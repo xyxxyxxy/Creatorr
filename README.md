@@ -46,7 +46,7 @@ Go module: `github.com/xyxxyxxy/Creatorr`
 docker compose up -d
 ```
 
-- Image: `ghcr.io/xyxxyxxy/creatorr:latest` (CI also pushes `:sha-<short>` for pinning)
+- Image: `ghcr.io/xyxxyxxy/creatorr:latest` (`main`); `:develop` from `develop`; `:sha-<short>` for pinning
 - UI: `http://127.0.0.1:8787/`
 - Health: `GET http://127.0.0.1:8787/api/health`
 - OpenAPI: `GET http://127.0.0.1:8787/api/openapi.json`
@@ -116,7 +116,7 @@ make css        # after Tailwind/daisyUI class changes or ECharts npm bump (copi
 make sbom       # repo CycloneDX SBOM (needs syft); CI also uploads + license-gates it
 ```
 
-CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Docker image: [`.github/workflows/docker.yml`](.github/workflows/docker.yml) (`:latest` + `:sha-<short>` on `main`).
+CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on `main` + `develop`. Docker: [`.github/workflows/docker.yml`](.github/workflows/docker.yml) (`:latest` on `main`, `:develop` on `develop`, plus `:sha-<short>`).
 
 ## Fixed paths (not env)
 
