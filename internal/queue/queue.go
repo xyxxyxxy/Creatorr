@@ -575,6 +575,25 @@ func (s *Store) startDomainCooldown(domain string) {
 	s.cooldown[domain] = time.Now().Add(time.Duration(lim.TaskCooldownSeconds) * time.Second)
 }
 
+// HasPendingOrRunningDomain reports whether any task is pending or running for domain.
+func (s *Store) HasPendingOrRunningDomain(domain string) (bool, error) {
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		return false, nil
+	}
+	var one int
+	err := s.DB.SQL.QueryRow(`
+		SELECT 1 FROM tasks WHERE domain = ? AND status IN (?, ?) LIMIT 1
+	`, domain, StatusPending, StatusRunning).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // HasPendingOrRunningKind reports whether any task of kind is pending or running
 // (optionally scoped to domain; empty domain = any).
 func (s *Store) HasPendingOrRunningKind(kind, domain string) (bool, error) {

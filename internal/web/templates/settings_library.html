@@ -299,9 +299,10 @@
       {{template "field_input" (dict
         "Name" "format_selector"
         "Label" "Format selector"
-        "Value" "bv*+ba/b"
+        "Value" "bv*+ba"
         "Required" true
-        "Info" "Passed to yt-dlp as --format (yt-dlp -f style). Use bv*+ba/b for best video+audio merge. Avoid bare best - on DASH sites it often picks a soft progressive file (~360p–720p)."
+        "Info" "Passed to yt-dlp as --format (yt-dlp -f style)."
+        "Hint" "Use bv*+ba for the highest video+audio merge. Avoid bare 'best' - on DASH sites it often picks a soft progressive file (~360p-720p). Trailing /b or /best are progressive fallbacks (handy when PO token / separate-stream fetch fails); omit them when you want a strict highest-quality merge."
       )}}
       {{template "checkbox_field" (dict
         "Name" "verify_media"
@@ -339,7 +340,8 @@
         "Label" "Format selector"
         "Value" .FormatSelector
         "Required" true
-        "Info" "Passed to yt-dlp as --format (yt-dlp -f style). Use bv*+ba/b for best video+audio merge. Avoid bare best - on DASH sites it often picks a soft progressive file (~360p–720p)."
+        "Info" "Passed to yt-dlp as --format (yt-dlp -f style)."
+        "Hint" "Use bv*+ba for the highest video+audio merge. Avoid bare 'best' - on DASH sites it often picks a soft progressive file (~360p-720p). Trailing /b or /best are progressive fallbacks (handy when PO token / separate-stream fetch fails); omit them when you want a strict highest-quality merge."
       )}}
       {{template "checkbox_field" (dict
         "Name" "verify_media"

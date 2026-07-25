@@ -101,7 +101,7 @@
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
             Use FlareSolverr
-            {{template "field_info" (dict "Info" "Pass Settings → General FlareSolverr URL to yt-dlp. Default inherits Domain defaults. On requires a URL there.")}}
+            {{template "field_info" (dict "Info" "Pre-solve CloudFlare challenges via Settings → General FlareSolverr URL before yt-dlp. Default inherits Domain defaults. On requires a URL there.")}}
           </span>
         </legend>
         <select name="use_flaresolverr" class="select w-full{{if eq $flare "default"}} opacity-70{{end}}">

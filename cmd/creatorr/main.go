@@ -55,6 +55,10 @@ func main() {
 		log.Error("migrate external base URL", "err", err)
 		os.Exit(1)
 	}
+	if err := settings.MigrateFlareSolverrURLFromEnv(database); err != nil {
+		log.Error("migrate FlareSolverr URL", "err", err)
+		os.Exit(1)
+	}
 	if err := library.SeedDefaults(database, cfg); err != nil {
 		log.Error("seed library defaults", "err", err)
 		os.Exit(1)
@@ -190,6 +194,7 @@ func main() {
 	}()
 
 	<-ctx.Done()
+	ytdlp.DestroyAllFlareSessions(context.Background())
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpSrv.Shutdown(shutdownCtx)

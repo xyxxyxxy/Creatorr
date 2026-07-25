@@ -2,13 +2,13 @@
 
 Index: [README.md](README.md). Terminology: [`AGENTS.md`](../AGENTS.md).
 
-Most knobs are Settings keys (UI / SQLite). Process bootstrap env is only `CREATORR_PORT`, `CREATORR_PUBLIC_BASE_URL`, `CREATORR_POT_PROVIDER_URL`, `CREATORR_WEB_*`, `TZ` (see [`config.Load`](../internal/config/config.go)). Paths are fixed (container `/data`, `/cache`, `/media/...`, `/yt-dlp-plugins`, baked POT plugin under `/usr/local/share/yt-dlp-plugins/bgutil`; local `var/...`). HTTP bind is always `0.0.0.0` (not configurable). yt-dlp binary is `/usr/local/bin/yt-dlp` (Docker) or `PATH`; plugins: see [`ytdlp.md`](ytdlp.md).
+Most knobs are Settings keys (UI / SQLite). Process bootstrap env is only `CREATORR_PORT`, `CREATORR_PUBLIC_BASE_URL`, `CREATORR_POT_PROVIDER_URL`, `CREATORR_FLARESOLVERR_URL`, `CREATORR_WEB_*`, `TZ` (see [`config.Load`](../internal/config/config.go)). Paths are fixed (container `/data`, `/cache`, `/media/...`, `/yt-dlp-plugins`, baked POT plugin under `/usr/local/share/yt-dlp-plugins/bgutil`; local `var/...`). HTTP bind is always `0.0.0.0` (not configurable). yt-dlp binary is `/usr/local/bin/yt-dlp` (Docker) or `PATH`; plugins: see [`ytdlp.md`](ytdlp.md).
 
 Editable settings (examples):
 
 | Key | Role |
 |---|---|
-| `flare_solverr_url` | Required for domains behind CloudFlare. Set URL here before enabling **Use FlareSolverr** on Domain defaults and/or per-host On override (Settings → Queue). Empty = skip health probe, never pass `--flaresolverr`, and clears Use FlareSolverr flags (defaults off; host On → inherit) |
+| `flare_solverr_url` | Required for domains behind CloudFlare. Set URL here before enabling **Use FlareSolverr** on Domain defaults and/or per-host On override (Settings → Queue). Empty = skip health probe, skip FlareSolverr pre-solve, and clears Use FlareSolverr flags (defaults off; host On → inherit). Optional one-shot seed from env `CREATORR_FLARESOLVERR_URL` (Compose default `http://creatorr-flaresolverr:8191`). Sidecar uses headless Chrome (notable RAM). |
 | `pot_fetch` | **PO token fetch** (PO = proof-of-origin): `auto` (default) / `always` / `never` → yt-dlp `youtube:fetch_pot`. Settings → General. Control disabled until env `CREATORR_POT_PROVIDER_URL` is set (Compose default `http://creatorr-po-token:4416`). When URL unset, invokes force `never`. |
 | `episode_format` | Relative path under the series folder for packed episodes (default `S{year}/S{year}E{episode:000000} [{id}]`; `{year}` = UTC year-season, `{episode}` = `MMDD` + same-day index, default path zero-pads to 6 digits). Series folder is always `SeriesDir` (sanitized title, no rune cap). `/` separates folders under that series. Also `{date}`, `{domain}`, `{title}`, optional `{series}` / `{series:N}` in the stem. `{series:N}` / `{title:N}` cap runes (bare is not truncated). Saving does not rename - use Apply episode format (Maintenance). |
 | `download_wanted_cron` | Schedule to enqueue wanted videos for monitored series. Settings → Scheduler. Seed `@hourly`. Empty = off |

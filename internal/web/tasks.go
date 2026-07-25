@@ -11,6 +11,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 type taskView struct {
@@ -43,6 +44,9 @@ type laneView struct {
 	SleepRequests       float64 // effective yt-dlp --sleep-requests
 	HasCookies          bool
 	CookiesTip          string
+	ShowFlare           bool
+	FlareWarm           bool
+	FlareTip            string
 	HasOverrideRow      bool
 	CooldownOverride     string
 	QueueOverride       string
@@ -113,6 +117,15 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 			if ok, tip, err := cookies.Applies(h.Queue.DB, domain); err == nil && ok {
 				lv.HasCookies = true
 				lv.CookiesTip = tip
+			}
+			if flareURL, err := domains.FlareSolverrURL(h.Queue.DB, domain); err == nil && strings.TrimSpace(flareURL) != "" {
+				lv.ShowFlare = true
+				lv.FlareWarm = ytdlp.HasFlareSession(domain)
+				if lv.FlareWarm {
+					lv.FlareTip = "FlareSolverr session warm"
+				} else {
+					lv.FlareTip = "FlareSolverr enabled"
+				}
 			}
 			if meta, ok := knownMeta[domain]; ok {
 				lv.HasOverrideRow = true

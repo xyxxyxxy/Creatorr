@@ -74,7 +74,7 @@ type DomainLimits struct {
 	MaxParallelTasks    int     // concurrent running non-interactive tasks on this domain
 	DownloadRateLimit   string  // yt-dlp --limit-rate; "off"/"0"/"none" = unlimited
 	SleepRequests       float64 // yt-dlp --sleep-requests + --sleep-subtitles + --sleep-interval; 0 = off
-	UseFlareSolverr     bool    // pass Settings flare_solverr_url to yt-dlp
+	UseFlareSolverr     bool    // pre-solve via Settings flare_solverr_url when effective
 }
 
 func defaultDomainLimits() DomainLimits {

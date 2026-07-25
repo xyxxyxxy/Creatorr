@@ -1,19 +1,25 @@
 {{define "auto_ignore_media_types_field"}}
 {{/*
-  Series auto-ignore media types: marked ignored when known (list, download, or stream pack).
-  Expects optional: Items ([]string), Options ([]string), ListID (default auto-ignore-media-types-suggestions).
+  Series auto-ignore media types: indexed first; marked ignored when type is known
+  (download / stream pack). Expects optional: Items ([]string), Options ([]string),
+  ListID (default auto-ignore-media-types-suggestions).
 */}}
 {{$listID := .ListID}}{{if not $listID}}{{$listID = "auto-ignore-media-types-suggestions"}}{{end}}
-{{template "metadata_string_list_editor" (dict
-  "Label" "Media types"
-  "Name" "auto_ignore_media_types"
-  "Singular" "media type"
-  "Placeholder" "Add a media type"
-  "Items" .Items
-  "Options" .Options
-  "ListID" $listID
-  "NoReorder" true
-  "EmptyText" "none"
-  "Info" "Auto-ignore when a wanted video's download starts and media_type is known. Download stops and the video is marked ignored. Values depend on the source site; inspect yt-dlp info.json media_type."
-)}}
+<div class="space-y-2 w-full min-w-0">
+  <h4 class="font-semibold text-base">Auto ignore</h4>
+  <p class="text-sm opacity-60">
+    Videos are still indexed as wanted. When a download task learns more detail, matching ones are marked ignored and the download stops.
+  </p>
+  {{template "metadata_string_list_editor" (dict
+    "Label" "Media types"
+    "Name" "auto_ignore_media_types"
+    "Singular" "media type"
+    "Placeholder" "Add a media type"
+    "Items" .Items
+    "Options" .Options
+    "ListID" $listID
+    "NoReorder" true
+    "EmptyText" "none"
+  )}}
+</div>
 {{end}}

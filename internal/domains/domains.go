@@ -360,7 +360,7 @@ func ListHosts(database *db.DB) ([]Domain, error) {
 
 // FlareSolverrURL returns the Settings FlareSolverr URL when this hostname has
 // Use FlareSolverr enabled (host override or Domain defaults). Empty string means
-// do not pass --flaresolverr. Opt-in without flare_solverr_url → FlareSolverrRequired.
+// skip FlareSolverr pre-solve. Opt-in without flare_solverr_url → FlareSolverrRequired.
 func FlareSolverrURL(database *db.DB, host string) (string, error) {
 	host = settings.NormalizeDomain(host)
 	if host == "" || host == "unknown" || host == "system" || host == settings.DomainDefault {

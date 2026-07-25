@@ -13,7 +13,7 @@ type Config struct {
 	Host            string
 	Port            int
 	DBPath          string
-	FlareSolverrURL string // filled from Settings after seed (not an env var)
+	FlareSolverrURL string // filled from Settings after seed (optional CREATORR_FLARESOLVERR_URL one-shot)
 	LibraryRoot     string // seed path for empty root_folders
 	ImportRoot      string
 	// YtDlpBin is the yt-dlp executable. Empty after Load; main sets via ytdlp.ResolveBin

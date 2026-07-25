@@ -37,7 +37,7 @@ Go module: `github.com/xyxxyxxy/Creatorr`
 | [`AGENTS.md`](AGENTS.md) | AI agent contract (hard rules, architecture, workflow); UI details in [`docs/ui.md`](docs/ui.md) |
 | [`api/openapi.yaml`](api/openapi.yaml) | REST contract |
 
-**FlareSolverr:** set the service URL under Settings → General, then enable **Use FlareSolverr** on Domain defaults and/or per-host override (Default / On / Off) under Settings → Queue. Creatorr then passes `--flaresolverr` to yt-dlp when effective for that hostname.
+**FlareSolverr:** Compose runs `creatorr-flaresolverr` (headless Chrome; notable RAM). One-shot seeds Settings `flare_solverr_url` from `CREATORR_FLARESOLVERR_URL` (default `http://creatorr-flaresolverr:8191`) when empty. Enable **Use FlareSolverr** on Domain defaults and/or per-host override under Settings → Queue. Creatorr pre-solves via the FlareSolverr HTTP API (per-host session while the lane has work; short cookie cache), then passes `--cookies` / `--user-agent` to yt-dlp.
 
 **PO tokens:** Compose runs `creatorr-po-token`; set `CREATORR_POT_PROVIDER_URL` (default `http://creatorr-po-token:4416`) and **PO token fetch** under Settings → General (`auto` / `always` / `never`). See [`docs/ytdlp.md`](docs/ytdlp.md).
 
@@ -133,6 +133,8 @@ Bootstrap only. HTTP always binds `0.0.0.0`. Everything else is Settings (SQLite
 |---|---|---|
 | `CREATORR_PORT` | `8787` | HTTP port |
 | `CREATORR_PUBLIC_BASE_URL` | *(empty)* | Optional first-boot seed into Settings `external_base_url`. Prefer **Settings → Library → Streaming → External Creatorr URL**. Dev: [`scripts/sync-dev-public-url.sh`](scripts/sync-dev-public-url.sh) / [`scripts/compose`](scripts/compose) writes `http://<LAN-IPv4>:8787` into `.env`. |
+| `CREATORR_POT_PROVIDER_URL` | *(empty)* | bgutil PO token provider base URL. Compose default `http://creatorr-po-token:4416`. Empty disables Settings **PO token fetch**. |
+| `CREATORR_FLARESOLVERR_URL` | *(empty)* | Optional first-boot seed into Settings `flare_solverr_url`. Compose default `http://creatorr-flaresolverr:8191`. Prefer Settings → General afterward. |
 | `CREATORR_WEB_DEV` | off | Reload HTML/partials/`static/` from disk each request (`1` in `docker-compose.dev.yml`). |
 | `CREATORR_WEB_DIR` | `internal/web` | UI root when `CREATORR_WEB_DEV` is on (`/web` with the dev mount). |
 | `TZ` | host / unset | Process local zone for **UI cron labels** only (stored cron still UTC). Prod compose `${TZ:-UTC}`; optional machine-local default in `docker-compose.override.dev.yml` (example: Europe/Berlin). |

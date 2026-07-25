@@ -61,7 +61,7 @@ When introducing a new domain term, add it here (or the topic doc above if it be
 | `notifications` | In-app notify log (event, title, body, optional `task_id`, `external_ok`, `read_at`) |
 | `cookies` | Netscape jar text per domain key (`default` = fallback for all hosts) |
 | `domain_runtime` | Soft pause per hostname (`paused`); missing row = not paused; never a limits override |
-| `domains` | Hostname profiles: `default` (global limits + Use FlareSolverr) + host overrides; `active`, optional limit overrides and `use_flaresolverr` (NULL = inherit `default`; 0/1 = Off/On), pass Settings FlareSolverr URL to yt-dlp when effective on |
+| `domains` | Hostname profiles: `default` (global limits + Use FlareSolverr) + host overrides; `active`, optional limit overrides and `use_flaresolverr` (NULL = inherit `default`; 0/1 = Off/On), FlareSolverr HTTP pre-solve when effective on |
 | `settings` | Key/value runtime config |
 
 ## Video statuses (minimum)

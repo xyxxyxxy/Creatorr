@@ -132,6 +132,7 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 	defer func() {
 		cancel()
 		r.Queue.UnregisterRunning(task.ID)
+		r.releaseFlareIfIdle(task.Domain)
 	}()
 
 	var runErr error
@@ -250,6 +251,21 @@ func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task 
 		}
 	}
 	notify.SoftPauseAndAlert(ctx, r.Queue.DB, log, task.ID, task.Domain, code, runErr.Error())
+}
+
+func (r *Runner) releaseFlareIfIdle(domain string) {
+	if r == nil || r.Queue == nil {
+		return
+	}
+	domain = strings.TrimSpace(domain)
+	if domain == "" || domain == "unknown" || domain == queue.SystemDomain {
+		return
+	}
+	busy, err := r.Queue.HasPendingOrRunningDomain(domain)
+	if err != nil || busy {
+		return
+	}
+	ytdlp.ReleaseFlareSession(context.Background(), domain)
 }
 
 var errUnknownKind = errors.New("unknown task kind")

@@ -40,6 +40,11 @@
           <i data-lucide="cookie" class="size-4 opacity-70"></i>
         </span>
         {{end}}
+        {{if .ShowFlare}}
+        <span class="inline-flex items-center tooltip" data-tip="{{.FlareTip}}" aria-label="{{.FlareTip}}">
+          <i data-lucide="shield" class="size-4{{if .FlareWarm}} text-info{{else}} opacity-70{{end}}"></i>
+        </span>
+        {{end}}
         {{if .ShowCooldown}}
         <span class="inline-flex items-baseline font-mono text-sm tooltip" data-tip="Task cooldown" data-domain-cooldown data-ends-at="{{.CooldownEndsAt}}" aria-label="Task cooldown">
           <span data-cd-min-wrap class="countdown{{if eq .CooldownMin 0}} hidden{{end}}"><span data-cd-min style="--value:{{.CooldownMin}};" aria-live="polite" aria-label="{{.CooldownMin}}">{{.CooldownMin}}</span>m&nbsp;</span><span class="countdown"><span data-cd-sec style="--value:{{.CooldownSec}}; --digits: 2;" aria-live="polite" aria-label="{{.CooldownSec}}">{{printf "%02d" .CooldownSec}}</span>s</span>

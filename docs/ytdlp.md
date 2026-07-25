@@ -23,7 +23,21 @@ volumes:
 
 Operator plugins keep working under `/yt-dlp-plugins` (`--plugin-dirs`).
 
-Image also ships **ffmpeg** (remux) and **Deno** (yt-dlp EJS challenge solver). FlareSolverr is optional external (Settings URL + Domain defaults / per-host On override).
+Image also ships **ffmpeg** (remux) and **Deno** (yt-dlp EJS challenge solver).
+
+## FlareSolverr
+
+Compose service **`creatorr-flaresolverr`** (`ghcr.io/flaresolverr/flaresolverr`) solves CloudFlare challenges with headless Chrome (**notable RAM**; port 8191 stays internal).
+
+| Piece | Detail |
+| --- | --- |
+| Env | `CREATORR_FLARESOLVERR_URL` one-shot seeds Settings `flare_solverr_url` when empty (Compose default `http://creatorr-flaresolverr:8191`). |
+| Settings | `flare_solverr_url` + Domain defaults / per-host **Use FlareSolverr**. UI/API refuse On without a URL; clearing the URL turns those flags off. |
+| Pre-solve | Creatorr calls FlareSolverr `request.get` (not yt-dlp `--flaresolverr`), merges cookies into a Netscape jar, passes `--cookies` / `--user-agent` to yt-dlp. |
+| Session | One browser session per hostname (`sessions.create`) while that domain lane has pending/running work; destroyed when the lane drains. `session_ttl_minutes` safety net on each get. |
+| Cookie cache | Successful clearance cookies are cached in-process (2–30 min) so warm lanes often skip Flare HTTP; cache miss still hits the warm session when open. |
+| Tasks UI | Lane header shield icon when Flare is effective: muted = enabled, `text-info` = session warm. |
+| Health | `/api/health` check `flaresolverr` probes the Settings URL (skipped if unset). |
 
 ## PO Token provider
 
@@ -42,7 +56,7 @@ Creatorr passes `--extractor-args youtubepot-bgutilhttp:base_url=…` when the e
 
 ## What Creatorr owns
 
-- FlareSolverr pre-solve when effective **Use FlareSolverr** is on for the host (Domain defaults or host On override) and Settings `flare_solverr_url` is set. UI/API refuse enabling Use FlareSolverr / host On without a URL; clearing the URL turns those flags off.
+- FlareSolverr pre-solve when effective **Use FlareSolverr** is on for the host (Domain defaults or host On override) and Settings `flare_solverr_url` is set (see **FlareSolverr** above).
 - PO Token provider URL (env) + Settings **PO token fetch** mode (see above).
 - Netscape cookie jars (Settings → Queue; host jar, else `default`).
 - Pace flags from domain limits: `--limit-rate`; when `sleep_requests` > 0 also `--sleep-requests`, `--sleep-subtitles`, and `--sleep-interval` (same seconds; no `--max-sleep-interval`).

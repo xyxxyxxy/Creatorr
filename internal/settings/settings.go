@@ -29,7 +29,7 @@ const (
 
 // Help is one-line UI help text per key.
 var Help = map[string]string{
-	KeyFlareSolverrURL:              "Required for domains behind CloudFlare protection. Configure FlareSolverr here before enabling Use FlareSolverr on Domain defaults or a host On override (Settings → Queue).",
+	KeyFlareSolverrURL:              "Required for domains behind CloudFlare protection. Configure FlareSolverr here before enabling Use FlareSolverr on Domain defaults or a host On override (Settings → Queue). Compose can one-shot seed from CREATORR_FLARESOLVERR_URL (default http://creatorr-flaresolverr:8191).",
 	KeyPotFetch:                     "PO token means proof-of-origin token. When to ask the provider for attestation tokens: only when needed, always, or never. Requires CREATORR_POT_PROVIDER_URL. Compose defaults to http://creatorr-po-token:4416.",
 	KeyEpisodeFormat:                "Relative path under the series folder for packed episodes (no extension). Saving does not rename existing files - use Apply episode format.",
 	KeyDownloadWantedCron:           "Schedule to enqueue wanted videos for monitored series.",

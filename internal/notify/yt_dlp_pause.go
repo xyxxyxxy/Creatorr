@@ -7,6 +7,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 // SoftPauseAndAlert soft-pauses the hostname when code is a yt-dlp pause code,
@@ -22,6 +23,9 @@ func SoftPauseAndAlert(ctx context.Context, database *db.DB, log *slog.Logger, t
 				log.Warn("auto-pause domain", "domain", domain, "code", code, "err", err)
 			}
 		}
+	}
+	if code == apperrors.CodeCookieInvalid {
+		ytdlp.InvalidateFlareHost(ctx, domain)
 	}
 	var nerr error
 	switch code {

@@ -3,11 +3,13 @@ package streamproxy
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/xyxxyxxy/Creatorr/internal/exectrace"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 const occupancyIdleTTL = 2 * time.Minute
@@ -180,6 +182,7 @@ func (h *Handler) finishOccupancyDone(key string, o *streamOccupancy) {
 	if h.Events != nil {
 		h.Events.TaskDone(o.taskID, queue.KindStreamPlay, o.domain, "Stream session ended", o.seriesID, o.videoID)
 	}
+	releaseFlareIfIdle(h.Queue, o.domain)
 }
 
 // failOccupancy marks the stream_play task failed and drops occupancy.
@@ -208,6 +211,19 @@ func (h *Handler) failOccupancy(videoID int64, token, code, message, detail stri
 	if h.Events != nil {
 		h.Events.TaskFailed(tid, queue.KindStreamPlay, domain, message, code, seriesID, videoID)
 	}
+	releaseFlareIfIdle(h.Queue, domain)
+}
+
+func releaseFlareIfIdle(q *queue.Store, domain string) {
+	domain = strings.TrimSpace(domain)
+	if q == nil || domain == "" || domain == "unknown" || domain == queue.SystemDomain {
+		return
+	}
+	busy, err := q.HasPendingOrRunningDomain(domain)
+	if err != nil || busy {
+		return
+	}
+	ytdlp.ReleaseFlareSession(context.Background(), domain)
 }
 
 func reapOccupancy(h *Handler, key string, o *streamOccupancy) {
