@@ -1,0 +1,2 @@
+{{define "empty_value"}}{{/* Grey ASCII dash for missing list cells (not detail key/value rows). Never em dash. */}}<span class="opacity-60">-</span>{{end}}
+{{define "muted"}}{{/* Grey label for empty-ish list/cell states: never, none, default, … Expects string. Detail key/value rows use detail_row instead. */}}<span class="opacity-60">{{.}}</span>{{end}}

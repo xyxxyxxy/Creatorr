@@ -1,0 +1,34 @@
+{{define "source_filter_fields"}}
+{{/*
+  Feed-only index filters: cutoff + title include/exclude.
+  Expects optional: Cutoff (YYYY-MM-DD),
+    TitleRegexpInclude, TitleRegexpIncludeID,
+    TitleRegexpExclude, TitleRegexpExcludeID.
+*/}}
+<div class="space-y-2">
+  <h4 class="font-semibold text-base">Filter</h4>
+  {{template "date_past" (dict
+    "Name" "scan_cutoff"
+    "Label" "Cutoff"
+    "Value" .Cutoff
+    "Info" "Videos before this date will not be indexed."
+    "Hint" "Empty = no cutoff - index all from this source."
+  )}}
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full min-w-0">
+    {{template "title_regexp_field" (dict
+      "Name" "title_regexp_include"
+      "Label" "Title include"
+      "Value" .TitleRegexpInclude
+      "ID" .TitleRegexpIncludeID
+      "Info" "Go regexp matched against video titles. Only matching titles are indexed."
+    )}}
+    {{template "title_regexp_field" (dict
+      "Name" "title_regexp_exclude"
+      "Label" "Title exclude"
+      "Value" .TitleRegexpExclude
+      "ID" .TitleRegexpExcludeID
+      "Info" "Go regexp matched against video titles. Matching titles are not indexed. Exclude takes priority over include when both match."
+    )}}
+  </div>
+</div>
+{{end}}

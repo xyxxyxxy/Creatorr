@@ -1,0 +1,29 @@
+{{define "preset_fill"}}
+{{/*
+  cron text input with @-descriptor datalist.
+
+  Required: FieldName, FieldID, FieldLabel
+  Optional: FieldValue, FieldPlaceholder, FieldInfo, FieldHint, FieldHelp (alias→Info),
+            FieldClass, FieldRequired, CronDescriptors ([]string)
+
+  Free-text cron still allowed; datalist only suggests @hourly/@daily/…
+*/}}
+{{ $cur := .FieldValue }}
+{{$info := .FieldInfo}}{{if not $info}}{{$info = .FieldHelp}}{{end}}
+{{$listID := printf "%s-dl" .FieldID}}
+<div class="w-full">
+  {{template "field_input" (dict
+    "Name" .FieldName
+    "ID" .FieldID
+    "Label" .FieldLabel
+    "Value" $cur
+    "Placeholder" .FieldPlaceholder
+    "Info" $info
+    "Hint" .FieldHint
+    "Required" .FieldRequired
+    "InputClass" (printf "preset-fill-input %s" .FieldClass)
+    "ListID" $listID
+    "Options" .CronDescriptors
+  )}}
+</div>
+{{end}}

@@ -1,0 +1,84 @@
+{{define "series_metadata_body"}}
+{{/*
+  Inner metadata modal content (HTMX swap target for prefetch).
+  Expects same fields as series_metadata_form.
+  Pending poll lives on this root; Fetch button already shows the spinner.
+*/}}
+<div id="series-metadata-body"
+     {{if .PrefetchPending}}hx-get="/series/{{.Series.ID}}/metadata/prefetch/{{.PrefetchTaskID}}" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
+  {{if .PrefetchDraft.Error}}
+  <div class="alert alert-error mb-4"><span>{{.PrefetchDraft.Error}}</span></div>
+  {{end}}
+
+  {{template "metadata_fetch_url" (dict "SeriesID" .Series.ID "Disabled" .PrefetchPending "FetchURL" .FetchURL)}}
+
+  <form method="post" action="/actions/save-series-metadata" enctype="multipart/form-data" class="space-y-3" {{if .PrefetchPending}}aria-busy="true"{{end}}>
+    <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+    {{if .PrefetchTaskID}}<input type="hidden" name="prefetch_task_id" value="{{.PrefetchTaskID}}" />{{end}}
+    <fieldset class="space-y-3 border-0 p-0 m-0 min-w-0" {{if .PrefetchPending}}disabled{{end}}>
+
+    <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
+      <legend class="fieldset-legend text-base">Title</legend>
+      <div class="grid gap-3 sm:grid-cols-2">
+        {{template "form_row" (dict "Name" "originaltitle" "Label" "Original title" "Value" .Series.Meta.OriginalTitle "Placeholder" .Series.Title)}}
+        {{template "form_row" (dict "Name" "sorttitle" "Label" "Sort title" "Value" .Series.Meta.SortTitle "Placeholder" .Series.Title)}}
+      </div>
+      <p class="label whitespace-normal">Regular series title is defined in series, not here.</p>
+    </fieldset>
+    {{template "form_row" (dict "Type" "textarea" "Name" "plot" "Label" "Plot" "Value" .Series.Meta.Plot)}}
+    <div class="grid gap-3 sm:grid-cols-2">
+      {{template "metadata_suggest_row" (dict "Name" "tagline" "Label" "Tagline" "Value" .Series.Meta.Tagline)}}
+      {{template "metadata_suggest_row" (dict "Name" "studio" "Label" "Studio" "Value" .Series.Meta.Studio "ListID" "meta-dl-studio" "Options" .Suggestions.Studios)}}
+    </div>
+    <div class="grid gap-3 sm:grid-cols-2">
+      {{template "metadata_suggest_row" (dict "Name" "country" "Label" "Country" "Value" .Series.Meta.Country "ListID" "meta-dl-country" "Options" .Suggestions.Countries)}}
+      {{template "metadata_suggest_row" (dict "Name" "mpaa" "Label" "Content rating" "Value" .Series.Meta.MPAA "ListID" "meta-dl-mpaa" "Options" .Suggestions.MPAAs)}}
+    </div>
+    <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
+      <legend class="fieldset-legend text-base">Images</legend>
+      <div class="grid gap-3 sm:grid-cols-2">
+        {{template "metadata_art_slot" (dict "Role" "poster" "Label" "Poster" "SeriesID" .Series.ID "HasFile" .Art.Poster "ArtVersion" (index .ArtMtimes "poster") "PrefetchPath" (index .PrefetchArt "poster") "PrefetchTaskID" .PrefetchTaskID)}}
+        {{template "metadata_art_slot" (dict "Role" "banner" "Label" "Banner" "SeriesID" .Series.ID "HasFile" .Art.Banner "ArtVersion" (index .ArtMtimes "banner") "PrefetchPath" (index .PrefetchArt "banner") "PrefetchTaskID" .PrefetchTaskID)}}
+        {{template "metadata_art_slot" (dict "Role" "fanart" "Label" "Fanart" "SeriesID" .Series.ID "HasFile" .Art.Fanart "ArtVersion" (index .ArtMtimes "fanart") "PrefetchPath" (index .PrefetchArt "fanart") "PrefetchTaskID" .PrefetchTaskID)}}
+        {{template "metadata_art_slot" (dict "Role" "clearlogo" "Label" "Clearlogo" "SeriesID" .Series.ID "HasFile" .Art.Clearlogo "ArtVersion" (index .ArtMtimes "clearlogo") "PrefetchPath" (index .PrefetchArt "clearlogo") "PrefetchTaskID" .PrefetchTaskID)}}
+      </div>
+    </fieldset>
+    {{template "metadata_actors_editor" (dict "Actors" .Series.Meta.Actors "NameOptions" .Suggestions.ActorNames "RoleOptions" .Suggestions.ActorRoles)}}
+    <div class="grid gap-3 sm:grid-cols-2">
+      {{template "metadata_string_list_editor" (dict
+        "Label" "Genres"
+        "Name" "genre"
+        "Singular" "genre"
+        "Items" .Series.Meta.Genres
+        "Options" .Suggestions.Genres
+        "ListID" "meta-dl-genres"
+        "Placeholder" "Add a genre"
+        "EmptyText" "none"
+      )}}
+      {{template "metadata_string_list_editor" (dict
+        "Label" "Tags"
+        "Name" "tag"
+        "Singular" "tag"
+        "Items" .Series.Meta.Tags
+        "Options" .Suggestions.Tags
+        "ListID" "meta-dl-tags"
+        "Placeholder" "Add a tag"
+        "EmptyText" "none"
+      )}}
+    </div>
+
+    <p class="text-sm opacity-70">
+      In <code class="text-xs">tvshow.nfo</code>: <strong>title</strong> is this series name;
+      <strong>premiered</strong> is the oldest video upload date (UTC day) after a source history finishes indexing;
+      <strong>year</strong> comes from premiered;
+      <strong>status</strong> is Continuing when the series is monitored, Ended when not.
+    </p>
+    </fieldset>
+
+    <div class="modal-action">
+      <label for="modal-edit-series-metadata" class="btn btn-ghost modal-cancel">Cancel</label>
+      <button type="submit" class="btn btn-primary" {{if .PrefetchPending}}disabled{{end}}>Save</button>
+    </div>
+  </form>
+</div>
+{{end}}

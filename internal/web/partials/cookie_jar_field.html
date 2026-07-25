@@ -1,0 +1,40 @@
+{{define "cookie_jar_field"}}
+{{/*
+  Netscape cookie jar textarea for Domains modals.
+  Optional: Label, Value, Info, Hint, EmptyHelp (alias→Hint for empty jar),
+  ShowGuide (bool - cookies.txt how-to; omit/false to hide, e.g. override modal).
+*/}}
+{{$label := .Label}}{{if not $label}}{{$label = "Cookies (Netscape jar)"}}{{end}}
+{{$hint := .Hint}}{{if not $hint}}{{$hint = .EmptyHelp}}{{end}}
+{{$info := .Info}}{{if not $info}}{{$info = "Paste a Netscape cookies.txt export for this hostname (or Default). Host jar wins over Default."}}{{end}}
+<div class="w-full">
+  {{template "field_input" (dict
+    "Name" "cookies"
+    "Label" $label
+    "Type" "textarea"
+    "Value" .Value
+    "Info" $info
+    "Hint" $hint
+    "Mono" true
+    "InputClass" "h-28"
+  )}}
+  {{if .ShowGuide}}
+  <details class="collapse collapse-arrow bg-base-100 border border-base-300 mt-1">
+    <summary class="collapse-title font-medium text-sm min-h-0 py-3">How to export cookies</summary>
+    <div class="collapse-content text-sm space-y-1">
+      <p>
+        Extension:
+        <a class="link" href="https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/" target="_blank" rel="noopener noreferrer">cookies.txt</a>
+        (Firefox).
+      </p>
+      <ol class="list-decimal list-inside space-y-1">
+        <li>Install cookies.txt and enable it in private windows.</li>
+        <li>Open a new private window, navigate to the video provider.</li>
+        <li>Log in.</li>
+        <li>Copy “Current container” cookies with cookies.txt and paste here.</li>
+      </ol>
+    </div>
+  </details>
+  {{end}}
+</div>
+{{end}}

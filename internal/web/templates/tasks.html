@@ -1,0 +1,137 @@
+{{define "tasks"}}
+{{template "head" .}}
+{{template "list_panel"}}
+<div class="list-header flex flex-wrap items-start justify-between gap-3">
+  <div class="min-w-0 flex-1">
+    <h1 class="text-2xl font-semibold inline-flex items-center gap-2">
+      <i data-lucide="{{.Icon}}" class="size-6 shrink-0"></i>
+      <span>Tasks</span>
+    </h1>
+    <p class="text-sm opacity-60 mt-0.5">All open tasks, separated by the queue they belong to.</p>
+  </div>
+</div>
+{{template "list_panel_end"}}
+<div class="alert alert-info text-sm mb-4">
+  <span>
+    Soft <strong>Pause</strong> on a host blocks new ClaimNext work (scan, download, pack stream, cache beginning, …); pending stay queued and running tasks finish.
+    <strong>Interactive</strong> work still runs while paused (domain must stay <strong>active</strong>): UI metadata prefetch (series / video / add-series) ignores busy/cooldown; <code>stream_play</code> occupancy (live or cache playback) also starts while paused but <strong>occupies</strong> the parallel slot so ClaimNext waits.
+  </span>
+</div>
+<div id="tasks-live">
+  {{range .Lanes}}
+  {{template "list_panel"}}
+  <div class="list-header flex flex-wrap items-start justify-between gap-3">
+    <div class="min-w-0 flex-1">
+      <h2 class="text-lg font-semibold font-mono inline-flex flex-wrap items-center gap-2">
+        {{.Domain}}
+        {{if .Paused}}
+        <span class="badge badge-warning badge-sm">paused</span>
+        {{end}}
+        {{if .RateLimit}}
+        <span class="badge badge-ghost badge-sm font-mono tooltip" data-tip="Download rate limit">{{.RateLimit}}</span>
+        {{end}}
+        {{if ne .Domain "system"}}
+        <span class="badge badge-ghost badge-sm tabular-nums tooltip" data-tip="Sleep between requests">sleep {{.SleepRequests}}s</span>
+        {{else}}
+        <span class="badge badge-ghost badge-sm tooltip" data-tip="Maintenance and SponsorBlock cuts run one at a time">one at a time</span>
+        {{end}}
+        {{if .HasCookies}}
+        <span class="inline-flex items-center tooltip" data-tip="{{.CookiesTip}}" aria-label="{{.CookiesTip}}">
+          <i data-lucide="cookie" class="size-4 opacity-70"></i>
+        </span>
+        {{end}}
+        {{if .ShowCooldown}}
+        <span class="inline-flex items-baseline font-mono text-sm tooltip" data-tip="Task cooldown" data-domain-cooldown data-ends-at="{{.CooldownEndsAt}}" aria-label="Task cooldown">
+          <span data-cd-min-wrap class="countdown{{if eq .CooldownMin 0}} hidden{{end}}"><span data-cd-min style="--value:{{.CooldownMin}};" aria-live="polite" aria-label="{{.CooldownMin}}">{{.CooldownMin}}</span>m&nbsp;</span><span class="countdown"><span data-cd-sec style="--value:{{.CooldownSec}}; --digits: 2;" aria-live="polite" aria-label="{{.CooldownSec}}">{{printf "%02d" .CooldownSec}}</span>s</span>
+        </span>
+        {{end}}
+      </h2>
+      <p class="text-sm opacity-60 mt-1">
+        {{len .Tasks}} task(s)
+        {{if .DownloadCount}}· Downloads {{.DownloadCount}}{{end}}
+      </p>
+    </div>
+    <div class="list-actions flex flex-wrap gap-2 shrink-0 items-center">
+      {{if and .CanPause (not .Paused)}}
+      <form method="post" action="/actions/set-domain-paused" class="inline">
+        <input type="hidden" name="domain" value="{{.Domain}}" />
+        <input type="hidden" name="paused" value="1" />
+        <input type="hidden" name="redirect" value="/tasks" />
+        <button type="submit" class="btn btn-outline">Pause</button>
+      </form>
+      {{else if and .CanPause .Paused}}
+      <form method="post" action="/actions/set-domain-paused" class="inline">
+        <input type="hidden" name="domain" value="{{.Domain}}" />
+        <input type="hidden" name="paused" value="0" />
+        <input type="hidden" name="redirect" value="/tasks" />
+        <button type="submit" class="btn btn-outline">Resume</button>
+      </form>
+      {{end}}
+      {{if ne .Domain "system"}}
+      <a class="btn btn-outline" href="/history?domain={{urlquery .Domain}}">History</a>
+      <label for="modal-edit-domain-{{.Domain}}" class="btn btn-outline">Edit</label>
+      {{end}}
+      {{if .ShowCancelPending}}
+      <label for="modal-cancel-domain-{{.Domain}}" class="btn btn-outline btn-error">Cancel pending</label>
+      {{else}}
+      <button type="button" class="btn btn-outline btn-error tooltip tooltip-top" disabled data-tip="No pending tasks">Cancel pending</button>
+      {{end}}
+    </div>
+  </div>
+  {{if .Tasks}}
+  {{template "list_table"}}
+  <thead><tr><th class="w-12">#</th><th>Status</th><th>Kind</th><th>Series / video</th><th>Message</th><th></th></tr></thead>
+  <tbody>
+    {{range .Tasks}}{{template "task_row" .}}{{end}}
+  </tbody>
+  {{template "list_table_end"}}
+  {{template "pagination" .Page}}
+  {{end}}
+  {{template "list_panel_end"}}
+  {{end}}
+</div>
+{{range .Lanes}}
+{{if .ShowCancelPending}}
+<input type="checkbox" id="modal-cancel-domain-{{.Domain}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Cancel pending - {{.Domain}}</h3>
+    <p class="text-sm mb-4">Cancels pending tasks for this domain only. Running tasks keep going.</p>
+    <form method="post" action="/actions/cancel-domain-tasks">
+      <input type="hidden" name="domain" value="{{.Domain}}" />
+      <div class="modal-action">
+        <label for="modal-cancel-domain-{{.Domain}}" class="btn btn-ghost modal-cancel">Keep</label>
+        <button type="submit" class="btn btn-error">Cancel pending</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+{{end}}
+{{range .Lanes}}
+{{if ne .Domain "system"}}
+{{template "domain_override_modal" (dict
+  "Mode" "edit"
+  "Redirect" "/tasks"
+  "Domain" .Domain
+  "CooldownOverride" .CooldownOverride
+  "QueueOverride" .QueueOverride
+  "ParallelOverride" .ParallelOverride
+  "RateOverride" .RateOverride
+  "SleepOverride" .SleepOverride
+  "FlareOverride" .FlareOverride
+  "CookieContent" .CookieContent
+  "HasRow" .HasOverrideRow
+  "DefaultCooldown" .DefaultCooldown
+  "DefaultQueue" .DefaultQueue
+  "DefaultParallel" .DefaultParallel
+  "DefaultRate" .DefaultRate
+  "DefaultSleep" .DefaultSleep
+  "DefaultFlare" .DefaultFlare
+  "FlareConfigured" $.FlareConfigured
+)}}
+{{end}}
+{{end}}
+{{template "foot" .}}
+{{end}}

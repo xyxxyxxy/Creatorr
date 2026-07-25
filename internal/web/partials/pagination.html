@@ -1,0 +1,25 @@
+{{define "pagination_join"}}
+{{/* Prev / page / next join only. Dot = PageInfo. */}}
+{{$live := .LiveTarget}}
+<div class="join shrink-0">
+  {{if .HasPrev}}
+  <a href="{{.PrevHref}}" class="join-item btn btn-sm js-keep-scroll" aria-label="Previous page"{{if $live}} hx-get="{{.PrevHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>«</a>
+  {{else}}
+  <button type="button" class="join-item btn btn-sm btn-disabled" disabled aria-label="Previous page">«</button>
+  {{end}}
+  <span class="join-item btn btn-sm btn-ghost no-animation pointer-events-none">{{.Page}} / {{.TotalPages}}</span>
+  {{if .HasNext}}
+  <a href="{{.NextHref}}" class="join-item btn btn-sm js-keep-scroll" aria-label="Next page"{{if $live}} hx-get="{{.NextHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>»</a>
+  {{else}}
+  <button type="button" class="join-item btn btn-sm btn-disabled" disabled aria-label="Next page">»</button>
+  {{end}}
+</div>
+{{end}}
+
+{{define "pagination"}}
+{{if .Show}}
+<div class="flex flex-wrap items-center justify-end gap-2 my-3">
+  {{template "pagination_join" .}}
+</div>
+{{end}}
+{{end}}

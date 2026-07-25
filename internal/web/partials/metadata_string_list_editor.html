@@ -1,0 +1,57 @@
+{{define "metadata_string_list_editor"}}
+{{/*
+  Locked string rows (plain text + optional reorder + remove) + draft add.
+  Expects: Label, Name (form field, e.g. genre|tag), Items ([]string), Options ([]string),
+           ListID (datalist id). Optional: Placeholder, Singular (aria; default Name), Info,
+           EmptyText (shown above draft when Items empty),
+           NoReorder (bool) - badge chips (flex-wrap LTR, X remove); append on add.
+           Ordered mode keeps ordinal + up/down rows.
+*/}}
+{{$ph := .Placeholder}}{{if not $ph}}{{$ph = printf "Add a %s" .Name}}{{end}}
+{{$sing := .Singular}}{{if not $sing}}{{$sing = .Name}}{{end}}
+{{$unordered := .NoReorder}}
+<div class="w-full min-w-0" data-string-list-editor data-item-name="{{.Name}}" data-item-singular="{{$sing}}"{{if $unordered}} data-string-list-unordered{{end}}{{if .EmptyText}} data-string-list-empty="{{.EmptyText}}"{{end}}>
+  <fieldset class="fieldset bg-base-200 border border-base-300 rounded-box p-4">
+    <legend class="fieldset-legend">
+      <span class="inline-flex items-center gap-1">
+        {{.Label}}
+        {{if .Info}}{{template "field_info" (dict "Info" .Info)}}{{end}}
+      </span>
+    </legend>
+    <div class="{{if $unordered}}flex flex-wrap gap-2{{else}}space-y-1{{end}}" data-string-list>
+      {{if and .EmptyText (not .Items)}}
+      <p class="text-sm opacity-60{{if $unordered}} w-full{{end}}" data-string-list-empty-label>{{.EmptyText}}</p>
+      {{end}}
+      {{range .Items}}
+      {{if $unordered}}
+      <span class="badge badge-lg gap-1 pr-0.5 max-w-full" data-string-list-row>
+        <input type="hidden" name="{{$.Name}}" value="{{.}}" />
+        <span class="truncate max-w-48">{{.}}</span>
+        <button type="button" class="btn btn-ghost btn-xs btn-square h-4 min-h-4 w-4 p-0 shrink-0" data-string-list-remove aria-label="Remove {{$sing}}"><i data-lucide="x" class="size-3"></i></button>
+      </span>
+      {{else}}
+      <div class="flex gap-1 items-center" data-string-list-row>
+        <input type="hidden" name="{{$.Name}}" value="{{.}}" />
+        <span class="tabular-nums text-xs opacity-60 w-4 shrink-0 text-right" data-list-ord aria-hidden="true"></span>
+        <div class="join shrink-0">
+          <button type="button" class="btn btn-ghost btn-sm btn-square join-item" data-string-list-up aria-label="Move {{$sing}} up"><i data-lucide="chevron-up" class="size-4"></i></button>
+          <button type="button" class="btn btn-ghost btn-sm btn-square join-item" data-string-list-down aria-label="Move {{$sing}} down"><i data-lucide="chevron-down" class="size-4"></i></button>
+        </div>
+        <span class="grow min-w-0 text-sm truncate">{{.}}</span>
+        <button type="button" class="btn btn-ghost btn-sm btn-square shrink-0" data-string-list-remove aria-label="Remove {{$sing}}"><i data-lucide="minus" class="size-4"></i></button>
+      </div>
+      {{end}}
+      {{end}}
+    </div>
+    <div class="join w-full mt-2" data-string-list-draft>
+      <input type="text" class="input join-item grow min-w-0" list="{{.ListID}}" data-string-list-draft-value placeholder="{{$ph}}" autocomplete="off" />
+      <button type="button" class="btn btn-outline btn-square join-item shrink-0" data-string-list-add aria-label="Add {{$sing}}"><i data-lucide="plus" class="size-4"></i></button>
+    </div>
+    <datalist id="{{.ListID}}">
+      {{range .Options}}
+      <option value="{{.}}"></option>
+      {{end}}
+    </datalist>
+  </fieldset>
+</div>
+{{end}}

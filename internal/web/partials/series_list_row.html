@@ -1,0 +1,34 @@
+{{define "series_list_row"}}
+{{/* Dot: seriesListRow with Series fields + PosterURL Line2 KindIcon KindTip MonitorTitle Redirect LiveTarget MonitorInd StatusInd */}}
+{{template "list_row_shell" (dict
+  "MediaURL" .PosterURL
+  "MediaClass" "size-14 shrink-0"
+  "Circle" true
+  "PlaceholderIcon" "tv"
+  "TitleHref" (printf "/series/%d" .ID)
+  "Title" .Title
+  "KindIcon" .KindIcon
+  "KindTip" .KindTip
+  "MonitorInd" .MonitorInd
+  "StatusInd" .StatusInd
+  "Line2" .Line2
+  "ShowProgress" true
+  "DeliveryMode" .DeliveryMode
+  "ProgressTotal" .ProgressTotal
+  "DownloadedCount" .DownloadedCount
+  "WantedCount" .WantedCount
+  "StreamOptimizedCount" .StreamOptimizedCount
+  "StreamColdCount" .StreamColdCount
+  "StreamOptimizedPct" .StreamOptimizedPct
+  "StreamColdPct" .StreamColdPct
+  "Monitor" (dict
+    "Action" "/actions/set-series-monitored"
+    "SeriesID" .ID
+    "Monitored" .Monitored
+    "Redirect" .Redirect
+    "Title" .MonitorTitle
+    "AsButton" true
+    "LiveTarget" .LiveTarget
+  )
+)}}
+{{end}}

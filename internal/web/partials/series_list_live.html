@@ -1,0 +1,32 @@
+{{define "series_list_live"}}
+<div id="series-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}>
+{{if or .Series .FilterActive}}
+{{template "list_filters" (dict
+  "Query" .SeriesFilter.Query
+  "QueryPlaceholder" .SeriesFilter.QueryPlaceholder
+  "AriaLabel" .SeriesFilter.AriaLabel
+  "Selects" .SeriesFilter.Selects
+  "LiveTarget" .SeriesFilter.LiveTarget
+  "FormAction" .SeriesFilter.FormAction
+)}}
+{{end}}
+{{if not .Series}}
+{{if .FilterActive}}
+{{template "list_empty" "No series match the filters."}}
+{{else}}
+<div class="py-10 px-4 w-full">
+  <div class="flex w-full max-w-2xl mx-auto flex-col items-center">
+    <label for="modal-add-series" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal w-full">Add series</label>
+  </div>
+</div>
+{{end}}
+{{else}}
+<ul class="list bg-base-100 rounded-box border border-base-300">
+  {{range .Series}}
+  {{template "series_list_row" .}}
+  {{end}}
+</ul>
+{{template "pagination" .Page}}
+{{end}}
+</div>
+{{end}}

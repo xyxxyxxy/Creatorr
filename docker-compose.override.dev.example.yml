@@ -1,0 +1,12 @@
+# Machine-local plugin mounts for dev. Copy to docker-compose.override.dev.yml
+# (gitignored) and pass -f with the .dev stack:
+#   docker compose -f docker-compose.dev.yml \
+#     -f docker-compose.override.dev.yml up -d --build
+#   ./scripts/compose …  (includes override.dev when the file exists)
+#
+# See docs/ytdlp.md and PLUGIN.md in each plugin repo.
+services:
+  creatorr:
+    volumes:
+      # Uncomment when a sibling handler checkout exists:
+      # - ../Creatorr-handler-example.com:/yt-dlp-plugins/example:ro

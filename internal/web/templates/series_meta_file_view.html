@@ -1,0 +1,58 @@
+{{define "series_meta_file_view"}}
+{{template "head" .}}
+{{template "breadcrumbs" .Crumbs}}
+<div class="navbar bg-base-100 border border-base-300 rounded-box px-3 mb-4 min-h-14 gap-2 flex-wrap">
+  <div class="flex-1 min-w-0">
+    <h1 class="text-xl font-semibold truncate inline-flex items-center gap-2 max-w-full">
+      <i data-lucide="{{.Icon}}" class="size-5 shrink-0"></i>
+      <span class="truncate">{{.Name}}</span>
+    </h1>
+    <p class="text-xs opacity-60">{{.KindLabel}} · {{.SizeLabel}}</p>
+  </div>
+  <div class="flex-none flex flex-wrap gap-2 items-center">
+    {{if not .Missing}}
+    <a class="btn btn-outline" href="{{.RawHref}}?download=1">Download</a>
+    {{end}}
+  </div>
+</div>
+
+{{template "list_panel"}}
+<div class="list-header flex flex-wrap items-center justify-between gap-3">
+  <div class="min-w-0 flex-1">
+    <h2 class="text-lg font-semibold">File</h2>
+  </div>
+</div>
+{{if .Missing}}
+{{template "list_empty" "File is missing on disk."}}
+{{else if .IsImage}}
+<div class="flex justify-center p-4 bg-base-200 rounded-box border border-base-300">
+  <img class="max-w-full max-h-[70vh] object-contain rounded" src="{{.RawHref}}" alt="{{.Name}}" />
+</div>
+{{else if .IsText}}
+{{if .Truncated}}
+<p class="text-sm opacity-60 mb-2">Preview truncated to 2 MiB.</p>
+{{end}}
+<pre class="text-xs font-mono whitespace-pre-wrap break-all bg-base-200 border border-base-300 rounded-box p-4 max-h-[70vh] overflow-auto">{{.Text}}</pre>
+{{else}}
+{{template "list_empty" "No in-app preview for this file type. Use Download."}}
+{{end}}
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Details")}}
+{{template "list_table"}}
+<tbody>
+  <tr><th class="w-40">Type</th><td>{{.KindLabel}}</td></tr>
+  <tr><th class="w-40">Name</th><td><code class="text-xs">{{.Name}}</code></td></tr>
+  {{if eq .SizeLabel "-"}}
+  {{template "detail_row" (dict "Label" "Size" "TdClass" "tabular-nums")}}
+  {{else}}
+  <tr><th class="w-40">Size</th><td class="tabular-nums">{{.SizeLabel}}</td></tr>
+  {{end}}
+  <tr><th class="w-40">Path</th><td class="text-xs break-all"><code>{{.Path}}</code></td></tr>
+</tbody>
+{{template "list_table_end"}}
+{{template "list_panel_end"}}
+
+{{template "foot" .}}
+{{end}}

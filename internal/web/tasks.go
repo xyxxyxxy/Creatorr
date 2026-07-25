@@ -1,0 +1,296 @@
+package web
+
+import (
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/xyxxyxxy/Creatorr/internal/cookies"
+	"github.com/xyxxyxxy/Creatorr/internal/domains"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
+)
+
+type taskView struct {
+	ID          int64
+	Position    int
+	Status      string
+	Kind        string
+	SeriesID    int64
+	SeriesTitle string
+	VideoID     int64
+	VideoTitle  string
+	Message     string
+	Progress    *float64
+}
+
+type laneView struct {
+	Domain              string
+	Paused              bool
+	CanPause            bool // false for system / reserved lanes
+	Tasks               []taskView
+	Page                PageInfo
+	PendingCount        int
+	DownloadCount       int
+	ShowCancelPending   bool
+	ShowCooldown        bool
+	CooldownEndsAt      string // RFC3339Nano for JS tick
+	CooldownMin         int
+	CooldownSec         int
+	RateLimit           string  // effective yt-dlp --limit-rate display
+	SleepRequests       float64 // effective yt-dlp --sleep-requests
+	HasCookies          bool
+	CookiesTip          string
+	HasOverrideRow      bool
+	CooldownOverride     string
+	QueueOverride       string
+	ParallelOverride    string
+	RateOverride        string
+	SleepOverride       string
+	FlareOverride       string
+	CookieContent       string
+	DefaultCooldown      int
+	DefaultQueue        int
+	DefaultParallel     int
+	DefaultRate         string
+	DefaultSleep        float64
+	DefaultFlare        bool
+}
+
+func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
+	tasks, err := h.Queue.ListActive()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	known, err := domains.List(h.Queue.DB)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	knownMeta := map[string]domains.Domain{}
+	for _, d := range known {
+		knownMeta[d.Domain] = d
+	}
+
+	titles := map[int64]string{}
+	videoTitles := map[int64]string{}
+	lanesMap := map[string]*laneView{}
+	var order []string
+
+	defLim, _ := settings.DefaultLimits(h.Queue.DB)
+	ensureLane := func(domain string) *laneView {
+		lv, ok := lanesMap[domain]
+		if ok {
+			return lv
+		}
+		canPause := domain != queue.SystemDomain && domain != "unknown" && domain != settings.DomainDefault
+		paused := false
+		if canPause {
+			if p, err := domains.IsPaused(h.Queue.DB, domain); err == nil {
+				paused = p
+			}
+		}
+		lv = &laneView{
+			Domain:           domain,
+			Paused:           paused,
+			CanPause:         canPause,
+			DefaultCooldown:  defLim.TaskCooldownSeconds,
+			DefaultQueue:     defLim.MaxDownloadQueue,
+			DefaultParallel:  defLim.MaxParallelTasks,
+			DefaultRate:      defLim.DownloadRateLimit,
+			DefaultSleep:     defLim.SleepRequests,
+			DefaultFlare:     defLim.UseFlareSolverr,
+		}
+		if domain != queue.SystemDomain {
+			if lim, err := settings.LimitsForDomain(h.Queue.DB, domain); err == nil {
+				lv.RateLimit = lim.DownloadRateLimit
+				lv.SleepRequests = lim.SleepRequests
+			}
+			if ok, tip, err := cookies.Applies(h.Queue.DB, domain); err == nil && ok {
+				lv.HasCookies = true
+				lv.CookiesTip = tip
+			}
+			if meta, ok := knownMeta[domain]; ok {
+				lv.HasOverrideRow = true
+				lv.FlareOverride = domains.FlareOverrideLabel(meta.UseFlareSolverr)
+				if meta.TaskCooldownSeconds.Valid {
+					lv.CooldownOverride = strconv.FormatInt(meta.TaskCooldownSeconds.Int64, 10)
+				}
+				if meta.MaxDownloadQueue.Valid {
+					lv.QueueOverride = strconv.FormatInt(meta.MaxDownloadQueue.Int64, 10)
+				}
+				if meta.MaxParallelTasks.Valid {
+					lv.ParallelOverride = strconv.FormatInt(meta.MaxParallelTasks.Int64, 10)
+				}
+				if meta.DownloadRateLimit.Valid {
+					s := strings.TrimSpace(meta.DownloadRateLimit.String)
+					if s == "" {
+						s = "off"
+					}
+					lv.RateOverride = s
+				}
+				if meta.SleepRequests.Valid {
+					lv.SleepOverride = strconv.FormatFloat(meta.SleepRequests.Float64, 'f', -1, 64)
+				}
+			}
+			if c, err := cookies.Get(h.Queue.DB, domain); err == nil {
+				lv.CookieContent = c
+			}
+		}
+		lanesMap[domain] = lv
+		order = append(order, domain)
+		return lv
+	}
+
+	// System lane always visible (maintenance + SponsorBlock cuts); pin first.
+	ensureLane(queue.SystemDomain)
+	for _, d := range known {
+		if d.Domain == settings.DomainDefault {
+			continue
+		}
+		ensureLane(d.Domain)
+	}
+	// Source hostnames always get a lane even without a domains override row.
+	if sourceHosts, err := h.Library.ListSourceDomains(); err == nil {
+		for _, host := range sourceHosts {
+			ensureLane(host)
+		}
+	}
+	for _, t := range tasks {
+		lv := ensureLane(t.Domain)
+		tv := taskView{
+			ID: t.ID, Position: t.QueuePos, Status: t.Status, Kind: t.Kind, Message: t.Message,
+		}
+		if t.SeriesID.Valid {
+			tv.SeriesID = t.SeriesID.Int64
+			if title, ok := titles[tv.SeriesID]; ok {
+				tv.SeriesTitle = title
+			} else if ser, err := h.Library.GetSeries(tv.SeriesID, false); err == nil {
+				titles[tv.SeriesID] = ser.Title
+				tv.SeriesTitle = ser.Title
+			}
+		}
+		if t.VideoID.Valid {
+			tv.VideoID = t.VideoID.Int64
+			if title, ok := videoTitles[tv.VideoID]; ok {
+				tv.VideoTitle = title
+			} else if v, err := h.Library.GetVideo(tv.VideoID); err == nil {
+				videoTitles[tv.VideoID] = v.Title
+				tv.VideoTitle = v.Title
+				if tv.SeriesID == 0 {
+					tv.SeriesID = v.SeriesID
+				}
+			}
+		}
+		if t.Progress.Valid {
+			p := t.Progress.Float64
+			tv.Progress = &p
+		}
+		lv.Tasks = append(lv.Tasks, tv)
+		if t.Status == queue.StatusPending {
+			lv.PendingCount++
+		}
+		if t.Kind == queue.KindDownload || t.Kind == queue.KindCacheBeginning {
+			lv.DownloadCount++
+		}
+	}
+
+	// Stable order: system first, then known domains (alphabetical), then any extras from tasks.
+	var rest []string
+	for _, d := range order {
+		if d == queue.SystemDomain {
+			continue
+		}
+		rest = append(rest, d)
+	}
+	sort.Strings(rest)
+	order = append([]string{queue.SystemDomain}, rest...)
+	lanes := make([]laneView, 0, len(order))
+	for _, d := range order {
+		lv := lanesMap[d]
+		if lv == nil {
+			continue
+		}
+		lv.ShowCancelPending = lv.PendingCount > 0
+		if d != queue.SystemDomain {
+			if until := h.Queue.CooldownUntil(d); !until.IsZero() {
+				rem := int(time.Until(until).Round(time.Second) / time.Second)
+				if rem < 1 {
+					rem = 1
+				}
+				lv.ShowCooldown = true
+				lv.CooldownEndsAt = until.UTC().Format(time.RFC3339Nano)
+				lv.CooldownMin = rem / 60
+				if lv.CooldownMin > 999 {
+					lv.CooldownMin = 999
+				}
+				lv.CooldownSec = rem % 60
+			}
+		}
+		pageTasks, pageInfo := SlicePage(r, "page", lv.Tasks)
+		lv.Tasks = pageTasks
+		lv.Page = pageInfo
+		lanes = append(lanes, *lv)
+	}
+	flareOK, _ := settings.FlareSolverrConfigured(h.Queue.DB)
+
+	render(w, "tasks", struct {
+		pageBase
+		Lanes           []laneView
+		FlareConfigured bool
+	}{
+		pageBase:        newPage("Tasks", "tasks", nil),
+		Lanes:           lanes,
+		FlareConfigured: flareOK,
+	})
+}
+
+func (h *Handler) actionCancelTask(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	_, _ = h.Queue.CancelWithMessage(id, "Cancelled")
+	redir := strings.TrimSpace(r.FormValue("redirect"))
+	if redir == "" || !strings.HasPrefix(redir, "/") || strings.HasPrefix(redir, "//") {
+		redir = "/tasks"
+	}
+	http.Redirect(w, r, redir, http.StatusSeeOther)
+}
+
+func (h *Handler) actionBumpTask(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	_ = h.Queue.Bump(id)
+	http.Redirect(w, r, "/tasks", http.StatusSeeOther)
+}
+
+func (h *Handler) actionCancelDomainTasks(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	domain := settings.NormalizeDomain(r.FormValue("domain"))
+	if domain != "" {
+		_, _ = h.Queue.CancelPendingDomain(domain)
+	}
+	http.Redirect(w, r, "/tasks", http.StatusSeeOther)
+}
+
+func (h *Handler) actionSetDomainPaused(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	domain := formDomain(r)
+	paused := r.FormValue("paused") == "1"
+	if err := domains.SetPaused(h.Queue.DB, domain, paused); err != nil {
+		redir := r.FormValue("redirect")
+		if redir == "" {
+			redir = "/tasks"
+		}
+		http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
+		return
+	}
+	redir := r.FormValue("redirect")
+	if redir == "" {
+		redir = "/tasks"
+	}
+	http.Redirect(w, r, redir, http.StatusSeeOther)
+}

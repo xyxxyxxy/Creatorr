@@ -1,0 +1,24 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+
+linters-settings:
+  errcheck:
+    exclude-functions:
+      - encoding/json.Marshal
+      - (*encoding/json.Encoder).Encode
+
+issues:
+  exclude-rules:
+    - path: internal/api/gen/
+      linters:
+        - errcheck
+        - unused

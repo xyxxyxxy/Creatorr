@@ -1,0 +1,1788 @@
+openapi: 3.0.3
+info:
+  title: Creatorr API
+  version: 0.1.0
+  description: |
+    REST API for Creatorr (creator VOD daemon).
+    HTMX HTML routes and SSE (`/api/events`) are out of this contract - see AGENTS.md.
+
+servers:
+  - url: /
+    description: Local / Docker
+
+tags:
+  - name: system
+  - name: tasks
+  - name: history
+  - name: settings
+  - name: cookies
+  - name: queue
+  - name: library
+
+paths:
+  /api/health:
+    get:
+      tags: [system]
+      operationId: getHealth
+      summary: Dependency health checks
+      responses:
+        "200":
+          description: Health report (may be ok, degraded, or down)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/tasks:
+    get:
+      tags: [tasks]
+      operationId: listTasks
+      summary: Running and pending tasks by domain queue
+      responses:
+        "200":
+          description: Active tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+    post:
+      tags: [tasks]
+      operationId: enqueueTask
+      summary: Enqueue a task (manual / tests)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnqueueTaskRequest"
+      responses:
+        "201":
+          description: Created task id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnqueueTaskResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/tasks/cancel-all:
+    post:
+      tags: [tasks]
+      operationId: cancelAllTasks
+      summary: Cancel all pending tasks
+      responses:
+        "200":
+          description: Count cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cancelled]
+                properties:
+                  cancelled:
+                    type: integer
+                    format: int64
+
+  /api/tasks/{id}/cancel:
+    post:
+      tags: [tasks]
+      operationId: cancelTask
+      summary: Cancel a pending or running task
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "204":
+          description: Cancelled
+        "404":
+          description: Not found / not cancellable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/tasks/{id}/bump:
+    post:
+      tags: [tasks]
+      operationId: bumpTask
+      summary: Raise priority of a pending task
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "204":
+          description: Bumped
+        "404":
+          description: Not pending
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/domains/paused:
+    get:
+      tags: [queue]
+      operationId: listPausedDomains
+      summary: List soft-paused hostname queue lanes
+      responses:
+        "200":
+          description: Sorted list of paused domain hostnames
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /api/domains/{domain}/active:
+    put:
+      tags: [queue]
+      operationId: setDomainActive
+      summary: Set whether a domain is active (inactive domains do not run queue tasks; deactivating cancels pending and running tasks for that host)
+      parameters:
+        - $ref: "#/components/parameters/Domain"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetActiveRequest"
+      responses:
+        "204":
+          description: Updated
+        "400":
+          description: Invalid domain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/domains/{domain}/paused:
+    put:
+      tags: [queue]
+      operationId: setDomainPaused
+      summary: Soft-pause or resume a domain queue lane (ClaimNext blocked; interactive metadata prefetch still runs; pending stay queued; running continue; does not create a domains override row)
+      parameters:
+        - $ref: "#/components/parameters/Domain"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPausedRequest"
+      responses:
+        "204":
+          description: Updated
+        "400":
+          description: Invalid domain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/history:
+    get:
+      tags: [history]
+      operationId: listHistory
+      summary: Finished tasks (History)
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [done, failed, cancelled]
+          description: Filter by terminal task status
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: History items (finished tasks)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HistoryItem"
+
+  /api/notifications:
+    get:
+      tags: [history]
+      operationId: listNotifications
+      summary: In-app notification log
+      parameters:
+        - name: event
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, download_digest]
+        - name: unread_only
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Notifications newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /api/notifications/unread-count:
+    get:
+      tags: [history]
+      operationId: getNotificationUnreadCount
+      summary: Unread alert notification count
+      responses:
+        "200":
+          description: Count of unread alert notifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadCount"
+
+  /api/notifications/read-all:
+    post:
+      tags: [history]
+      operationId: markAllNotificationsRead
+      summary: Mark all unread alert notifications as read
+      responses:
+        "200":
+          description: Updated unread count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadCount"
+
+  /api/notifications/{id}:
+    get:
+      tags: [history]
+      operationId: getNotification
+      summary: One notification
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/notifications/{id}/read:
+    post:
+      tags: [history]
+      operationId: markNotificationRead
+      summary: Mark one notification as read
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Notification after mark
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/settings:
+    get:
+      tags: [settings]
+      operationId: listSettings
+      summary: List editable settings with help text
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SettingEntry"
+    put:
+      tags: [settings]
+      operationId: updateSettings
+      summary: Update one or more settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSettingsRequest"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SettingEntry"
+        "400":
+          description: Unknown key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/cookies:
+    get:
+      tags: [cookies]
+      operationId: listCookies
+      summary: List per-domain Netscape cookie jars
+      responses:
+        "200":
+          description: Cookies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Cookie"
+    put:
+      tags: [cookies]
+      operationId: upsertCookie
+      summary: Create or replace cookies for a domain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertCookieRequest"
+      responses:
+        "204":
+          description: Saved
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/cookies/{domain}:
+    delete:
+      tags: [cookies]
+      operationId: deleteCookie
+      summary: Delete cookies for a domain
+      parameters:
+        - $ref: "#/components/parameters/Domain"
+      responses:
+        "204":
+          description: Deleted
+
+  /api/roots:
+    get:
+      tags: [library]
+      operationId: listRoots
+      summary: List root folders
+      responses:
+        "200":
+          description: Roots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RootFolder"
+    post:
+      tags: [library]
+      operationId: createRoot
+      summary: Create a root folder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRootRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RootFolder"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/roots/{id}:
+    patch:
+      tags: [library]
+      operationId: updateRoot
+      summary: Update a root folder
+      parameters:
+        - $ref: "#/components/parameters/RootId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRootRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RootFolder"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/quality-profiles:
+    get:
+      tags: [library]
+      operationId: listQualityProfiles
+      summary: List quality profiles
+      responses:
+        "200":
+          description: Profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QualityProfile"
+    post:
+      tags: [library]
+      operationId: createQualityProfile
+      summary: Create a quality profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQualityProfileRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualityProfile"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/quality-profiles/{id}:
+    patch:
+      tags: [library]
+      operationId: updateQualityProfile
+      summary: Update a quality profile
+      parameters:
+        - $ref: "#/components/parameters/QualityProfileId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQualityProfileRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualityProfile"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/series:
+    get:
+      tags: [library]
+      operationId: listSeries
+      summary: List series with sources and counts
+      responses:
+        "200":
+          description: Series
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Series"
+    post:
+      tags: [library]
+      operationId: createSeries
+      summary: Create a series (optional first source)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSeriesRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Series"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/series/{id}:
+    get:
+      tags: [library]
+      operationId: getSeries
+      summary: Series detail with sources and videos
+      parameters:
+        - $ref: "#/components/parameters/SeriesId"
+      responses:
+        "200":
+          description: Series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Series"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [library]
+      operationId: deleteSeries
+      summary: Delete a series and its sources/indexed entries (library files on disk are kept; UI delete always removes library files after confirm)
+      parameters:
+        - $ref: "#/components/parameters/SeriesId"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/series/{id}/scan:
+    post:
+      tags: [library]
+      operationId: scanSeries
+      summary: Enqueue full scan for sources that still need indexing
+      parameters:
+        - $ref: "#/components/parameters/SeriesId"
+      responses:
+        "201":
+          description: Scan task enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnqueueTaskResponse"
+        "400":
+          description: No eligible sources (full scan done or domains inactive)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Series not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Scan already queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/series/{id}/metadata-rescan:
+    post:
+      tags: [library]
+      operationId: metadataRescanSeries
+      summary: Enqueue metadata rescan for existing videos (no discovery)
+      parameters:
+        - $ref: "#/components/parameters/SeriesId"
+      responses:
+        "201":
+          description: Metadata rescan task enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnqueueTaskResponse"
+        "400":
+          description: No monitored sources
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Series not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Metadata rescan already queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/series/{id}/sources:
+    post:
+      tags: [library]
+      operationId: addSource
+      summary: Add a source URL to a series
+      parameters:
+        - $ref: "#/components/parameters/SeriesId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSourceRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Source"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Series not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/series/{id}/sources/{sourceId}:
+    patch:
+      tags: [library]
+      operationId: updateSource
+      summary: Update a source
+      parameters:
+        - $ref: "#/components/parameters/SeriesId"
+        - $ref: "#/components/parameters/SourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSourceRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Source"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [library]
+      operationId: deleteSource
+      summary: Delete a source and all of its videos
+      description: >
+        Removes the source, hard-deletes every indexed video that belonged to it
+        (including on-disk media/sidecars), and cancels related scan/download tasks.
+        To keep videos, unmonitor the source instead.
+      parameters:
+        - $ref: "#/components/parameters/SeriesId"
+        - $ref: "#/components/parameters/SourceId"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/videos/{id}:
+    get:
+      tags: [library]
+      operationId: getVideo
+      summary: Get one indexed video
+      parameters:
+        - $ref: "#/components/parameters/VideoId"
+      responses:
+        "200":
+          description: Video
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Video"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/videos/{id}/want:
+    post:
+      tags: [library]
+      operationId: wantVideo
+      summary: Set status to wanted from ignored, deleted, or missing; does not enqueue download
+      parameters:
+        - $ref: "#/components/parameters/VideoId"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Video"
+        "400":
+          description: Status cannot be wanted again
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/videos/{id}/metadata-rescan:
+    post:
+      tags: [library]
+      operationId: metadataRescanVideo
+      summary: Enqueue metadata rescan for one indexed video
+      parameters:
+        - $ref: "#/components/parameters/VideoId"
+      responses:
+        "201":
+          description: Metadata rescan task enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnqueueTaskResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Metadata rescan already queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/import/scan:
+    post:
+      tags: [library]
+      operationId: scanImport
+      summary: Scan import inbox and library orphans; return match suggestions (never auto-binds)
+      description: >
+        Lists every untracked file under the import folder and online root folders (not already
+        in the files table): media, sidecars (nfo/json/thumb/sub), and other files. Media match
+        existing videos by id/title; orphan sidecars match by filename stem beside a tracked
+        video. Library hits bind in place (no move); inbox media move into the series folder.
+        Nothing binds until POST /api/import/manual.
+      responses:
+        "200":
+          description: Candidates with suggestions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportScanResponse"
+        "400":
+          description: Import root missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/import/manual:
+    post:
+      tags: [library]
+      operationId: importManual
+      summary: Confirm bind or create unmatched video - enqueue import task
+      description: >
+        With video_id, binds an existing indexed video (inbox move or library in-place) for media,
+        or attaches sidecar file(s) when the path is a sidecar / paths lists sidecars (video must
+        already have media). With series_id (and no video_id), creates a new video from
+        supplied/sidecar metadata then enqueues install (inbox) or in-place bind (library orphan).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportManualRequest"
+      responses:
+        "201":
+          description: Import task enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnqueueTaskResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Video or media file not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Already has file or import queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  parameters:
+    TaskId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    Domain:
+      name: domain
+      in: path
+      required: true
+      schema:
+        type: string
+    RootId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    QualityProfileId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    SeriesId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    SourceId:
+      name: sourceId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    VideoId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine code (e.g. CookieInvalid, DownloadFailed, RemuxFailed, PackFailed)
+        message:
+          type: string
+          description: Short user-facing text
+        detail:
+          type: string
+          description: Optional operator/debug detail
+
+    HealthStatus:
+      type: string
+      enum: [ok, degraded, down]
+
+    HealthCheck:
+      type: object
+      required: [name, status]
+      properties:
+        name:
+          type: string
+          description: Check id (db, worker, ytdlp, disk, flaresolverr)
+        status:
+          $ref: "#/components/schemas/HealthStatus"
+        message:
+          type: string
+          description: Short explanation
+
+    HealthResponse:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          $ref: "#/components/schemas/HealthStatus"
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/HealthCheck"
+
+    TaskStatus:
+      type: string
+      enum: [pending, running, done, failed, cancelled]
+
+    Task:
+      type: object
+      required: [id, kind, status, domain, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        kind:
+          type: string
+          description: scan, download, rescan_metadata, import
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        domain:
+          type: string
+        series_id:
+          type: integer
+          format: int64
+          nullable: true
+        video_id:
+          type: integer
+          format: int64
+          nullable: true
+        message:
+          type: string
+        progress:
+          type: number
+          format: double
+          nullable: true
+        queue_position:
+          type: integer
+          nullable: true
+          description: 1 = front of domain queue
+        error_code:
+          type: string
+        error_message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    EnqueueTaskRequest:
+      type: object
+      required: [kind, domain]
+      properties:
+        kind:
+          type: string
+        domain:
+          type: string
+        series_id:
+          type: integer
+          format: int64
+        video_id:
+          type: integer
+          format: int64
+        message:
+          type: string
+        priority:
+          type: integer
+
+    EnqueueTaskResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: integer
+          format: int64
+
+    ImportManualRequest:
+      type: object
+      description: >
+        Bind to an existing video (video_id) or create a new indexed video under series_id
+        with optional metadata (unmatched import). Exactly one of video_id or series_id required.
+        For media bind/create, path is required. For attaching multiple sidecars at once, pass
+        video_id and paths (path optional when paths is set).
+      properties:
+        path:
+          type: string
+          description: Absolute path under the import inbox or an online library root
+        paths:
+          type: array
+          items:
+            type: string
+          description: Multiple sidecar paths to attach at once (requires video_id; video must already have media)
+        video_id:
+          type: integer
+          format: int64
+          description: Existing indexed video to bind (omit when creating)
+        series_id:
+          type: integer
+          format: int64
+          description: Series for a new video when unmatched (omit when binding existing)
+        title:
+          type: string
+          description: Title for new video; defaults from filename / info.json / NFO
+        remote_id:
+          type: string
+          description: Remote id for new video; defaults from sidecars or import- hash
+        handler_id:
+          type: string
+          description: Optional site hint (e.g. yt-dlp); not a registry id
+        source_url:
+          type: string
+          description: Video page URL (watch/clip); never the feed channel/playlist URL
+        upload_date:
+          type: string
+          description: RFC3339 UTC preferred; date-only (YYYY-MM-DD / YYYYMMDD) accepted for unmatched import and stored as midnight UTC.
+        description:
+          type: string
+        verify:
+          type: boolean
+          description: >
+            When true, after successful import bind/pack enqueue system media_verify
+            (null-decode). Explicit opt-in; ignores profile mature-only gate. Default false.
+
+    ImportIDHint:
+      type: object
+      required: [handler_id, remote_id]
+      properties:
+        handler_id:
+          type: string
+        remote_id:
+          type: string
+
+    ImportVideoSuggestion:
+      type: object
+      required: [video_id, series_id, title, series_title, score]
+      properties:
+        video_id:
+          type: integer
+          format: int64
+        series_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        series_title:
+          type: string
+        remote_id:
+          type: string
+        score:
+          type: number
+          format: double
+
+    ImportSeriesSuggestion:
+      type: object
+      required: [series_id, title, score]
+      properties:
+        series_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        score:
+          type: number
+          format: double
+
+    ImportCandidate:
+      type: object
+      required: [path, filename, source, role, ids, video_suggestions, series_suggestions]
+      properties:
+        path:
+          type: string
+        filename:
+          type: string
+        source:
+          type: string
+          enum: [inbox, library]
+          description: inbox = import folder (move on confirm for media); library = under a root (bind in place)
+        role:
+          type: string
+          enum: [video, nfo, json, thumb, sub, other]
+          description: File classification; other is listed for visibility but cannot be imported
+        ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportIDHint"
+        suggested_video_id:
+          type: integer
+          format: int64
+          nullable: true
+        suggested_series_id:
+          type: integer
+          format: int64
+          nullable: true
+        suggested_title:
+          type: string
+          description: Prefill title for unmatched create
+        suggested_remote_id:
+          type: string
+        suggested_handler_id:
+          type: string
+        match_type:
+          type: string
+          description: id, title, series_title, or sidecar_stem when suggested
+        match_label:
+          type: string
+        video_suggestions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportVideoSuggestion"
+        series_suggestions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportSeriesSuggestion"
+
+    ImportScanResponse:
+      type: object
+      required: [import_path, candidates]
+      properties:
+        import_path:
+          type: string
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportCandidate"
+
+    HistoryItem:
+      type: object
+      required: [id, created_at, kind, status, message]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Task id
+        created_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        kind:
+          type: string
+        status:
+          type: string
+          enum: [done, failed, cancelled]
+        message:
+          type: string
+        code:
+          type: string
+        detail:
+          type: string
+        series_id:
+          type: integer
+          format: int64
+          nullable: true
+        video_id:
+          type: integer
+          format: int64
+          nullable: true
+        domain:
+          type: string
+
+    Notification:
+      type: object
+      required: [id, created_at, event, title, body, external_ok, unread]
+      properties:
+        id:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        event:
+          type: string
+          enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, download_digest]
+        title:
+          type: string
+        body:
+          type: string
+        task_id:
+          type: integer
+          format: int64
+          nullable: true
+        external_ok:
+          type: boolean
+          description: True when any Apprise channel delivery succeeded
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+        unread:
+          type: boolean
+          description: True for unread alert notifications
+
+    NotificationUnreadCount:
+      type: object
+      required: [count]
+      properties:
+        count:
+          type: integer
+          minimum: 0
+
+    SettingEntry:
+      type: object
+      required: [key, label, value, help]
+      properties:
+        key:
+          type: string
+          description: Stable settings key (snake_case)
+        label:
+          type: string
+          description: Human-readable General Settings title
+        value:
+          type: string
+        help:
+          type: string
+
+    UpdateSettingsRequest:
+      type: object
+      required: [values]
+      properties:
+        values:
+          type: object
+          additionalProperties:
+            type: string
+
+    Cookie:
+      type: object
+      required: [domain, content, updated_at]
+      properties:
+        domain:
+          type: string
+          description: Hostname (www. stripped) or `default` for the global fallback jar
+        content:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+
+    UpsertCookieRequest:
+      type: object
+      required: [domain, content]
+      properties:
+        domain:
+          type: string
+          description: Hostname or `default` for the global fallback jar
+        content:
+          type: string
+
+    RootFolder:
+      type: object
+      required: [id, name, path]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        path:
+          type: string
+        retention_ttl_seconds:
+          type: integer
+          format: int64
+          nullable: true
+          description: Seconds after acquire before files may be removed. Empty = no retention.
+
+    CreateRootRequest:
+      type: object
+      required: [path]
+      properties:
+        name:
+          type: string
+          description: Display label; empty uses the last path segment.
+        path:
+          type: string
+          description: Absolute path on disk (relative paths are rejected).
+        retention_ttl_seconds:
+          type: integer
+          format: int64
+          nullable: true
+
+    UpdateRootRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        retention_ttl_seconds:
+          type: integer
+          format: int64
+          nullable: true
+
+    QualityProfile:
+      type: object
+      required: [id, name, format_selector, maturity_redownload_hours, maturity_sidecar_hours, sponsorblock_mark, sponsorblock_remove, sponsorblock_reencode_cut, sponsorblock_info_cards, verify_media]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        format_selector:
+          type: string
+          description: yt-dlp -f style format selector; Creatorr passes it to the domain handler as --format
+        maturity_redownload_hours:
+          type: integer
+          minimum: 0
+          maximum: 168
+          description: Hours after upload_date for one blind media maturity pass (0 = off for all series on this profile).
+        maturity_sidecar_hours:
+          type: integer
+          minimum: 0
+          maximum: 8760
+          description: Hours after upload_date for one NFO/thumb/subs refresh (0 = off). UI edits this as days. Does not rewrite info.json.
+        sponsorblock_mark:
+          type: array
+          items:
+            type: string
+          description: SponsorBlock categories to embed as extra MKV chapters (explicit list; empty = off). Must be disjoint from sponsorblock_remove.
+        sponsorblock_remove:
+          type: array
+          items:
+            type: string
+          description: SponsorBlock categories to cut/skip (explicit list; empty = off). Must be disjoint from sponsorblock_mark.
+        sponsorblock_reencode_cut:
+          type: boolean
+          description: When remove is non-empty, re-encode keep segments for accurate cut timestamps (bitrate/codec-matched). Off = stream-copy keyframe snap.
+        sponsorblock_info_cards:
+          type: boolean
+          description: When reencode_cut is on and remove is non-empty, insert hard-cut info cards at each skip. Rejected if set without reencode_cut.
+        verify_media:
+          type: boolean
+          description: >
+            When true, after archive pack enqueue a low-priority system media_verify (null-decode).
+            With maturity_redownload_hours > 0, young first packs skip verify until the maturity re-download
+            (or when maturity will never run). Default false.
+
+    CreateQualityProfileRequest:
+      type: object
+      required: [name, format_selector]
+      properties:
+        name:
+          type: string
+        format_selector:
+          type: string
+          description: yt-dlp -f style format selector
+        maturity_redownload_hours:
+          type: integer
+          minimum: 0
+          maximum: 168
+          description: Hours after upload_date for media maturity (0 = off; default 0)
+        maturity_sidecar_hours:
+          type: integer
+          minimum: 0
+          maximum: 8760
+          description: Hours after upload_date for sidecar maturity (0 = off; default 0). UI edits as days.
+        sponsorblock_mark:
+          type: array
+          items:
+            type: string
+        sponsorblock_remove:
+          type: array
+          items:
+            type: string
+        sponsorblock_reencode_cut:
+          type: boolean
+        sponsorblock_info_cards:
+          type: boolean
+        verify_media:
+          type: boolean
+          description: Post-pack media verify (default false)
+
+    UpdateQualityProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        format_selector:
+          type: string
+          description: yt-dlp -f style format selector
+        maturity_redownload_hours:
+          type: integer
+          minimum: 0
+          maximum: 168
+        maturity_sidecar_hours:
+          type: integer
+          minimum: 0
+          maximum: 8760
+        sponsorblock_mark:
+          type: array
+          items:
+            type: string
+        sponsorblock_remove:
+          type: array
+          items:
+            type: string
+        sponsorblock_reencode_cut:
+          type: boolean
+        sponsorblock_info_cards:
+          type: boolean
+        verify_media:
+          type: boolean
+
+    Source:
+      type: object
+      required: [id, series_id, url, kind, monitored]
+      properties:
+        id:
+          type: integer
+          format: int64
+        series_id:
+          type: integer
+          format: int64
+        url:
+          type: string
+        label:
+          type: string
+          nullable: true
+          description: Optional display name for the source (UI shows as Name)
+        kind:
+          type: string
+          enum: [feed, single]
+          description: feed = channel/playlist (catch-up); single = one video URL (index once, no catch-up)
+        monitored:
+          type: boolean
+          description: Included in series scans when true (always true for kind=single; UI hides the toggle)
+        title_regexp_include:
+          type: string
+          nullable: true
+          description: >
+            Optional Go regexp; new videos whose title does not match are not indexed.
+            Empty = no include filter. Evaluated with title_regexp_exclude (exclude wins when both match).
+        title_regexp_exclude:
+          type: string
+          nullable: true
+          description: >
+            Optional Go regexp; matching titles are not indexed. Empty = no exclude filter.
+            Takes priority over title_regexp_include when both match.
+        scan_cutoff:
+          type: string
+          nullable: true
+          description: Optional date cutoff; empty = index all videos from source (ignored for kind=single)
+        last_error_code:
+          type: string
+          nullable: true
+          description: Derived from latest source_history scan_error (sticky); empty after a later scanned
+        last_error_message:
+          type: string
+          nullable: true
+          description: Derived from latest source_history scan_error message
+        last_scanned_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Derived from created_at of latest source_history scanned or scan_error
+
+    CreateSourceRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+        label:
+          type: string
+          description: Optional display name for the source (UI shows as Name)
+        kind:
+          type: string
+          enum: [feed, single]
+          default: feed
+          description: feed = channel/playlist; single = one video URL (forces monitored, no cutoff)
+        monitored:
+          type: boolean
+          default: true
+        title_regexp_include:
+          type: string
+          description: Empty = no include filter; invalid patterns rejected
+        title_regexp_exclude:
+          type: string
+          description: Empty = no exclude filter; invalid patterns rejected; wins over include when both match
+        scan_cutoff:
+          type: string
+          description: Empty = index all videos
+
+    UpdateSourceRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          nullable: true
+          description: Optional display name for the source (UI shows as Name); null or empty clears
+        monitored:
+          type: boolean
+          description: Ignored for kind=single (always monitored)
+        title_regexp_include:
+          type: string
+          nullable: true
+          description: Empty clears the include filter
+        title_regexp_exclude:
+          type: string
+          nullable: true
+          description: Empty clears the exclude filter
+        scan_cutoff:
+          type: string
+          nullable: true
+          description: Ignored for kind=single
+
+    Video:
+      type: object
+      required: [id, series_id, remote_id, title, status]
+      properties:
+        id:
+          type: integer
+          format: int64
+        series_id:
+          type: integer
+          format: int64
+        source_id:
+          type: integer
+          format: int64
+          nullable: true
+        remote_id:
+          type: string
+        title:
+          type: string
+        upload_date:
+          type: string
+          nullable: true
+          description: RFC3339 UTC when known
+        source_url:
+          type: string
+          nullable: true
+          description: Video page URL (watch/clip); never the feed channel/playlist URL
+        status:
+          type: string
+          description: wanted, wanted_source_error, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored, streamable
+        season:
+          type: integer
+          nullable: true
+        episode:
+          type: integer
+          nullable: true
+        description:
+          type: string
+        thumbnail_url:
+          type: string
+          nullable: true
+        media_type:
+          type: string
+          nullable: true
+          description: yt-dlp media_type when known (e.g. video, short, livestream, clip); empty/null when missing
+        size_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: On-disk size of the packed video media file (kind=video); null when unknown or not downloaded
+        resolution:
+          type: string
+          nullable: true
+          description: >
+            Rough resolution bucket from min(width,height): 240p, 360p, 480p, 720p, 1080p, or 4K.
+            1440-class short side maps to 1080p. Null when width/height unknown.
+          enum: [240p, 360p, 480p, 720p, 1080p, 4K]
+
+    SetActiveRequest:
+      type: object
+      required: [active]
+      properties:
+        active:
+          type: boolean
+          description: Domain active flag; when false, queue tasks for this hostname do not run and pending+running tasks for the host are cancelled
+
+    SetPausedRequest:
+      type: object
+      required: [paused]
+      properties:
+        paused:
+          type: boolean
+          description: Soft pause; when true, ClaimNext is blocked for this hostname. Interactive metadata prefetch still runs. Pending stay queued; running continue. Does not cancel tasks or create a domains override row.
+
+    SetMonitoredRequest:
+      type: object
+      required: [monitored]
+      properties:
+        monitored:
+          type: boolean
+          description: Series monitored flag
+
+    Series:
+      type: object
+      required: [id, title, root_id, quality_profile_id, monitored, added_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        root_id:
+          type: integer
+          format: int64
+        quality_profile_id:
+          type: integer
+          format: int64
+        monitored:
+          type: boolean
+          description: Series-level monitored; never rewrites source/video/domain monitored flags
+        auto_ignore_media_types:
+          type: array
+          items:
+            type: string
+          description: >
+            yt-dlp media_type values to auto-ignore (e.g. short, livestream). Empty = none.
+            Missing media_type is never auto-ignored. Applied at index create when type is known,
+            at download via --match-filters, and at stream pack_stream from the urls extract
+            (indexed, then marked ignored; no cache_beginning).
+        added_at:
+          type: string
+          format: date-time
+        root_name:
+          type: string
+        quality_profile_name:
+          type: string
+        video_count:
+          type: integer
+          format: int64
+        downloaded_count:
+          type: integer
+          format: int64
+        wanted_count:
+          type: integer
+          format: int64
+        source_count:
+          type: integer
+          format: int64
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/Source"
+        videos:
+          type: array
+          items:
+            $ref: "#/components/schemas/Video"
+          description: Present on series detail GET only
+
+    CreateSeriesRequest:
+      type: object
+      required: [root_id, quality_profile_id]
+      properties:
+        title:
+          type: string
+          description: Defaults to source URL or Untitled series
+        source_url:
+          type: string
+          description: Optional first source; empty = oneshot series with no feeds yet
+        root_id:
+          type: integer
+          format: int64
+        quality_profile_id:
+          type: integer
+          format: int64
+        monitored:
+          type: boolean
+          default: true
+          description: Applied to the optional first source
+        scan_cutoff:
+          type: string
+          description: Cutoff for first source; empty = index all
+        title_regexp_include:
+          type: string
+          description: Title include filter for first source; empty = no filter
+        title_regexp_exclude:
+          type: string
+          description: Title exclude filter for first source; empty = none; wins over include when both match
+        auto_ignore_media_types:
+          type: array
+          items:
+            type: string
+          description: Series-level media types to auto-ignore; empty = none

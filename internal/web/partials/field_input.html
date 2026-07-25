@@ -1,0 +1,170 @@
+{{define "field_input"}}
+{{/*
+  daisyUI fieldset per setting (https://daisyui.com/components/fieldset/).
+  legend = Label + optional field_info; control; optional Hint.
+
+  Expects: Label, Name.
+  Optional: Type (text|textarea|select|date|range|…), Value, Placeholder, NoPlaceholder, Required, Info, Hint,
+            Options (select: {Value,Label} match Value; datalist []string when ListID set),
+            ID, Class, InputClass, Mono, Min, Step, Max, Disabled, DisabledTitle, Readonly, ListID, Autocomplete,
+            Unit (suffix after range value, e.g. "s"), ZeroLabel (range readout when value is 0),
+            JoinPrefix (non-editable daisyUI join label before the text control, e.g. "Series/"),
+            JoinSuffix (non-editable daisyUI join label after the text control, e.g. ".ext").
+  NoPlaceholder: omit placeholder (legend already names the field).
+  Disabled: control muted; tooltip uses DisabledTitle (else Hint). Hidden input keeps Name/Value in the form.
+*/}}
+{{$ph := .Placeholder}}{{if and (not .NoPlaceholder) (not $ph)}}{{$ph = .Label}}{{end}}
+{{$type := .Type}}{{if not $type}}{{$type = "text"}}{{end}}
+{{$sel := .Value}}
+{{$range := eq $type "range"}}
+{{$disabledTip := .DisabledTitle}}{{if not $disabledTip}}{{$disabledTip = .Hint}}{{end}}
+{{$joinPrefix := .JoinPrefix}}
+{{$joinSuffix := .JoinSuffix}}
+{{$join := or $joinPrefix $joinSuffix}}
+<fieldset class="fieldset {{.Class}}{{if .Disabled}} opacity-60{{end}}">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      {{.Label}}
+      {{if .Info}}{{template "field_info" (dict "Info" .Info)}}{{end}}
+    </span>
+  </legend>
+  {{if .Disabled}}
+  <input type="hidden" name="{{.Name}}" value="{{.Value}}" />
+  {{end}}
+  {{if eq $type "textarea"}}
+  {{if .Disabled}}
+  <span class="tooltip tooltip-top block w-full" {{if $disabledTip}}data-tip="{{$disabledTip}}"{{end}}>
+    <textarea {{if .ID}}id="{{.ID}}"{{end}}
+              class="textarea w-full pointer-events-none {{if .Mono}}font-mono{{end}} {{.InputClass}}"
+              {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
+              disabled>{{.Value}}</textarea>
+  </span>
+  {{else}}
+  <textarea name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
+            class="textarea w-full {{if .Mono}}font-mono{{end}} {{.InputClass}}"
+            {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
+            {{if .Required}}required{{end}}>{{.Value}}</textarea>
+  {{end}}
+  {{else if eq $type "select"}}
+  {{if .Disabled}}
+  <span class="tooltip tooltip-top block w-full" {{if $disabledTip}}data-tip="{{$disabledTip}}"{{end}}>
+    <select {{if .ID}}id="{{.ID}}"{{end}}
+            class="select w-full pointer-events-none {{.InputClass}}"
+            disabled>
+      {{range .Options}}
+      <option value="{{.Value}}" {{if eq .Value $sel}}selected{{end}}>{{.Label}}</option>
+      {{end}}
+    </select>
+  </span>
+  {{else}}
+  <select name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
+          class="select w-full {{.InputClass}}"
+          {{if .Required}}required{{end}}>
+    {{range .Options}}
+    <option value="{{.Value}}" {{if eq .Value $sel}}selected{{end}}>{{.Label}}</option>
+    {{end}}
+  </select>
+  {{end}}
+  {{else if eq $type "date"}}
+  {{if .Disabled}}
+  <span class="tooltip tooltip-top block w-full" {{if $disabledTip}}data-tip="{{$disabledTip}}"{{end}}>
+    <input type="date" {{if .ID}}id="{{.ID}}"{{end}}
+           class="input w-full pointer-events-none {{.InputClass}}"
+           {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
+           value="{{.Value}}" {{if .Max}}max="{{.Max}}"{{end}}
+           disabled />
+  </span>
+  {{else}}
+  <input type="date" name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
+         class="input w-full {{.InputClass}}"
+         {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
+         value="{{.Value}}" {{if .Max}}max="{{.Max}}"{{end}}
+         {{if .Required}}required{{end}} />
+  {{end}}
+  {{else if $range}}
+  {{$unit := .Unit}}{{if not $unit}}{{$unit = ""}}{{end}}
+  {{$outID := printf "%s-out" .ID}}{{if not .ID}}{{$outID = printf "%s-out" .Name}}{{end}}
+  <div class="flex items-center gap-3 w-full">
+    {{if .Disabled}}
+    <span class="tooltip tooltip-top grow min-w-0" {{if $disabledTip}}data-tip="{{$disabledTip}}"{{end}}>
+      <input type="range" {{if .ID}}id="{{.ID}}"{{end}}
+             class="range w-full pointer-events-none {{.InputClass}}"
+             value="{{.Value}}"
+             {{if .Min}}min="{{.Min}}"{{else}}min="0"{{end}}
+             {{if .Max}}max="{{.Max}}"{{end}}
+             {{if .Step}}step="{{.Step}}"{{else}}step="1"{{end}}
+             disabled />
+    </span>
+    {{else}}
+    <input type="range" name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
+           class="range {{.InputClass}}"
+           value="{{.Value}}"
+           {{if .Min}}min="{{.Min}}"{{else}}min="0"{{end}}
+           {{if .Max}}max="{{.Max}}"{{end}}
+           {{if .Step}}step="{{.Step}}"{{else}}step="1"{{end}}
+           data-range-output="#{{$outID}}"
+           {{if $unit}}data-range-unit="{{$unit}}"{{end}}
+           {{if .ZeroLabel}}data-range-zero="{{.ZeroLabel}}"{{end}}
+           {{if .Required}}required{{end}} />
+    {{end}}
+    <span id="{{$outID}}" class="label tabular-nums min-w-10 justify-end">{{if and .ZeroLabel (eq .Value "0")}}{{.ZeroLabel}}{{else}}{{.Value}}{{$unit}}{{end}}</span>
+  </div>
+  {{else}}
+  {{if $join}}
+  {{if .Disabled}}
+  <span class="tooltip tooltip-top block w-full" {{if $disabledTip}}data-tip="{{$disabledTip}}"{{end}}>
+    <div class="join w-full pointer-events-none">
+      {{if $joinPrefix}}<span class="btn join-item no-animation font-mono">{{$joinPrefix}}</span>{{end}}
+      <input type="{{$type}}" {{if .ID}}id="{{.ID}}"{{end}}
+             class="input join-item grow min-w-0 {{if .Mono}}font-mono{{end}} {{.InputClass}}"
+             {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
+             value="{{.Value}}"
+             disabled />
+      {{if $joinSuffix}}<span class="btn join-item no-animation font-mono">{{$joinSuffix}}</span>{{end}}
+    </div>
+  </span>
+  {{else}}
+  <div class="join w-full">
+    {{if $joinPrefix}}<span class="btn join-item no-animation pointer-events-none font-mono">{{$joinPrefix}}</span>{{end}}
+    <input type="{{$type}}" name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
+           class="input join-item grow min-w-0 {{if .Mono}}font-mono{{end}} {{.InputClass}}"
+           {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
+           value="{{.Value}}"
+           {{if .Min}}min="{{.Min}}"{{end}} {{if .Step}}step="{{.Step}}"{{end}} {{if .Max}}max="{{.Max}}"{{end}}
+           {{if .ListID}}list="{{.ListID}}"{{end}}
+           {{if .Autocomplete}}autocomplete="{{.Autocomplete}}"{{else if .ListID}}autocomplete="off"{{end}}
+           {{if .Required}}required{{end}} {{if .Readonly}}readonly{{end}} />
+    {{if $joinSuffix}}<span class="btn join-item no-animation pointer-events-none font-mono">{{$joinSuffix}}</span>{{end}}
+  </div>
+  {{end}}
+  {{else if .Disabled}}
+  <span class="tooltip tooltip-top block w-full" {{if $disabledTip}}data-tip="{{$disabledTip}}"{{end}}>
+    <input type="{{$type}}" {{if .ID}}id="{{.ID}}"{{end}}
+           class="input w-full pointer-events-none {{if .Mono}}font-mono{{end}} {{.InputClass}}"
+           {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
+           value="{{.Value}}"
+           disabled />
+  </span>
+  {{else}}
+  <input type="{{$type}}" name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
+         class="input w-full {{if .Mono}}font-mono{{end}} {{.InputClass}}"
+         {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
+         value="{{.Value}}"
+         {{if .Min}}min="{{.Min}}"{{end}} {{if .Step}}step="{{.Step}}"{{end}} {{if .Max}}max="{{.Max}}"{{end}}
+         {{if .ListID}}list="{{.ListID}}"{{end}}
+         {{if .Autocomplete}}autocomplete="{{.Autocomplete}}"{{else if .ListID}}autocomplete="off"{{end}}
+         {{if .Required}}required{{end}} {{if .Readonly}}readonly{{end}} />
+  {{end}}
+  {{end}}
+  {{if .ListID}}
+  <datalist id="{{.ListID}}">
+    {{range .Options}}
+    <option value="{{.}}"></option>
+    {{end}}
+  </datalist>
+  {{end}}
+  {{if and .Hint (not .Disabled)}}
+  <p class="label whitespace-normal">{{.Hint}}</p>
+  {{end}}
+</fieldset>
+{{end}}

@@ -1,0 +1,510 @@
+{{define "import"}}
+{{template "head" .}}
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "page" "title" "Import" "icon" .Icon "help" "Scan lists every untracked file under the import inbox and library roots - media, sidecars, and other files. Media and same-stem sidecars show as one row. Match media to an indexed video or create one. Orphan sidecars matched by filename stem can be attached to the video that already has media.")}}
+<p class="text-sm opacity-70 font-mono">Inbox: {{.ImportPath}}</p>
+<p class="text-sm opacity-60">Inbox media move into the series folder. Library orphans bind in place (no move). Sidecars attach in place when the video already has a media file.</p>
+<div class="list-actions flex flex-wrap gap-2">
+  <button type="button" class="btn btn-primary" id="btn-scan">Scan</button>
+  <button type="button" class="btn btn-outline tooltip tooltip-top" id="btn-attach-all" disabled data-tip="Attach all orphan sidecars that matched a video by filename">Attach all matched sidecars</button>
+</div>
+<div id="status" class="text-sm opacity-60 mt-2">Not scanned yet.</div>
+{{template "list_table"}}
+<thead>
+  <tr><th>File</th><th>Role</th><th>Source</th><th>Match</th><th>Series</th><th>Video / create</th><th></th></tr>
+</thead>
+<tbody id="tbody"></tbody>
+{{template "list_table_end"}}
+<div id="import-pager" class="hidden flex flex-wrap items-center justify-between gap-2 mt-3">
+  <p class="text-sm opacity-60" id="import-pager-label"></p>
+  <div class="join">
+    <button type="button" class="join-item btn" id="import-prev">Previous</button>
+    <span class="join-item btn btn-ghost no-animation pointer-events-none" id="import-page-label"></span>
+    <button type="button" class="join-item btn" id="import-next">Next</button>
+  </div>
+</div>
+{{template "list_panel_end"}}
+
+<input type="checkbox" id="modal-import-msg" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" id="import-msg-title">Import</h3>
+    <p class="text-sm mb-4" id="import-msg-body"></p>
+    <div class="modal-action">
+      <label for="modal-import-msg" class="btn btn-primary">OK</label>
+    </div>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<script>
+const SERIES = {{toJSON .Series}};
+const VIDEOS = {{toJSON .Videos}};
+const CREATE = '__create__';
+const PAGE_SIZE = 50;
+const SIDECAR_ROLES = { nfo:1, json:1, thumb:1, sub:1 };
+const MEDIA_EXTS = { '.mkv':1, '.mp4':1, '.mov':1, '.webm':1, '.m4v':1 };
+let importCandidates = [];
+let importBundles = [];
+let importPage = 1;
+
+function showImportMsg(title, body) {
+  document.getElementById('import-msg-title').textContent = title;
+  document.getElementById('import-msg-body').textContent = body;
+  document.getElementById('modal-import-msg').checked = true;
+}
+
+function videosForSeries(seriesId) {
+  const sid = seriesId ? Number(seriesId) : null;
+  return VIDEOS.filter(v => !sid || v.series_id === sid);
+}
+
+function optionList(entries, valueKey, labelFn, selected) {
+  return entries.map(e => {
+    const v = e[valueKey];
+    const sel = selected != null && Number(selected) === Number(v) ? ' selected' : '';
+    return `<option value="${v}"${sel}>${escapeHtml(labelFn(e))}</option>`;
+  }).join('');
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function isSidecar(c) { return !!SIDECAR_ROLES[c.role]; }
+function isVideo(c) { return c.role === 'video'; }
+function isOther(c) { return c.role === 'other' || (!isVideo(c) && !isSidecar(c)); }
+
+/** Mirror library.ClassifyImportFile stem for grouping. */
+function fileStem(filename) {
+  const name = String(filename || '');
+  const lower = name.toLowerCase();
+  const dot = name.lastIndexOf('.');
+  const ext = dot >= 0 ? lower.slice(dot) : '';
+  if (MEDIA_EXTS[ext]) return name.slice(0, name.length - ext.length);
+  if (lower.endsWith('.info.json')) return name.slice(0, name.length - '.info.json'.length);
+  if (ext === '.nfo' || { '.srt':1, '.vtt':1, '.ass':1, '.ssa':1, '.sub':1 }[ext]) {
+    return name.slice(0, name.length - ext.length);
+  }
+  if ({ '.jpg':1, '.jpeg':1, '.png':1, '.webp':1 }[ext]) {
+    let stem = name.slice(0, name.length - ext.length);
+    const ls = stem.toLowerCase();
+    if (ls.endsWith('-thumb')) stem = stem.slice(0, -'-thumb'.length);
+    else if (ls.endsWith('.thumb')) stem = stem.slice(0, -'.thumb'.length);
+    return stem;
+  }
+  return dot >= 0 ? name.slice(0, dot) : name;
+}
+
+function stemKey(c) {
+  const path = String(c.path || '').replace(/\\/g, '/');
+  const i = path.lastIndexOf('/');
+  const dir = i >= 0 ? path.slice(0, i) : '';
+  return dir + '\0' + fileStem(c.filename || path);
+}
+
+function buildImportBundles(candidates) {
+  const byStem = new Map();
+  const others = [];
+  candidates.forEach((c) => {
+    if (isOther(c)) {
+      others.push({ kind: 'other', files: [c] });
+      return;
+    }
+    const key = stemKey(c);
+    let g = byStem.get(key);
+    if (!g) {
+      g = { key, video: null, sidecars: [] };
+      byStem.set(key, g);
+    }
+    if (isVideo(c)) g.video = c;
+    else g.sidecars.push(c);
+  });
+  const bundles = [];
+  byStem.forEach((g) => {
+    if (g.video) {
+      bundles.push({ kind: 'media', video: g.video, sidecars: g.sidecars });
+    } else if (g.sidecars.length) {
+      bundles.push({ kind: 'sidecars', sidecars: g.sidecars });
+    }
+  });
+  bundles.push(...others);
+  return bundles;
+}
+
+function bundlePaths(b) {
+  if (b.kind === 'media') return [b.video.path, ...b.sidecars.map((s) => s.path)];
+  if (b.kind === 'sidecars') return b.sidecars.map((s) => s.path);
+  return b.files.map((f) => f.path);
+}
+
+function syncCreatePanel(tr, c) {
+  const videoSel = tr.querySelector('.video-sel');
+  const panel = tr.querySelector('.create-panel');
+  if (!videoSel || !panel) return;
+  const show = videoSel.value === CREATE;
+  panel.classList.toggle('hidden', !show);
+  if (show) {
+    const title = panel.querySelector('.create-title');
+    const remote = panel.querySelector('.create-remote');
+    if (!title.value) title.value = c.suggested_title || '';
+    if (!remote.value) remote.value = c.suggested_remote_id || '';
+  }
+}
+
+function actionLabel(c) {
+  if (isSidecar(c)) return 'Attach';
+  return c.source === 'library' ? 'Bind' : 'Import';
+}
+
+function fileCell(c) {
+  return `<code class="text-xs">${escapeHtml(c.filename)}</code><div class="opacity-50 text-xs break-all">${escapeHtml(c.path)}</div>`;
+}
+
+function filesStack(primary, sidecars) {
+  let html = `<div class="space-y-1">${fileCell(primary)}</div>`;
+  if (sidecars && sidecars.length) {
+    html += `<ul class="mt-2 space-y-1 border-t border-base-300 pt-2">`;
+    sidecars.forEach((s) => {
+      html += `<li class="flex items-start gap-2 text-xs">
+        <span class="badge badge-sm shrink-0">${escapeHtml(s.role)}</span>
+        <span class="min-w-0"><code>${escapeHtml(s.filename)}</code>
+        <div class="opacity-50 break-all">${escapeHtml(s.path)}</div></span>
+      </li>`;
+    });
+    html += `</ul>`;
+  }
+  return html;
+}
+
+function roleCell(primaryRole, sidecarCount) {
+  if (!sidecarCount) return `<span class="badge badge-sm">${escapeHtml(primaryRole)}</span>`;
+  return `<div class="flex flex-col gap-1">
+    <span class="badge badge-sm">${escapeHtml(primaryRole)}</span>
+    <span class="badge badge-sm badge-ghost">${sidecarCount} sidecar${sidecarCount === 1 ? '' : 's'}</span>
+  </div>`;
+}
+
+function matchedSidecarGroups() {
+  const byVideo = {};
+  importBundles.forEach((b) => {
+    if (b.kind !== 'sidecars') return;
+    const lead = b.sidecars.find((s) => s.suggested_video_id) || b.sidecars[0];
+    if (!lead || !lead.suggested_video_id) return;
+    const id = Number(lead.suggested_video_id);
+    if (!byVideo[id]) byVideo[id] = [];
+    b.sidecars.forEach((s) => byVideo[id].push(s.path));
+  });
+  return byVideo;
+}
+
+function updateAttachAllBtn() {
+  const groups = matchedSidecarGroups();
+  const n = Object.keys(groups).length;
+  const btn = document.getElementById('btn-attach-all');
+  btn.disabled = n === 0;
+  btn.textContent = n === 0
+    ? 'Attach all matched sidecars'
+    : 'Attach all matched sidecars (' + n + ' video' + (n === 1 ? '' : 's') + ')';
+}
+
+function importTotalPages() {
+  return Math.max(1, Math.ceil(importBundles.length / PAGE_SIZE));
+}
+
+function renderImportPage() {
+  const status = document.getElementById('status');
+  const tbody = document.getElementById('tbody');
+  const pager = document.getElementById('import-pager');
+  tbody.innerHTML = '';
+  importBundles = buildImportBundles(importCandidates);
+  updateAttachAllBtn();
+  if (!importBundles.length) {
+    pager.classList.add('hidden');
+    return;
+  }
+  const pages = importTotalPages();
+  if (importPage > pages) importPage = pages;
+  const start = (importPage - 1) * PAGE_SIZE;
+  const slice = importBundles.slice(start, start + PAGE_SIZE);
+  slice.forEach((b) => tbody.appendChild(buildImportBundleRow(b)));
+  const from = start + 1;
+  const to = start + slice.length;
+  document.getElementById('import-pager-label').textContent =
+    'Showing ' + from + '–' + to + ' of ' + importBundles.length + ' item(s)';
+  document.getElementById('import-page-label').textContent = importPage + ' / ' + pages;
+  document.getElementById('import-prev').disabled = importPage <= 1;
+  document.getElementById('import-next').disabled = importPage >= pages;
+  pager.classList.toggle('hidden', pages <= 1);
+  const counts = { video:0, sidecar:0, other:0 };
+  importCandidates.forEach(c => {
+    if (isVideo(c)) counts.video++;
+    else if (isSidecar(c)) counts.sidecar++;
+    else counts.other++;
+  });
+  status.textContent = importCandidates.length + ' file(s) in ' + importBundles.length + ' item(s): ' +
+    counts.video + ' media, ' + counts.sidecar + ' sidecar(s), ' + counts.other + ' other.';
+  if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    tbody.querySelectorAll('i[data-lucide]').forEach((el) => {
+      if (el.parentElement) window.lucide.createIcons({ root: el.parentElement, attrs: { 'stroke-width': 1.75, 'aria-hidden': 'true' } });
+    });
+  }
+}
+
+function removePaths(paths) {
+  const drop = new Set(paths);
+  importCandidates = importCandidates.filter(x => !drop.has(x.path));
+}
+
+function buildImportBundleRow(b) {
+  if (b.kind === 'other') return buildOtherRow(b.files[0]);
+  if (b.kind === 'sidecars') return buildSidecarBundleRow(b);
+  return buildMediaBundleRow(b);
+}
+
+function buildOtherRow(c) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>${fileCell(c)}</td>
+    <td><span class="badge badge-sm">${escapeHtml(c.role || 'other')}</span></td>
+    <td>${c.source === 'library'
+      ? '<span class="badge badge-sm badge-warning">library</span>'
+      : '<span class="badge badge-sm">inbox</span>'}</td>
+    <td><span class="opacity-60 text-xs">listed only - not importable</span></td>
+    <td colspan="2" class="opacity-50 text-xs">-</td>
+    <td></td>`;
+  return tr;
+}
+
+function buildSidecarBundleRow(b) {
+  const lead = b.sidecars.find((s) => s.suggested_video_id) || b.sidecars[0];
+  const tr = document.createElement('tr');
+  const srcBadge = lead.source === 'library'
+    ? '<span class="badge badge-sm badge-warning">library</span>'
+    : '<span class="badge badge-sm">inbox</span>';
+  const match = lead.match_label
+    ? `<span class="badge badge-sm">${escapeHtml(lead.match_type || 'match')}</span> <span class="opacity-60 text-xs">${escapeHtml(lead.match_label)}</span>`
+    : '<span class="opacity-60 text-xs">no auto match - pick video</span>';
+  const filtered = videosForSeries(lead.suggested_series_id);
+  const videoOpts = '<option value="">- pick video -</option>' + optionList(
+    filtered.length ? filtered : VIDEOS,
+    'id',
+    e => e.series_title + ': ' + e.title,
+    lead.suggested_video_id
+  );
+  const primary = b.sidecars[0];
+  const rest = b.sidecars.slice(1);
+  tr.innerHTML = `
+    <td>${filesStack(primary, rest)}</td>
+    <td>${roleCell('sidecar', b.sidecars.length)}</td>
+    <td>${srcBadge}</td>
+    <td>${match}</td>
+    <td class="opacity-50 text-xs">-</td>
+    <td><select class="select video-sel">${videoOpts}</select></td>
+    <td><button type="button" class="btn btn-primary btn-xs confirm-btn">Attach</button></td>`;
+  const videoSel = tr.querySelector('.video-sel');
+  tr.querySelector('.confirm-btn').addEventListener('click', async () => {
+    const videoId = videoSel.value;
+    if (!videoId) { showImportMsg('Pick a video', 'Pick the video that already has media.'); return; }
+    const paths = b.sidecars.map((s) => s.path);
+    const r = await fetch('/api/import/manual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_id: Number(videoId), paths }),
+    });
+    if (!r.ok) {
+      showImportMsg('Attach failed', await r.text());
+      return;
+    }
+    removePaths(paths);
+    if (!importCandidates.length) {
+      document.getElementById('status').textContent = 'All pending imports queued.';
+    }
+    renderImportPage();
+  });
+  return tr;
+}
+
+function buildMediaBundleRow(b) {
+  const c = b.video;
+  const tr = document.createElement('tr');
+  const srcBadge = c.source === 'library'
+    ? '<span class="badge badge-sm badge-warning">library</span>'
+    : '<span class="badge badge-sm">inbox</span>';
+  const match = c.match_label
+    ? `<span class="badge badge-sm">${escapeHtml(c.match_type || 'match')}</span> <span class="opacity-60 text-xs">${escapeHtml(c.match_label)}</span>`
+    : '<span class="opacity-60 text-xs">no auto match - create new or pick</span>';
+  const seriesOpts = '<option value="">- pick series -</option>' + optionList(
+    SERIES, 'id', e => e.title, c.suggested_series_id
+  );
+  const filtered = videosForSeries(c.suggested_series_id);
+  const videoOpts = '<option value="">- pick video -</option>' +
+    `<option value="${CREATE}">+ create new video</option>` +
+    optionList(
+      filtered.length ? filtered : VIDEOS,
+      'id',
+      e => e.series_title + ': ' + e.title,
+      c.suggested_video_id
+    );
+  tr.innerHTML = `
+    <td>${filesStack(c, b.sidecars)}</td>
+    <td>${roleCell('video', b.sidecars.length)}</td>
+    <td>${srcBadge}</td>
+    <td>${match}</td>
+    <td><select class="select series-sel">${seriesOpts}</select></td>
+    <td>
+      <select class="select video-sel">${videoOpts}</select>
+      <div class="create-panel hidden mt-2 space-y-2">
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Title</legend>
+          <input class="input w-full create-title" value="${escapeHtml(c.suggested_title || '')}" />
+        </fieldset>
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">
+            <span class="inline-flex items-center gap-1">
+              Remote ID
+              <div class="tooltip tooltip-top">
+                <div class="tooltip-content"><p class="whitespace-normal max-w-xs text-left">From NFO/info.json/brackets, or import-… hash if empty.</p></div>
+                <button type="button" class="btn btn-soft btn-info btn-xs btn-circle js-field-info" aria-label="Info" aria-pressed="false"><i data-lucide="info" class="size-4"></i></button>
+              </div>
+            </span>
+          </legend>
+          <input class="input w-full create-remote font-mono" value="${escapeHtml(c.suggested_remote_id || '')}" />
+          <p class="label whitespace-normal">Empty = auto from filename / sidecars.</p>
+        </fieldset>
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">
+            <span class="inline-flex items-center gap-1">
+              Handler
+              <div class="tooltip tooltip-top">
+                <div class="tooltip-content"><p class="whitespace-normal max-w-xs text-left">Optional tool id for history (default yt-dlp).</p></div>
+                <button type="button" class="btn btn-soft btn-info btn-xs btn-circle js-field-info" aria-label="Info" aria-pressed="false"><i data-lucide="info" class="size-4"></i></button>
+              </div>
+            </span>
+          </legend>
+          <input class="input w-full create-handler font-mono" value="${escapeHtml(c.suggested_handler_id || 'yt-dlp')}" />
+        </fieldset>
+      </div>
+    </td>
+    <td>
+      <label class="label cursor-pointer gap-2 justify-start py-0">
+        <input type="checkbox" class="checkbox checkbox-sm import-verify" />
+        <span class="label-text text-xs">Verify</span>
+      </label>
+      <button type="button" class="btn btn-primary btn-xs confirm-btn">${actionLabel(c)}</button>
+    </td>
+  `;
+  const seriesSel = tr.querySelector('.series-sel');
+  const videoSel = tr.querySelector('.video-sel');
+  seriesSel.addEventListener('change', () => {
+    const list = videosForSeries(seriesSel.value);
+    const cur = videoSel.value;
+    videoSel.innerHTML = '<option value="">- pick video -</option>' +
+      `<option value="${CREATE}">+ create new video</option>` +
+      optionList(list, 'id', e => e.series_title + ': ' + e.title, null);
+    if (cur === CREATE) videoSel.value = CREATE;
+    syncCreatePanel(tr, c);
+  });
+  videoSel.addEventListener('change', () => syncCreatePanel(tr, c));
+  if (!c.suggested_video_id && c.suggested_series_id) {
+    videoSel.value = CREATE;
+  }
+  syncCreatePanel(tr, c);
+  tr.querySelector('.confirm-btn').addEventListener('click', async () => {
+    const seriesId = seriesSel.value;
+    const videoId = videoSel.value;
+    const verify = tr.querySelector('.import-verify')?.checked === true;
+    let body;
+    if (videoId === CREATE) {
+      if (!seriesId) { showImportMsg('Missing series', 'Pick a series for the new video.'); return; }
+      const title = tr.querySelector('.create-title').value.trim();
+      if (!title) { showImportMsg('Title required', 'Title required when creating a new video.'); return; }
+      body = {
+        path: c.path,
+        series_id: Number(seriesId),
+        title,
+        remote_id: tr.querySelector('.create-remote').value.trim() || undefined,
+        handler_id: tr.querySelector('.create-handler').value.trim() || undefined,
+        verify,
+      };
+    } else {
+      if (!videoId) { showImportMsg('Pick a video', 'Pick a video or create new.'); return; }
+      body = { path: c.path, video_id: Number(videoId), verify };
+    }
+    const r = await fetch('/api/import/manual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      showImportMsg('Import failed', await r.text());
+      return;
+    }
+    // Media import packs sibling nfo/json; drop whole stem group from the list.
+    removePaths(bundlePaths(b));
+    if (!importCandidates.length) {
+      document.getElementById('status').textContent = 'All pending imports queued.';
+    }
+    renderImportPage();
+  });
+  return tr;
+}
+
+document.getElementById('import-prev').addEventListener('click', () => {
+  if (importPage > 1) { importPage--; renderImportPage(); }
+});
+document.getElementById('import-next').addEventListener('click', () => {
+  if (importPage < importTotalPages()) { importPage++; renderImportPage(); }
+});
+
+document.getElementById('btn-attach-all').addEventListener('click', async () => {
+  const groups = matchedSidecarGroups();
+  const ids = Object.keys(groups);
+  if (!ids.length) return;
+  let ok = 0, fail = 0;
+  const removed = [];
+  for (const id of ids) {
+    const paths = groups[id];
+    const r = await fetch('/api/import/manual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_id: Number(id), paths }),
+    });
+    if (r.ok) {
+      ok++;
+      removed.push(...paths);
+    } else {
+      fail++;
+    }
+  }
+  removePaths(removed);
+  renderImportPage();
+  showImportMsg('Attach queued',
+    'Queued sidecar attach for ' + ok + ' video(s)' + (fail ? '; ' + fail + ' failed' : '') + '.');
+});
+
+document.getElementById('btn-scan').addEventListener('click', async () => {
+  const status = document.getElementById('status');
+  status.textContent = 'Scanning…';
+  importCandidates = [];
+  importBundles = [];
+  importPage = 1;
+  document.getElementById('tbody').innerHTML = '';
+  document.getElementById('import-pager').classList.add('hidden');
+  updateAttachAllBtn();
+  const res = await fetch('/api/import/scan', { method: 'POST' });
+  if (!res.ok) {
+    status.textContent = 'Scan failed: ' + await res.text();
+    return;
+  }
+  const data = await res.json();
+  if (!data.candidates || !data.candidates.length) {
+    status.textContent = 'No untracked files in inbox or library roots.';
+    return;
+  }
+  importCandidates = data.candidates;
+  renderImportPage();
+});
+</script>
+{{template "foot" .}}
+{{end}}

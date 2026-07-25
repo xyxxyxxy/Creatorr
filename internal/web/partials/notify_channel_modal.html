@@ -1,0 +1,83 @@
+{{define "notify_channel_modal"}}
+{{/*
+  Add/edit Apprise notify channel.
+  Mode: "add" | "edit"
+  Expects: Redirect, Name, URL, Events ([]string selected), EventOptions ([]{ID,Label}), ID (edit)
+  Optional: URLError (string - inline validation message under URL)
+*/}}
+{{$edit := eq .Mode "edit"}}
+{{$id := "modal-add-notify-channel"}}
+{{if $edit}}{{$id = printf "modal-edit-notify-%d" .ID}}{{end}}
+{{$urlFieldID := "notify-url-field-add"}}
+{{if $edit}}{{$urlFieldID = printf "notify-url-field-%d" .ID}}{{end}}
+<input type="checkbox" id="{{$id}}" class="modal-toggle" {{if .URLError}}checked{{end}} />
+<div class="modal">
+  <div class="modal-box max-w-lg">
+    <h3 class="font-bold text-lg mb-2">{{if $edit}}Edit notification channel{{else}}Add notification channel{{end}}</h3>
+    <form method="post" action="/actions/upsert-notify-channel" class="space-y-3" id="{{$id}}-form"
+      hx-post="/actions/upsert-notify-channel"
+      hx-target="#{{$urlFieldID}}"
+      hx-swap="outerHTML">
+      <input type="hidden" name="redirect" value="{{.Redirect}}" />
+      {{if $edit}}<input type="hidden" name="id" value="{{.ID}}" />{{end}}
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Name (optional)</legend>
+        <input name="name" class="input w-full" value="{{.Name}}" placeholder="Optional name" autocomplete="off" />
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend flex flex-wrap items-center gap-2">
+          <span class="inline-flex items-center gap-1">
+            Apprise URL
+            {{template "field_info" (dict "Info" "Apprise notification URL (scheme and tokens). See supported services for construction.")}}
+          </span>
+        </legend>
+        {{template "notify_url_field" (dict
+          "FieldID" $urlFieldID
+          "URL" .URL
+          "URLError" .URLError
+        )}}
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Events</legend>
+        <div class="flex flex-col gap-2">
+          {{range $opt := .EventOptions}}
+          {{$checked := false}}
+          {{range $.Events}}{{if eq . $opt.ID}}{{$checked = true}}{{end}}{{end}}
+          <label class="label cursor-pointer justify-start gap-2">
+            <input type="checkbox" name="events" value="{{$opt.ID}}" class="checkbox checkbox-sm" {{if $checked}}checked{{end}} />
+            <span class="label-text">{{$opt.Label}}</span>
+          </label>
+          {{end}}
+        </div>
+      </fieldset>
+
+      <div class="modal-action items-center flex-wrap">
+        <label for="{{$id}}" class="btn">Cancel</label>
+        <button type="button" class="btn btn-soft btn-info"
+          hx-post="/actions/test-notify-channel"
+          hx-include="#{{$id}}-form"
+          hx-swap="none">Test</button>
+        <button type="submit" class="btn btn-primary">{{if $edit}}Save{{else}}Add{{end}}</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop"></div>
+</div>
+{{end}}
+
+{{define "notify_url_field"}}
+{{/*
+  Apprise URL input + help + optional error. HTMX swap target for upsert validation.
+  Expects: FieldID, URL, URLError (optional)
+*/}}
+<div id="{{.FieldID}}">
+  <input name="url" class="input w-full font-mono text-sm{{if .URLError}} input-error{{end}}" value="{{.URL}}" placeholder="gotifys://... or smtp2go://" required autocomplete="off" />
+  <p class="label whitespace-normal">
+    <a href="https://appriseit.com/services/" target="_blank" rel="noopener noreferrer" class="link link-primary">Supported services</a>
+    for scheme and tokens.{{if .URLError}}<br /><span class="text-error">{{.URLError}}</span>{{end}}
+  </p>
+</div>
+{{end}}

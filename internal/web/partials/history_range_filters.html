@@ -1,0 +1,16 @@
+{{define "history_range_filters"}}
+{{/* Shared History From/To (UTC datetime-local). Dot: From, To, Hidden []{Name,Value}. Full page GET. */}}
+<form method="get" action="/history" class="join w-full mb-0 js-keep-scroll js-list-filters" aria-label="History time range">
+  {{range .Hidden}}
+  <input type="hidden" name="{{.Name}}" value="{{.Value}}" />
+  {{end}}
+  <label class="input join-item shrink-0 min-w-72">
+    <span class="label">From</span>
+    <input type="datetime-local" name="from" value="{{.From}}" aria-label="From (UTC)" />
+  </label>
+  <label class="input join-item shrink-0 min-w-72">
+    <span class="label">To</span>
+    <input type="datetime-local" name="to" value="{{.To}}" aria-label="To (UTC)" />
+  </label>
+</form>
+{{end}}

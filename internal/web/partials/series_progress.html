@@ -1,0 +1,28 @@
+{{define "series_progress"}}
+{{/* Dot: DeliveryMode, ProgressTotal, DownloadedCount, WantedCount, StreamOptimizedCount, StreamColdCount, StreamOptimizedPct, StreamColdPct.
+     Bar on top, counts under (centered); fills parent width (series list shares Line2 row 50/50). */}}
+{{if eq .DeliveryMode "stream"}}
+<span class="tooltip tooltip-top block w-full min-w-0" data-tip="Optimized / Streamable / Total">
+  <div class="flex flex-col gap-0.5 w-full min-w-0 items-center">
+    <div class="flex h-2 w-full rounded overflow-hidden bg-base-300">
+      {{if gt .ProgressTotal 0}}
+      <span class="bg-success h-full shrink-0" style="width:{{printf "%.2f" .StreamOptimizedPct}}%"></span>
+      <span class="bg-warning h-full shrink-0" style="width:{{printf "%.2f" .StreamColdPct}}%"></span>
+      {{end}}
+    </div>
+    <span class="text-xs tabular-nums whitespace-nowrap opacity-80">{{.StreamOptimizedCount}} / {{.DownloadedCount}} / {{.ProgressTotal}}</span>
+  </div>
+</span>
+{{else}}
+<span class="tooltip tooltip-top block w-full min-w-0" data-tip="Available / Total">
+  <div class="flex flex-col gap-0.5 w-full min-w-0 items-center">
+    {{if gt .ProgressTotal 0}}
+    <progress class="progress progress-primary w-full" value="{{.DownloadedCount}}" max="{{.ProgressTotal}}"></progress>
+    {{else}}
+    <progress class="progress w-full" value="0" max="1"></progress>
+    {{end}}
+    <span class="text-xs tabular-nums whitespace-nowrap opacity-80">{{.DownloadedCount}} / {{.ProgressTotal}}</span>
+  </div>
+</span>
+{{end}}
+{{end}}

@@ -1,0 +1,17 @@
+{{define "metadata_tags_editor"}}
+{{/*
+  Back-compat wrapper → metadata_string_list_editor.
+  Expects: Tags ([]string), Options ([]string). Optional: ListID.
+*/}}
+{{$listID := .ListID}}{{if not $listID}}{{$listID = "meta-dl-tags"}}{{end}}
+{{template "metadata_string_list_editor" (dict
+  "Label" "Tags"
+  "Name" "tag"
+  "Singular" "tag"
+  "Items" .Tags
+  "Options" .Options
+  "ListID" $listID
+  "Placeholder" "Add a tag"
+  "EmptyText" "none"
+)}}
+{{end}}

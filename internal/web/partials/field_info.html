@@ -1,0 +1,18 @@
+{{define "field_info"}}
+{{/*
+  Info tip trigger + daisyUI tooltip. Default tooltip-top; app.js fits viewport.
+  Expects: Info (string). Optional: Class.
+  Join is unused (info always sits next to the fieldset legend label).
+  Modal overflow: see input.css (.modal-box overflow visible; scroll .modal instead).
+*/}}
+{{if .Info}}
+<button type="button"
+        class="btn btn-soft btn-info btn-xs btn-circle js-field-info tooltip tooltip-top {{.Class}}"
+        aria-label="Info" aria-pressed="false">
+  <div class="tooltip-content">
+    <p class="whitespace-normal max-w-xs text-left">{{.Info}}</p>
+  </div>
+  <i data-lucide="info" class="size-4"></i>
+</button>
+{{end}}
+{{end}}

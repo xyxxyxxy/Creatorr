@@ -1,0 +1,14 @@
+{
+  "name": "creatorr-web-ui",
+  "private": true,
+  "scripts": {
+    "build": "tailwindcss -i ./src/input.css -o ../static/app.css --minify && node ./scripts/copy-vendor.js"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "daisyui": "^5.6.18",
+    "echarts": "^5.6.0",
+    "lucide": "^1.25.0",
+    "tailwindcss": "^4.3.3"
+  }
+}

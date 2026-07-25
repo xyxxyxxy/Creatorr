@@ -1,0 +1,95 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: all;
+}
+/* Dim/night ship --radius-selector: 1rem → checkboxes look circular (~1.5rem box).
+   Squarer selectors match daisyUI checkbox docs (light uses ~0.25–0.5rem). */
+@plugin "daisyui/theme" {
+  name: "dim";
+  --radius-selector: 0.25rem;
+}
+@plugin "daisyui/theme" {
+  name: "night";
+  --radius-selector: 0.25rem;
+}
+
+/* Paths relative to this file (internal/web/ui/src/). */
+@source "../../templates/**/*.html";
+@source "../../partials/**/*.html";
+@source "../../static/app.js";
+
+/*
+  daisyUI lg:drawer-open sets pointer-events:auto on .drawer-side (full sticky column
+  with a stretched .drawer-overlay). That beats utility classes and steals clicks from
+  the sticky top navbar. Force overlay off and clicks through on desktop.
+
+  drawer-side also uses z-40 (mobile overlay). On desktop it paints after drawer-content
+  and covers field tooltips that extend left. Keep side under content so tips win;
+  mobile still uses z-40 when the drawer overlays.
+*/
+@media (width >= 64rem) {
+  .drawer.lg\:drawer-open > .drawer-side {
+    pointer-events: none !important;
+    z-index: 0 !important;
+  }
+  .drawer.lg\:drawer-open > .drawer-content {
+    position: relative;
+    z-index: 1;
+  }
+  .drawer.lg\:drawer-open > .drawer-side > :not(.drawer-overlay) {
+    pointer-events: auto !important;
+  }
+  .drawer.lg\:drawer-open > .drawer-side > .drawer-overlay {
+    display: none !important;
+  }
+}
+
+/*
+  Exception (approved): daisyUI .modal-box uses overflow-y:auto, which clips tooltip
+  speech-bubble tails. Scroll the .modal overlay instead so stock tooltips paint outside the box.
+  https://daisyui.com/components/tooltip/
+*/
+.modal {
+  overflow-y: auto;
+}
+.modal-box {
+  overflow: visible;
+  max-height: none;
+}
+
+/*
+  Delivery mode join: label.btn wrapping a radio - highlight when checked.
+  Stock daisyUI join radios are input.btn (aria-label only); we need Lucide icons inside.
+*/
+.delivery-mode-join > label:has(> input[type="radio"]:checked) {
+  background-color: var(--color-primary);
+  color: var(--color-primary-content);
+  border-color: var(--color-primary);
+}
+
+/*
+  List filter date join-item: native date inputs keep UA chrome that reads as a
+  nested white panel when the join flex-shrinks the label.input. Keep transparent
+  and give the date field a floor width inside the daisyUI label-for-date-input.
+*/
+.js-list-filters > label.input.join-item > input[type="date"],
+.js-list-filters > label.input.join-item > input[type="datetime-local"] {
+  min-width: 9.5rem;
+  background-color: transparent;
+  color: inherit;
+}
+.js-list-filters > label.input.join-item > input[type="date"]::-webkit-calendar-picker-indicator,
+.js-list-filters > label.input.join-item > input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  background-color: transparent;
+}
+[data-string-list],
+[data-actors-list] {
+  counter-reset: meta-ord;
+}
+[data-list-ord] {
+  counter-increment: meta-ord;
+}
+[data-list-ord]::before {
+  content: counter(meta-ord);
+}
+

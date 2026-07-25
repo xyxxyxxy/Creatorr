@@ -1,0 +1,66 @@
+{{define "nav"}}
+    <div class="drawer-side z-40">
+      <label for="app-drawer" class="drawer-overlay" aria-label="Close menu"></label>
+      <aside class="bg-base-100 min-h-full w-64 border-r border-base-300 flex flex-col">
+        <a href="/" class="min-h-14 px-4 flex items-center font-bold text-xl tracking-wide border-b border-base-300 shrink-0">Creatorr</a>
+        <ul class="menu w-full px-2 pt-2 grow">
+          <li>
+            <a href="/series" {{if eq .Nav "series"}}class="active"{{end}}>
+              <i data-lucide="tv" class="size-4"></i>Series
+            </a>
+          </li>
+          <li>
+            <a href="/import" {{if eq .Nav "import"}}class="active"{{end}}>
+              <i data-lucide="folder-input" class="size-4"></i>Import
+            </a>
+          </li>
+          <li>
+            <a href="/tasks" {{if eq .Nav "tasks"}}class="active"{{end}}>
+              <i data-lucide="list-todo" class="size-4"></i>Tasks
+              <span id="tasks-badge" class="badge badge-primary badge-sm hidden">0</span>
+              <span id="tasks-paused-badge" class="badge badge-warning badge-sm hidden">0</span>
+            </a>
+          </li>
+          <li>
+            <a href="/history" {{if eq .Nav "history"}}class="active"{{end}}>
+              <i data-lucide="history" class="size-4"></i>History
+            </a>
+          </li>
+          <li>
+            <a href="/stats" {{if eq .Nav "stats"}}class="active"{{end}}>
+              <i data-lucide="chart-column" class="size-4"></i>Stats
+            </a>
+          </li>
+          <li>
+            <details {{if eq .Nav "settings"}}open{{end}}>
+              <summary {{if eq .Nav "settings"}}class="active"{{end}}>
+                <i data-lucide="settings" class="size-4"></i>Settings
+              </summary>
+              <ul>
+                <li>
+                  <a href="/settings/general" {{if eq .SettingsTab "general"}}class="active"{{end}}>
+                    <i data-lucide="sliders-horizontal" class="size-4"></i>General
+                  </a>
+                </li>
+                <li>
+                  <a href="/settings/library" {{if eq .SettingsTab "library"}}class="active"{{end}}>
+                    <i data-lucide="folder" class="size-4"></i>Library
+                  </a>
+                </li>
+                <li>
+                  <a href="/settings/scheduler" {{if eq .SettingsTab "scheduler"}}class="active"{{end}}>
+                    <i data-lucide="calendar-clock" class="size-4"></i>Scheduler
+                  </a>
+                </li>
+                <li>
+                  <a href="/settings/queue" {{if eq .SettingsTab "queue"}}class="active"{{end}}>
+                    <i data-lucide="list-ordered" class="size-4"></i>Queue
+                  </a>
+                </li>
+              </ul>
+            </details>
+          </li>
+        </ul>
+      </aside>
+    </div>
+{{end}}

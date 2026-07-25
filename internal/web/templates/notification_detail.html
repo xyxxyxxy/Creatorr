@@ -1,0 +1,33 @@
+{{define "notification_detail"}}
+{{template "head" .}}
+{{template "breadcrumbs" .Crumbs}}
+<div class="navbar bg-base-100 border border-base-300 rounded-box px-3 mb-4 min-h-14 gap-2 flex-wrap">
+  <div class="flex-1 min-w-0">
+    <h1 class="text-xl font-semibold truncate inline-flex items-center gap-2 max-w-full">
+      <i data-lucide="bell" class="size-5 shrink-0"></i>
+      <span class="truncate">{{.Item.EventLabel}}</span>
+    </h1>
+    <p class="text-xs opacity-60">#{{.Item.ID}} · {{.Item.CreatedAgo}}</p>
+  </div>
+</div>
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Details" "help" "In-app notification record. Title and body are the message sent to Apprise when channels are configured.")}}
+{{template "list_table"}}
+<tbody>
+  <tr><th class="w-40">Event</th><td>{{.Item.EventLabel}} <span class="font-mono text-xs opacity-60">({{.Item.Event}})</span></td></tr>
+  <tr><th class="w-40">When</th><td class="text-xs">{{.Item.CreatedAgo}} <span class="opacity-50">({{.Item.CreatedAt}})</span></td></tr>
+  <tr><th class="w-40">Read</th><td class="text-sm">{{if .Item.Unread}}<span class="text-error">Unread</span>{{else if .Item.ReadAt}}{{.Item.ReadAt}}{{else}}Read{{end}}</td></tr>
+  <tr><th class="w-40">Channels</th><td class="text-sm">{{if .Item.ExternalOK}}in-app, Apprise{{else}}in-app{{end}}</td></tr>
+  {{if .Item.TaskID}}
+  <tr><th class="w-40">Task</th><td><a class="link link-hover font-mono" href="/task/{{.Item.TaskID}}">#{{.Item.TaskID}}</a></td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Task")}}
+  {{end}}
+  <tr><th class="w-40">Title</th><td class="text-sm">{{.Item.Title}}</td></tr>
+  <tr><th class="w-40">Body</th><td><pre class="text-xs whitespace-pre-wrap font-mono max-h-96 overflow-y-auto">{{.Item.Body}}</pre></td></tr>
+</tbody>
+{{template "list_table_end"}}
+{{template "list_panel_end"}}
+{{template "foot" .}}
+{{end}}

@@ -1,0 +1,4 @@
+{{define "source_stalled"}}
+{{/* OOB target kept empty; stalled copy lives on combined Status tooltip. */}}
+<div id="source-stalled-{{.ID}}" {{if .OOB}}hx-swap-oob="true"{{end}}></div>
+{{end}}

@@ -1,0 +1,38 @@
+{{define "form_row"}}
+{{/*
+  Form field. Text-like → field_input (fieldset). Checkbox → checkbox_field.
+  Expects: Name, Label. Optional: Type, Value, Placeholder, Required, Info, Hint, Help (alias→Info),
+            Options, Checked, CheckLabel, Class, InputClass, Mono, Min, Step, Max, Disabled.
+*/}}
+{{$info := .Info}}{{if not $info}}{{$info = .Help}}{{end}}
+{{if eq .Type "checkbox"}}
+{{$checkLabel := .CheckLabel}}{{if not $checkLabel}}{{$checkLabel = .Label}}{{end}}
+{{template "checkbox_field" (dict
+  "Name" .Name
+  "Label" $checkLabel
+  "Checked" .Checked
+  "Info" $info
+  "Hint" .Hint
+  "Disabled" .Disabled
+)}}
+{{else}}
+{{template "field_input" (dict
+  "Name" .Name
+  "Label" .Label
+  "Type" .Type
+  "Value" .Value
+  "Placeholder" .Placeholder
+  "Required" .Required
+  "Info" $info
+  "Hint" .Hint
+  "Options" .Options
+  "Class" .Class
+  "InputClass" .InputClass
+  "Mono" .Mono
+  "Min" .Min
+  "Step" .Step
+  "Max" .Max
+  "Disabled" .Disabled
+)}}
+{{end}}
+{{end}}

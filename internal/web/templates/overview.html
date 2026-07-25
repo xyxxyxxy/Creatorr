@@ -1,0 +1,35 @@
+{{define "overview"}}
+{{template "head" .}}
+{{template "list_header" (dict "level" "page" "title" "Overview" "icon" .Icon "help" "Library at a glance: series, videos, and packed media on disk." "add_modal" "modal-add-series" "add_label" "Add series")}}
+{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
+
+<div class="stats stats-vertical lg:stats-horizontal shadow bg-base-100 border border-base-300 w-full mt-4">
+  <div class="stat">
+    <div class="stat-figure text-primary">
+      <i data-lucide="tv" class="size-8"></i>
+    </div>
+    <div class="stat-title">Series</div>
+    <div class="stat-value">{{.SeriesCount}}</div>
+    <div class="stat-desc">Titles in the library</div>
+  </div>
+  <div class="stat">
+    <div class="stat-figure text-secondary">
+      <i data-lucide="film" class="size-8"></i>
+    </div>
+    <div class="stat-title">Videos</div>
+    <div class="stat-value">{{.VideoCount}}</div>
+    <div class="stat-desc">Indexed across all series</div>
+  </div>
+  <div class="stat">
+    <div class="stat-figure text-accent">
+      <i data-lucide="hard-drive" class="size-8"></i>
+    </div>
+    <div class="stat-title">On disk</div>
+    <div class="stat-value">{{.SizeHuman}}</div>
+    <div class="stat-desc">Packed video media</div>
+  </div>
+</div>
+
+{{template "add_series_modal" .}}
+{{template "foot" .}}
+{{end}}

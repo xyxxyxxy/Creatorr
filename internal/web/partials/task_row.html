@@ -1,0 +1,41 @@
+{{define "task_row"}}
+<tr id="task-row-{{.ID}}">
+  <td class="font-mono tabular-nums">{{.Position}}</td>
+  <td data-task-status>{{template "status_badge" .Status}}</td>
+  <td><a class="link link-hover" href="/task/{{.ID}}">{{.Kind}}</a></td>
+  <td>
+    {{if .SeriesID}}
+    <a class="link link-hover" href="/series/{{.SeriesID}}">{{if .SeriesTitle}}{{.SeriesTitle}}{{else}}#{{.SeriesID}}{{end}}</a>
+    {{else}}{{template "empty_value"}}{{end}}
+    {{if .VideoTitle}}
+    <div class="text-sm mt-0.5">
+      {{if and .SeriesID .VideoID}}
+      <a class="link link-hover" href="/series/{{.SeriesID}}/videos/{{.VideoID}}">{{.VideoTitle}}</a>
+      {{else}}{{.VideoTitle}}{{end}}
+    </div>
+    {{end}}
+  </td>
+  <td class="text-sm min-w-0" data-task-status-cell>
+    <div><a class="link link-hover" href="/task/{{.ID}}" data-task-message>{{if .Message}}{{.Message}}{{else}}{{template "empty_value"}}{{end}}</a></div>
+    {{if and (eq .Status "running") (progressActive .Progress)}}
+    <progress data-task-progress class="progress progress-primary w-full max-w-xs mt-1" value="{{pct .Progress}}" max="100"></progress>
+    {{end}}
+  </td>
+  <td class="whitespace-nowrap">
+    {{if eq .Status "pending"}}
+    <form method="post" action="/actions/bump-task" class="inline">
+      <input type="hidden" name="id" value="{{.ID}}" />
+      <button type="submit" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="To top" aria-label="To top">
+        <i data-lucide="arrow-up-to-line" class="size-3.5"></i>
+      </button>
+    </form>
+    {{end}}
+    <form method="post" action="/actions/cancel-task" class="inline">
+      <input type="hidden" name="id" value="{{.ID}}" />
+      <button type="submit" class="btn btn-ghost btn-xs btn-square text-error tooltip tooltip-top" data-tip="Cancel" aria-label="Cancel">
+        <i data-lucide="x" class="size-3.5"></i>
+      </button>
+    </form>
+  </td>
+</tr>
+{{end}}

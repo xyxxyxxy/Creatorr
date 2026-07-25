@@ -1,0 +1,104 @@
+{{define "add_series_modal"}}
+<input type="checkbox" id="modal-add-series" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box max-w-lg">
+    <h3 class="font-bold text-lg mb-2">Add series</h3>
+    {{if not .Roots}}
+    <div class="alert alert-warning mb-2"><span>Add a root folder under Settings first.</span></div>
+    {{end}}
+    {{if not .Profiles}}
+    <div class="alert alert-warning mb-2"><span>Add a quality profile under Settings first.</span></div>
+    {{end}}
+    <form method="post" action="/actions/add-series" class="space-y-3 js-add-series-form">
+      <input type="hidden" name="draft_token" id="add-series-draft-token" value="" />
+      <script type="application/json" id="add-series-all-source-urls">{{toJSON .AllSourceURLs}}</script>
+
+      <div data-add-series-choice>
+        <p class="text-sm opacity-70 mb-4">Pick how to start.</p>
+        <div class="flex w-full flex-col items-stretch">
+          <button type="button" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal js-add-series-pick" data-mode="url">
+            <span class="flex flex-col gap-0.5 items-center text-center">
+              <span class="font-semibold">From channel / playlist URL</span>
+              <span class="text-sm font-normal opacity-70">Fetch series metadata and add URL as first feed source.</span>
+            </span>
+          </button>
+          <div class="divider">OR</div>
+          <button type="button" class="btn btn-outline grow h-auto min-h-12 py-3 whitespace-normal js-add-series-pick" data-mode="manual">
+            <span class="flex flex-col gap-0.5 items-center text-center">
+              <span class="font-semibold">Create manually</span>
+              <span class="text-sm font-normal opacity-70">Setup series and add sources later.</span>
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <ul class="steps w-full mb-2 hidden" data-add-series-steps aria-label="Add series from URL">
+        <li class="step" data-add-series-step-ind="source">Source</li>
+        <li class="step" data-add-series-step-ind="fetching">Fetching</li>
+        <li class="step" data-add-series-step-ind="series">Series</li>
+      </ul>
+
+      <div role="alert" class="alert alert-error mb-2 hidden js-add-series-fetch-err">
+        <span class="break-words whitespace-pre-wrap"></span>
+      </div>
+
+      <div class="space-y-3 hidden" data-add-series-step="source">
+        <div class="w-full">
+          {{template "field_input" (dict
+            "Name" "source_url"
+            "ID" "add-series-url"
+            "Label" "Channel / playlist URL"
+            "Type" "url"
+            "Placeholder" "https://…"
+          )}}
+          <p class="label whitespace-normal text-error hidden js-add-series-url-dup">This URL is already a source on another series.</p>
+          <p class="label whitespace-normal text-error hidden js-add-series-url-invalid">Enter a valid http(s) URL with a host.</p>
+        </div>
+        {{template "field_input" (dict
+          "Name" "source_label"
+          "Label" "Name (optional)"
+          "Placeholder" "name"
+        )}}
+        {{template "scan_cron_field" (dict
+          "Value" "@weekly"
+          "ID" "add-series-scan-cron"
+          "Info" "How often this source is checked for new videos. Higher values mean slower video arrival but also less requests to external site."
+          "Hint" "Empty = off / no automatic scans."
+          "CronDescriptors" .ScanCronDescriptors
+        )}}
+        {{template "checkbox_field" (dict "Name" "index_as_ignored" "Label" "Mark new videos as ignored" "Info" "Ignored videos are indexed and need to be marked as wanted before they are downloaded.")}}
+        {{template "source_filter_fields" (dict)}}
+      </div>
+
+      <div class="hidden" data-add-series-step="fetching">
+        <div class="flex flex-col items-center justify-center gap-3 py-16">
+          <span class="loading loading-spinner loading-lg text-primary" aria-hidden="true"></span>
+          <p class="text-sm opacity-70">Fetching series metadata…</p>
+        </div>
+      </div>
+
+      <div class="space-y-3 hidden" data-add-series-step="series">
+        {{template "series_settings_fields" (dict
+          "DeliveryMode" "download"
+          "CanStream" .CanStream
+          "StreamDisabledReason" .StreamDisabledReason
+          "TitleID" "add-series-title"
+          "Roots" .Roots
+          "Profiles" .Profiles
+          "AutoIgnoreOptions" .AutoIgnoreMediaTypeOptions
+          "AutoIgnoreListID" "add-series-auto-ignore-media-types"
+        )}}
+      </div>
+
+      <div class="modal-action">
+        <label for="modal-add-series" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="button" class="btn btn-primary hidden js-add-series-fetch" data-add-series-continue
+                {{if or (not .Roots) (not .Profiles)}}disabled{{end}}>Continue</button>
+        <button type="submit" class="btn btn-primary hidden" data-add-series-submit
+                {{if or (not .Roots) (not .Profiles)}}disabled data-blocked="1"{{end}}>Add series</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}

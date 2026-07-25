@@ -1,0 +1,23 @@
+{{define "source_status_cell"}}
+{{/*
+  Combined source Status: icon + short label; tooltip stacks cutoff / next scan (multiline).
+  Expects sourceStatusView (SourceID, Kind, Title, Label, Href, Progress, OOB).
+*/}}
+<td id="source-status-{{.SourceID}}" class="source-status-cell whitespace-nowrap text-sm"
+    {{if .OOB}}hx-swap-oob="true"{{end}}
+    onclick="event.stopPropagation()">
+  <span class="inline-flex items-center gap-2 min-w-0 max-w-56 tooltip tooltip-top"
+        aria-label="{{.Title}}">
+    <div class="tooltip-content text-start whitespace-pre-line">{{.Title}}</div>
+    {{template "source_status_icon" .}}
+    {{if .Label}}
+    {{if .Href}}
+    <a class="link link-hover truncate{{if eq .Kind "scan_error"}} text-error{{else}} opacity-80{{end}}"
+       href="{{.Href}}">{{.Label}}</a>
+    {{else}}
+    <span class="truncate{{if eq .Kind "scan_error"}} text-error{{else}} opacity-80{{end}}">{{.Label}}</span>
+    {{end}}
+    {{end}}
+  </span>
+</td>
+{{end}}

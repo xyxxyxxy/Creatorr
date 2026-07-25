@@ -1,0 +1,19 @@
+{{define "date_past"}}
+{{/*
+  Past-or-today date via field_input.
+  Expects: Name, Label. Optional: Info, Hint, Help (alias→Info), Value, Class, InputClass, Required.
+*/}}
+{{$info := .Info}}{{if not $info}}{{$info = .Help}}{{end}}
+{{template "field_input" (dict
+  "Name" .Name
+  "Label" .Label
+  "Type" "date"
+  "Value" .Value
+  "Info" $info
+  "Hint" .Hint
+  "Class" .Class
+  "InputClass" .InputClass
+  "Required" .Required
+  "Max" (today)
+)}}
+{{end}}

@@ -1,0 +1,308 @@
+{{define "stats"}}
+{{template "head" .}}
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "page" "title" "Stats" "icon" .Icon "help" (printf "Video status and queue depth over time (stored on change, polled every minute). Library size pies are live. Storage development is sampled daily. Retention %s. Charts refresh every minute." .RetentionLabel))}}
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+<h2 class="text-lg font-semibold">Library size</h2>
+<p class="text-sm opacity-60 -mt-1 mb-2">
+  Total media bytes (<span class="font-mono">kind=video</span>).{{if gt .RootCount 1}} Split by root folder and by series.{{else}} Split by series.{{end}}
+  Click a series slice to open that series.
+</p>
+<p id="library-size-total" class="text-xl font-semibold mb-4">-</p>
+<div class="grid gap-4{{if gt .RootCount 1}} lg:grid-cols-2{{end}}">
+  {{if gt .RootCount 1}}
+  <div>
+    <h3 class="text-base font-semibold mb-1">By root folder</h3>
+    <p class="label mb-2">Share of library media bytes per root folder.</p>
+    <div id="chart-library-size-root" class="w-full h-80 bg-base-200 rounded-box"></div>
+  </div>
+  {{end}}
+  <div>
+    <h3 class="text-base font-semibold mb-1">By series</h3>
+    <p class="label mb-2">Share of library media bytes per series. Click a slice to open it.</p>
+    <div id="chart-library-size-series" class="w-full h-80 bg-base-200 rounded-box"></div>
+  </div>
+</div>
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+<h2 class="text-lg font-semibold">Video status</h2>
+<p class="text-sm -mt-1 mb-2">Wanted, downloaded (archive), and streamable video counts over time.</p>
+<div id="chart-video-status" class="w-full h-80 bg-base-200 rounded-box"></div>
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+<h2 class="text-lg font-semibold">Queue depth</h2>
+<p class="text-sm -mt-1 mb-2">Pending + running download and scan tasks. Dashed line is Domain defaults max download queue.</p>
+<div id="chart-queue" class="w-full h-80 bg-base-200 rounded-box"></div>
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+<h2 class="text-lg font-semibold">Storage development</h2>
+<p class="text-sm -mt-1 mb-2">Total packed media bytes over time. Sampled daily (UTC); shown for up to 1 year.</p>
+<div id="chart-storage" class="w-full h-80 bg-base-200 rounded-box"></div>
+{{template "list_panel_end"}}
+
+<p id="stats-empty" class="alert hidden"><span>No samples yet. Wait about a minute for the first sample.</span></p>
+
+<script src="/static/vendor/echarts.min.js" defer></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+(function () {
+  const queueEl = document.getElementById("chart-queue");
+  const videoEl = document.getElementById("chart-video-status");
+  const storageEl = document.getElementById("chart-storage");
+  const sizeRootEl = document.getElementById("chart-library-size-root");
+  const sizeSeriesEl = document.getElementById("chart-library-size-series");
+  const sizeTotalEl = document.getElementById("library-size-total");
+  const emptyEl = document.getElementById("stats-empty");
+  if (typeof echarts === "undefined") {
+    emptyEl.classList.remove("hidden");
+    emptyEl.querySelector("span").textContent = "ECharts failed to load. Run make css to copy vendor/echarts.min.js.";
+    return;
+  }
+
+  function isNight() {
+    try {
+      return getComputedStyle(document.documentElement).getPropertyValue("color-scheme").includes("dark");
+    } catch (e) {
+      return document.documentElement.getAttribute("data-theme") === "night";
+    }
+  }
+  function chartThemeName() {
+    return isNight() ? "dark" : undefined;
+  }
+  function mutedText() {
+    return isNight() ? "#a6adbb" : "#4b5563";
+  }
+
+  let queueChart = echarts.init(queueEl, chartThemeName());
+  let videoChart = echarts.init(videoEl, chartThemeName());
+  let storageChart = echarts.init(storageEl, chartThemeName());
+  let sizeRootChart = sizeRootEl ? echarts.init(sizeRootEl, chartThemeName()) : null;
+  let sizeSeriesChart = echarts.init(sizeSeriesEl, chartThemeName());
+
+  function formatBytes(n) {
+    n = Number(n) || 0;
+    if (n < 1024) return n + " B";
+    const u = ["KiB", "MiB", "GiB", "TiB", "PiB"];
+    let v = n / 1024, i = 0;
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    return v.toFixed(1) + " " + u[i];
+  }
+
+  function formatAxisTime(v, daily) {
+    try {
+      const d = new Date(v);
+      if (isNaN(d.getTime())) return v;
+      const pad = function (n) { return String(n).padStart(2, "0"); };
+      if (daily) {
+        return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate());
+      }
+      return pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes());
+    } catch (e) { return v; }
+  }
+
+  function lineOption(title, times, series, caps, opts) {
+    opts = opts || {};
+    const bytes = !!opts.bytes;
+    const daily = !!opts.daily;
+    const seriesOpts = series.map(function (s) {
+      return {
+        name: s.name,
+        type: "line",
+        stack: s.stack || title,
+        areaStyle: { opacity: 0.35 },
+        showSymbol: false,
+        emphasis: { focus: "series" },
+        data: s.data
+      };
+    });
+    if (title === "queue" && caps && caps.length && times && times.length) {
+      const c = caps[0];
+      const n = Number(c.max_download_queue) || 0;
+      if (n > 0) {
+        const flat = [];
+        for (let i = 0; i < times.length; i++) flat.push(n);
+        seriesOpts.push({
+          name: "max download queue",
+          type: "line",
+          showSymbol: false,
+          silent: true,
+          tooltip: { valueFormatter: function (v) { return v + " (Domain defaults max download queue)"; } },
+          lineStyle: { type: "dashed", width: 1.5 },
+          itemStyle: { opacity: 0.85 },
+          data: flat
+        });
+      }
+    }
+    const muted = mutedText();
+    return {
+      backgroundColor: "transparent",
+      animation: false,
+      tooltip: {
+        trigger: "axis",
+        formatter: function (params) {
+          if (!params || !params.length) return "";
+          let head = params[0].axisValue;
+          try {
+            const d = new Date(params[0].axisValue);
+            if (!isNaN(d.getTime())) {
+              const pad = function (n) { return String(n).padStart(2, "0"); };
+              if (daily) {
+                head = d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()) + " UTC";
+              } else {
+                head = d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()) +
+                  " " + pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + " UTC";
+              }
+            }
+          } catch (e) {}
+          let lines = [head];
+          params.forEach(function (p) {
+            const val = bytes ? formatBytes(p.value) : p.value;
+            lines.push(p.marker + p.seriesName + ": " + val);
+          });
+          return lines.join("<br/>");
+        }
+      },
+      legend: { type: "scroll", bottom: 0, textStyle: { color: muted } },
+      grid: { left: bytes ? 64 : 48, right: 24, top: 32, bottom: 72 },
+      xAxis: {
+        type: "category",
+        data: times,
+        axisLabel: {
+          hideOverlap: true,
+          color: muted,
+          formatter: function (v) { return formatAxisTime(v, daily); }
+        }
+      },
+      yAxis: {
+        type: "value",
+        minInterval: bytes ? undefined : 1,
+        axisLabel: {
+          color: muted,
+          formatter: bytes ? function (v) { return formatBytes(v); } : undefined
+        }
+      },
+      series: seriesOpts
+    };
+  }
+
+  function pieOption(slices, cursor) {
+    const muted = mutedText();
+    const data = (slices || []).map(function (s) {
+      return { name: s.label || ("#" + s.id), value: s.bytes || 0, id: s.id };
+    }).filter(function (s) { return s.value > 0; });
+    return {
+      backgroundColor: "transparent",
+      animation: false,
+      tooltip: {
+        trigger: "item",
+        formatter: function (p) {
+          if (!p) return "";
+          return p.marker + p.name + ": " + formatBytes(p.value) +
+            " (" + (p.percent != null ? p.percent.toFixed(1) : "?") + "%)";
+        }
+      },
+      legend: { type: "scroll", bottom: 0, textStyle: { color: muted } },
+      series: [{
+        type: "pie",
+        radius: ["35%", "65%"],
+        center: ["50%", "45%"],
+        data: data.length ? data : [{ name: "Empty", value: 0 }],
+        label: {
+          color: muted,
+          formatter: function (p) {
+            if (!p || p.name === "Empty") return "";
+            return p.name + "\n" + formatBytes(p.value);
+          }
+        },
+        emphasis: { itemStyle: { shadowBlur: 8, shadowColor: "rgba(0,0,0,0.4)" } },
+        cursor: cursor || "default"
+      }]
+    };
+  }
+
+  function bindSeriesClick() {
+    sizeSeriesChart.off("click");
+    sizeSeriesChart.on("click", function (params) {
+      if (!params || params.componentType !== "series") return;
+      const id = params.data && params.data.id;
+      if (!id) return;
+      window.location.href = "/series/" + id;
+    });
+  }
+  bindSeriesClick();
+
+  async function fetchLibrarySize(group) {
+    const res = await fetch("/stats/library-size.json?group=" + encodeURIComponent(group), { cache: "no-store" });
+    if (!res.ok) throw new Error(String(res.status));
+    return res.json();
+  }
+
+  async function refreshSize() {
+    const jobs = [fetchLibrarySize("series")];
+    if (sizeRootChart) jobs.unshift(fetchLibrarySize("root"));
+    const results = await Promise.all(jobs);
+    const seriesData = sizeRootChart ? results[1] : results[0];
+    const rootData = sizeRootChart ? results[0] : null;
+    sizeTotalEl.textContent = formatBytes(seriesData.total_bytes || 0);
+    if (sizeRootChart && rootData) {
+      sizeRootChart.setOption(pieOption(rootData.slices || [], "default"), true);
+    }
+    sizeSeriesChart.setOption(pieOption(seriesData.slices || [], "pointer"), true);
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch("/stats/series.json", { cache: "no-store" });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      const empty = (!data.times || data.times.length === 0) &&
+        (!data.storage_times || data.storage_times.length === 0);
+      emptyEl.classList.toggle("hidden", !empty);
+      if (empty) {
+        emptyEl.querySelector("span").textContent = "No samples yet. Wait about a minute for the first sample.";
+      }
+      queueChart.setOption(lineOption("queue", data.times || [], data.queue || [], data.queue_caps || []), true);
+      videoChart.setOption(lineOption("video_status", data.times || [], data.video_status || []), true);
+      storageChart.setOption(lineOption("storage", data.storage_times || [], data.storage || [], null, { bytes: true, daily: true }), true);
+      await refreshSize();
+    } catch (err) {
+      emptyEl.classList.remove("hidden");
+      emptyEl.querySelector("span").textContent = "Failed to load stats: " + err;
+    }
+  }
+
+  function reinitCharts() {
+    queueChart.dispose();
+    videoChart.dispose();
+    storageChart.dispose();
+    if (sizeRootChart) sizeRootChart.dispose();
+    sizeSeriesChart.dispose();
+    queueChart = echarts.init(queueEl, chartThemeName());
+    videoChart = echarts.init(videoEl, chartThemeName());
+    storageChart = echarts.init(storageEl, chartThemeName());
+    sizeRootChart = sizeRootEl ? echarts.init(sizeRootEl, chartThemeName()) : null;
+    sizeSeriesChart = echarts.init(sizeSeriesEl, chartThemeName());
+    bindSeriesClick();
+    refresh();
+  }
+
+  refresh();
+  setInterval(refresh, 60000);
+  window.addEventListener("resize", function () {
+    queueChart.resize();
+    videoChart.resize();
+    storageChart.resize();
+    if (sizeRootChart) sizeRootChart.resize();
+    sizeSeriesChart.resize();
+  });
+  window.addEventListener("creatorr:theme", reinitCharts);
+})();
+});
+</script>
+{{template "foot" .}}
+{{end}}

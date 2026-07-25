@@ -1,0 +1,340 @@
+{{define "series_detail"}}
+{{template "head" .}}
+{{template "breadcrumbs" (list
+  (dict "Href" "/series" "Label" "Series" "Icon" "tv")
+  (dict "Label" .Series.Title "Icon" "clapperboard")
+)}}
+<div class="navbar bg-base-100 border border-base-300 rounded-box px-3 mb-4 min-h-14 gap-2 flex-wrap">
+  <div class="flex-1 min-w-0">
+    <h1 class="text-xl font-semibold truncate inline-flex items-center gap-2 max-w-full">
+      <i data-lucide="clapperboard" class="size-5 shrink-0"></i>
+      <span class="truncate">{{.Series.Title}}</span>
+    </h1>
+    <p class="text-xs opacity-60">{{.Series.RootName}} · {{.Series.QualityProfileName}}</p>
+  </div>
+  <div class="flex-none flex flex-wrap gap-2">
+    <label for="modal-edit-series" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Edit series</label>
+    <label for="modal-edit-series-metadata" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Edit metadata</label>
+    <label for="modal-delete-series" class="btn btn-ghost text-error{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Delete</label>
+  </div>
+</div>
+{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
+{{if and .ScanBlocked .Sources}}
+<div class="alert alert-warning mb-4"><span>{{.ScanBlocked}}</span></div>
+{{end}}
+<div id="series-task-live" class="hidden"
+     hx-get="{{.TaskIndicatorsPath}}"
+     hx-trigger="every 2s"
+     hx-swap="none"></div>
+
+{{template "list_panel"}}
+{{if not .Sources}}
+{{template "list_header" (dict "level" "section" "title" "Sources")}}
+<script type="application/json" id="series-source-urls">{{toJSON .SourceURLs}}</script>
+<div class="py-10 px-4 w-full">
+  <div class="flex w-full max-w-2xl mx-auto flex-col items-center">
+    <div class="flex w-full flex-col items-stretch">
+      <label for="modal-add-source" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal">Add channel/playlist URL</label>
+      <div class="divider">OR</div>
+      <label for="modal-add-single" class="btn btn-outline grow h-auto min-h-12 py-3 whitespace-normal">Add single video</label>
+    </div>
+  </div>
+</div>
+{{else}}
+{{template "list_header" (dict "level" "section" "title" "Sources" "add_modal" "modal-add-source" "add_label" "Add channel/playlist URL" "add_modal2" "modal-add-single" "add_label2" "Add single video")}}
+<script type="application/json" id="series-source-urls">{{toJSON .SourceURLs}}</script>
+{{template "list_table"}}
+<thead><tr><th>URL / Name</th><th>Status</th><th class="w-0"></th></tr></thead>
+<tbody>
+  {{range .Sources}}
+  <tr class="hover cursor-pointer" onclick="location.href='/series/{{$.Series.ID}}/sources/{{.ID}}'">
+    <td>
+      <div class="flex items-center gap-2 min-w-0">
+        {{if eq .Kind "single"}}
+        <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="single video"><i data-lucide="film" class="size-4 opacity-70"></i></span>
+        {{else if .IndexAsIgnored}}
+        <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="channel/playlist - new videos marked as ignored"><i data-lucide="list-minus" class="size-4 opacity-70"></i></span>
+        {{else}}
+        <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="channel/playlist"><i data-lucide="list-video" class="size-4 opacity-70"></i></span>
+        {{end}}
+        {{if and .Label.Valid .Label.String}}
+        <div class="font-medium min-w-0 truncate"><span class="tooltip tooltip-top" data-tip="{{.URL}}">{{.Label.String}}</span></div>
+        {{else}}
+        <div class="font-medium break-all min-w-0">{{displayURL .URL}}</div>
+        {{end}}
+      </div>
+      {{template "source_stalled" .}}
+    </td>
+    {{template "source_status_cell" .StatusInd}}
+    <td class="whitespace-nowrap text-end" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-end gap-0.5">
+      {{template "source_scan_actions" .}}
+      {{if .HasRetryable}}
+      <label for="modal-retry-source-{{.ID}}" class="btn btn-ghost btn-xs tooltip tooltip-top" data-tip="Clear error hold: wanted_download_error and wanted_source_error → wanted. Does not enqueue downloads.">Retry</label>
+      {{end}}
+      <label for="modal-edit-source-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+        <i data-lucide="pencil" class="size-3.5"></i>
+      </label>
+      <label for="modal-delete-source-{{.ID}}" class="btn btn-ghost btn-xs btn-square text-error tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+        <i data-lucide="trash-2" class="size-3.5"></i>
+      </label>
+      </div>
+    </td>
+  </tr>
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{template "pagination" .SourcesPage}}
+{{end}}
+{{template "list_panel_end"}}
+
+{{template "series_videos_live" .VideosLive}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Series folder metadata: tvshow.nfo and art (poster, banner, fanart, clearlogo).")}}
+{{if not .MetaFiles}}
+{{template "list_empty" "No series metadata files yet."}}
+{{else}}
+{{template "list_table"}}
+<thead><tr><th>Type</th><th>File</th><th>Size</th></tr></thead>
+<tbody>
+  {{range .MetaFiles}}
+  <tr>
+    <td class="whitespace-nowrap">
+      <span class="inline-flex items-center gap-1.5">
+        <i data-lucide="{{.Icon}}" class="size-4 shrink-0 opacity-70"></i>
+        <span>{{.KindLabel}}</span>
+      </span>
+    </td>
+    <td class="text-sm break-all">
+      <a class="link link-hover" href="{{.ViewHref}}">
+        <code class="text-xs">{{.Name}}</code>
+      </a>
+    </td>
+    <td class="text-xs whitespace-nowrap tabular-nums">{{if eq .SizeLabel "-"}}{{template "empty_value"}}{{else}}{{.SizeLabel}}{{end}}</td>
+  </tr>
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{end}}
+{{template "list_panel_end"}}
+
+<input type="checkbox" id="modal-add-source" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Add channel/playlist URL</h3>
+        <form method="post" action="/actions/add-source" class="space-y-2 js-source-url-form">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <input type="hidden" name="kind" value="feed" />
+      <div class="w-full">
+        {{template "field_input" (dict
+          "Name" "url"
+          "Label" "URL"
+          "Required" true
+          "InputClass" "js-source-url"
+          "Info" "Channel or playlist URL. After full scan is done, Scan runs on schedule."
+        )}}
+        <p class="label whitespace-normal text-error hidden js-source-url-dup">This URL is already a source on this series.</p>
+        <p class="label whitespace-normal text-error hidden js-source-url-invalid">Enter a valid http(s) URL with a host.</p>
+      </div>
+      {{template "field_input" (dict "Name" "label" "Label" "Name (optional)")}}
+      {{template "scan_cron_field" (dict
+        "Value" "@weekly"
+        "ID" "add-source-scan-cron"
+        "CronDescriptors" .ScanCronDescriptors
+      )}}
+      {{template "checkbox_field" (dict "Name" "index_as_ignored" "Label" "Mark new videos as ignored" "Info" "Ignored videos are indexed and need to be marked as wanted before they are downloaded.")}}
+      {{template "source_filter_fields" (dict)}}
+      <div class="modal-action">
+        <label for="modal-add-source" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-add-single" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Add single video</h3>
+        <form method="post" action="/actions/add-source" class="space-y-2 js-source-url-form">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <input type="hidden" name="kind" value="single" />
+      <div class="w-full">
+        {{template "field_input" (dict
+          "Name" "url"
+          "Label" "URL"
+          "Required" true
+          "InputClass" "js-source-url"
+          "Info" "One video URL. Indexed once; skipped by Scan. Use Full scan to re-index."
+        )}}
+        <p class="label whitespace-normal text-error hidden js-source-url-dup">This URL is already a source on this series.</p>
+        <p class="label whitespace-normal text-error hidden js-source-url-invalid">Enter a valid http(s) URL with a host.</p>
+      </div>
+      {{template "field_input" (dict "Name" "label" "Label" "Name (optional)")}}
+      <div class="modal-action">
+        <label for="modal-add-single" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+{{range .Sources}}
+<input type="checkbox" id="modal-edit-source-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Edit {{if eq .Kind "single"}}single{{else}}feed{{end}}</h3>
+        <form method="post" action="/actions/update-source" class="space-y-2 js-source-url-form" data-current-url="{{.URL}}">
+      <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
+      <input type="hidden" name="source_id" value="{{.ID}}" />
+      <fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      URL
+      {{if eq .Kind "single"}}
+          {{template "field_info" (dict "Info" "Changing URL re-detects the domain (hostname). For singles, also restarts indexing.")}}
+          {{else}}
+          {{template "field_info" (dict "Info" "Changing URL re-detects the domain (hostname).")}}
+          {{end}}
+    </span>
+  </legend>
+  <input name="url" class="input w-full js-source-url" required value="{{.URL}}" />
+</fieldset>
+      <p class="label whitespace-normal text-error hidden js-source-url-dup">This URL is already a source on this series.</p>
+      <p class="label whitespace-normal text-error hidden js-source-url-invalid">Enter a valid http(s) URL with a host.</p>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Name (optional)</legend>
+        <input name="label" class="input w-full" value="{{if .Label.Valid}}{{.Label.String}}{{end}}" />
+        <p class="label whitespace-normal">Empty clears the name.</p>
+      </fieldset>
+      {{if ne .Kind "single"}}
+      {{template "scan_cron_field" (dict
+        "Value" .ScanCron
+        "ID" (printf "edit-source-scan-cron-%d" .ID)
+        "CronDescriptors" $.ScanCronDescriptors
+      )}}
+      {{end}}
+      {{if ne .Kind "single"}}
+      {{template "checkbox_field" (dict "Name" "index_as_ignored" "Label" "Mark new videos as ignored" "Checked" .IndexAsIgnored "Info" "Ignored videos are indexed and need to be marked as wanted before they are downloaded.")}}
+      {{$cutoff := ""}}{{if .ScanCutoff.Valid}}{{$cutoff = .ScanCutoff.String}}{{end}}
+      {{template "source_filter_fields" (dict
+        "Cutoff" $cutoff
+        "TitleRegexpInclude" .TitleRegexpInclude
+        "TitleRegexpIncludeID" (printf "edit-source-title-include-%d" .ID)
+        "TitleRegexpExclude" .TitleRegexpExclude
+        "TitleRegexpExcludeID" (printf "edit-source-title-exclude-%d" .ID)
+      )}}
+      {{end}}
+      <div class="modal-action">
+        <label for="modal-edit-source-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary js-source-url-submit">Save</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-delete-source-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Delete source</h3>
+    <p class="text-sm mb-2">Removes this source and <strong>all of its indexed videos</strong> ({{.VideoCount}}) including library files on disk. Related scan/download tasks are cancelled.</p>
+    <p class="text-sm opacity-70 mb-4">To keep videos and only stop scanning, set Scan to Never or deactivate the domain under Settings → Queue.</p>
+    <form method="post" action="/actions/delete-source" class="space-y-3 js-confirm-submit">
+      <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
+      <input type="hidden" name="source_id" value="{{.ID}}" />
+      {{template "checkbox_field" (dict "Name" "confirm_delete" "Label" "Yes, I want to delete this source, including all related video files" "InputClass" "js-confirm-submit-check")}}
+      <div class="modal-action">
+        <label for="modal-delete-source-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-error" disabled>Delete source and videos</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+{{if .HasRetryable}}
+<input type="checkbox" id="modal-retry-source-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Retry source errors</h3>
+    <p class="text-sm mb-4">Set wanted_download_error and wanted_source_error videos back to wanted for this source. Does not enqueue downloads.</p>
+    <form method="post" action="/actions/retry-source-errors">
+      <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
+      <input type="hidden" name="source_id" value="{{.ID}}" />
+      <div class="modal-action">
+        <label for="modal-retry-source-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Retry</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+{{end}}
+
+{{template "series_metadata_form" .MetaForm}}
+
+<input type="checkbox" id="modal-edit-series" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Edit series</h3>
+    {{if not .Roots}}
+    <div class="alert alert-warning mb-2"><span>Add a root folder under Settings first.</span></div>
+    {{end}}
+    {{if not .Profiles}}
+    <div class="alert alert-warning mb-2"><span>Add a quality profile under Settings first.</span></div>
+    {{end}}
+        <form method="post" action="/actions/update-series" class="space-y-2">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      {{template "series_settings_fields" (dict
+        "DeliveryMode" .Series.DeliveryMode
+        "CanStream" .CanStream
+        "StreamDisabledReason" .StreamDisabledReason
+        "Title" .Series.Title
+        "TitleInfo" "Changing the title updates Creatorr and renames the on-disk series folder immediately. Episode filenames that include the series name are not rewritten until you run Apply episode format under Settings → Library."
+        "TitleDisabled" .FolderRenameBusy
+        "TitleDisabledTitle" "Title and root are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
+        "Roots" .Roots
+        "RootID" .Series.RootID
+        "RootInfo" "Where downloads and series NFO/art are written. Changing root moves the series folder on disk."
+        "RootDisabled" .FolderRenameBusy
+        "RootDisabledTitle" "Title and root are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
+        "Profiles" .Profiles
+        "ProfileID" .Series.QualityProfileID
+        "ProfileInfo" "yt-dlp format selector for new downloads; stream mode uses the same --format on resolved URLs."
+        "AutoIgnoreItems" .Series.AutoIgnoreMediaTypes
+        "AutoIgnoreOptions" .AutoIgnoreMediaTypeOptions
+        "AutoIgnoreListID" "edit-series-auto-ignore-media-types"
+      )}}
+      <div class="modal-action">
+        <label for="modal-edit-series" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary" {{if or (not .Roots) (not .Profiles)}}disabled{{end}}>Save</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-delete-series" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Delete series</h3>
+    <p class="text-sm mb-4">Removes this series from Creatorr: its sources, <strong>indexed entries</strong> in the database, and library media on disk. Related scan and download tasks are cancelled.</p>
+    <form method="post" action="/actions/delete-series" class="space-y-3 js-confirm-submit">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      {{template "checkbox_field" (dict "Name" "delete_files" "Label" "Yes, I want to delete this series, including all library files on disk" "InputClass" "js-confirm-submit-check")}}
+      <div class="modal-action">
+        <label for="modal-delete-series" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-error" disabled>Delete series</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+{{template "foot" .}}
+{{end}}

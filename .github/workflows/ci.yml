@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: test
+        run: make test
+
+      - name: vet
+        run: make vet
+
+      - name: lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.1.6
+
+      - name: openapi-check
+        run: make openapi-check
+
+      - name: sbom
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          upload-artifact: true
+          artifact-name: sbom-cdx
+          upload-artifact-retention: 30
+
+      - name: license-gate
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json, sys
+          from pathlib import Path
+
+          deny = {
+              line.strip()
+              for line in Path(".github/license-deny.txt").read_text().splitlines()
+              if line.strip() and not line.strip().startswith("#")
+          }
+          doc = json.loads(Path("sbom.cdx.json").read_text())
+          hits = []
+          for comp in doc.get("components") or []:
+              name = comp.get("name") or comp.get("bom-ref") or "?"
+              licenses = comp.get("licenses") or []
+              ids = []
+              for entry in licenses:
+                  lic = entry.get("license") or {}
+                  if "id" in lic:
+                      ids.append(lic["id"])
+                  elif "name" in lic:
+                      ids.append(lic["name"])
+                  expr = entry.get("expression")
+                  if expr:
+                      ids.append(expr)
+              for lic_id in ids:
+                  # Match exact SPDX id or substring for expressions.
+                  for d in deny:
+                      if lic_id == d or d in lic_id.split(" "):
+                          hits.append(f"{name}: {lic_id}")
+                          break
+          if hits:
+              print("Denied licenses in repo SBOM:", file=sys.stderr)
+              for h in sorted(set(hits)):
+                  print(f"  {h}", file=sys.stderr)
+              sys.exit(1)
+          print(f"OK: {len(doc.get('components') or [])} components; none on deny list")
+          PY

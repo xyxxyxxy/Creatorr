@@ -1,0 +1,100 @@
+{{define "settings_row"}}
+{{/*
+  Settings key/value row via field_input.
+  Expects typed settingsRowView fields only: Key, Value, Help, Label, Textarea, Wide, Disabled.
+  Never read optional fields missing from the struct (Go templates error - WEB_DEV reloads HTML
+  before a binary rebuild). Per-key placeholders: branch on .Key below.
+*/}}
+{{$label := .Label}}{{if not $label}}{{$label = .Key}}{{end}}
+{{$ph := ""}}{{if eq .Key "flare_solverr_url"}}{{$ph = "http://"}}{{end}}
+{{if eq .Key "external_base_url"}}{{$ph = "http://creatorr.example.com:8787"}}{{end}}
+{{$info := .Help}}{{if eq .Key "flare_solverr_url"}}{{$info = "Required for domains behind CloudFlare protection. Configure FlareSolverr here before enabling Use FlareSolverr on Domain defaults or a host On override (Settings → Queue)."}}{{end}}
+{{if eq .Key "cache_beginning_seconds"}}{{$info = "Piped streams need a few seconds before playback can start. Caching the beginning beforehand enables instant playback while the rest of the stream loads in the background. Changing this does not alter beginnings already cached."}}{{end}}
+{{if eq .Key "stream_playback_cache"}}{{$info = .Help}}{{end}}
+{{if eq .Key "stream_playback_cache_max_hours"}}{{$info = .Help}}{{end}}
+{{if eq .Key "external_base_url"}}{{$info = .Help}}{{end}}
+{{$id := printf "setting-%s" .Key}}
+<div class="w-full {{if .Wide}}md:col-span-2{{end}} {{if eq .Key "external_base_url"}}md:col-span-2{{end}} {{if eq .Key "stream_playback_cache"}}md:col-span-2{{end}}">
+  {{if .Textarea}}
+  {{template "field_input" (dict
+    "Name" .Key
+    "ID" $id
+    "Label" $label
+    "Type" "textarea"
+    "Value" .Value
+    "Info" $info
+    "Placeholder" $ph
+    "Mono" true
+    "InputClass" "h-24"
+    "Disabled" .Disabled
+  )}}
+  {{else if eq .Key "cache_beginning_seconds"}}
+  {{template "field_input" (dict
+    "Name" .Key
+    "ID" $id
+    "Label" $label
+    "Type" "range"
+    "Value" .Value
+    "Info" $info
+    "Min" "0"
+    "Max" "120"
+    "Step" "10"
+    "Unit" "s"
+    "ZeroLabel" "off"
+  )}}
+  {{else if eq .Key "stream_playback_cache"}}
+  {{template "checkbox_field" (dict
+    "Name" .Key
+    "Label" $label
+    "Info" $info
+    "Checked" (eq .Value "1")
+    "InputClass" "js-playback-cache-toggle"
+  )}}
+  {{else if eq .Key "stream_playback_cache_max_hours"}}
+  {{template "field_input" (dict
+    "Name" .Key
+    "ID" $id
+    "Label" $label
+    "Type" "range"
+    "Value" .Value
+    "Info" $info
+    "Min" "10"
+    "Max" "100"
+    "Step" "10"
+    "Unit" "h"
+    "Disabled" .Disabled
+    "InputClass" "js-playback-cache-hours"
+  )}}
+  {{else if eq .Key "source_download_error_threshold"}}
+  {{template "field_input" (dict
+    "Name" .Key
+    "ID" $id
+    "Label" $label
+    "Type" "number"
+    "Value" .Value
+    "Info" $info
+    "Min" "1"
+    "Step" "1"
+  )}}
+  {{else if eq .Key "external_base_url"}}
+  {{template "field_input" (dict
+    "Name" .Key
+    "ID" $id
+    "Label" $label
+    "Value" .Value
+    "Info" $info
+    "Placeholder" $ph
+    "Mono" true
+  )}}
+  {{else}}
+  {{template "field_input" (dict
+    "Name" .Key
+    "ID" $id
+    "Label" $label
+    "Value" .Value
+    "Info" $info
+    "Placeholder" $ph
+  )}}
+  {{end}}
+</div>
+{{end}}

@@ -1,0 +1,15 @@
+{{define "metadata_readonly"}}
+{{/*
+  Read-only fieldset display. Expects: Label, Value. Optional: Info, Help (alias→Info).
+*/}}
+{{$info := .Info}}{{if not $info}}{{$info = .Help}}{{end}}
+<fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      {{.Label}}
+      {{if $info}}{{template "field_info" (dict "Info" $info)}}{{end}}
+    </span>
+  </legend>
+  <div class="input input-bordered bg-base-200 flex items-center min-h-12 w-full">{{if .Value}}{{.Value}}{{else}}{{template "empty_value"}}{{end}}</div>
+</fieldset>
+{{end}}

@@ -1,0 +1,66 @@
+{{define "history"}}
+{{template "head" .}}
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "page" "title" "History" "icon" .Icon "help" "Notification log and finished tasks. Time range is UTC.")}}
+{{template "history_range_filters" (dict "From" .RangeFrom "To" .RangeTo "Hidden" .RangeHidden)}}
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Notifications" "id" "notifications" "help" "In-app log of every notify event. Alert events stay unread until the detail page is opened, marked read, or delivered via an Apprise channel.")}}
+<div id="notification-history-live">
+{{template "list_filters" (dict
+  "HideQuery" true
+  "AriaLabel" "Notification filters"
+  "Selects" .NotifySelects
+  "Hidden" .NotifyHidden
+  "LiveTarget" "notification-history-live"
+  "FormAction" "/history"
+)}}
+{{if not .Notifications}}
+{{if .NotifyFilterActive}}
+{{template "list_empty" "No notifications match the filters."}}
+{{else}}
+{{template "list_empty" "No notifications yet."}}
+{{end}}
+{{else}}
+{{template "list_table"}}
+<thead><tr><th class="w-10"></th><th>Event</th><th>When</th><th>Title</th></tr></thead>
+<tbody>
+  {{range .Notifications}}{{template "notification_row" .}}{{end}}
+</tbody>
+{{template "list_table_end"}}
+{{template "pagination" .NotifyPage}}
+{{end}}
+</div>
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Tasks" "help" "Finished tasks (done, failed, cancelled).")}}
+<div id="history-live">
+{{template "list_filters" (dict
+  "HideQuery" .HistoryFilter.HideQuery
+  "AriaLabel" .HistoryFilter.AriaLabel
+  "Selects" .HistoryFilter.Selects
+  "Hidden" .HistoryFilter.Hidden
+  "LiveTarget" .HistoryFilter.LiveTarget
+  "FormAction" .HistoryFilter.FormAction
+)}}
+{{if not .Items}}
+{{if .FilterActive}}
+{{template "list_empty" "No history matches the filters."}}
+{{else}}
+{{template "list_empty" "No task history yet."}}
+{{end}}
+{{else}}
+{{template "list_table"}}
+<thead><tr><th>Domain</th><th>Kind</th><th>When</th><th>Message</th></tr></thead>
+<tbody>
+  {{range .Items}}{{template "history_row" .}}{{end}}
+</tbody>
+{{template "list_table_end"}}
+{{template "pagination" .Page}}
+{{end}}
+</div>
+{{template "list_panel_end"}}
+{{template "foot" .}}
+{{end}}

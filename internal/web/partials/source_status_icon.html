@@ -1,0 +1,33 @@
+{{define "source_status_icon"}}
+{{/* Icon only for combined Status. Expects Kind, Progress (optional). */}}
+<span class="inline-flex items-center justify-center shrink-0 size-5"
+      {{if or (eq .Kind "running") (eq .Kind "pending")}}aria-busy="true"{{else}}aria-busy="false"{{end}}>
+  {{if eq .Kind "scan_error"}}
+  <i data-lucide="circle-alert" class="size-5 text-error"></i>
+  {{else if eq .Kind "stalled"}}
+  <i data-lucide="calendar-x-2" class="size-5 text-warning"></i>
+  {{else if eq .Kind "incomplete"}}
+  <i data-lucide="calendar-off" class="size-5 text-error"></i>
+  {{else if eq .Kind "running"}}
+    {{if progressActive .Progress}}
+    <div class="radial-progress text-primary leading-none"
+         style="--value:{{pct .Progress}};--size:1.25rem;--thickness:2px;"
+         role="progressbar"
+         aria-valuenow="{{pct .Progress}}"
+         aria-valuemin="0"
+         aria-valuemax="100"
+         aria-label="{{pct .Progress}} percent"></div>
+    {{else}}
+    <span class="loading loading-spinner loading-sm text-info"></span>
+    {{end}}
+  {{else if eq .Kind "pending"}}
+  <i data-lucide="list-ordered" class="size-5 text-base-content/50"></i>
+  {{else if eq .Kind "scheduled"}}
+  <i data-lucide="calendar-clock" class="size-5 text-success"></i>
+  {{else if eq .Kind "indexed"}}
+  <i data-lucide="calendar-check-2" class="size-5 text-success"></i>
+  {{else}}
+  <i data-lucide="calendar-off" class="size-5 opacity-50"></i>
+  {{end}}
+</span>
+{{end}}

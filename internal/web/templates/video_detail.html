@@ -1,0 +1,218 @@
+{{define "video_detail"}}
+{{template "head" .}}
+{{template "breadcrumbs" (list
+  (dict "Href" "/series" "Label" "Series" "Icon" "tv")
+  (dict "Href" (printf "/series/%d" .Series.ID) "Label" .Series.Title "Icon" "clapperboard")
+  (dict "Label" .Video.Title "Icon" "film")
+)}}
+<div class="navbar bg-base-100 border border-base-300 rounded-box px-3 mb-4 min-h-14 gap-2 flex-wrap">
+  <div class="flex-1 min-w-0">
+    <h1 class="text-xl font-semibold truncate inline-flex items-center gap-2 max-w-full">
+      <i data-lucide="film" class="size-5 shrink-0"></i>
+      <span class="truncate">{{.Video.Title}}</span>
+    </h1>
+  </div>
+  <div class="flex-none flex flex-wrap gap-2 items-center">
+    {{if .Deleting}}
+    <span class="text-xs opacity-60">Queued for deletion</span>
+    <label for="modal-edit-video-metadata" class="btn btn-outline btn-disabled" aria-disabled="true">Metadata</label>
+    <button type="button" class="btn btn-outline btn-disabled" aria-disabled="true" disabled>Refresh sidecars</button>
+    {{else}}
+    <label for="modal-edit-video-metadata" class="btn btn-outline">Metadata</label>
+    {{$canRefreshSidecars := and .HasPackAnchor .DomainActive}}
+    <form method="post" action="/actions/refresh-sidecars-video" class="inline">
+      <input type="hidden" name="video_id" value="{{.Video.ID}}" />
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <input type="hidden" name="redirect" value="/series/{{.Series.ID}}/videos/{{.Video.ID}}" />
+      {{if $canRefreshSidecars}}
+      <button type="submit" class="btn btn-outline">Refresh sidecars</button>
+      {{else}}
+      {{$sideTip := "Needs a packed video or .strm on disk"}}
+      {{if and .HasPackAnchor (not .DomainActive)}}{{$sideTip = .DomainDisabledTitle}}{{end}}
+      <span class="tooltip tooltip-bottom" data-tip="{{$sideTip}}">
+        <button type="submit" class="btn btn-outline btn-disabled" disabled aria-label="Refresh sidecars">Refresh sidecars</button>
+      </span>
+      {{end}}
+    </form>
+    {{$delivery := dict
+      "VideoID" .Video.ID
+      "SeriesID" .Series.ID
+      "Status" .Video.Status
+      "DomainActive" .DomainActive
+      "DomainDisabledTitle" .DomainDisabledTitle
+      "DeliveryQueued" .DeliveryQueued
+      "IsStream" .IsStream
+      "CDNDirect" .TaskInd.CDNDirect
+      "BeginningReady" .TaskInd.BeginningReady
+      "Redirect" (printf "/series/%d/videos/%d" .Series.ID .Video.ID)
+      "BtnClass" "btn btn-outline"
+      "NeutralClass" "btn btn-neutral"
+      "PrimaryClass" "btn btn-primary"
+    }}
+    {{$wantIgnore := dict
+      "VideoID" .Video.ID
+      "SeriesID" .Series.ID
+      "Status" .Video.Status
+      "DomainActive" .DomainActive
+      "DomainDisabledTitle" .DomainDisabledTitle
+      "DownloadRunning" .DownloadRunning
+      "IsStream" .IsStream
+      "Redirect" (printf "/series/%d/videos/%d" .Series.ID .Video.ID)
+      "Class" "btn btn-neutral"
+      "DeleteClass" "btn btn-error"
+    }}
+    {{template "video_delivery_actions" $delivery}}
+    {{template "want_ignore_button" $wantIgnore}}
+    {{end}}
+  </div>
+</div>
+{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
+{{if .DownloadRunning}}
+<input type="checkbox" id="modal-ignore-video-{{.Video.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Ignore video</h3>
+    <p class="text-sm mb-4">A download or pack stream task is in progress. Ignore and cancel it?</p>
+    <form method="post" action="/actions/ignore-video">
+      <input type="hidden" name="video_id" value="{{.Video.ID}}" />
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <input type="hidden" name="redirect" value="/series/{{.Series.ID}}/videos/{{.Video.ID}}" />
+      <div class="modal-action">
+        <label for="modal-ignore-video-{{.Video.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Ignore and cancel task</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+<div id="video-task-live" class="hidden"
+     hx-get="/series/{{.Series.ID}}/videos/{{.Video.ID}}/task-indicator"
+     hx-trigger="every 2s"
+     hx-swap="none"></div>
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Details" "help" "Index metadata and Creatorr-owned download/stream state.")}}
+{{template "list_table"}}
+<tbody>
+  <tr><th class="w-40">Status</th>
+    <td>
+      <div class="inline-flex items-center gap-2 flex-wrap">
+        {{template "task_indicator" .TaskInd}}
+        {{if or (eq .Video.Status "wanted_download_error") (eq .Video.Status "wanted_source_error") (eq .Video.Status "verify_failed")}}
+        {{if .ErrorHistoryID}}
+        <a class="link link-hover text-error text-xs" href="/task/{{.ErrorHistoryID}}">Open task for details</a>
+        {{else}}
+        <a class="link link-hover text-error text-xs" href="#video-history">See History below for details</a>
+        {{end}}
+        {{end}}
+      </div>
+    </td>
+  </tr>
+  {{template "detail_row" (dict "Label" "Media type" "Value" .Video.MediaType)}}
+  {{if .Video.UploadDate.Valid}}
+  <tr><th class="w-40">Upload date</th><td>{{template "local_time" .Video.UploadDate.String}}</td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Upload date")}}
+  {{end}}
+  {{if .Video.AcquiredAt.Valid}}
+  <tr><th class="w-40">Acquired</th><td>{{template "local_time" .Video.AcquiredAt.String}}</td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Acquired")}}
+  {{end}}
+  {{if eq .SizeLabel "-"}}
+  {{template "detail_row" (dict "Label" "Size")}}
+  {{else}}
+  <tr><th class="w-40">Size</th><td>{{.SizeLabel}}</td></tr>
+  {{end}}
+  {{if .Video.SourceURL.Valid}}
+  <tr><th class="w-40">Source URL</th><td class="text-xs break-all"><a class="link" href="{{.Video.SourceURL.String}}" target="_blank" rel="noopener">{{displayURL .Video.SourceURL.String}}</a></td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Source URL" "TdClass" "text-xs break-all")}}
+  {{end}}
+  {{range .DetailRows}}
+  <tr>
+    <th class="w-40">{{.Label}}</th>
+    <td class="text-sm break-all{{if and (eq .Value "none") (not .ProgressOn)}} opacity-60{{end}}">
+      {{if .ProgressOn}}
+      <div class="flex flex-col gap-1 max-w-md">
+        <span>{{.Value}}</span>
+        {{if ge .ProgressPct 0}}
+        <progress class="progress progress-primary w-full" value="{{.ProgressPct}}" max="100" aria-label="Stream cache {{.ProgressPct}} percent"></progress>
+        {{else if gt (len .Value) 0}}
+        <progress class="progress progress-primary w-full" aria-label="Stream cache filling"></progress>
+        {{end}}
+      </div>
+      {{else if .IsURL}}<a class="link" href="{{.Value}}" target="_blank" rel="noopener">{{displayURL .Value}}</a>
+      {{else if .IsPath}}<code class="text-xs">{{.Value}}</code>
+      {{else}}{{.Value}}{{end}}
+    </td>
+  </tr>
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Video and sidecar files beside the packed media (NFO, info.json, thumbnail, subtitles, SponsorBlock plan, and other stem-matched companions).")}}
+{{if not .Files}}
+{{template "list_empty" "No files yet."}}
+{{else}}
+{{template "list_table"}}
+<thead><tr><th>Type</th><th>File</th><th>Size</th><th></th></tr></thead>
+<tbody>
+  {{range .Files}}
+  <tr>
+    <td class="whitespace-nowrap">
+      <span class="inline-flex items-center gap-1.5">
+        <i data-lucide="{{.Icon}}" class="size-4 shrink-0 opacity-70"></i>
+        <span>{{.KindLabel}}</span>
+      </span>
+    </td>
+    <td class="text-sm break-all">
+      {{if .Missing}}
+      <code class="text-xs opacity-60 tooltip tooltip-top" data-tip="{{.Path}}">{{.Name}}</code>
+      {{else if .ViewHref}}
+      <a class="link link-hover" href="{{.ViewHref}}">
+        <code class="text-xs">{{.Name}}</code>
+      </a>
+      {{else}}
+      <code class="text-xs">{{.Name}}</code>
+      {{end}}
+    </td>
+    <td class="text-xs whitespace-nowrap tabular-nums">{{if eq .SizeLabel "-"}}{{template "empty_value"}}{{else}}{{.SizeLabel}}{{end}}</td>
+    <td class="whitespace-nowrap text-right">
+      {{if .Missing}}<span class="badge badge-warning badge-sm tooltip tooltip-top" data-tip="Path recorded but file not on disk">missing</span>{{end}}
+    </td>
+  </tr>
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{end}}
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+<div id="video-history-live">
+{{template "list_header" (dict "level" "section" "title" "History" "id" "video-history" "help" "Lifecycle events for this video, plus discovery/update projected from source list passes.")}}
+{{if not .History}}
+{{template "list_empty" "No history yet."}}
+{{else}}
+{{template "list_table"}}
+<thead><tr><th>When</th><th>Event</th><th>Message</th></tr></thead>
+<tbody>
+  {{range .History}}
+  <tr{{if .HistoryID}} class="hover cursor-pointer" onclick="location.href='/task/{{.HistoryID}}'"{{end}}>
+    <td class="text-xs whitespace-nowrap">{{template "rel_time" .}}</td>
+    <td>{{template "history_event" .Event}}</td>
+    <td class="text-sm{{if historyEventError .Event}} text-error{{end}}">{{.Message}}</td>
+  </tr>
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{template "pagination" .HistoryPage}}
+{{end}}
+</div>
+{{template "list_panel_end"}}
+{{template "video_metadata_form" .MetaForm}}
+{{template "foot" .}}
+{{end}}

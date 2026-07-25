@@ -1,0 +1,15 @@
+{{define "series_list"}}
+{{template "head" .}}
+{{template "list_panel"}}
+{{if and (not .Live.Series) (not .Live.FilterActive)}}
+{{template "list_header" (dict "level" "page" "title" "Series" "icon" .Icon "help" "Channels and playlists mirrored into your library.")}}
+{{else}}
+{{template "list_header" (dict "level" "page" "title" "Series" "icon" .Icon "help" "Channels and playlists mirrored into your library." "add_modal" "modal-add-series" "add_label" "Add series")}}
+{{end}}
+{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
+{{template "series_list_live" .Live}}
+{{template "list_panel_end"}}
+
+{{template "add_series_modal" .}}
+{{template "foot" .}}
+{{end}}

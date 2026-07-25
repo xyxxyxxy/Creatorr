@@ -1,0 +1,504 @@
+{{define "settings_library"}}
+{{template "head" .}}
+{{template "settings_nav" .}}
+{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Root folders" "help" "Named disk paths where series store files." "add_modal" "modal-add-root" "add_label" "Add root")}}
+{{if not .Roots}}
+{{template "list_empty" "No roots yet."}}
+{{else}}
+{{template "list_table"}}
+<thead><tr><th>Name</th><th>Path</th><th>Retention (days)</th><th></th></tr></thead>
+<tbody>
+  {{range .Roots}}
+  <tr>
+    <td>{{.Name}}</td>
+    <td class="font-mono text-xs">{{.Path}}</td>
+    <td>{{if .RetentionTTLSeconds.Valid}}{{retentionDays .RetentionTTLSeconds}}{{else}}<span class="tooltip tooltip-top inline-flex" data-tip="Keep forever"><i data-lucide="infinity" class="size-4 opacity-70" aria-label="Keep forever"></i></span>{{end}}</td>
+    <td><label for="modal-edit-root-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+      <i data-lucide="pencil" class="size-3.5"></i>
+    </label></td>
+  </tr>
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{template "pagination" .RootsPage}}
+{{end}}
+<form method="post" action="/actions/save-settings" class="space-y-3 border-t border-base-300 pt-3 max-w-3xl">
+  <input type="hidden" name="redirect" value="/settings/library" />
+  {{if .NamingLocked}}
+  <div class="alert alert-info text-sm"><span>Episode format is locked while Apply episode format is pending or running. Cancel that task on Tasks or wait until it finishes.</span></div>
+  {{end}}
+  {{template "field_input" (dict
+    "Name" "episode_format"
+    "Label" "Episode format"
+    "Value" .EpisodeFormat
+    "Hint" "Saving does not rename existing files. Run maintenance task to apply new format to existing files."
+    "Mono" true
+    "Required" true
+    "JoinPrefix" "Series/"
+    "JoinSuffix" ".ext"
+    "Disabled" .NamingLocked
+    "DisabledTitle" "Episode format is locked while Apply episode format is pending or running."
+  )}}
+  <details class="collapse collapse-arrow bg-base-100 border border-base-300 max-w-3xl">
+    <summary class="collapse-title font-medium text-sm min-h-0 py-3">Available format tokens</summary>
+    <div class="collapse-content text-sm text-base-content/70 space-y-2">
+      <div class="overflow-x-auto">
+        <table class="table table-sm w-full">
+          <thead>
+            <tr>
+              <th scope="col">Token</th>
+              <th scope="col">Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code class="text-xs">{id}</code></td>
+              <td>site video id</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{domain}</code></td>
+              <td>source hostname</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{series}</code> / <code class="text-xs">{series:N}</code></td>
+              <td>series title for the stem or subfolders (optional); series folder itself is always fixed. <code class="text-xs">:N</code> caps runes (bare is not truncated)</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{title}</code> / <code class="text-xs">{title:N}</code></td>
+              <td>video title; <code class="text-xs">:N</code> caps runes</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{episode}</code> / <code class="text-xs">{episode:000000}</code></td>
+              <td><code class="text-xs">MMDD</code> + same-day index (<code class="text-xs">00</code>…; oldest upload first that UTC day). Equal times use arrival order. Default format uses <code class="text-xs">:000000</code> so January is <code class="text-xs">01…</code> (6 digits).</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{date}</code></td>
+              <td>release date (<code class="text-xs">YYYY-MM-DD</code>)</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{year}</code></td>
+              <td>calendar year (year-season, e.g. 2026)</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{month}</code> / <code class="text-xs">{month:02}</code></td>
+              <td>UTC release month; <code class="text-xs">:02</code> zero-pads</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{day}</code> / <code class="text-xs">{day:02}</code></td>
+              <td>UTC release day; <code class="text-xs">:02</code> zero-pads</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The following tokens become available after the release date of a video is known: <code class="text-xs">{date}</code>, <code class="text-xs">{year}</code>, <code class="text-xs">{month}</code>, <code class="text-xs">{day}</code>, and <code class="text-xs">{episode}</code>.</p>
+    </div>
+  </details>
+  <div class="card-actions"><button type="submit" class="btn btn-primary" {{if .NamingLocked}}disabled{{end}}>Save</button></div>
+</form>
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Quality profiles" "help" "Named yt-dlp format selectors (--format), maturity re-download and SponsorBlock configuration." "add_modal" "modal-add-profile" "add_label" "Add profile")}}
+{{if not .Profiles}}
+{{template "list_empty" "No profiles yet."}}
+{{else}}
+{{template "list_table"}}
+<thead><tr><th>Name</th><th>Media maturity</th><th>Sidecar maturity</th><th>SponsorBlock</th><th></th></tr></thead>
+<tbody>
+  {{range .Profiles}}
+  <tr>
+    <td>{{.Name}}</td>
+    <td>{{if eq .MaturityMediaPreset 0}}{{template "empty_value"}}{{else}}{{.MaturityMediaLabel}}{{end}}</td>
+    <td>{{if eq .MaturitySidecarPreset 0}}{{template "empty_value"}}{{else}}{{.MaturitySidecarLabel}}{{end}}</td>
+    <td>
+      <span class="inline-flex tooltip tooltip-top" data-tip="{{.SponsorBlockIconTip}}">
+        <i data-lucide="{{.SponsorBlockLucideIcon}}" class="size-4 {{if .SponsorBlockEnabled}}text-primary{{else}}opacity-40{{end}}" aria-label="{{.SponsorBlockIconTip}}"></i>
+      </span>
+    </td>
+    <td><label for="modal-edit-profile-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+      <i data-lucide="pencil" class="size-3.5"></i>
+    </label></td>
+  </tr>
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{template "pagination" .ProfilesPage}}
+{{end}}
+<fieldset class="fieldset">
+  <p class="label whitespace-normal">Changing quality profile format does not affect already downloaded or queued videos.</p>
+</fieldset>
+{{template "list_panel_end"}}
+
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl">
+    <input type="hidden" name="redirect" value="/settings/library" />
+    <input type="hidden" name="subtitle_settings" value="1" />
+    <h2 class="text-lg font-semibold">Subtitles</h2>
+    <p class="text-sm opacity-60">Sidecars are always SRT (yt-dlp --convert-subs). Added on download, stream pack, and Replace sidecars.</p>
+    <div class="space-y-3 w-full min-w-0">
+      {{template "subtitle_langs_field" (dict
+        "Items" .SubtitleLangs
+        "Options" .SubtitleLangOptions
+        "ListID" "library-subtitle-lang-suggestions"
+      )}}
+      {{template "checkbox_field" (dict
+        "Name" "subtitle_auto"
+        "Label" "Include auto-generated captions"
+        "Checked" .SubtitleAuto
+        "Info" "Also download auto-generated captions when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt)."
+      )}}
+    </div>
+    <div class="card-actions"><button type="submit" class="btn btn-primary">Save</button></div>
+  </form>
+</section>
+
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <form method="post" action="/actions/save-settings" class="card-body gap-3">
+    <input type="hidden" name="redirect" value="/settings/library" />
+    <h2 class="text-lg font-semibold">Streaming</h2>
+    <p class="text-sm opacity-60">External origin for .strm playback through Creatorr, beginning cache, playback cache, and stream URL token.</p>
+    {{if .ExternalURLSetting}}
+    <div class="grid gap-3 md:grid-cols-2">
+      {{template "settings_row" .ExternalURLSetting}}
+    </div>
+    {{end}}
+    {{if not .StreamEnabled}}
+    <div class="alert alert-warning text-sm"><span>{{.StreamDisabledReason}}</span></div>
+    {{end}}
+    <fieldset class="border-0 p-0 m-0 min-w-0 space-y-3" {{if not .StreamEnabled}}disabled{{end}}>
+      {{if .StreamURLToken}}
+      <div class="w-full">
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">
+            <span class="inline-flex items-center gap-1">
+              Stream URL token
+              {{template "field_info" (dict "Info" "Embedded in every .strm proxy URL. Generate a new token to invalidate existing .strm links. All .strm files can be regenerated in the maintenance section below.")}}
+            </span>
+          </legend>
+          <div class="join w-full">
+            <input type="text" name="stream_url_token_display" id="setting-stream-url-token"
+                   class="input join-item grow min-w-0 font-mono"
+                   value="{{.StreamURLToken}}" disabled />
+            <span class="tooltip tooltip-top join-item" data-tip="Generate new token">
+              <label for="modal-regen-stream-token" class="btn btn-square btn-warning join-item" aria-label="Generate new token">
+                <i data-lucide="refresh-cw" class="size-4"></i>
+              </label>
+            </span>
+          </div>
+        </fieldset>
+      </div>
+      {{end}}
+      <div class="grid gap-3 md:grid-cols-2">
+        {{range .Settings}}
+        {{template "settings_row" .}}
+        {{end}}
+      </div>
+    </fieldset>
+    <div class="card-actions items-center gap-2">
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </form>
+</section>
+
+<input type="checkbox" id="modal-add-root" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Add root folder</h3>
+        <form method="post" action="/actions/add-root" class="space-y-2">
+      <input type="hidden" name="redirect" value="/settings/library" />
+      <fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      Path
+      {{template "field_info" (dict "Info" "Absolute path on disk.")}}
+    </span>
+  </legend>
+  <input name="path" id="add-root-path" class="input w-full" required autocomplete="off"
+                   data-autofill-name="#add-root-name" />
+</fieldset>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">
+          <span class="inline-flex items-center gap-1">
+            Name
+            {{template "field_info" (dict "Info" "Display label in the UI. Empty = last folder of Path.")}}
+          </span>
+        </legend>
+        <input name="name" id="add-root-name" class="input w-full" placeholder="Last folder of Path"
+               data-user-edited="" oninput="this.dataset.userEdited='1'" />
+      </fieldset>
+      {{template "field_input" (dict
+        "Name" "retention_ttl_days"
+        "Label" "Retention days (optional)"
+        "Type" "number"
+        "Min" "1"
+        "Placeholder" "Forever"
+        "Info" "Days after pack before retention delete may remove artifacts."
+        "Hint" "Empty = keep forever."
+      )}}
+      <div class="modal-action">
+        <label for="modal-add-root" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Add root</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+{{range .Roots}}
+<input type="checkbox" id="modal-edit-root-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Edit root {{.Name}}</h3>
+        <form method="post" action="/actions/update-root" class="space-y-2">
+      <input type="hidden" name="id" value="{{.ID}}" />
+      <input type="hidden" name="redirect" value="/settings/library" />
+      {{template "field_input" (dict
+        "Name" "path"
+        "Label" "Path"
+        "Value" .Path
+        "Required" true
+        "Info" "Absolute path on disk."
+      )}}
+      {{template "field_input" (dict
+        "Name" "name"
+        "Label" "Name"
+        "Value" .Name
+        "Placeholder" "Last folder of Path"
+        "Info" "Display label in the UI. Empty = last folder of Path."
+      )}}
+      {{template "field_input" (dict
+        "Name" "retention_ttl_days"
+        "Label" "Retention days (optional)"
+        "Type" "number"
+        "Min" "1"
+        "Placeholder" "Forever"
+        "Value" (retentionDaysValue .RetentionTTLSeconds)
+        "Info" "Days after pack before retention delete may remove artifacts."
+        "Hint" "Empty = keep forever."
+      )}}
+      <div class="modal-action">
+        <label for="modal-edit-root-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+
+<input type="checkbox" id="modal-add-profile" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box max-w-2xl">
+    <h1 class="font-bold text-lg mb-2">Add quality profile</h1>
+        <form method="post" action="/actions/add-profile" class="space-y-2">
+      <input type="hidden" name="redirect" value="/settings/library" />
+      {{template "field_input" (dict "Name" "name" "Label" "Name" "Required" true)}}
+      {{template "field_input" (dict
+        "Name" "format_selector"
+        "Label" "Format selector"
+        "Value" "bv*+ba/b"
+        "Required" true
+        "Info" "Passed to yt-dlp as --format (yt-dlp -f style). Use bv*+ba/b for best video+audio merge. Avoid bare best - on DASH sites it often picks a soft progressive file (~360p–720p)."
+      )}}
+      {{template "checkbox_field" (dict
+        "Name" "verify_media"
+        "Label" "Verify downloaded videos"
+        "Checked" false
+        "Info" "After pack, queue a low-priority null-decode of the video file. Fail keeps the file and sets status verify_failed. When media maturity hours are set, only mature packs are verified automatically."
+      )}}
+      {{template "profile_maturity_fields" (dict
+        "MediaPreset" 0
+        "SidecarPreset" 0
+        "MediaOutID" "maturity-media-out-add"
+        "SidecarOutID" "maturity-sidecar-out-add"
+      )}}
+      {{template "profile_sponsorblock_fields" (dict "InfoCards" false "ReencodeCut" false)}}
+      <div class="modal-action">
+        <label for="modal-add-profile" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Add profile</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+{{range .Profiles}}
+<input type="checkbox" id="modal-edit-profile-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box max-w-xl">
+    <h1 class="font-bold text-lg mb-2">Edit quality profile - {{.Name}}</h1>
+        <form method="post" action="/actions/update-profile" class="space-y-2">
+      <input type="hidden" name="id" value="{{.ID}}" />
+      <input type="hidden" name="redirect" value="/settings/library" />
+      {{template "field_input" (dict "Name" "name" "Label" "Name" "Value" .Name "Required" true)}}
+      {{template "field_input" (dict
+        "Name" "format_selector"
+        "Label" "Format selector"
+        "Value" .FormatSelector
+        "Required" true
+        "Info" "Passed to yt-dlp as --format (yt-dlp -f style). Use bv*+ba/b for best video+audio merge. Avoid bare best - on DASH sites it often picks a soft progressive file (~360p–720p)."
+      )}}
+      {{template "checkbox_field" (dict
+        "Name" "verify_media"
+        "Label" "Verify downloaded videos"
+        "Checked" .VerifyMedia
+        "Info" "After pack, queue a low-priority null-decode of the video file. Fail keeps the file and sets status verify_failed. When media maturity hours are set, only mature packs are verified automatically."
+      )}}
+      {{template "profile_maturity_fields" (dict
+        "MediaPreset" .MaturityMediaPreset
+        "SidecarPreset" .MaturitySidecarPreset
+        "MediaOutID" (printf "maturity-media-out-%d" .ID)
+        "SidecarOutID" (printf "maturity-sidecar-out-%d" .ID)
+      )}}
+      {{template "profile_sponsorblock_fields" (dict
+        "Mark" .SponsorBlockMark
+        "Remove" .SponsorBlockRemove
+        "ReencodeCut" .SponsorBlockReencodeCut
+        "InfoCards" .SponsorBlockInfoCards
+      )}}
+      <div class="modal-action">
+        <label for="modal-edit-profile-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Maintenance" "help" "Library-wide one-shot actions. Large libraries may take a while.")}}
+<div class="card-body gap-2">
+  <p class="text-sm opacity-70">Rename packed episode files (and season folders) to the current episode format. Does not cancel other queue work. Videos with active download/pack/stream tasks are skipped - re-run later for leftovers.</p>
+  {{if .ApplyNamingBusy}}
+  <button type="button" class="btn btn-warning w-fit" disabled>Apply episode format (queued)</button>
+  {{else}}
+  <label for="modal-apply-naming" class="btn btn-warning w-fit">Apply episode format</label>
+  {{end}}
+  <p class="text-sm opacity-70 mt-4">Rewrite every episode <code class="text-xs">.nfo</code> beside on-disk media, and each series <code class="text-xs">tvshow.nfo</code> when the series folder exists. Queued as a system-lane task (resumes after restart). Skips files already matching. Does not re-download or touch video/json/thumb files.</p>
+  {{if .NFORegenBusy}}
+  <button type="button" class="btn btn-warning w-fit" disabled>Regenerate all NFO files (queued)</button>
+  {{else}}
+  <label for="modal-regen-nfos" class="btn btn-warning w-fit">Regenerate all NFO files</label>
+  {{end}}
+  <p class="text-sm opacity-70 mt-4">Rewrite every on-disk <code class="text-xs">.strm</code> to the current External Creatorr URL and stream URL token. Queued as a system-lane task (resumes after restart). Skips files already matching. Run after rotating the token or changing the external URL.</p>
+  {{if not .StreamEnabled}}
+  <span class="tooltip tooltip-top" data-tip="{{.StreamDisabledReason}}">
+    <button type="button" class="btn btn-warning w-fit" disabled>Regenerate all .strm files</button>
+  </span>
+  {{else if .StrmRegenBusy}}
+  <button type="button" class="btn btn-warning w-fit" disabled>Regenerate all .strm files (queued)</button>
+  {{else}}
+  <label for="modal-regen-strms" class="btn btn-warning w-fit">Regenerate all .strm files</label>
+  {{end}}
+  <p class="text-sm opacity-70 mt-4">Delete every beginning cache under the cache directory and clear <code class="text-xs">stream_beginning_cached</code>. Cancels pending beginning-cache tasks. Beginnings refill only when pack or file sync requeues them (setting &gt; 0).</p>
+  {{if .BeginClearBusy}}
+  <button type="button" class="btn btn-warning w-fit" disabled>Clear beginning of stream cache (queued)</button>
+  {{else}}
+  <label for="modal-clear-beginning-cache" class="btn btn-warning w-fit">Clear beginning of stream cache</label>
+  {{end}}
+  <p class="text-sm opacity-70 mt-4">Delete every progressive on-play stream cache under the cache directory and clear progressive cache columns. Does not touch beginning caches.</p>
+  {{if .PlaybackClearBusy}}
+  <button type="button" class="btn btn-warning w-fit" disabled>Clear progressive stream cache (queued)</button>
+  {{else}}
+  <label for="modal-clear-playback-cache" class="btn btn-warning w-fit">Clear progressive stream cache</label>
+  {{end}}
+</div>
+{{template "list_panel_end"}}
+
+<input type="checkbox" id="modal-regen-stream-token" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Generate new stream URL token?</h3>
+    <p class="text-sm opacity-80 mb-4">A new token invalidates every existing <code class="text-xs">.strm</code> file immediately.</p>
+    <p class="text-sm opacity-80 mb-4">After confirming, run <strong>Regenerate all .strm files</strong> under Maintenance on this page so library <code class="text-xs">.strm</code> files pick up the new token.</p>
+    <form method="post" action="/actions/regenerate-stream-token">
+      <div class="modal-action">
+        <label for="modal-regen-stream-token" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Generate new token</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-regen-nfos" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Regenerate all NFO files?</h3>
+    <p class="text-sm opacity-80 mb-4">Queues a system-lane task that rewrites episode <code class="text-xs">.nfo</code> for every video with media on disk, and <code class="text-xs">tvshow.nfo</code> for series that already have a folder. Unchanged files are skipped. Safe to interrupt - resumes after Creatorr restart. Info.json and thumbnails are left unchanged.</p>
+    <form method="post" action="/actions/regenerate-nfos">
+      <div class="modal-action">
+        <label for="modal-regen-nfos" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Regenerate</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-apply-naming" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Apply episode format?</h3>
+    <p class="text-sm opacity-80 mb-4">Renames packed episode files to the current episode format (system lane). Can take a while. Other downloads and scans keep running. Videos with an active download or pack stream task will be skipped - run again later for those.</p>
+    <form method="post" action="/actions/apply-episode-naming">
+      <div class="modal-action">
+        <label for="modal-apply-naming" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Apply format</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-regen-strms" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Regenerate all .strm files?</h3>
+    <p class="text-sm opacity-80 mb-4">Queues a system-lane task that rewrites every on-disk <code class="text-xs">.strm</code> to the current External Creatorr URL and stream URL token. Unchanged files are skipped. Safe to interrupt - resumes after Creatorr restart. Does not re-resolve streams or touch NFO/thumb files.</p>
+    <form method="post" action="/actions/regenerate-strms">
+      <div class="modal-action">
+        <label for="modal-regen-strms" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Regenerate</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-clear-beginning-cache" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Clear beginning of stream cache?</h3>
+    <p class="text-sm opacity-80 mb-4">Queues a system-lane task that deletes all beginning caches under the download-beginnings cache directory and clears the beginning-cached flag on every video. Pending beginning-cache tasks are cancelled. Does not re-download beginnings; pack and file sync may refill them later when the setting is above zero.</p>
+    <form method="post" action="/actions/clear-beginning-cache">
+      <div class="modal-action">
+        <label for="modal-clear-beginning-cache" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Clear cache</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-clear-playback-cache" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Clear progressive stream cache?</h3>
+    <p class="text-sm opacity-80 mb-4">Queues a system-lane task that deletes all progressive on-play caches under the playback-cache directory and clears progressive cache columns on every video. Beginning caches are left alone.</p>
+    <form method="post" action="/actions/clear-playback-cache">
+      <div class="modal-action">
+        <label for="modal-clear-playback-cache" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Clear cache</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+{{template "foot" .}}
+{{end}}

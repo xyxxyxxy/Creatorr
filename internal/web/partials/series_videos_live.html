@@ -1,0 +1,72 @@
+{{define "series_videos_live"}}
+<div id="series-videos-live" {{if .OOB}}hx-swap-oob="true"{{end}}>
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Videos" "help" "Indexed from scans. Open a video for details.")}}
+{{template "list_filters" (dict
+  "Query" .VideoFilter.Query
+  "QueryPlaceholder" .VideoFilter.QueryPlaceholder
+  "AriaLabel" .VideoFilter.AriaLabel
+  "Selects" .VideoFilter.Selects
+  "LiveTarget" .VideoFilter.LiveTarget
+  "FormAction" .VideoFilter.FormAction
+)}}
+{{if not .Videos}}
+{{if .FilterActive}}
+{{template "list_empty" "No videos match the filters."}}
+{{else}}
+{{template "list_empty" "No videos indexed yet. Run a scan."}}
+{{end}}
+{{else}}
+<ul class="list bg-base-100 rounded-box border border-base-300">
+  {{range .Videos}}
+  {{template "video_list_row" (dict
+    "ID" .ID
+    "Title" .Title
+    "Status" .Status
+    "UploadDate" .UploadDate
+    "SizeLabel" .SizeLabel
+    "ResolutionLabel" .ResolutionLabel
+    "StreamTypeLabel" .StreamTypeLabel
+    "DurationLabel" .DurationLabel
+    "MediaTypeLabel" .MediaTypeLabel
+    "ThumbURL" .ThumbURL
+    "TaskInd" .TaskInd
+    "DownloadRunning" .DownloadRunning
+    "DeliveryQueued" .DeliveryQueued
+    "Deleting" .Deleting
+    "DomainActive" .DomainActive
+    "DomainDisabledTitle" .DomainDisabledTitle
+    "SeriesID" $.SeriesID
+    "IsStream" $.IsStream
+    "KeepScroll" true
+    "LiveSwap" true
+    "FormClass" "inline"
+  )}}
+  {{end}}
+</ul>
+{{template "pagination" .VideosPage}}
+{{end}}
+{{template "list_panel_end"}}
+
+{{range .Videos}}
+{{if .DownloadRunning}}
+<input type="checkbox" id="modal-ignore-video-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Ignore video</h3>
+    <p class="text-sm mb-4">A download or pack stream task is in progress for <strong>{{.Title}}</strong>. Ignore and cancel it?</p>
+    <form method="post" action="/actions/ignore-video" class="inline" hx-post="/actions/ignore-video" hx-target="#series-videos-live" hx-swap="outerHTML">
+      <input type="hidden" name="video_id" value="{{.ID}}" />
+      <input type="hidden" name="series_id" value="{{$.SeriesID}}" />
+      <div class="modal-action">
+        <label for="modal-ignore-video-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Ignore and cancel task</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+{{end}}
+</div>
+{{end}}

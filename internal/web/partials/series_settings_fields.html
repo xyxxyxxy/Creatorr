@@ -1,0 +1,79 @@
+{{define "series_settings_fields"}}
+{{/*
+  Shared series fields for Add series (series step) and Edit series.
+  Expects: Roots, Profiles, CanStream.
+  Optional: Title, TitleID, TitleInfo, TitlePlaceholder, TitleDisabled, TitleDisabledTitle,
+            RootID, ProfileID, DeliveryMode,
+            StreamDisabledReason,
+            AutoIgnoreItems, AutoIgnoreOptions, AutoIgnoreListID,
+            RootInfo, RootDisabled, RootDisabledTitle, ProfileInfo.
+*/}}
+{{$titlePH := .TitlePlaceholder}}{{if not $titlePH}}{{$titlePH = "Creator / show name"}}{{end}}
+{{$ignoreListID := .AutoIgnoreListID}}{{if not $ignoreListID}}{{$ignoreListID = "series-auto-ignore-media-types"}}{{end}}
+{{template "delivery_mode_field" (dict
+  "Value" .DeliveryMode
+  "CanStream" .CanStream
+  "StreamDisabledReason" .StreamDisabledReason
+)}}
+{{template "field_input" (dict
+  "Name" "title"
+  "ID" .TitleID
+  "Label" "Title"
+  "Value" .Title
+  "Placeholder" $titlePH
+  "Required" true
+  "Info" .TitleInfo
+  "Disabled" .TitleDisabled
+  "DisabledTitle" .TitleDisabledTitle
+)}}
+{{if .RootDisabled}}
+<input type="hidden" name="root_id" value="{{.RootID}}" />
+<span class="tooltip tooltip-top block w-full" {{if .RootDisabledTitle}}data-tip="{{.RootDisabledTitle}}"{{end}}>
+  <fieldset class="fieldset opacity-60">
+    <legend class="fieldset-legend">
+      <span class="inline-flex items-center gap-1">
+        Root folder
+        {{if .RootInfo}}{{template "field_info" (dict "Info" .RootInfo)}}{{end}}
+      </span>
+    </legend>
+    <select class="select w-full pointer-events-none" disabled>
+      {{range .Roots}}
+      <option value="{{.ID}}"{{if eq .ID $.RootID}} selected{{end}}>{{.Name}} ({{.Path}})</option>
+      {{end}}
+    </select>
+  </fieldset>
+</span>
+{{else}}
+<fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      Root folder
+      {{if .RootInfo}}{{template "field_info" (dict "Info" .RootInfo)}}{{end}}
+    </span>
+  </legend>
+  <select name="root_id" class="select w-full" required {{if not .Roots}}disabled{{end}}>
+    {{range .Roots}}
+    <option value="{{.ID}}"{{if eq .ID $.RootID}} selected{{end}}>{{.Name}} ({{.Path}})</option>
+    {{end}}
+  </select>
+</fieldset>
+{{end}}
+<fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      Quality profile
+      {{if .ProfileInfo}}{{template "field_info" (dict "Info" .ProfileInfo)}}{{end}}
+    </span>
+  </legend>
+  <select name="quality_profile_id" class="select w-full" required {{if not .Profiles}}disabled{{end}}>
+    {{range .Profiles}}
+    <option value="{{.ID}}"{{if eq .ID $.ProfileID}} selected{{end}}{{if and (not $.ProfileID) (eq .Name "best")}} selected{{end}}>{{.Name}}</option>
+    {{end}}
+  </select>
+</fieldset>
+{{template "auto_ignore_media_types_field" (dict
+  "Items" .AutoIgnoreItems
+  "Options" .AutoIgnoreOptions
+  "ListID" $ignoreListID
+)}}
+{{end}}

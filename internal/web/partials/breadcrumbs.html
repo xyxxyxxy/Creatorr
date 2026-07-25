@@ -1,0 +1,34 @@
+{{define "breadcrumbs"}}
+{{/*
+  daisyUI breadcrumbs with Lucide icons.
+  Expects a slice of dicts: Href? (omit or empty = current), Label, Icon (lucide name).
+
+  Icon map (type → lucide):
+    series list → tv
+    series      → clapperboard
+    source      → rss
+    video       → film
+    activity    → history (list) / scroll-text (item)
+*/}}
+{{if .}}
+<nav class="breadcrumbs text-sm mb-2" aria-label="Breadcrumb">
+  <ul>
+    {{range .}}
+    <li>
+      {{if .Href}}
+      <a href="{{.Href}}">
+        {{if .Icon}}<i data-lucide="{{.Icon}}" class="size-4"></i>{{end}}
+        {{.Label}}
+      </a>
+      {{else}}
+      <span class="inline-flex items-center gap-2 max-w-[14rem] sm:max-w-xs">
+        {{if .Icon}}<i data-lucide="{{.Icon}}" class="size-4 shrink-0"></i>{{end}}
+        <span class="truncate">{{.Label}}</span>
+      </span>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+</nav>
+{{end}}
+{{end}}

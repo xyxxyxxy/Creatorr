@@ -1,0 +1,17 @@
+{{define "task_logs"}}
+{{/* RefreshOnLoad: one HTMX fetch on first paint (running/pending detail). Omitted on /logs swap. */}}
+<div id="task-logs" class="space-y-3"
+     {{if .RefreshOnLoad}}hx-get="/task/{{.ID}}/logs" hx-trigger="load" hx-swap="outerHTML"{{end}}>
+  <div class="flex items-center justify-between gap-2 flex-wrap">
+    <button type="button" class="btn btn-ghost btn-xs ml-auto"
+            hx-get="/task/{{.ID}}/logs" hx-target="#task-logs" hx-swap="outerHTML">
+      Refresh
+    </button>
+  </div>
+  {{if .LogText}}
+  <pre class="text-xs whitespace-pre-wrap font-mono max-h-64 overflow-y-auto bg-base-200 rounded-box p-3">{{.LogText}}</pre>
+  {{else}}
+  <p class="text-sm opacity-60">No progress lines yet.</p>
+  {{end}}
+</div>
+{{end}}

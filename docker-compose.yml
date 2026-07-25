@@ -1,0 +1,39 @@
+# Production Compose: pulls GHCR image. Host ./var mirrors container mounts.
+# Dev: docker compose -f docker-compose.dev.yml up -d --build
+#   or: ./scripts/compose up -d --build
+services:
+  creatorr:
+    image: ghcr.io/xyxxyxxy/creatorr:latest
+    container_name: creatorr
+    # Image USER is 1000:1000. Host ./var trees must be writable by uid 1000
+    # (e.g. sudo chown -R 1000:1000 var).
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./var/data:/data
+      - ./var/cache:/cache
+      - ./var/media/library:/media/library
+      - ./var/media/import:/media/import
+      # Example second library root (add the path in Settings → Library after boot):
+      # - ./var/media/other:/media/other
+      # Optional yt-dlp plugins:
+      # - ./var/yt-dlp-plugins:/yt-dlp-plugins:ro
+      # Optional custom yt-dlp (replaces image /usr/local/bin/yt-dlp):
+      # - /path/to/your/yt-dlp:/usr/local/bin/yt-dlp:ro
+    environment:
+      # First-boot seed for Settings external_base_url. Required for streaming
+      # (.strm / proxy URLs); set in .env or later under Settings → Library → Streaming.
+      CREATORR_PUBLIC_BASE_URL: ${CREATORR_PUBLIC_BASE_URL:-}
+      # UI cron labels use process local time (fires stay UTC). Override via .env TZ=.
+      TZ: ${TZ:-UTC}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped

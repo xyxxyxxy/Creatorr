@@ -1,0 +1,202 @@
+{{define "task_detail"}}
+{{template "head" .}}
+{{template "breadcrumbs" .Crumbs}}
+<div class="navbar bg-base-100 border border-base-300 rounded-box px-3 mb-4 min-h-14 gap-2 flex-wrap" data-task-detail="{{.Item.ID}}">
+  <div class="flex-1 min-w-0">
+    <h1 class="text-xl font-semibold truncate inline-flex items-center gap-2 max-w-full">
+      <i data-lucide="scroll-text" class="size-5 shrink-0"></i>
+      <span class="truncate">Task - {{.Item.Kind}}</span>
+    </h1>
+    <p class="text-xs opacity-60">#{{.Item.ID}} · {{.Item.CreatedAgo}}</p>
+  </div>
+  {{if .Live}}
+  <div class="flex-none flex flex-wrap gap-2">
+    <label for="modal-cancel-task" class="btn btn-ghost text-error">Cancel</label>
+  </div>
+  {{end}}
+</div>
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Details" "help" .DetailsHelp)}}
+{{template "list_table"}}
+<tbody>
+  {{if .Item.Domain}}
+  <tr><th class="w-40">Domain</th><td class="font-mono text-xs">{{.Item.Domain}}</td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Domain" "TdClass" "font-mono text-xs")}}
+  {{end}}
+  <tr><th class="w-40">Kind</th><td>{{.Item.Kind}}</td></tr>
+  <tr><th class="w-40">Status</th><td data-task-status>{{template "status_badge" .Item.Status}}</td></tr>
+  {{if .Item.Message}}
+  <tr><th class="w-40">Message</th><td class="text-sm" data-task-message>{{.Item.Message}}</td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Message" "TdClass" "text-sm")}}
+  {{end}}
+  <tr><th class="w-40">Progress</th><td data-task-progress-cell>
+    {{if and (eq .Item.Status "running") (progressActive .Progress)}}
+    <progress data-task-progress class="progress progress-primary w-full max-w-xs" value="{{pct .Progress}}" max="100"></progress>
+    {{else}}{{template "muted" "none"}}{{end}}
+  </td></tr>
+  {{if .Item.Code}}
+  <tr><th class="w-40">Code</th><td class="text-xs"><span class="text-error">{{.Item.Code}}</span></td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Code" "TdClass" "text-xs")}}
+  {{end}}
+  {{if .Series}}
+  <tr><th class="w-40">Series</th><td><a class="link link-hover" href="/series/{{.Series.ID}}">{{.Series.Title}}</a></td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Series")}}
+  {{end}}
+  {{if .Video}}
+  <tr><th class="w-40">Video</th><td>
+      {{if .Video.SeriesID}}
+      <a class="link link-hover" href="/series/{{.Video.SeriesID}}/videos/{{.Video.ID}}">{{.Video.Title}}</a>
+      {{else}}{{.Video.Title}}{{end}}
+  </td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Video")}}
+  {{end}}
+  <tr><th class="w-40">Created</th><td class="text-xs">{{.CreatedAgo}} <span class="opacity-50">({{.CreatedAt}})</span></td></tr>
+  {{if .QueuedLabel}}
+  <tr><th class="w-40">Started</th><td class="text-xs">{{if .QueuedMuted}}{{template "muted" .QueuedLabel}}{{else}}{{.QueuedLabel}}{{end}}</td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Started" "TdClass" "text-xs")}}
+  {{end}}
+  {{if .RuntimeLabel}}
+  <tr><th class="w-40">Finished</th><td class="text-xs">{{if .RuntimeMuted}}{{template "muted" .RuntimeLabel}}{{else}}{{.RuntimeLabel}}{{end}}</td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Finished" "TdClass" "text-xs")}}
+  {{end}}
+  {{if .Payload}}
+  <tr><th class="w-40">Payload</th><td>
+    <pre class="text-xs whitespace-pre-wrap font-mono max-h-48 overflow-y-auto{{if .PayloadMuted}} opacity-50{{end}}">{{.Payload}}</pre>
+  </td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Payload")}}
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{template "list_panel_end"}}
+
+{{if .Commands}}
+{{template "list_panel"}}
+<div data-json-preview>
+<div class="list-header flex flex-wrap items-start justify-between gap-3">
+  <div class="min-w-0 flex-1">
+    <h2 class="text-lg font-semibold">Commands</h2>
+    <p class="text-sm opacity-60 mt-0.5">External programs invoked for this task (yt-dlp, ffmpeg, ffprobe), with full arguments. Persisted for History.</p>
+  </div>
+  <div class="list-actions flex flex-wrap gap-2 shrink-0 items-center">
+    <label class="label cursor-pointer gap-2 py-0">
+      <span class="label-text">Pretty</span>
+      <input type="checkbox" class="toggle toggle-sm js-json-pretty-toggle" checked aria-label="Pretty-print commands" />
+    </label>
+  </div>
+</div>
+<div class="space-y-2">
+  {{range .Commands}}
+  <div>
+    <pre data-json-raw class="hidden text-xs whitespace-pre-wrap font-mono max-h-48 overflow-y-auto bg-base-200 rounded-box p-3">{{.}}</pre>
+    <pre data-json-pretty class="text-xs whitespace-pre-wrap font-mono max-h-48 overflow-y-auto bg-base-200 rounded-box p-3">{{prettyCommand .}}</pre>
+  </div>
+  {{end}}
+</div>
+</div>
+{{template "list_panel_end"}}
+{{end}}
+
+{{if or .DetailFields .Live}}
+<div id="task-detail-live">
+{{if .DetailFields}}
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Detail" "help" "Task outcome and per-video events for this task. Video id lists show titles with links when the video still exists.")}}
+{{template "list_table"}}
+<tbody>
+  {{range .DetailFields}}
+  <tr>
+    <th class="w-40 font-mono text-xs align-top">{{if .Key}}{{.Key}}{{else}}raw{{end}}</th>
+    <td class="text-sm min-w-0">
+      {{if .IsVideoList}}
+        {{if .Videos}}
+        <ul class="space-y-1">
+          {{range .Videos}}
+          <li class="font-mono text-xs flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span class="opacity-60">#{{.ID}}</span>
+            {{if and (not .Missing) .SeriesID}}
+            <a class="link link-hover font-sans text-sm" href="/series/{{.SeriesID}}/videos/{{.ID}}">{{.Title}}</a>
+            {{else}}
+            <span class="font-sans text-sm{{if .Missing}} opacity-60{{end}}">{{.Title}}</span>
+            {{if .Missing}}<span class="text-xs opacity-60">not in library</span>{{end}}
+            {{end}}
+            {{if .HasState}}
+            {{template "status_badge" .State}}
+            {{if .IgnoredReason}}<span class="text-xs opacity-70">{{.IgnoredReason}}</span>{{end}}
+            {{end}}
+          </li>
+          {{end}}
+        </ul>
+        {{else}}
+        <span class="opacity-60">[]</span>
+        {{end}}
+      {{else if .IsSkippedTitleList}}
+        {{if .SkippedTitles}}
+        <ul class="space-y-1">
+          {{range .SkippedTitles}}
+          <li class="text-sm">
+            {{if .Title}}{{.Title}}{{else}}{{template "empty_value"}}{{end}}
+            {{if .RemoteID}}<span class="font-mono text-xs opacity-60 ml-2">{{.RemoteID}}</span>{{end}}
+          </li>
+          {{end}}
+          {{if .SkippedTitlesMore}}
+          <li class="text-xs opacity-60">and {{.SkippedTitlesMore}} more</li>
+          {{end}}
+        </ul>
+        {{else}}
+        <span class="opacity-60">[]</span>
+        {{end}}
+      {{else}}
+        <pre class="text-xs whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">{{.Text}}</pre>
+      {{end}}
+    </td>
+  </tr>
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{template "list_panel_end"}}
+{{else}}
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Detail" "help" "Task outcome and per-video events for this task. Video id lists show titles with links when the video still exists.")}}
+{{template "list_empty" "No detail for this task yet."}}
+{{template "list_panel_end"}}
+{{end}}
+</div>
+{{end}}
+
+{{if .Live}}
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Logs")}}
+{{template "task_logs" (dict "ID" .Item.ID "Live" .Live "LogText" .LogText "Lines" .LogLines "RefreshOnLoad" true)}}
+{{template "list_panel_end"}}
+{{end}}
+
+{{if .Live}}
+<input type="checkbox" id="modal-cancel-task" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Cancel task</h3>
+    <p class="text-sm mb-4">Stop this {{.Item.Kind}} task (#{{.Item.ID}}). Pending work is dropped; a running worker is aborted.</p>
+    <form method="post" action="/actions/cancel-task">
+      <input type="hidden" name="id" value="{{.Item.ID}}" />
+      <input type="hidden" name="redirect" value="/task/{{.Item.ID}}" />
+      <div class="modal-action">
+        <label for="modal-cancel-task" class="btn btn-ghost modal-cancel">Keep</label>
+        <button type="submit" class="btn btn-error">Cancel task</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+
+{{template "foot" .}}
+{{end}}

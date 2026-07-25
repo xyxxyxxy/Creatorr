@@ -1,0 +1,74 @@
+{{define "monitor_toggle"}}
+{{/*
+  Quick monitored/active toggle for list rows.
+  Required: Action, and Monitored (series/source) or Active (domain)
+  Optional: SeriesID, SourceID, VideoID, Domain, Redirect, Title, Disabled, DisabledTitle, LiveTarget, AsButton
+
+  HTMX swaps this root so the page does not reload (no scroll jump / button twitch).
+  When LiveTarget is set (element id without #), swap that panel instead (filter refresh).
+  AsButton: icon button instead of checkbox toggle (series list).
+*/}}
+{{$on := .Monitored}}
+{{$field := "monitored"}}
+{{$label := "Monitored"}}
+{{if .Domain}}
+  {{$on = .Active}}
+  {{$field = "active"}}
+  {{$label = "Active"}}
+{{end}}
+{{$hxTarget := "closest .monitor-toggle-root"}}
+{{$hxSelect := ""}}
+{{if .LiveTarget}}
+  {{$hxTarget = (printf "#%s" .LiveTarget)}}
+  {{$hxSelect = (printf "#%s" .LiveTarget)}}
+{{end}}
+{{$tip := .Title}}{{if not $tip}}{{$tip = $label}}{{end}}
+{{/* AsButton shows the action that will apply (opposite of current state). */}}
+{{$icon := "bookmark-off"}}{{if not $on}}{{$icon = "bookmark"}}{{end}}
+{{if .Domain}}{{$icon = "globe-off"}}{{if not $on}}{{$icon = "globe"}}{{end}}{{end}}
+{{if .AsButton}}
+  {{if $on}}{{$tip = "Unmonitor"}}{{else}}{{$tip = "Monitor"}}{{end}}
+  {{if .Domain}}{{if $on}}{{$tip = "Deactivate"}}{{else}}{{$tip = "Activate"}}{{end}}{{end}}
+{{end}}
+<span class="monitor-toggle-root inline-flex items-center">
+{{if .Disabled}}
+<span class="tooltip tooltip-top inline-flex items-center" data-tip="{{if .DisabledTitle}}{{.DisabledTitle}}{{else}}Disabled{{end}}">
+  {{if .AsButton}}
+  <button type="button" class="btn btn-soft btn-square" disabled aria-label="{{if .DisabledTitle}}{{.DisabledTitle}}{{else}}{{$label}}{{end}}">
+    <i data-lucide="{{$icon}}" class="size-4 opacity-40"></i>
+  </button>
+  {{else}}
+  <input type="checkbox" class="toggle" {{if $on}}checked{{end}} disabled
+         aria-label="{{if .DisabledTitle}}{{.DisabledTitle}}{{else}}{{$label}}{{end}}" />
+  {{end}}
+</span>
+{{else}}
+<form method="post" action="{{.Action}}"
+      hx-post="{{.Action}}"
+      hx-target="{{$hxTarget}}"
+      {{if $hxSelect}}hx-select="{{$hxSelect}}"{{end}}
+      hx-swap="outerHTML"
+      class="inline-flex items-center"
+      onclick="event.stopPropagation()">
+  {{if .SeriesID}}<input type="hidden" name="series_id" value="{{.SeriesID}}" />{{end}}
+  {{if .SourceID}}<input type="hidden" name="source_id" value="{{.SourceID}}" />{{end}}
+  {{if .VideoID}}<input type="hidden" name="video_id" value="{{.VideoID}}" />{{end}}
+  {{if .Domain}}<input type="hidden" name="domain" value="{{.Domain}}" />{{end}}
+  {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
+  {{if .AsButton}}
+  <input type="hidden" name="{{$field}}" value="{{if $on}}0{{else}}1{{end}}" />
+  <button type="submit" class="btn btn-soft btn-square tooltip tooltip-top" data-tip="{{$tip}}" aria-label="{{$tip}}">
+    <i data-lucide="{{$icon}}" class="size-4"></i>
+  </button>
+  {{else}}
+  <input type="hidden" name="{{$field}}" value="{{if $on}}1{{else}}0{{end}}" class="monitor-toggle-value" />
+  <span class="tooltip tooltip-top inline-flex items-center" data-tip="{{$tip}}">
+    <input type="checkbox" class="toggle monitor-toggle"
+           {{if $on}}checked{{end}}
+           aria-label="{{$tip}}" />
+  </span>
+  {{end}}
+</form>
+{{end}}
+</span>
+{{end}}
