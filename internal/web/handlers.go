@@ -10,9 +10,10 @@ import (
 
 // Handler serves HTML admin pages and form actions.
 type Handler struct {
-	Library *library.Store
-	Queue   *queue.Store
-	YtDlp   *ytdlp.Client
+	Library        *library.Store
+	Queue          *queue.Store
+	YtDlp          *ytdlp.Client
+	PotProviderURL string // CREATORR_POT_PROVIDER_URL; empty disables pot_fetch UI
 }
 
 // Mount registers UI routes on r.

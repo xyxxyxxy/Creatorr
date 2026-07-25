@@ -88,6 +88,7 @@ func mapNotification(n notify.Notification) gen.Notification {
 		Id:         n.ID,
 		CreatedAt:  parseTime(n.CreatedAt),
 		Event:      gen.NotificationEvent(n.Event),
+		Level:      gen.NotificationLevel(notify.EventLevel(n.Event)),
 		Title:      n.Title,
 		Body:       n.Body,
 		ExternalOk: n.ExternalOK,

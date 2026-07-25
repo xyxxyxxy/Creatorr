@@ -384,6 +384,19 @@ func (h *Handler) resolvePlay(w http.ResponseWriter, r *http.Request) (playCtx, 
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
 	ctx = h.withOccupancyTrace(ctx, taskID)
+	ctx = ytdlp.ContextWithPOTTracker(ctx,
+		func(detail string) {
+			if err := notify.POTProvider(context.WithoutCancel(ctx), h.Library.DB, taskID, domain, detail); err != nil {
+				slog.Default().Warn("notify pot_provider", "task", taskID, "err", err)
+			}
+		},
+		func(st ytdlp.POTStatus) {
+			if h.Queue == nil || st.State == "" {
+				return
+			}
+			_ = h.Queue.MergeDetailJSON(taskID, map[string]any{ytdlp.DetailKeyPOToken: st})
+		},
+	)
 	urls, err := h.YtDlp.FetchUrls(ctx, ytdlp.UrlsOpts{
 		URL:             pageURL,
 		FormatSelector:  format,
@@ -474,6 +487,19 @@ func (h *Handler) serveProgressive(w http.ResponseWriter, r *http.Request, pc pl
 		invalidateCachedUrls(pc.videoID, pc.format)
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 		defer cancel()
+		ctx = ytdlp.ContextWithPOTTracker(ctx,
+			func(detail string) {
+				if err := notify.POTProvider(context.WithoutCancel(ctx), h.Library.DB, pc.taskID, pc.domain, detail); err != nil {
+					slog.Default().Warn("notify pot_provider", "task", pc.taskID, "err", err)
+				}
+			},
+			func(st ytdlp.POTStatus) {
+				if h.Queue == nil || st.State == "" {
+					return
+				}
+				_ = h.Queue.MergeDetailJSON(pc.taskID, map[string]any{ytdlp.DetailKeyPOToken: st})
+			},
+		)
 		urls2, err2 := h.YtDlp.FetchUrls(ctx, ytdlp.UrlsOpts{
 			URL: pc.pageURL, FormatSelector: pc.format,
 			CookiesPath: pc.jar, FlareSolverrURL: pc.flare,

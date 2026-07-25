@@ -18,6 +18,7 @@ Go module: `github.com/xyxxyxxy/Creatorr`
 - **Maturity sidecar refresh** - optional one-shot NFO/thumb/subs refresh after upload date (never rewrites `info.json`); same profile delays (UI days, stored hours).
 - **SponsorBlock** - optional mark/remove on the quality profile, plus optional **info cards on cut** for downloads (needs re-encode). Uses SponsorBlock data from https://sponsor.ajay.app/ (Creatorr client; never yt-dlp `--sponsorblock-*`). Archive cuts + chapter embed; stream play plan + skip-aware beginning cache.
 - **Import** - add offline/local files to a series manually (inbox or library orphans).
+- **PO token support out of the box** - Compose `creatorr-po-token` sidecar + baked yt-dlp provider plugin; Settings → General controls fetch mode.
 - Download via **in-tree yt-dlp** (`internal/ytdlp`); optional plugin mounts under `/yt-dlp-plugins`.
 - Track videos (columns + packed `info.json`); admin web UI.
 - Support for yt-dlp sites (with plugins where needed).
@@ -37,6 +38,8 @@ Go module: `github.com/xyxxyxxy/Creatorr`
 | [`api/openapi.yaml`](api/openapi.yaml) | REST contract |
 
 **FlareSolverr:** set the service URL under Settings → General, then enable **Use FlareSolverr** on Domain defaults and/or per-host override (Default / On / Off) under Settings → Queue. Creatorr then passes `--flaresolverr` to yt-dlp when effective for that hostname.
+
+**PO tokens:** Compose runs `creatorr-po-token`; set `CREATORR_POT_PROVIDER_URL` (default `http://creatorr-po-token:4416`) and **PO token fetch** under Settings → General (`auto` / `always` / `never`). See [`docs/ytdlp.md`](docs/ytdlp.md).
 
 ## Run (Docker, production)
 
@@ -62,7 +65,7 @@ docker compose up -d
 
 Commented examples in compose: second library at `/media/other`, `/yt-dlp-plugins`, custom yt-dlp binary.
 
-First boot seeds one root (`library` → `/media/library`, no TTL) and quality profiles `best` (format `bv*+ba/b`), `1080p`, `720p`.
+First boot seeds one root (`library` → `/media/library`, no TTL) and quality profiles `best` (format `bv*+ba`), `1080p`, `720p`.
 
 The container runs as **uid/gid 1000** (non-root). Host `./var` must be writable by that user: `sudo chown -R 1000:1000 var`.
 

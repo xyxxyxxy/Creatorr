@@ -14,7 +14,7 @@ import (
 // Test hooks via env (streamproxy unit tests). Not for production.
 const (
 	envFakeUrlsKind = "CREATORR_FAKE_URLS_KIND"
-	envFakeHLSFail = "CREATORR_FAKE_HLS_FAIL"
+	envFakeHLSFail  = "CREATORR_FAKE_HLS_FAIL"
 )
 
 func fakeUrlsFromEnv() (UrlsResult, bool) {

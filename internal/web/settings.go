@@ -19,18 +19,19 @@ import (
 )
 
 type settingsRowView struct {
-	Key      string
-	Label    string
-	Value    string
-	Help     string
-	Cron     bool
-	Checkbox bool
-	Checked  bool
-	Select   bool // closed-set dropdown (scan schedule, stats retention)
-	Options  []PresetOption
-	Textarea bool
-	Wide     bool
-	Disabled bool
+	Key           string
+	Label         string
+	Value         string
+	Help          string
+	Cron          bool
+	Checkbox      bool
+	Checked       bool
+	Select        bool // closed-set dropdown (scan schedule, stats retention)
+	Options       []PresetOption
+	Textarea      bool
+	Wide          bool
+	Disabled      bool
+	DisabledTitle string
 }
 
 type notifyChannelView struct {
@@ -109,6 +110,7 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows := make([]settingsRowView, 0, len(entries))
+	potURLSet := strings.TrimSpace(h.PotProviderURL) != ""
 	for _, e := range entries {
 		row := settingsRowView{
 			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
@@ -119,6 +121,17 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 			row.Value = settings.NormalizeStatsRetention(e.Value)
 			for _, o := range settings.StatsRetentionOptions() {
 				row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
+			}
+		}
+		if e.Key == settings.KeyPotFetch {
+			row.Select = true
+			row.Value = settings.NormalizePotFetch(e.Value)
+			for _, o := range settings.PotFetchOptions() {
+				row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
+			}
+			if !potURLSet {
+				row.Disabled = true
+				row.DisabledTitle = "Set CREATORR_POT_PROVIDER_URL first (Compose default http://creatorr-po-token:4416)."
 			}
 		}
 		rows = append(rows, row)
@@ -383,6 +396,7 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	vals := map[string]string{}
 	for _, e := range []string{
 		settings.KeyFlareSolverrURL,
+		settings.KeyPotFetch,
 		settings.KeyDownloadWantedCron,
 		settings.KeyDownloadWantedOrder,
 		settings.KeySyncFilesCron,
@@ -427,6 +441,9 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if raw, ok := vals[settings.KeyCacheBeginningSeconds]; ok {
 		vals[settings.KeyCacheBeginningSeconds] = settings.NormalizeCacheBeginningSeconds(raw)
+	}
+	if raw, ok := vals[settings.KeyPotFetch]; ok {
+		vals[settings.KeyPotFetch] = settings.NormalizePotFetch(raw)
 	}
 	// Checkbox: absent from form when unchecked; only update when Scheduler POST includes the field intent.
 	if r.FormValue("redirect") == "/settings/scheduler" {

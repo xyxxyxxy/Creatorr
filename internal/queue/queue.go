@@ -683,6 +683,33 @@ func (s *Store) SetDetail(id int64, detail string) error {
 	return err
 }
 
+// MergeDetailJSON merges patch keys into tasks.detail (JSON object).
+// Non-JSON existing detail is preserved under key "error".
+func (s *Store) MergeDetailJSON(id int64, patch map[string]any) error {
+	if s == nil || id <= 0 || len(patch) == 0 {
+		return nil
+	}
+	var cur string
+	err := s.DB.SQL.QueryRow(`SELECT COALESCE(detail, '') FROM tasks WHERE id = ?`, id).Scan(&cur)
+	if err != nil {
+		return err
+	}
+	m := map[string]any{}
+	if strings.TrimSpace(cur) != "" {
+		if json.Unmarshal([]byte(cur), &m) != nil || m == nil {
+			m = map[string]any{"error": cur}
+		}
+	}
+	for k, v := range patch {
+		m[k] = v
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return s.SetDetail(id, string(b))
+}
+
 const taskCommandsCap = 100
 
 // AppendCommand appends a shell-formatted external command line to tasks.commands.

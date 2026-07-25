@@ -74,8 +74,8 @@ func Send(ctx context.Context, urls []string, title, body string) error {
 
 // SendEvent delivers to every channel subscribed to event: in-app inserts a
 // notifications row; Apprise channels call sendFn. taskID is required (>0) for
-// alert events; may be 0 for download_digest (stored NULL). Successful Apprise
-// delivery sets external_ok and marks alert notifications read.
+// unread events (alert + warning); may be 0 for download_digest (stored NULL).
+// Successful Apprise delivery sets external_ok and marks unread notifications read.
 func SendEvent(ctx context.Context, database *db.DB, event, title, body string, taskID int64) error {
 	if database == nil {
 		return nil
@@ -84,7 +84,7 @@ func SendEvent(ctx context.Context, database *db.DB, event, title, body string, 
 	if !validEvent(event) {
 		return fmt.Errorf("unknown notify event %q", event)
 	}
-	if IsAlertEvent(event) && taskID <= 0 {
+	if IsUnreadEvent(event) && taskID <= 0 {
 		return fmt.Errorf("task_id required for notify event %q", event)
 	}
 	if err := ctx.Err(); err != nil {
@@ -93,7 +93,7 @@ func SendEvent(ctx context.Context, database *db.DB, event, title, body string, 
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	readAt := ""
-	if !IsAlertEvent(event) {
+	if !IsUnreadEvent(event) {
 		readAt = now
 	}
 
@@ -135,7 +135,7 @@ func SendEvent(ctx context.Context, database *db.DB, event, title, body string, 
 	}
 	if anyAppriseOK {
 		markRead := ""
-		if IsAlertEvent(event) {
+		if IsUnreadEvent(event) {
 			markRead = now
 		}
 		_ = MarkExternalOK(database, notifID, markRead)
@@ -190,6 +190,21 @@ func VerifyFailed(ctx context.Context, database *db.DB, taskID int64, series, ti
 	nTitle := fmt.Sprintf("Creatorr: verify failed (%s)", label)
 	body := fmt.Sprintf("%s: %s failed media verify. File kept; status verify_failed. Re-download to retry.\n\n%s", label, vt, detail)
 	return SendEvent(ctx, database, EventVerifyFailed, nTitle, body, taskID)
+}
+
+// POTProvider notifies that the PO token sidecar/plugin had a problem while
+// yt-dlp continued (warning level; download is not failed for this alone).
+func POTProvider(ctx context.Context, database *db.DB, taskID int64, domain, detail string) error {
+	if len(detail) > 500 {
+		detail = detail[:500]
+	}
+	dom := strings.TrimSpace(domain)
+	if dom == "" {
+		dom = "unknown"
+	}
+	title := fmt.Sprintf("Creatorr: PO token provider (%s)", dom)
+	body := fmt.Sprintf("Domain %s: PO token provider issue while the task continued. Check creatorr-po-token / plugin dirs / CREATORR_POT_PROVIDER_URL.\n\n%s", dom, detail)
+	return SendEvent(ctx, database, EventPOTProvider, title, body, taskID)
 }
 
 // DigestItem is one completed media item in a download_digest.

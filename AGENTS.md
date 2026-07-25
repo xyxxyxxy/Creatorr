@@ -37,7 +37,7 @@ internal/worker/        background task runner
 internal/events/        SSE hub
 internal/health/        /api/health dependency checks
 internal/ytdlp/         in-tree yt-dlp invoke, image/PATH binary, plugins
-internal/notify/        Apprise (apprise-go) + in-app log (info digests vs unread alerts)
+internal/notify/        Apprise (apprise-go) + in-app log (info digests vs unread alerts/warnings)
 internal/stats/         every-minute change-only sampler + daily library size + chart series for /stats
 internal/web/           HTMX UI (see docs/ui.md)
 internal/errors/        AppError codes + ErrorResponse mapping
@@ -70,7 +70,7 @@ New domain term → matching docs file (domain-model by default).
 
 ## Ship
 
-- **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker`, `ytdlp`, `disk`, `flaresolverr` (skipped if unset). Compose healthcheck should use it.
+- **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker`, `ytdlp`, `disk`, `flaresolverr`, `pot_provider` (last two skipped if URL unset). Compose healthcheck should use it.
 - **Tests:** unit (domain/settings), yt-dlp fixtures (no live net), integration (temp SQLite + worker/queue), API httptest + schema. Prefer golden fixtures; add tests for behavior changes.
 - **Branching:** git-flow (`feature/*`, `develop`, `main`).
 - **Commits:** Conventional Commits; one logical step each; subject ≤72 chars; body explains why when not obvious.

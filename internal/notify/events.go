@@ -13,7 +13,15 @@ const (
 	EventRateLimited    = "rate_limited"
 	EventYtDlpFailed    = "ytdlp_failed"
 	EventVerifyFailed   = "verify_failed"
+	EventPOTProvider    = "pot_provider"
 	EventDownloadDigest = "download_digest"
+)
+
+// Notification levels (in-app icon / API). Warning matches alert for unread behavior.
+const (
+	LevelInfo    = "info"
+	LevelWarning = "warning"
+	LevelAlert   = "alert"
 )
 
 // Legacy event ids (read-time aliases only; never written on new Upsert).
@@ -29,6 +37,7 @@ var AllEvents = []string{
 	EventVerifyFailed,
 	EventCookieInvalid,
 	EventRateLimited,
+	EventPOTProvider,
 }
 
 // EventLabels are short UI labels for event checkboxes.
@@ -37,10 +46,11 @@ var EventLabels = map[string]string{
 	EventRateLimited:    "Rate limit / IP block",
 	EventYtDlpFailed:    "yt-dlp / site failure",
 	EventVerifyFailed:   "Verify failed",
+	EventPOTProvider:    "PO token provider",
 	EventDownloadDigest: "Downloads finished (digest)",
 }
 
-// AlertEvents are unread-eligible notification events (vs info digests).
+// AlertEvents are unread-eligible failure notifications (red megaphone in UI).
 var AlertEvents = []string{
 	EventCookieInvalid,
 	EventRateLimited,
@@ -48,13 +58,48 @@ var AlertEvents = []string{
 	EventVerifyFailed,
 }
 
+// WarningEvents are unread-eligible warnings (same in-app unread rules as alerts).
+var WarningEvents = []string{
+	EventPOTProvider,
+}
+
 func validEvent(id string) bool {
 	return slices.Contains(AllEvents, id)
 }
 
-// IsAlertEvent reports whether event is an alert (unread tracking, requires task_id).
+// IsAlertEvent reports whether event is an alert-level notification.
 func IsAlertEvent(event string) bool {
 	return slices.Contains(AlertEvents, event)
+}
+
+// IsWarningEvent reports whether event is a warning-level notification.
+func IsWarningEvent(event string) bool {
+	return slices.Contains(WarningEvents, event)
+}
+
+// IsUnreadEvent reports whether event stays unread until read / Apprise OK.
+func IsUnreadEvent(event string) bool {
+	return IsAlertEvent(event) || IsWarningEvent(event)
+}
+
+// EventLevel returns info, warning, or alert for an event id.
+func EventLevel(event string) string {
+	switch {
+	case IsAlertEvent(event):
+		return LevelAlert
+	case IsWarningEvent(event):
+		return LevelWarning
+	default:
+		return LevelInfo
+	}
+}
+
+// UnreadEvents returns alert + warning event ids (SQL IN lists, mark-all).
+func UnreadEvents() []string {
+	out := make([]string, 0, len(AlertEvents)+len(WarningEvents))
+	out = append(out, AlertEvents...)
+	out = append(out, WarningEvents...)
+	return out
 }
 
 // AliasEvent maps legacy channel event ids to canonical ids.
@@ -92,7 +137,7 @@ func NormalizeEvents(ids []string) ([]string, error) {
 
 func notifyTypeFor(event string) apprise.NotifyType {
 	switch event {
-	case EventCookieInvalid, EventRateLimited:
+	case EventCookieInvalid, EventRateLimited, EventPOTProvider:
 		return apprise.NotifyWarning
 	case EventYtDlpFailed, EventVerifyFailed:
 		return apprise.NotifyFailure

@@ -49,6 +49,7 @@ func (c *Checker) Run(ctx context.Context) Report {
 		c.checkYtDlp(ctx),
 		c.checkDisk(),
 		c.checkFlareSolverr(ctx),
+		c.checkPotProvider(ctx),
 	}
 	overall := StatusOK
 	for _, ch := range checks {
@@ -169,4 +170,27 @@ func (c *Checker) checkFlareSolverr(ctx context.Context) Check {
 		return Check{Name: "flaresolverr", Status: StatusDegraded, Message: resp.Status}
 	}
 	return Check{Name: "flaresolverr", Status: StatusOK}
+}
+
+func (c *Checker) checkPotProvider(ctx context.Context) Check {
+	base := strings.TrimSpace(c.Cfg.PotProviderURL)
+	if base == "" {
+		return Check{Name: "pot_provider", Status: StatusSkipped, Message: "URL unset"}
+	}
+	pingURL := strings.TrimRight(base, "/") + "/ping"
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pingURL, nil)
+	if err != nil {
+		return Check{Name: "pot_provider", Status: StatusDegraded, Message: err.Error()}
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return Check{Name: "pot_provider", Status: StatusDegraded, Message: err.Error()}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 500 {
+		return Check{Name: "pot_provider", Status: StatusDegraded, Message: resp.Status}
+	}
+	return Check{Name: "pot_provider", Status: StatusOK}
 }

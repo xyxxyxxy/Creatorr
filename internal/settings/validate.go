@@ -11,6 +11,9 @@ func validateValue(key, value string) error {
 	if key == KeyStatsRetentionDays {
 		return validateStatsRetention(value)
 	}
+	if key == KeyPotFetch {
+		return validatePotFetch(value)
+	}
 	if key == KeyDownloadWantedOrder {
 		return validateDownloadWantedOrder(value)
 	}

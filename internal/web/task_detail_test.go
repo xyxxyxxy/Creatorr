@@ -7,6 +7,19 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 )
 
+func TestParsePOTDetail(t *testing.T) {
+	got := parsePOTDetail(`{"po-token":{"state":"issued","detail":"Retrieved a gvs PO Token","fetch":"auto"}}`)
+	if got == nil || got.State != "issued" || got.Label != "Issued" || got.Fetch != "auto" {
+		t.Fatalf("got %#v", got)
+	}
+	if parsePOTDetail(`{"created_ids":[1]}`) != nil {
+		t.Fatal("expected nil without pot")
+	}
+	if parsePOTDetail("not-json") != nil {
+		t.Fatal("expected nil for non-json")
+	}
+}
+
 func TestTaskDetailFieldsCreatedState(t *testing.T) {
 	h := &Handler{}
 	detail := `{

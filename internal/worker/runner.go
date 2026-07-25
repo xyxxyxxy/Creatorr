@@ -15,6 +15,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 // Runner claims and executes tasks from the domain queue.
@@ -111,6 +112,22 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 		}
 		r.Queue.Logs.Append(task.ID, "$ "+line)
 	})
+	persistPOT := func(st ytdlp.POTStatus) {
+		if st.State == "" {
+			return
+		}
+		if err := r.Queue.MergeDetailJSON(task.ID, map[string]any{ytdlp.DetailKeyPOToken: st}); err != nil {
+			log.Warn("persist pot status", "task", task.ID, "err", err)
+		}
+	}
+	taskCtx = ytdlp.ContextWithPOTTracker(taskCtx,
+		func(detail string) {
+			if err := notify.POTProvider(context.WithoutCancel(taskCtx), r.Queue.DB, task.ID, task.Domain, detail); err != nil {
+				log.Warn("notify pot_provider", "task", task.ID, "err", err)
+			}
+		},
+		persistPOT,
+	)
 	r.Queue.RegisterRunning(task.ID, cancel)
 	defer func() {
 		cancel()
@@ -122,6 +139,9 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 		runErr = fmt.Errorf("%w: %s", errUnknownKind, task.Kind)
 	} else {
 		runErr = handler(taskCtx, task, progress)
+	}
+	if st := ytdlp.POTStatusFromContext(taskCtx); st.State != "" {
+		persistPOT(st)
 	}
 
 	st, _ := r.Queue.TaskStatus(task.ID)

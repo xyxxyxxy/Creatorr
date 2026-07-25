@@ -75,7 +75,19 @@ func main() {
 		os.Exit(1)
 	}
 	log.Info("yt-dlp ready", "bin", cfg.YtDlpBin, "version", ytVersion)
-	ytClient := &ytdlp.Client{Bin: cfg.YtDlpBin, PluginsDir: cfg.YtDlpPluginsDir}
+	ytClient := &ytdlp.Client{
+		Bin:              cfg.YtDlpBin,
+		PluginsDir:       cfg.YtDlpPluginsDir,
+		SystemPluginsDir: cfg.YtDlpSystemPluginsDir,
+		PotProviderURL:   cfg.PotProviderURL,
+		PotFetch: func() string {
+			mode, err := settings.EffectivePotFetch(database, cfg.PotProviderURL)
+			if err != nil {
+				return settings.PotFetchNever
+			}
+			return mode
+		},
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -158,6 +170,7 @@ func main() {
 		r.Handle("/static/*", web.StaticHandler())
 		ui := &web.Handler{
 			Library: lib, Queue: q, YtDlp: ytClient,
+			PotProviderURL: cfg.PotProviderURL,
 		}
 		ui.Mount(r)
 	})

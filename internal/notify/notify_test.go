@@ -298,3 +298,43 @@ func TestListNotificationsRange(t *testing.T) {
 		t.Fatalf("items=%v err=%v", items, err)
 	}
 }
+
+func TestPOTProviderWarningUnread(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "pot.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	taskID := seedTask(t, d)
+	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
+		if nt != apprise.NotifyWarning {
+			t.Fatalf("notify type %v want warning", nt)
+		}
+		return nil
+	})
+	defer notify.SetSendFnForTest(old)
+
+	if notify.EventLevel(notify.EventPOTProvider) != notify.LevelWarning {
+		t.Fatal("pot_provider should be warning level")
+	}
+	if !notify.IsUnreadEvent(notify.EventPOTProvider) || notify.IsAlertEvent(notify.EventPOTProvider) {
+		t.Fatal("pot_provider should be unread warning, not alert")
+	}
+	if err := notify.POTProvider(context.Background(), d, taskID, "example.com", "PO Token Providers: none"); err != nil {
+		t.Fatal(err)
+	}
+	items, err := notify.ListNotifications(d, notify.ListFilter{UnreadOnly: true}, 10, 0)
+	if err != nil || len(items) != 1 || items[0].Event != notify.EventPOTProvider {
+		t.Fatalf("items=%v err=%v", items, err)
+	}
+	if !items[0].Unread() {
+		t.Fatal("want unread")
+	}
+	if _, err := notify.MarkAllRead(d); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := notify.CountUnread(d); n != 0 {
+		t.Fatalf("unread after mark-all=%d", n)
+	}
+}
+

@@ -36,11 +36,21 @@ func (o options) resolveFfmpegBin() string {
 	return ffmpegBin()
 }
 
-// withPluginDirs prepends --plugin-dirs for the plugins root and each child
-// that contains a yt_dlp_plugins package (sibling repo volume mounts).
-// yt-dlp accepts the flag multiple times - not a PATH-style joined string.
-func withPluginDirs(args []string, pluginDirs string) []string {
-	dirs := expandPluginDirs(pluginDirs)
+// withPluginDirs prepends --plugin-dirs for each resolved plugin search parent
+// (system POT plugin + operator mounts). yt-dlp accepts the flag multiple times
+// - not a PATH-style joined string.
+func withPluginDirs(args []string, pluginRoots ...string) []string {
+	var dirs []string
+	seen := map[string]bool{}
+	for _, root := range pluginRoots {
+		for _, d := range expandPluginDirs(root) {
+			if d == "" || seen[d] {
+				continue
+			}
+			seen[d] = true
+			dirs = append(dirs, d)
+		}
+	}
 	if len(dirs) == 0 {
 		return args
 	}
@@ -51,37 +61,55 @@ func withPluginDirs(args []string, pluginDirs string) []string {
 	return append(out, args...)
 }
 
-// expandPluginDirs returns paths yt-dlp should search for yt_dlp_plugins packages.
+// appendPOTArgs adds youtube:fetch_pot and optional youtubepot-bgutilhttp:base_url.
+// When a provider URL is set and fetch is not never, also enables pot_trace so
+// mint / provider lines appear in captured yt-dlp output (task logs + detect).
+func appendPOTArgs(args []string, o options) []string {
+	fetch := strings.TrimSpace(o.potFetch)
+	if fetch == "" {
+		fetch = "never"
+	}
+	ytArgs := "youtube:fetch_pot=" + fetch
+	if u := strings.TrimSpace(o.potProviderURL); u != "" && fetch != "never" {
+		ytArgs += ",pot_trace=true"
+		args = append(args, "--extractor-args", ytArgs)
+		args = append(args, "--extractor-args", "youtubepot-bgutilhttp:base_url="+u)
+		return args
+	}
+	return append(args, "--extractor-args", ytArgs)
+}
+
+// expandPluginDirs returns paths for yt-dlp --plugin-dirs.
+// yt-dlp expects a parent that contains named package folders
+// (each package/<name>/yt_dlp_plugins/...). Passing the package folder itself
+// (…/bgutil) yields "Plugin directories: none" and no POT providers.
 func expandPluginDirs(root string) []string {
 	root = strings.TrimSpace(root)
 	if root == "" {
 		return nil
 	}
-	var out []string
+	// Root is already a single package (contains yt_dlp_plugins): pass its parent.
 	if hasYtDlpPluginsPkg(root) {
-		out = append(out, root)
+		parent := filepath.Dir(root)
+		if parent == "" || parent == "." {
+			return []string{root}
+		}
+		return []string{parent}
 	}
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		if len(out) == 0 {
-			// Root missing/empty: still pass it so mkdir + mount later works.
-			return []string{root}
-		}
-		return out
+		// Root missing/empty: still pass it so mkdir + mount later works.
+		return []string{root}
 	}
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
-		child := filepath.Join(root, e.Name())
-		if hasYtDlpPluginsPkg(child) {
-			out = append(out, child)
+		if hasYtDlpPluginsPkg(filepath.Join(root, e.Name())) {
+			return []string{root}
 		}
 	}
-	if len(out) == 0 {
-		return []string{root}
-	}
-	return out
+	return []string{root}
 }
 
 func hasYtDlpPluginsPkg(dir string) bool {
@@ -150,28 +178,24 @@ func secondsOff(v string) bool {
 	return err == nil && f <= 0
 }
 
-// normalizeFormat fills in a sane default format selector and appends a "/best"
-// fallback so an unavailable combination doesn't hard-fail the download.
+// normalizeFormat returns the profile format selector as-is, or the strict
+// default merge selector when empty. Does not append /best - height-capped
+// profiles keep their own soft tails; the best profile is strict bv*+ba.
 func normalizeFormat(sel string) string {
 	sel = strings.TrimSpace(sel)
 	if sel == "" {
-		return "bv*+ba/b"
+		return "bv*+ba"
 	}
-	for _, part := range strings.Split(sel, "/") {
-		if strings.TrimSpace(part) == "best" {
-			return sel
-		}
-	}
-	return sel + "/best"
+	return sel
 }
 
 // normalizeHDFormat is the stream/download-equivalent selector for muxable A+V.
-// Bare "best" (Creatorr default profile) must not stay as yt-dlp "best" - that
-// picks a single progressive file (often a soft ~360p DASH progressive).
+// Bare "best" (Creatorr default profile name / yt-dlp token) must not stay as
+// yt-dlp "best" - that picks a single progressive file (often a soft ~360p).
 func normalizeHDFormat(sel string) string {
 	sel = strings.TrimSpace(sel)
 	if sel == "" || sel == "best" {
-		return "bv*+ba/b"
+		return "bv*+ba"
 	}
 	return normalizeFormat(sel)
 }
@@ -223,8 +247,9 @@ func dumpJSON(ctx context.Context, url, cookiesPath string, flat bool, playlistE
 		args = append(args, "--user-agent", userAgent)
 	}
 	args = appendPaceFlags(args, o.limitRate, o.sleepRequests)
+	args = appendPOTArgs(args, o)
 	args = append(args, url)
-	args = withPluginDirs(args, o.pluginDirs)
+	args = withPluginDirs(args, o.systemPluginDirs, o.pluginDirs)
 
 	stdout, stderr, err := runCapture(ctx, o, args, "")
 	if err != nil {
@@ -247,8 +272,9 @@ func dumpJSONWithFormat(ctx context.Context, url, format, cookiesPath, userAgent
 		args = append(args, "--user-agent", userAgent)
 	}
 	args = appendPaceFlags(args, o.limitRate, o.sleepRequests)
+	args = appendPOTArgs(args, o)
 	args = append(args, url)
-	args = withPluginDirs(args, o.pluginDirs)
+	args = withPluginDirs(args, o.systemPluginDirs, o.pluginDirs)
 
 	stdout, stderr, err := runCapture(ctx, o, args, "")
 	if err != nil {
@@ -500,8 +526,9 @@ func directURLsViaG(ctx context.Context, url, format, cookiesPath, userAgent str
 		args = append(args, "--user-agent", userAgent)
 	}
 	args = appendPaceFlags(args, o.limitRate, o.sleepRequests)
+	args = appendPOTArgs(args, o)
 	args = append(args, url)
-	args = withPluginDirs(args, o.pluginDirs)
+	args = withPluginDirs(args, o.systemPluginDirs, o.pluginDirs)
 
 	stdout, stderr, err := runCapture(ctx, o, args, "")
 	if err != nil {
@@ -699,7 +726,8 @@ func stringField(m map[string]any, key string) (string, bool) {
 
 // downloadMedia runs a plain yt-dlp download (no merge/remux flag) into outdir,
 // streaming progress to onProgress, and returns the resulting media file path.
-func downloadMedia(ctx context.Context, url, outdir, format, cookiesPath, userAgent string, o options, onProgress func(message string, fraction float64)) (string, error) {
+// onProgress fraction may be nil for message-only lines (PO token trace).
+func downloadMedia(ctx context.Context, url, outdir, format, cookiesPath, userAgent string, o options, onProgress func(message string, fraction *float64)) (string, error) {
 	if err := os.MkdirAll(outdir, 0o755); err != nil {
 		return "", appErr(apperrors.CodeDownloadFailed, "could not create output directory", err.Error())
 	}
@@ -720,10 +748,12 @@ func downloadMedia(ctx context.Context, url, outdir, format, cookiesPath, userAg
 	}
 	args = appendSubtitleFlags(args, o.subLangs, o.subAuto)
 	args = appendPaceFlags(args, o.limitRate, o.sleepRequests)
+	args = appendPOTArgs(args, o)
 	args = append(args, url)
-	args = withPluginDirs(args, o.pluginDirs)
+	args = withPluginDirs(args, o.systemPluginDirs, o.pluginDirs)
 
 	stderrTail, err := runStream(ctx, o, args, outdir, onProgress)
+	notePOTOutput(ctx, o, stderrTail)
 	if err != nil {
 		if isMediaTypeFilterReject(string(stderrTail), o.matchFilter) {
 			return "", wrapYtdlpFail(apperrors.CodeMediaTypeExcluded, "media type excluded", stderrTail, nil, err)
@@ -762,8 +792,9 @@ func fetchSidecars(ctx context.Context, url, outdir, cookiesPath, userAgent stri
 		args = append(args, "--user-agent", userAgent)
 	}
 	args = appendPaceFlags(args, o.limitRate, o.sleepRequests)
+	args = appendPOTArgs(args, o)
 	args = append(args, url)
-	args = withPluginDirs(args, o.pluginDirs)
+	args = withPluginDirs(args, o.systemPluginDirs, o.pluginDirs)
 
 	stdout, stderr, runErr := runCapture(ctx, o, args, outdir)
 	if runErr != nil {
@@ -844,13 +875,15 @@ func runCapture(ctx context.Context, o options, args []string, cwd string) (stdo
 	cmd.Stderr = &errBuf
 	exectrace.Record(ctx, bin, args...)
 	err = cmd.Run()
+	notePOTOutput(ctx, o, outBuf.Bytes(), errBuf.Bytes())
 	return outBuf.Bytes(), errBuf.Bytes(), err
 }
 
 // runStream runs yt-dlp with combined stdout+stderr piped line by line so
 // progress can be forwarded as it happens; it returns the last portion of
 // output (for error detail) alongside cmd.Wait's error, if any.
-func runStream(ctx context.Context, o options, args []string, cwd string, onProgress func(message string, fraction float64)) ([]byte, error) {
+// onProgress fraction may be nil for message-only lines (PO token trace).
+func runStream(ctx context.Context, o options, args []string, cwd string, onProgress func(message string, fraction *float64)) ([]byte, error) {
 	bin := o.resolveYtdlpBin()
 	cmd := exec.CommandContext(ctx, bin, args...)
 	if cwd != "" {
@@ -866,6 +899,7 @@ func runStream(ctx context.Context, o options, args []string, cwd string, onProg
 		return nil, err
 	}
 
+	tracePOT := strings.TrimSpace(o.potProviderURL) != "" && o.potFetch != "never"
 	var tail bytes.Buffer
 	sc := bufio.NewScanner(stdout)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -876,8 +910,14 @@ func runStream(ctx context.Context, o options, args []string, cwd string, onProg
 		if tail.Len() > 4096 {
 			tail.Next(tail.Len() - 4096)
 		}
+		if tracePOT {
+			observePOTLine(ctx, o, line)
+			if onProgress != nil && isPOTTraceLine(line) {
+				onProgress(trimPOTLine(line), nil)
+			}
+		}
 		if msg, frac := parseProgress(line); msg != "" && frac != nil && onProgress != nil {
-			onProgress(msg, *frac)
+			onProgress(msg, frac)
 		}
 	}
 	waitErr := cmd.Wait()

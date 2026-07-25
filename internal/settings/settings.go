@@ -12,6 +12,7 @@ import (
 // Keys stored in the settings table (SQLite + UI). Process bootstrap env is config.Load only - never Settings.
 const (
 	KeyFlareSolverrURL              = "flare_solverr_url"
+	KeyPotFetch                     = "pot_fetch"
 	KeyEpisodeFormat                = "episode_format"
 	KeyDownloadWantedCron           = "download_wanted_cron"
 	KeyDownloadNewOnScan            = "download_new_on_scan"
@@ -29,6 +30,7 @@ const (
 // Help is one-line UI help text per key.
 var Help = map[string]string{
 	KeyFlareSolverrURL:              "Required for domains behind CloudFlare protection. Configure FlareSolverr here before enabling Use FlareSolverr on Domain defaults or a host On override (Settings → Queue).",
+	KeyPotFetch:                     "PO token means proof-of-origin token. When to ask the provider for attestation tokens: only when needed, always, or never. Requires CREATORR_POT_PROVIDER_URL. Compose defaults to http://creatorr-po-token:4416.",
 	KeyEpisodeFormat:                "Relative path under the series folder for packed episodes (no extension). Saving does not rename existing files - use Apply episode format.",
 	KeyDownloadWantedCron:           "Schedule to enqueue wanted videos for monitored series.",
 	KeyDownloadNewOnScan:            "Queues new videos after a scan until the download queue is full. Download wanted schedule is used to fill gaps. Does not apply to full scan.",
@@ -48,6 +50,7 @@ var Help = map[string]string{
 // Labels are human-readable Settings titles (DB/API keys are snake_case).
 var Labels = map[string]string{
 	KeyFlareSolverrURL:              "FlareSolverr URL",
+	KeyPotFetch:                     "PO token fetch",
 	KeyEpisodeFormat:                "Episode format",
 	KeyDownloadWantedCron:           "Download wanted schedule",
 	KeyDownloadNewOnScan:            "Download new videos immediately",
@@ -67,6 +70,7 @@ var Labels = map[string]string{
 // generalOrder is Settings → General (not schedules).
 var generalOrder = []string{
 	KeyFlareSolverrURL,
+	KeyPotFetch,
 	KeyStatsRetentionDays,
 }
 
@@ -119,6 +123,7 @@ func SeedDefaults(database *db.DB) error {
 	}
 	defaults := map[string]string{
 		KeyFlareSolverrURL:              "",
+		KeyPotFetch:                     PotFetchAuto,
 		KeyEpisodeFormat:                DefaultEpisodeFormat,
 		KeyDownloadWantedCron:           "@hourly",
 		KeyDownloadNewOnScan:            "1",

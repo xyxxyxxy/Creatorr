@@ -23,7 +23,11 @@ type options struct {
 	audioHeadersJSON string
 	matchFilter      string
 
-	ytdlpPath  string
-	ffmpegPath string
-	pluginDirs string
+	ytdlpPath        string
+	ffmpegPath       string
+	pluginDirs       string
+	systemPluginDirs string
+
+	potProviderURL string
+	potFetch       string // youtube:fetch_pot value (auto|always|never)
 }

@@ -32,3 +32,5 @@ Mount sibling extractor repos under `/yt-dlp-plugins/` (see compose comments, [`
 ```
 
 Smoke: after boot, `yt-dlp --plugin-dirs … --list-extractors` should list the plugin extractors when those mounts are present.
+
+**PO Token plugin (local Go):** `make pot-plugin` installs the bgutil provider zip under `var/yt-dlp-plugins/bgutil`. Compose already runs `creatorr-po-token`; set `CREATORR_POT_PROVIDER_URL` (default `http://creatorr-po-token:4416`).

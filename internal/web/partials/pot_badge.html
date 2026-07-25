@@ -1,0 +1,37 @@
+{{define "pot_badge"}}
+{{/* PO token state from task detail; tip carries optional detail. Text size inherits from parent td (text-sm). */}}
+{{if eq .State "issued"}}
+<span class="inline-flex items-center gap-2">
+  <span class="inline-flex tooltip tooltip-top text-success" data-tip="{{if .Detail}}{{.Detail}}{{else}}issued{{end}}" aria-label="PO token issued">
+    <i data-lucide="shield-check" class="size-4"></i>
+  </span>
+  <span>Issued</span>
+  {{if .Fetch}}<span class="opacity-60 font-mono text-xs">({{.Fetch}})</span>{{end}}
+</span>
+{{else if eq .State "failed"}}
+<span class="inline-flex items-center gap-2">
+  <span class="inline-flex tooltip tooltip-top text-warning" data-tip="{{if .Detail}}{{.Detail}}{{else}}failed{{end}}" aria-label="PO token failed">
+    <i data-lucide="triangle-alert" class="size-4"></i>
+  </span>
+  <span class="text-warning">Failed</span>
+  {{if .Fetch}}<span class="opacity-60 font-mono text-xs">({{.Fetch}})</span>{{end}}
+</span>
+{{else if eq .State "skipped"}}
+<span class="inline-flex items-center gap-2">
+  <span class="inline-flex tooltip tooltip-top opacity-70" data-tip="{{if .Detail}}{{.Detail}}{{else}}skipped{{end}}" aria-label="PO token skipped">
+    <i data-lucide="shield-off" class="size-4"></i>
+  </span>
+  <span>Skipped</span>
+  {{if .Fetch}}<span class="opacity-60 font-mono text-xs">({{.Fetch}})</span>{{end}}
+</span>
+{{else if eq .State "off"}}
+<span class="inline-flex items-center gap-2">
+  <span class="inline-flex tooltip tooltip-top opacity-60" data-tip="{{if .Detail}}{{.Detail}}{{else}}off{{end}}" aria-label="PO token off">
+    <i data-lucide="shield-off" class="size-4"></i>
+  </span>
+  <span class="opacity-60">Off</span>
+</span>
+{{else}}
+<span class="opacity-60">{{.Label}}</span>
+{{end}}
+{{end}}

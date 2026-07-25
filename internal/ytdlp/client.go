@@ -14,9 +14,13 @@ import (
 
 // Client invokes yt-dlp (and ffmpeg for pipe/HLS mux) in-process for Creatorr.
 type Client struct {
-	Bin        string // path to yt-dlp binary; empty uses YTDLP_BIN / "yt-dlp"
-	PluginsDir string // always passed as --plugin-dirs when non-empty
-	FFmpegBin  string // path to ffmpeg; empty uses FFMPEG_BIN / "ffmpeg"
+	Bin              string // path to yt-dlp binary; empty uses YTDLP_BIN / "yt-dlp"
+	PluginsDir       string // operator plugin mounts; always passed as --plugin-dirs when non-empty
+	SystemPluginsDir string // baked POT plugin path; always passed in addition to PluginsDir
+	FFmpegBin        string // path to ffmpeg; empty uses FFMPEG_BIN / "ffmpeg"
+	PotProviderURL   string // CREATORR_POT_PROVIDER_URL; empty forces fetch_pot=never
+	// PotFetch returns Settings pot_fetch (or never when URL unset). Optional; defaults apply when nil.
+	PotFetch func() string
 }
 
 // ListOpts controls List (flat playlist / channel index).
@@ -121,6 +125,18 @@ func (c *Client) fill(o *options) {
 	o.ytdlpPath = strings.TrimSpace(c.Bin)
 	o.ffmpegPath = strings.TrimSpace(c.FFmpegBin)
 	o.pluginDirs = strings.TrimSpace(c.PluginsDir)
+	o.systemPluginDirs = strings.TrimSpace(c.SystemPluginsDir)
+	o.potProviderURL = strings.TrimSpace(c.PotProviderURL)
+	if o.potProviderURL == "" {
+		o.potFetch = "never"
+		return
+	}
+	if c.PotFetch != nil {
+		o.potFetch = strings.TrimSpace(c.PotFetch())
+	}
+	if o.potFetch == "" {
+		o.potFetch = "auto"
+	}
 }
 
 func sleepSeconds(v float64) string {
@@ -274,14 +290,7 @@ func (c *Client) Download(ctx context.Context, opts DownloadOpts) (string, error
 	}
 	defer cleanup()
 
-	var onProgress func(message string, fraction float64)
-	if opts.OnProgress != nil {
-		onProgress = func(message string, fraction float64) {
-			f := fraction
-			opts.OnProgress(message, &f)
-		}
-	}
-	return downloadMedia(ctx, o.url, o.outdir, o.format, jarPath, ua, o, onProgress)
+	return downloadMedia(ctx, o.url, o.outdir, o.format, jarPath, ua, o, opts.OnProgress)
 }
 
 // FetchSidecars writes info.json / thumbnail / subs via --skip-download.

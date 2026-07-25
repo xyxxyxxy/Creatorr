@@ -70,8 +70,8 @@ func IsReservedDomain(domain string) bool {
 // DomainLimits is queue/yt-dlp knobs (global default or effective resolved values).
 type DomainLimits struct {
 	TaskCooldownSeconds int
-	MaxDownloadQueue    int // pending+running download-family on this domain
-	MaxParallelTasks    int // concurrent running non-interactive tasks on this domain
+	MaxDownloadQueue    int     // pending+running download-family on this domain
+	MaxParallelTasks    int     // concurrent running non-interactive tasks on this domain
 	DownloadRateLimit   string  // yt-dlp --limit-rate; "off"/"0"/"none" = unlimited
 	SleepRequests       float64 // yt-dlp --sleep-requests + --sleep-subtitles + --sleep-interval; 0 = off
 	UseFlareSolverr     bool    // pass Settings flare_solverr_url to yt-dlp

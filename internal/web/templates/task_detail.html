@@ -25,7 +25,7 @@
   {{else}}
   {{template "detail_row" (dict "Label" "Domain" "TdClass" "font-mono text-xs")}}
   {{end}}
-  <tr><th class="w-40">Kind</th><td>{{.Item.Kind}}</td></tr>
+  <tr><th class="w-40">Kind</th><td class="text-sm">{{.Item.Kind}}</td></tr>
   <tr><th class="w-40">Status</th><td data-task-status>{{template "status_badge" .Item.Status}}</td></tr>
   {{if .Item.Message}}
   <tr><th class="w-40">Message</th><td class="text-sm" data-task-message>{{.Item.Message}}</td></tr>
@@ -37,24 +37,27 @@
     <progress data-task-progress class="progress progress-primary w-full max-w-xs" value="{{pct .Progress}}" max="100"></progress>
     {{else}}{{template "muted" "none"}}{{end}}
   </td></tr>
+  {{if .POT}}
+  <tr><th class="w-40">PO token</th><td class="text-sm" data-task-pot>{{template "pot_badge" .POT}}</td></tr>
+  {{end}}
   {{if .Item.Code}}
   <tr><th class="w-40">Code</th><td class="text-xs"><span class="text-error">{{.Item.Code}}</span></td></tr>
   {{else}}
   {{template "detail_row" (dict "Label" "Code" "TdClass" "text-xs")}}
   {{end}}
   {{if .Series}}
-  <tr><th class="w-40">Series</th><td><a class="link link-hover" href="/series/{{.Series.ID}}">{{.Series.Title}}</a></td></tr>
+  <tr><th class="w-40">Series</th><td class="text-sm"><a class="link link-hover" href="/series/{{.Series.ID}}">{{.Series.Title}}</a></td></tr>
   {{else}}
-  {{template "detail_row" (dict "Label" "Series")}}
+  {{template "detail_row" (dict "Label" "Series" "TdClass" "text-sm")}}
   {{end}}
   {{if .Video}}
-  <tr><th class="w-40">Video</th><td>
+  <tr><th class="w-40">Video</th><td class="text-sm">
       {{if .Video.SeriesID}}
       <a class="link link-hover" href="/series/{{.Video.SeriesID}}/videos/{{.Video.ID}}">{{.Video.Title}}</a>
       {{else}}{{.Video.Title}}{{end}}
   </td></tr>
   {{else}}
-  {{template "detail_row" (dict "Label" "Video")}}
+  {{template "detail_row" (dict "Label" "Video" "TdClass" "text-sm")}}
   {{end}}
   <tr><th class="w-40">Created</th><td class="text-xs">{{.CreatedAgo}} <span class="opacity-50">({{.CreatedAt}})</span></td></tr>
   {{if .QueuedLabel}}

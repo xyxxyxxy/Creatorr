@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -28,6 +29,53 @@ type detailVideoRef struct {
 type detailSkippedTitle struct {
 	RemoteID string
 	Title    string
+}
+
+// potDetailView is PO token state from task detail JSON for the Details table.
+type potDetailView struct {
+	State  string
+	Label  string
+	Detail string
+	Fetch  string
+}
+
+func parsePOTDetail(detail string) *potDetailView {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return nil
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(detail), &raw); err != nil {
+		return nil
+	}
+	potRaw, ok := raw[ytdlp.DetailKeyPOToken]
+	if !ok || potRaw == nil {
+		return nil
+	}
+	b, err := json.Marshal(potRaw)
+	if err != nil {
+		return nil
+	}
+	var pot struct {
+		State  string `json:"state"`
+		Detail string `json:"detail"`
+		Fetch  string `json:"fetch"`
+	}
+	if err := json.Unmarshal(b, &pot); err != nil || pot.State == "" {
+		return nil
+	}
+	label := pot.State
+	switch pot.State {
+	case "issued":
+		label = "Issued"
+	case "failed":
+		label = "Failed"
+	case "skipped":
+		label = "Skipped"
+	case "off":
+		label = "Off"
+	}
+	return &potDetailView{State: pot.State, Label: label, Detail: pot.Detail, Fetch: pot.Fetch}
 }
 
 // detailField is one top-level key from task detail JSON.
@@ -186,6 +234,9 @@ func (h *Handler) taskDetailFields(detail string) []detailField {
 	for _, k := range keys {
 		v := raw[k]
 		switch k {
+		case ytdlp.DetailKeyPOToken:
+			// Shown as dedicated Details row (PO token).
+			continue
 		case "ignored_media_type_ids", "ignored_index_as_ignored_ids":
 			if ids, ok := jsonNumberIDs(v); ok {
 				out = append(out, detailField{Key: k, Text: strconv.Itoa(len(ids))})
@@ -383,6 +434,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 	payload := t.Payload
 	payloadMuted := isEmptyJSONPayload(payload)
 	detailFields := mergeVideoHistoryDetailFields(h.taskDetailFields(t.Detail), histRows)
+	pot := parsePOTDetail(t.Detail)
 
 	var progress *float64
 	if t.Progress.Valid {
@@ -407,6 +459,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		Payload      string
 		PayloadMuted bool
 		DetailFields []detailField
+		POT          *potDetailView
 		Commands     []string
 		CreatedAt    string
 		CreatedAgo   string
@@ -429,6 +482,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		Payload:      payload,
 		PayloadMuted: payloadMuted,
 		DetailFields: detailFields,
+		POT:          pot,
 		Commands:     commands,
 		CreatedAt:    createdAt,
 		CreatedAgo:   createdAgo,

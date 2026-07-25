@@ -2,13 +2,14 @@
 
 Index: [README.md](README.md). Terminology: [`AGENTS.md`](../AGENTS.md).
 
-Most knobs are Settings keys (UI / SQLite). Process bootstrap env is only `CREATORR_PORT`, `CREATORR_PUBLIC_BASE_URL`, `CREATORR_WEB_*`, `TZ` (see [`config.Load`](../internal/config/config.go)). Paths are fixed (container `/data`, `/cache`, `/media/...`, `/yt-dlp-plugins`; local `var/...`). HTTP bind is always `0.0.0.0` (not configurable). yt-dlp binary is `/usr/local/bin/yt-dlp` (Docker) or `PATH`; plugins live under `/yt-dlp-plugins` - see [`ytdlp.md`](ytdlp.md).
+Most knobs are Settings keys (UI / SQLite). Process bootstrap env is only `CREATORR_PORT`, `CREATORR_PUBLIC_BASE_URL`, `CREATORR_POT_PROVIDER_URL`, `CREATORR_WEB_*`, `TZ` (see [`config.Load`](../internal/config/config.go)). Paths are fixed (container `/data`, `/cache`, `/media/...`, `/yt-dlp-plugins`, baked POT plugin under `/usr/local/share/yt-dlp-plugins/bgutil`; local `var/...`). HTTP bind is always `0.0.0.0` (not configurable). yt-dlp binary is `/usr/local/bin/yt-dlp` (Docker) or `PATH`; plugins: see [`ytdlp.md`](ytdlp.md).
 
 Editable settings (examples):
 
 | Key | Role |
 |---|---|
 | `flare_solverr_url` | Required for domains behind CloudFlare. Set URL here before enabling **Use FlareSolverr** on Domain defaults and/or per-host On override (Settings → Queue). Empty = skip health probe, never pass `--flaresolverr`, and clears Use FlareSolverr flags (defaults off; host On → inherit) |
+| `pot_fetch` | **PO token fetch** (PO = proof-of-origin): `auto` (default) / `always` / `never` → yt-dlp `youtube:fetch_pot`. Settings → General. Control disabled until env `CREATORR_POT_PROVIDER_URL` is set (Compose default `http://creatorr-po-token:4416`). When URL unset, invokes force `never`. |
 | `episode_format` | Relative path under the series folder for packed episodes (default `S{year}/S{year}E{episode:000000} [{id}]`; `{year}` = UTC year-season, `{episode}` = `MMDD` + same-day index, default path zero-pads to 6 digits). Series folder is always `SeriesDir` (sanitized title, no rune cap). `/` separates folders under that series. Also `{date}`, `{domain}`, `{title}`, optional `{series}` / `{series:N}` in the stem. `{series:N}` / `{title:N}` cap runes (bare is not truncated). Saving does not rename - use Apply episode format (Maintenance). |
 | `download_wanted_cron` | Schedule to enqueue wanted videos for monitored series. Settings → Scheduler. Seed `@hourly`. Empty = off |
 | `download_new_on_scan` | Queues new videos after a scan until the download queue is full; Download wanted schedule fills gaps. Does not apply to full scan. Default on. Settings → Scheduler |
@@ -42,9 +43,10 @@ Sidecars are always converted to SRT via yt-dlp `--convert-subs srt` (no format 
 | `rate_limited` | alert | Rate limit / IP block |
 | `ytdlp_failed` | alert | Any other failed non-system domain task (scan, prefetch, download, stream pack, cache beginning, remux/pack on download, …) |
 | `verify_failed` | alert | Post-pack media verify failed (file kept; status `verify_failed`) |
+| `pot_provider` | warning | PO token plugin/sidecar problem while yt-dlp continued (task not failed for this alone) |
 | `download_digest` | info | Global digest after all media tasks drain and no eligible wanted remain (archive + stream, beginning cached or not) |
 
-**Alerts** (`AlertEvents` in code: the four alert rows above) stay unread in-app until the detail page is opened, marked read (API / mark-all), or any Apprise send succeeds (`external_ok`); they require a `task_id`. **Info** digests are stored already-read with no `task_id`. Alert rows always link the failed task. UI: History → Notifications (bell = info, red megaphone = alert); detail `/notification/{id}` (opening marks alert read); top-nav bell dropdown **Unread alerts** + badge for unread alert count. Test button sends to that channel’s URL without requiring an event subscription (not logged in-app).
+**Alerts** and **warnings** (`AlertEvents` / `WarningEvents` in code; both unread-eligible) stay unread in-app until the detail page is opened, marked read (API / mark-all), or any Apprise send succeeds (`external_ok`); they require a `task_id`. **Info** digests are stored already-read with no `task_id`. Alert/warning rows always link the task. UI: History → Notifications (bell = info, amber triangle = warning, red megaphone = alert); detail `/notification/{id}` (opening marks unread events read); top-nav bell dropdown **Unread alerts** + badge for unread alert/warning count. Test button sends to that channel’s URL without requiring an event subscription (not logged in-app).
 
 **Stats sampling** lives in `internal/stats` only - fixed every-minute poll (change-only writes) plus daily library-size sample; do not fold into the main scheduler. Chart JSON forward-fills across change timestamps and appends a synthetic tip at request time (current minute for queue/library charts, current UTC day for storage) so the series reaches "now" without writing an unchanged sample. Live library size pies (`GET /stats/library-size.json?group=root|series`) are not sampled. Storage development chart uses daily samples (display capped at 1 year).
 
@@ -57,6 +59,6 @@ Every settings UI control has help text. See [ui.md](ui.md) § Setting descripti
 | Seed | Values |
 |---|---|
 | Root folder | name = last segment of absolute path from seeded library root (`/media/library` in container; `var/media/library` local), no retention TTL |
-| Quality profiles | `best` (format `bv*+ba/b`, default), `1080p` (`bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b`), `720p` (`bv*[height<=720]+ba/b[height<=720]/bv*+ba/b`). Bare yt-dlp `best` is avoided (soft progressive on DASH sites). Remux is always MKV. |
+| Quality profiles | `best` (format `bv*+ba`, strict highest merge, default), `1080p` (`bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b`), `720p` (`bv*[height<=720]+ba/b[height<=720]/bv*+ba/b`). Height profiles keep soft unrestricted tails. Bare yt-dlp `best` is avoided (soft progressive on DASH sites). Remux is always MKV. |
 
 Import folder is `/media/import` (container) or `var/media/import` (local Go); not a Setting. Import scan also lists **library orphans** (media under online roots with no `files` row). Confirm binds inbox via move, library via in-place. UI groups media with same-directory same-stem sidecars into one row; orphan sidecar stems without media stay one Attach row.

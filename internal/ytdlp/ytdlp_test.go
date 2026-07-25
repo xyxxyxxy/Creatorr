@@ -72,14 +72,14 @@ func TestAppendSubtitleFlags(t *testing.T) {
 }
 
 func TestNormalizeFormat(t *testing.T) {
-	if got := normalizeFormat(""); got != "bv*+ba/b" {
+	if got := normalizeFormat(""); got != "bv*+ba" {
 		t.Fatalf("normalizeFormat(\"\") = %q", got)
 	}
-	if got := normalizeFormat("bestvideo+bestaudio"); got != "bestvideo+bestaudio/best" {
+	if got := normalizeFormat("bestvideo+bestaudio"); got != "bestvideo+bestaudio" {
 		t.Fatalf("normalizeFormat = %q", got)
 	}
-	if got := normalizeFormat("bv/best"); got != "bv/best" {
-		t.Fatalf("normalizeFormat with existing best fallback should be unchanged, got %q", got)
+	if got := normalizeFormat("bv*+ba/b"); got != "bv*+ba/b" {
+		t.Fatalf("normalizeFormat should preserve profile fallbacks, got %q", got)
 	}
 }
 
@@ -100,24 +100,43 @@ func TestNormalizeStreamFormat(t *testing.T) {
 }
 
 func TestNormalizeHDFormat(t *testing.T) {
-	if got := normalizeHDFormat(""); got != "bv*+ba/b" {
+	if got := normalizeHDFormat(""); got != "bv*+ba" {
 		t.Fatalf("empty = %q", got)
 	}
-	if got := normalizeHDFormat("best"); got != "bv*+ba/b" {
+	if got := normalizeHDFormat("best"); got != "bv*+ba" {
 		t.Fatalf("best = %q", got)
 	}
-	if got := normalizeHDFormat("bv*[height<=1080]+ba/b"); got != "bv*[height<=1080]+ba/b/best" {
+	if got := normalizeHDFormat("bv*[height<=1080]+ba/b"); got != "bv*[height<=1080]+ba/b" {
 		t.Fatalf("1080p = %q", got)
 	}
-	got := normalizeStreamPlayFormat("bv*+ba/b")
-	if !strings.Contains(got, "avc") || !strings.Contains(got, "bv*+ba/b") {
+	got := normalizeStreamPlayFormat("bv*+ba")
+	if !strings.Contains(got, "avc") || !strings.Contains(got, "bv*+ba") {
 		t.Fatalf("stream play format: %q", got)
+	}
+}
+
+func TestAppendPOTArgs(t *testing.T) {
+	got := appendPOTArgs(nil, options{potFetch: "auto", potProviderURL: "http://creatorr-po-token:4416"})
+	want := []string{
+		"--extractor-args", "youtube:fetch_pot=auto,pot_trace=true",
+		"--extractor-args", "youtubepot-bgutilhttp:base_url=http://creatorr-po-token:4416",
+	}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("got %v want %v", got, want)
+	}
+	got = appendPOTArgs(nil, options{})
+	if len(got) != 2 || got[1] != "youtube:fetch_pot=never" {
+		t.Fatalf("empty URL should force never, got %v", got)
+	}
+	got = appendPOTArgs(nil, options{potFetch: "never", potProviderURL: "http://creatorr-po-token:4416"})
+	if len(got) != 2 || got[1] != "youtube:fetch_pot=never" {
+		t.Fatalf("never should omit pot_trace and base_url, got %v", got)
 	}
 }
 
 func TestStreamKindFromInfo(t *testing.T) {
 	progressive := map[string]any{
-		"url": "https://cdn.example.com/v.mp4",
+		"url":          "https://cdn.example.com/v.mp4",
 		"http_headers": map[string]any{"User-Agent": "ua"},
 	}
 	got, ok := streamKindFromInfo(progressive)
@@ -126,7 +145,7 @@ func TestStreamKindFromInfo(t *testing.T) {
 	}
 
 	hls := map[string]any{
-		"url": "https://cdn.example.com/master.m3u8",
+		"url":          "https://cdn.example.com/master.m3u8",
 		"http_headers": map[string]any{"Referer": "https://example.com/"},
 	}
 	got, ok = streamKindFromInfo(hls)

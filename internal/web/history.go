@@ -37,6 +37,8 @@ type notifyHistoryView struct {
 	ExternalOK bool
 	Unread     bool
 	Alert      bool
+	Warning    bool
+	Level      string
 	ReadAt     string
 }
 
@@ -90,6 +92,8 @@ func notificationToView(n notify.Notification, now time.Time) notifyHistoryView 
 		ExternalOK: n.ExternalOK,
 		Unread:     n.Unread(),
 		Alert:      notify.IsAlertEvent(n.Event),
+		Warning:    notify.IsWarningEvent(n.Event),
+		Level:      notify.EventLevel(n.Event),
 	}
 	if n.TaskID.Valid {
 		v.TaskID = n.TaskID.Int64

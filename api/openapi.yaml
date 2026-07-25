@@ -233,7 +233,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, download_digest]
+            enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, pot_provider, download_digest]
         - name: unread_only
           in: query
           required: false
@@ -987,7 +987,7 @@ components:
       properties:
         name:
           type: string
-          description: Check id (db, worker, ytdlp, disk, flaresolverr)
+          description: Check id (db, worker, ytdlp, disk, flaresolverr, pot_provider)
         status:
           $ref: "#/components/schemas/HealthStatus"
         message:
@@ -1272,7 +1272,7 @@ components:
 
     Notification:
       type: object
-      required: [id, created_at, event, title, body, external_ok, unread]
+      required: [id, created_at, event, level, title, body, external_ok, unread]
       properties:
         id:
           type: integer
@@ -1282,7 +1282,13 @@ components:
           format: date-time
         event:
           type: string
-          enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, download_digest]
+          enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, pot_provider, download_digest]
+        level:
+          type: string
+          enum: [info, warning, alert]
+          description: |
+            Presentation level. warning and alert share in-app unread behavior
+            (badge, mark-read, task_id required); info digests are stored already-read.
         title:
           type: string
         body:
@@ -1300,7 +1306,7 @@ components:
           nullable: true
         unread:
           type: boolean
-          description: True for unread alert notifications
+          description: True for unread alert or warning notifications
 
     NotificationUnreadCount:
       type: object
