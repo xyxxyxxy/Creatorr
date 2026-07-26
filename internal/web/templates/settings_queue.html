@@ -17,7 +17,7 @@
         "Label" .Label
         "Type" "select"
         "Value" .Value
-        "Info" .Help
+        "Hint" .Help
         "Options" .Options
       )}}
       {{else}}
@@ -33,89 +33,62 @@
   <form method="post" action="/actions/save-domain-default" class="card-body gap-3">
     <input type="hidden" name="redirect" value="/settings/queue" />
     <h2 class="text-lg font-semibold">Domain defaults</h2>
-    <p class="text-sm opacity-60">Per-hostname queue depth and concurrency. Overrides below replace these for individual domains. Stored as domains row <code class="text-xs">default</code> (limits required; cookies optional).</p>
+    <p class="text-sm opacity-60">Per-hostname queue depth and concurrency. Overrides below replace these for individual domains.</p>
     <div class="grid gap-3 md:grid-cols-2">
       <p class="md:col-span-2 text-sm font-medium">Concurrency</p>
       <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Task cooldown
-            {{template "field_info" (dict "Info" "Pause after a task starts before another may start on this domain (still applies when several run in parallel).")}}
-          </span>
-        </legend>
+        <legend class="fieldset-legend">Task cooldown</legend>
         <div class="join w-full">
           <input type="number" min="0" name="task_cooldown_seconds" class="input join-item grow min-w-0" value="{{.DefaultLimits.TaskCooldownSeconds}}" required />
           <span class="btn join-item no-animation pointer-events-none">seconds</span>
         </div>
-        <p class="label whitespace-normal">0 = no pause.</p>
+        <p class="label whitespace-normal">Pause after a task starts before another may start (still applies when several run in parallel).</p>
       </fieldset>
       <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Max download queue
-            {{template "field_info" (dict "Info" "Maximum number of download tasks to be queued for the given domain. 'Download now' user action bypasses this limit.")}}
-          </span>
-        </legend>
-        <input type="number" min="1" name="max_download_queue" class="input w-full" value="{{.DefaultLimits.MaxDownloadQueue}}" required />
-        <p class="label whitespace-normal">Per domain — not shared across hosts.</p>
-      </fieldset>
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Max parallel tasks
-            {{template "field_info" (dict "Info" "How many tasks may run at once on this hostname. Cannot exceed Max download queue.")}}
-          </span>
-        </legend>
-        <input type="number" min="1" name="max_parallel_tasks" class="input w-full" value="{{.DefaultLimits.MaxParallelTasks}}" required />
-        <p class="label whitespace-normal">1 = one task at a time (default).</p>
-      </fieldset>
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Download rate limit
-            {{template "field_info" (dict "Info" "Maximum download rate within the given domain (yt-dlp --limit-rate). Unlimited skips the flag. Also applies to beginning cache.")}}
-          </span>
-        </legend>
-        {{template "download_rate_limit_join" (dict "Value" .DefaultLimits.DownloadRateLimit "Required" true)}}
-      </fieldset>
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Stream play rate limit
-            {{template "field_info" (dict "Info" "yt-dlp --limit-rate for live stream play mux/pipe only. Does not affect archive download, beginning cache, or sleep between requests. Unlimited skips the flag.")}}
-          </span>
-        </legend>
-        {{template "download_rate_limit_join" (dict "Name" "stream_play_rate_limit" "Value" .DefaultLimits.StreamPlayRateLimit "Required" true)}}
-      </fieldset>
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Sleep between requests
-            {{template "field_info" (dict "Info" "Seconds yt-dlp waits between HTTP requests (metadata, media fragments, and subtitles) to avoid rate limits. Same value for --sleep-requests, --sleep-subtitles, and --sleep-interval. Does not apply to stream play.")}}
-          </span>
-        </legend>
+        <legend class="fieldset-legend">Sleep between requests</legend>
         <div class="join w-full">
           <input type="number" min="0" step="any" name="sleep_requests" class="input join-item grow min-w-0" value="{{.DefaultLimits.SleepRequests}}" required />
           <span class="btn join-item no-animation pointer-events-none">seconds</span>
         </div>
-        <p class="label whitespace-normal">0 = off.</p>
+        <p class="label whitespace-normal">Seconds yt-dlp waits between HTTP requests (metadata, media fragments, and subtitles) to avoid rate limits. Same value for --sleep-requests, --sleep-subtitles, and --sleep-interval. Does not apply to stream play.</p>
       </fieldset>
-      <div class="md:col-span-2 space-y-3">
-        <p class="label whitespace-normal">FlareSolverr and cookies can be set on 'Domain defaults', but prefer a 'Domain override' per hostname for FlareSolverr. Keep cookies per host too so expired sessions are easier to replace individually.</p>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Max download queue</legend>
+        <input type="number" min="1" name="max_download_queue" class="input w-full" value="{{.DefaultLimits.MaxDownloadQueue}}" required />
+        <p class="label whitespace-normal">Maximum number of download tasks to be queued for the given domain. 'Download now' user action bypasses this limit.</p>
+      </fieldset>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Max parallel tasks</legend>
+        <input type="number" min="1" name="max_parallel_tasks" class="input w-full" value="{{.DefaultLimits.MaxParallelTasks}}" required />
+        <p class="label whitespace-normal">How many tasks may run at once on this domain. Cannot exceed 'Max download queue'.</p>
+      </fieldset>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Download rate limit</legend>
+        {{template "download_rate_limit_join" (dict "Value" .DefaultLimits.DownloadRateLimit "Required" true)}}
+        <p class="label whitespace-normal">Maximum download rate (yt-dlp --limit-rate).</p>
+      </fieldset>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Stream play rate limit</legend>
+        {{template "download_rate_limit_join" (dict "Name" "stream_play_rate_limit" "Value" .DefaultLimits.StreamPlayRateLimit "Required" true "HideG" true)}}
+        <p class="label whitespace-normal">Separate streaming rate limit. Makes sure streams do not buffer because of the general 'Download rate limit'.</p>
+      </fieldset>
+      <fieldset class="fieldset gap-3 md:col-span-2 bg-base-200 border border-base-300 rounded-box p-4">
+        <legend class="fieldset-legend">Access</legend>
+        <div role="alert" class="alert alert-info text-sm">
+          <span>FlareSolverr and cookies can be set on 'Domain defaults', but prefer a 'Domain override' per hostname for FlareSolverr. For cookies the per domain settings can be used to clearly separate sessions and replace them individually when expired.</span>
+        </div>
         {{template "checkbox_field" (dict
           "Name" "use_flaresolverr"
           "Label" "Use FlareSolverr"
           "Checked" (and .DefaultLimits.UseFlareSolverr .FlareConfigured)
           "Disabled" (not .FlareConfigured)
           "DisabledTitle" "Set CREATORR_FLARESOLVERR_URL first."
-          "Info" "Pre-solve CloudFlare challenges via CREATORR_FLARESOLVERR_URL for hosts that inherit this default."
         )}}
         {{template "cookie_jar_field" (dict
           "Value" .DefaultCookies
-          "EmptyHelp" "Optional fallback jar for every hostname with no jar of its own. Empty = clear default cookies."
           "ShowGuide" true
         )}}
-      </div>
+      </fieldset>
     </div>
     <div class="card-actions"><button type="submit" class="btn btn-primary">Save</button></div>
   </form>

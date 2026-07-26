@@ -74,7 +74,7 @@ Flat listing only (newest-first). No full metadata extract during scan. YouTube 
 | `max_download_queue` | `8` | Max pending+running download + cache_beginning tasks **for this hostname**. Auto-enqueue stops when full; **Download now** bypasses. Upper bound for max parallel tasks. |
 | `max_parallel_tasks` | `1` | Max concurrent **running** non-interactive tasks on this hostname (scan, download, …). Set ≥ 2 so a tip scan can start while a download runs. Must be ≤ max download queue. |
 | `download_rate_limit` | `10M` | Passed to yt-dlp as `--limit-rate` for archive download, scan/list/prefetch, and **`cache_beginning`**. UI: number + unit join (`K`/`M`/`G`, or Unlimited → `off`). `off` / `0` / `none` = unlimited. Not used for `stream_play`. |
-| `stream_play_rate_limit` | `off` | Passed to yt-dlp as `--limit-rate` for **`stream_play` mux/pipe only** (not resolve). Default Unlimited. Never applies sleep. Same UI join as download rate. |
+| `stream_play_rate_limit` | `off` | Passed to yt-dlp as `--limit-rate` for **`stream_play` mux/pipe only** (not resolve). Default Unlimited. Never applies sleep. Same UI join as download rate. Must be ≥ effective `download_rate_limit` (Unlimited highest); validated on Domain defaults / override save |
 | `sleep_requests` | `1` | Seconds for yt-dlp pacing: `--sleep-requests`, `--sleep-subtitles`, and `--sleep-interval` (same value). `0` = off. Applies to archive/scan/beginning; **not** to `stream_play`. |
 
 Global defaults live on `domains` row **`default`** (non-NULL limit columns). Per-host overrides are other `domains` rows (NULL = inherit `default`). Missing host row = implicitly active + `default` limits. Operator creates/deletes overrides on Settings → Queue. Reserved name `default` is not a host override.

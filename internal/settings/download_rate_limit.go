@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -84,4 +85,53 @@ func CombineDownloadRateLimitOverride(value, unit, defaultRate string) (string, 
 		return "", nil
 	}
 	return CombineDownloadRateLimit(value, unit)
+}
+
+// downloadRateBytesPerSec converts a stored rate (e.g. 10M, off) to bytes/s.
+// Unlimited (off) is +Inf. Empty or unrecognized → error.
+func downloadRateBytesPerSec(raw string) (float64, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return 0, fmt.Errorf("rate required")
+	}
+	if RateLimitOff(s) {
+		return math.Inf(1), nil
+	}
+	v, u := SplitDownloadRateLimit(s)
+	if v == "" || u == "" || u == RateUnitOff {
+		return 0, fmt.Errorf("invalid rate %q", raw)
+	}
+	n, err := strconv.ParseFloat(v, 64)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("invalid rate %q", raw)
+	}
+	var mul float64
+	switch u {
+	case RateUnitK:
+		mul = 1024
+	case RateUnitM:
+		mul = 1024 * 1024
+	case RateUnitG:
+		mul = 1024 * 1024 * 1024
+	default:
+		return 0, fmt.Errorf("invalid rate %q", raw)
+	}
+	return n * mul, nil
+}
+
+// ValidateStreamPlayRateAgainstDownload requires stream play rate ≥ download rate
+// (Unlimited is highest). Both must be non-empty stored rates.
+func ValidateStreamPlayRateAgainstDownload(download, streamPlay string) error {
+	d, err := downloadRateBytesPerSec(download)
+	if err != nil {
+		return fmt.Errorf("download_rate_limit: %w", err)
+	}
+	s, err := downloadRateBytesPerSec(streamPlay)
+	if err != nil {
+		return fmt.Errorf("stream_play_rate_limit: %w", err)
+	}
+	if s < d {
+		return fmt.Errorf("stream play rate limit cannot be lower than download rate limit")
+	}
+	return nil
 }

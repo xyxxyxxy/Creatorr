@@ -306,6 +306,9 @@ func SetDomainDefault(database *db.DB, delay, maxQueue, maxParallel int, rate, s
 	if streamPlayRate == "" {
 		return fmt.Errorf("stream_play_rate_limit required")
 	}
+	if err := ValidateStreamPlayRateAgainstDownload(rate, streamPlayRate); err != nil {
+		return err
+	}
 	sleepStr = strings.TrimSpace(sleepStr)
 	if sleepStr == "" {
 		return fmt.Errorf("sleep_requests required")

@@ -34,14 +34,17 @@ func TestScopedLimitUpdatesLeaveOtherColumns(t *testing.T) {
 		t.Fatalf("stream play should stay default off: %+v", lim)
 	}
 
-	if err := domains.UpdateHostOverrides(d, "example.com", "60", "", "", "5M", "750K", "2", "on"); err != nil {
+	if err := domains.UpdateHostOverrides(d, "example.com", "60", "", "", "5M", "750K", "2", "on"); err == nil {
+		t.Fatal("expected stream play below download rejected")
+	}
+	if err := domains.UpdateHostOverrides(d, "example.com", "60", "", "", "5M", "10M", "2", "on"); err != nil {
 		t.Fatal(err)
 	}
 	lim, err = settings.LimitsForDomain(d, "example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lim.StreamPlayRateLimit != "750K" || lim.DownloadRateLimit != "5M" || lim.SleepRequests != 2 || lim.TaskCooldownSeconds != 60 {
+	if lim.StreamPlayRateLimit != "10M" || lim.DownloadRateLimit != "5M" || lim.SleepRequests != 2 || lim.TaskCooldownSeconds != 60 {
 		t.Fatalf("stream play with other overrides: %+v", lim)
 	}
 

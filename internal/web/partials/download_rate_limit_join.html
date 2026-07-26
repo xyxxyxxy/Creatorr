@@ -6,7 +6,8 @@
             Required (domain defaults), Override (empty = inherit Domain defaults),
             DefaultRate (Domain defaults rate; override inherit shows default: N or default: Unlimited),
             Placeholder (number placeholder; override default = "default: …" from DefaultRate),
-            ShowClear (join override_clear_btn after unit).
+            ShowClear (join override_clear_btn after unit),
+            HideG (omit G/s unless the current value is already G).
 */}}
 {{$name := .Name}}{{if not $name}}{{$name = "download_rate_limit"}}{{end}}
 {{$stored := rateLimitParts .Value}}
@@ -38,7 +39,9 @@
           {{if .Required}}required{{end}}>
     <option value="K" {{if eq $unit "K"}}selected{{end}}>K/s</option>
     <option value="M" {{if eq $unit "M"}}selected{{end}}>M/s</option>
+    {{if or (not .HideG) (eq $unit "G")}}
     <option value="G" {{if eq $unit "G"}}selected{{end}}>G/s</option>
+    {{end}}
     <option value="off" {{if eq $unit "off"}}selected{{end}}>Unlimited</option>
   </select>
   {{if .ShowClear}}{{template "override_clear_btn"}}{{end}}

@@ -310,11 +310,18 @@ func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelSt
 	if err := settings.ValidateConcurrencyLimits(effQueue, effParallel); err != nil {
 		return err
 	}
+	effDownload := def.DownloadRateLimit
+	effStream := def.StreamPlayRateLimit
 	if s := strings.TrimSpace(rateStr); s != "" {
 		rate = s
+		effDownload = s
 	}
 	if s := strings.TrimSpace(streamPlayRateStr); s != "" {
 		streamRate = s
+		effStream = s
+	}
+	if err := settings.ValidateStreamPlayRateAgainstDownload(effDownload, effStream); err != nil {
+		return err
 	}
 	if s := strings.TrimSpace(sleepStr); s != "" {
 		f, err := strconv.ParseFloat(s, 64)

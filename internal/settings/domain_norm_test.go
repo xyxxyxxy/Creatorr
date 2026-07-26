@@ -101,11 +101,14 @@ func TestSetDomainDefaultRejectsEmpty(t *testing.T) {
 	if err := settings.SetDomainDefault(d, 10, 8, 1, "5M", "off", "", false); err == nil {
 		t.Fatal("expected empty sleep rejected")
 	}
-	if err := settings.SetDomainDefault(d, 45, 8, 1, "2M", "500K", "4", false); err != nil {
+	if err := settings.SetDomainDefault(d, 45, 8, 1, "2M", "500K", "4", false); err == nil {
+		t.Fatal("expected stream play below download rejected")
+	}
+	if err := settings.SetDomainDefault(d, 45, 8, 1, "2M", "2M", "4", false); err != nil {
 		t.Fatal(err)
 	}
 	lim, _ := settings.DefaultLimits(d)
-	if lim.TaskCooldownSeconds != 45 || lim.DownloadRateLimit != "2M" || lim.StreamPlayRateLimit != "500K" || lim.SleepRequests != 4 {
+	if lim.TaskCooldownSeconds != 45 || lim.DownloadRateLimit != "2M" || lim.StreamPlayRateLimit != "2M" || lim.SleepRequests != 4 {
 		t.Fatalf("after set %+v", lim)
 	}
 }
@@ -117,12 +120,12 @@ func TestLimitsForDomainInheritsDefault(t *testing.T) {
 	}
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 12, 8, 1, "3M", "1M", "2", false)
+	_ = settings.SetDomainDefault(d, 12, 8, 1, "3M", "off", "2", false)
 	lim, err := settings.LimitsForDomain(d, "example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lim.TaskCooldownSeconds != 12 || lim.DownloadRateLimit != "3M" || lim.StreamPlayRateLimit != "1M" || lim.SleepRequests != 2 {
+	if lim.TaskCooldownSeconds != 12 || lim.DownloadRateLimit != "3M" || lim.StreamPlayRateLimit != "off" || lim.SleepRequests != 2 {
 		t.Fatalf("no host row should use default %+v", lim)
 	}
 }

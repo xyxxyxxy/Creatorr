@@ -2404,6 +2404,74 @@
     if (submit && submit.disabled) ev.preventDefault();
   });
 
+  // Match settings.ValidateOverrideDomain / NormalizeDomain (client-side for Add override modal).
+  function normalizeOverrideDomainClient(raw) {
+    let s = String(raw || "").trim().toLowerCase();
+    if (s.startsWith("www.")) s = s.slice(4);
+    return s;
+  }
+
+  function overrideDomainValidationMessage(raw) {
+    const domain = normalizeOverrideDomainClient(raw);
+    if (!domain) return "Domain is required.";
+    if (domain === "default" || domain === "unknown" || domain === "system") {
+      return "Reserved domain name.";
+    }
+    if (/[:/\\@,#?&!\"'$;%^*()\[\]{}|=+ ]/.test(domain) || domain.includes(",")) {
+      return "Enter a valid hostname (e.g. example.com).";
+    }
+    if (!domain.includes(".")) {
+      return "Enter a valid hostname (e.g. example.com).";
+    }
+    if (domain.length > 253) {
+      return "Enter a valid hostname (e.g. example.com).";
+    }
+    const labels = domain.split(".");
+    for (const lab of labels) {
+      if (!lab || lab.length > 63) {
+        return "Enter a valid hostname (e.g. example.com).";
+      }
+      if (lab[0] === "-" || lab[lab.length - 1] === "-") {
+        return "Enter a valid hostname (e.g. example.com).";
+      }
+      if (!/^[a-z0-9-]+$/.test(lab)) {
+        return "Enter a valid hostname (e.g. example.com).";
+      }
+    }
+    return "";
+  }
+
+  function syncDomainOverrideForm(form) {
+    if (!form || !form.classList.contains("js-domain-override-form")) return;
+    const input = form.querySelector(".js-domain-override-domain");
+    if (!input) return;
+    const msg = overrideDomainValidationMessage(input.value);
+    if (msg) setControlValidity(input, msg);
+    else clearControlValidity(input);
+    return msg;
+  }
+
+  document.body.addEventListener("input", (ev) => {
+    const input = ev.target.closest(".js-domain-override-domain");
+    if (!input) return;
+    syncDomainOverrideForm(input.closest("form"));
+  });
+  document.body.addEventListener("submit", (ev) => {
+    const form = ev.target.closest(".js-domain-override-form");
+    if (!form) return;
+    const msg = syncDomainOverrideForm(form);
+    if (msg) {
+      ev.preventDefault();
+      const input = form.querySelector(".js-domain-override-domain");
+      try {
+        if (input) {
+          input.focus();
+          if (typeof input.select === "function") input.select();
+        }
+      } catch (_) {}
+    }
+  });
+
   document.body.addEventListener("change", (ev) => {
     const input = ev.target.closest("input[data-art-file]");
     if (!input || input.type !== "file") return;
