@@ -42,6 +42,17 @@ func TestMediaTypeMatchFilter(t *testing.T) {
 	}
 }
 
+func TestBuildDownloadMatchFilter(t *testing.T) {
+	if got := BuildDownloadMatchFilter(nil); got != LiveBroadcastMatchFilter {
+		t.Fatalf("empty exclude: got %q want %q", got, LiveBroadcastMatchFilter)
+	}
+	got := BuildDownloadMatchFilter([]string{"short"})
+	want := "media_type!=short & " + LiveBroadcastMatchFilter
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
 func TestMergeMediaTypeSuggestions(t *testing.T) {
 	got := MergeMediaTypeSuggestions([]string{"episode", "short", "unknown"})
 	seen := map[string]bool{}

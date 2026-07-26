@@ -33,61 +33,63 @@ const videoSelectCols = `id, series_id, source_id, remote_id, title, upload_date
 
 // Video is an indexed instance within a series.
 type Video struct {
-	ID                       int64
-	SeriesID                 int64
-	SourceID                 sql.NullInt64
-	RemoteID                 string
-	Title                    string
-	UploadDate               sql.NullString
-	SourceURL                sql.NullString
-	Status                   string
-	Season                   sql.NullInt64
-	Episode                  sql.NullInt64
-	Description              string // plot in episode NFO / metadata UI
-	ThumbnailURL             sql.NullString
-	MediaType                string // yt-dlp media_type; empty = missing
-	DurationSeconds          sql.NullInt64
-	Width                    sql.NullInt64
-	Height                   sql.NullInt64
-	FPS                      sql.NullFloat64
-	StreamURLsKind                 sql.NullString
-	StreamBeginningCached          bool
-	StreamPlaybackCachedSeconds    float64
-	StreamPlaybackCacheComplete    bool
-	StreamPlaybackCacheWrittenAt   sql.NullString
-	StreamPlaybackCacheLastAccess  sql.NullString
-	DownloadFormatSelector         sql.NullString
-	DownloadRemuxContainer   sql.NullString
-	Tool                     sql.NullString
-	ImportSrc                sql.NullString
-	AcquiredAt               sql.NullString
-	SidecarsAcquiredAt       sql.NullString
-	SortTitle                string
-	OriginalTitle            string
-	Studio                   string
-	Genres                   []string
-	Tags                     []string
-	UniqueIDType             string
-	UniqueIDValue            string
-	Actors                   []SeriesActor
-	Tagline                  string
-	Country                  string
-	MPAA                     string
+	ID                            int64
+	SeriesID                      int64
+	SourceID                      sql.NullInt64
+	RemoteID                      string
+	Title                         string
+	UploadDate                    sql.NullString
+	SourceURL                     sql.NullString
+	Status                        string
+	Season                        sql.NullInt64
+	Episode                       sql.NullInt64
+	Description                   string // plot in episode NFO / metadata UI
+	ThumbnailURL                  sql.NullString
+	MediaType                     string // yt-dlp media_type; empty = missing
+	DurationSeconds               sql.NullInt64
+	Width                         sql.NullInt64
+	Height                        sql.NullInt64
+	FPS                           sql.NullFloat64
+	StreamURLsKind                sql.NullString
+	StreamBeginningCached         bool
+	StreamPlaybackCachedSeconds   float64
+	StreamPlaybackCacheComplete   bool
+	StreamPlaybackCacheWrittenAt  sql.NullString
+	StreamPlaybackCacheLastAccess sql.NullString
+	DownloadFormatSelector        sql.NullString
+	DownloadRemuxContainer        sql.NullString
+	Tool                          sql.NullString
+	ImportSrc                     sql.NullString
+	AcquiredAt                    sql.NullString
+	SidecarsAcquiredAt            sql.NullString
+	SortTitle                     string
+	OriginalTitle                 string
+	Studio                        string
+	Genres                        []string
+	Tags                          []string
+	UniqueIDType                  string
+	UniqueIDValue                 string
+	Actors                        []SeriesActor
+	Tagline                       string
+	Country                       string
+	MPAA                          string
 }
 
-// VideoListFilter scopes series video lists by title, status, source, media type, and upload calendar day (UTC).
+// VideoListFilter scopes series video lists by title, status, source, media type,
+// upload calendar year, and upload calendar day (UTC).
 type VideoListFilter struct {
 	Title     string   // case-insensitive substring; empty = any title
 	Statuses  []string // empty = all statuses
 	SourceID  int64    // 0 = all sources
 	MediaType string   // non-empty exact match; empty query = all
+	Year      int      // UTC calendar year of upload_date; 0 = any year
 	FromDay   string   // YYYY-MM-DD inclusive; empty = no lower bound
 	ToDay     string   // YYYY-MM-DD inclusive; empty = no upper bound
 }
 
 // Active reports whether any filter constraint is set.
 func (f VideoListFilter) Active() bool {
-	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID > 0 || strings.TrimSpace(f.MediaType) != "" || f.FromDay != "" || f.ToDay != ""
+	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID > 0 || strings.TrimSpace(f.MediaType) != "" || f.Year > 0 || f.FromDay != "" || f.ToDay != ""
 }
 
 func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter) {
@@ -108,6 +110,12 @@ func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter
 	if mt := strings.TrimSpace(f.MediaType); mt != "" {
 		b.WriteString(` AND media_type = ? AND media_type != ''`)
 		*args = append(*args, mt)
+	}
+	if f.Year > 0 {
+		// UTC calendar year of upload_date (same as year-season / {year}).
+		b.WriteString(` AND upload_date IS NOT NULL AND trim(upload_date) != ''`)
+		b.WriteString(` AND CAST(strftime('%Y', upload_date) AS INTEGER) = ?`)
+		*args = append(*args, f.Year)
 	}
 	if f.FromDay == "" && f.ToDay == "" {
 		return
@@ -166,7 +174,7 @@ func (s *Store) ListVideosPageFiltered(seriesID int64, filter VideoListFilter, l
 	}
 	var b strings.Builder
 	b.WriteString(`
-		SELECT `+videoSelectCols+`
+		SELECT ` + videoSelectCols + `
 		FROM videos WHERE series_id = ?`)
 	args := []any{seriesID}
 	appendVideoListFilterSQL(&b, &args, filter)
@@ -342,6 +350,32 @@ func (s *Store) DistinctVideoStatuses(seriesID int64) ([]string, error) {
 	return out, rows.Err()
 }
 
+// DistinctVideoYears returns UTC calendar years present on a series upload_date (newest first).
+func (s *Store) DistinctVideoYears(seriesID int64) ([]int, error) {
+	rows, err := s.DB.SQL.Query(`
+		SELECT DISTINCT CAST(strftime('%Y', upload_date) AS INTEGER) AS y
+		FROM videos
+		WHERE series_id = ?
+		  AND upload_date IS NOT NULL AND trim(upload_date) != ''
+		ORDER BY y DESC
+	`, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int
+	for rows.Next() {
+		var y int
+		if err := rows.Scan(&y); err != nil {
+			return nil, err
+		}
+		if y > 0 {
+			out = append(out, y)
+		}
+	}
+	return out, rows.Err()
+}
+
 // CountVideosBySource returns video counts keyed by source_id for a series.
 func (s *Store) CountVideosBySource(seriesID int64) (map[int64]int, error) {
 	rows, err := s.DB.SQL.Query(`
@@ -508,6 +542,17 @@ func (s *Store) IgnoreVideo(videoID int64) ([]queue.Task, error) {
 		return cancelled, err
 	}
 	return cancelled, nil
+}
+
+// RecordLiveBroadcastSkipped appends video_history when download/pack_stream soft-skips
+// a currently live broadcast. Status is unchanged (stays wanted for later retry).
+func (s *Store) RecordLiveBroadcastSkipped(videoID, taskID int64) error {
+	if s == nil || videoID <= 0 || taskID <= 0 {
+		return nil
+	}
+	return s.AddVideoHistory(videoID, "live_skipped", "Skipped (currently live)", map[string]any{
+		"reason": "is_live",
+	}, taskID)
 }
 
 // MarkIgnoredMediaType sets status ignored after a media_type exclude match (download or pack_stream).

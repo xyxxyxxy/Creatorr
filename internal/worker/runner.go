@@ -173,6 +173,32 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 
 	if runErr != nil {
 		code, msg := classify(runErr)
+		if code == apperrors.CodeLiveBroadcastSkipped &&
+			(task.Kind == queue.KindDownload || task.Kind == queue.KindPackStream) &&
+			task.VideoID.Valid && r.Library != nil {
+			doneMsg := "Skipped (currently live)"
+			_ = r.Queue.Finish(task.ID, queue.StatusDone, doneMsg, code, runErr.Error())
+			_ = r.Queue.SetDetail(task.ID, runErr.Error())
+			if err := r.Library.RecordLiveBroadcastSkipped(task.VideoID.Int64, task.ID); err != nil {
+				log.Warn("record live_skipped", "video", task.VideoID.Int64, "err", err)
+			}
+			seriesTitle, videoTitle := "", ""
+			if v, err := r.Library.GetVideo(task.VideoID.Int64); err == nil && v != nil {
+				videoTitle = v.Title
+				if ser, err := r.Library.GetSeries(v.SeriesID, false); err == nil && ser != nil {
+					seriesTitle = ser.Title
+				}
+			}
+			if err := notify.LiveSkipped(ctx, r.Queue.DB, task.ID, seriesTitle, videoTitle); err != nil {
+				log.Warn("live_skipped notify", "task", task.ID, "err", err)
+			}
+			r.Events.TaskDone(task.ID, task.Kind, task.Domain, doneMsg, sid, vid)
+			if mediaKind(task.Kind) {
+				r.maybeScheduleDigest(ctx, log)
+			}
+			log.Info("task done (live broadcast skipped)", "id", task.ID, "kind", task.Kind)
+			return
+		}
 		if code == apperrors.CodeMediaTypeExcluded && task.Kind == queue.KindDownload && task.VideoID.Valid && r.Library != nil {
 			doneMsg := "Ignored (excluded media type)"
 			_ = r.Queue.Finish(task.ID, queue.StatusDone, doneMsg, code, runErr.Error())
@@ -243,7 +269,7 @@ func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task 
 	switch code {
 	case apperrors.CodeCookieInvalid, apperrors.CodeRateLimited,
 		apperrors.CodeRemuxFailed, apperrors.CodePackFailed, apperrors.CodeMediaVerifyFailed,
-		apperrors.CodeMediaTypeExcluded:
+		apperrors.CodeMediaTypeExcluded, apperrors.CodeLiveBroadcastSkipped:
 		// keep classified code (do not re-detect remux/pack/verify into pause)
 	default:
 		if d := apperrors.DetectPauseCode(runErr.Error()); d != "" {

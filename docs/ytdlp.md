@@ -61,7 +61,7 @@ Creatorr passes `--extractor-args youtubepot-bgutilhttp:base_url=…` when the e
 - Netscape cookie jars (Settings → Queue; host jar, else `default`).
 - Pace flags from domain limits: `--limit-rate` from `download_rate_limit` (archive/scan/`cache_beginning`) or `stream_play_rate_limit` (stream_play mux/pipe only); when `sleep_requests` > 0 also `--sleep-requests`, `--sleep-subtitles`, and `--sleep-interval` (same seconds; no `--max-sleep-interval`). **`stream_play` never gets sleep** (client waits on bytes). Resolve (`urls`) for play has no pace flags.
 - Subtitle sidecars from Library settings (`subtitle_langs` / `subtitle_auto`): `--write-subs` + `--convert-subs srt` (never `--embed-subs`). Used on archive download, stream `pack_stream`, and Replace sidecars. Empty langs = off. Auto-only tracks are renamed to `.lang.auto.srt` after download.
-- Series `auto_ignore_media_types` → download `--match-filters` (`media_type!=…`); reject → `MediaTypeExcluded` (ignored, not download error). Stream `pack_stream` uses the same list against `media_type` from the `urls` extract (ignore before `.strm` / `cache_beginning`).
+- Archive downloads **always** pass `--match-filters` `is_live!=?1` (soft-skip while broadcasting; missing `is_live` passes). Series `auto_ignore_media_types` → additional `media_type!=…` clauses AND'd into the same filter; media-type reject → `MediaTypeExcluded` (ignored, not download error). Live reject → `LiveBroadcastSkipped` (stay `wanted`). Stream `pack_stream` reads `is_live` and `media_type` from the `urls` extract (live soft-skip first, then media-type ignore before `.strm` / `cache_beginning`).
 - Remux (ffmpeg → MKV) and pack after download.
 - Stream proxy: resolve URLs (`progressive` / `pipe` / `hls`), HLS mux, beginning-cache.
 

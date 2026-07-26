@@ -24,7 +24,7 @@ Changing delivery mode does not move existing files. Operator toggles only.
 
 **Task kind:** `pack_stream` (UI: Prepare stream / refresh).
 
-Worker calls yt-dlp **`urls`** (not full download) to validate the site can resolve a play path. When that extract reports a `media_type` listed in the series **auto ignore filters**, pack finishes **`done`**, video → **`ignored`** (reason `media_type`), and **no** `.strm` / NFO write and **no** `cache_beginning` enqueue. Empty/missing type never auto-ignores (same as download). Otherwise writes library files:
+Worker calls yt-dlp **`urls`** (not full download) to validate the site can resolve a play path. Stream mode is VOD-focused (storage alternative to archive download), not live broadcast delivery. When the extract reports **`is_live`**, pack finishes **`done`**, video stays **`wanted`** (history `live_skipped`; code `LiveBroadcastSkipped`; info notify `live_skipped` with task link), and **no** `.strm` / NFO / `cache_beginning` - retry on a later wanted pass after the broadcast ends. When that extract reports a `media_type` listed in the series **auto ignore filters**, pack finishes **`done`**, video → **`ignored`** (reason `media_type`), and **no** `.strm` / NFO write and **no** `cache_beginning` enqueue. Empty/missing type never auto-ignores (same as download). Live check runs before media-type auto-ignore. Otherwise writes library files:
 
 1. **`.strm`** - one line: Creatorr proxy URL (see below). Still **one** `.strm` entry regardless of progressive / pipe / HLS.
 2. **`.nfo`** - full episode NFO (same shape as download pack), including **runtime / durationinseconds** when resolve/urls reports duration (Emby uses this for `.strm` length).

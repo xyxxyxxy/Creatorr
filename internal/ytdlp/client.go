@@ -116,6 +116,7 @@ type UrlsResult struct {
 	AudioHeaders    map[string]string
 	DurationSeconds float64
 	MediaType       string // yt-dlp media_type from the same -J extract; empty when missing
+	IsLive          bool   // true only when yt-dlp is_live is explicitly true
 }
 
 func (c *Client) fill(o *options) {
@@ -484,6 +485,7 @@ func urlsResultFromMap(m map[string]any) UrlsResult {
 		AudioURL:        strMap(m, "audio_url"),
 		DurationSeconds: durationSeconds(m),
 		MediaType:       strings.TrimSpace(strMap(m, "media_type")),
+		IsLive:          boolField(m, "is_live"),
 	}
 	out.Headers = stringMapField(m, "headers")
 	out.VideoHeaders = stringMapField(m, "video_headers")

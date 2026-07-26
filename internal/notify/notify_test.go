@@ -36,6 +36,40 @@ func TestAliasLegacyEvents(t *testing.T) {
 	}
 }
 
+func TestEventsSortedByLevel(t *testing.T) {
+	got := notify.EventsSortedByLevel()
+	if len(got) != len(notify.AllEvents) {
+		t.Fatalf("len=%d want %d", len(got), len(notify.AllEvents))
+	}
+	seen := map[string]bool{}
+	prevRank := -1
+	for _, id := range got {
+		if seen[id] {
+			t.Fatalf("duplicate %q", id)
+		}
+		seen[id] = true
+		rank := map[string]int{
+			notify.LevelAlert: 0, notify.LevelWarning: 1, notify.LevelInfo: 2,
+		}[notify.EventLevel(id)]
+		if rank < prevRank {
+			t.Fatalf("out of level order at %q", id)
+		}
+		prevRank = rank
+	}
+	for _, id := range notify.AllEvents {
+		if !seen[id] {
+			t.Fatalf("missing %q", id)
+		}
+	}
+	// First block alerts; last is info (live_skipped / download_digest).
+	if notify.EventLevel(got[0]) != notify.LevelAlert {
+		t.Fatalf("first=%q want alert", got[0])
+	}
+	if notify.EventLevel(got[len(got)-1]) != notify.LevelInfo {
+		t.Fatalf("last=%q want info", got[len(got)-1])
+	}
+}
+
 func seedTask(t *testing.T, d *db.DB) int64 {
 	t.Helper()
 	id, err := queue.NewStore(d).Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com"})
@@ -437,5 +471,49 @@ func TestPOTProviderWarningUnread(t *testing.T) {
 	}
 	if n, _ := notify.CountUnread(d); n != 0 {
 		t.Fatalf("unread after mark-all=%d", n)
+	}
+}
+
+func TestLiveSkippedInfoWithTaskID(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "live-skip.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	taskID := seedTask(t, d)
+	var gotType apprise.NotifyType
+	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
+		gotType = nt
+		return nil
+	})
+	defer notify.SetSendFnForTest(old)
+	if _, err := notify.Upsert(d, 0, "ap", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventLiveSkipped}); err != nil {
+		t.Fatal(err)
+	}
+
+	if notify.EventLevel(notify.EventLiveSkipped) != notify.LevelInfo {
+		t.Fatal("live_skipped should be info")
+	}
+	if notify.IsUnreadEvent(notify.EventLiveSkipped) {
+		t.Fatal("live_skipped must not be unread")
+	}
+	if err := notify.LiveSkipped(context.Background(), d, taskID, "Series", "On air"); err != nil {
+		t.Fatal(err)
+	}
+	if gotType != apprise.NotifyInfo {
+		t.Fatalf("apprise type=%v want info", gotType)
+	}
+	items, err := notify.ListNotifications(d, notify.ListFilter{Event: notify.EventLiveSkipped}, 10, 0)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%v err=%v", items, err)
+	}
+	if items[0].Unread() {
+		t.Fatal("info should be stored read")
+	}
+	if !items[0].TaskID.Valid || items[0].TaskID.Int64 != taskID {
+		t.Fatalf("task_id=%v want %d", items[0].TaskID, taskID)
+	}
+	if !strings.Contains(items[0].Body, "Series / On air") {
+		t.Fatalf("body=%q", items[0].Body)
 	}
 }

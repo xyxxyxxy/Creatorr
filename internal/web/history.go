@@ -197,7 +197,6 @@ func parseNotifyListFilter(r *http.Request) notify.ListFilter {
 		level = ""
 	}
 	return notify.ListFilter{
-		Event: strings.TrimSpace(r.URL.Query().Get("nevent")),
 		Level: level,
 		From:  fromBound,
 		To:    toBound,
@@ -264,7 +263,7 @@ func historyFilterActive(f queue.HistoryFilter) bool {
 }
 
 func notifyFilterActive(f notify.ListFilter) bool {
-	return f.Event != "" || f.Level != "" || f.From != "" || f.To != ""
+	return f.Level != "" || f.From != "" || f.To != ""
 }
 
 func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
@@ -346,15 +345,8 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 		{Value: notify.LevelWarning, Label: "Warning", Selected: nFilter.Level == notify.LevelWarning},
 		{Value: notify.LevelAlert, Label: "Alert", Selected: nFilter.Level == notify.LevelAlert},
 	}
-	eventOpts := make([]listFilterOpt, 0, len(notify.AllEvents))
-	for _, id := range notify.AllEvents {
-		eventOpts = append(eventOpts, listFilterOpt{
-			Value: id, Label: notify.EventLabels[id], Selected: nFilter.Event == id,
-		})
-	}
 	notifySelects := []listFilterSelect{
 		{Name: "nlevel", AriaLabel: "Type", EmptyLabel: "All types", Options: levelOpts},
-		{Name: "nevent", AriaLabel: "Event", EmptyLabel: "All events", Options: eventOpts},
 	}
 
 	rangeHidden := []hiddenFilter{}
@@ -383,9 +375,6 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 	if nFilter.Level != "" {
 		taskHidden = append(taskHidden, hiddenFilter{Name: "nlevel", Value: nFilter.Level})
 	}
-	if nFilter.Event != "" {
-		taskHidden = append(taskHidden, hiddenFilter{Name: "nevent", Value: nFilter.Event})
-	}
 	if nPageInfo.Page > 1 {
 		taskHidden = append(taskHidden, hiddenFilter{Name: "npage", Value: strconv.Itoa(nPageInfo.Page)})
 	}
@@ -402,9 +391,6 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if nFilter.Level != "" {
 		rangeHiddenForTop = append(rangeHiddenForTop, hiddenFilter{Name: "nlevel", Value: nFilter.Level})
-	}
-	if nFilter.Event != "" {
-		rangeHiddenForTop = append(rangeHiddenForTop, hiddenFilter{Name: "nevent", Value: nFilter.Event})
 	}
 
 	render(w, "history", struct {

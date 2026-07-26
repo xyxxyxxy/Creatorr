@@ -6,6 +6,8 @@ Most knobs are Settings keys (UI / SQLite). Process bootstrap env is only `CREAT
 
 **External service URLs (env only, not Settings):** `CREATORR_FLARESOLVERR_URL` and `CREATORR_POT_PROVIDER_URL`. Settings → General shows both as disabled URL inputs with a colored status icon beside each with a one-shot health probe on page load. Empty Flare URL skips the health probe and FlareSolverr pre-solve, and clears Use FlareSolverr flags on boot (defaults off; host On → inherit). Compose defaults `http://creatorr-flaresolverr:8191` / `http://creatorr-po-token:4416`. Flare sidecar uses headless Chrome (notable RAM).
 
+**Appearance (browser only):** Settings → General theme picker (Dark / Light / Special curated daisyUI themes). Stored in `localStorage` `creatorr-theme`; not a SQLite setting. OS default is `emerald` (light) / `dark` (dark) until the operator picks one.
+
 Editable settings (examples):
 
 | Key | Role |
@@ -46,8 +48,11 @@ Sidecars are always converted to SRT via yt-dlp `--convert-subs srt` (no format 
 | `file_sync_issues` | alert | End-of-pass digest from `sync_files`: newly missing media/sidecars and/or size mismatches (media → status `verify_failed`; sidecars keep video status; no auto re-download) |
 | `pot_provider` | warning | PO token plugin/sidecar problem while yt-dlp continued (task not failed for this alone) |
 | `download_digest` | info | Global digest after all media tasks drain and no eligible wanted remain (archive + stream, beginning cached or not) |
+| `live_skipped` | info | Archive download or `pack_stream` soft-skipped because yt-dlp `is_live`; video stays `wanted`; notification `task_id` links to the finished task (video history `live_skipped`) |
 
-**Alerts** and **warnings** (`AlertEvents` / `WarningEvents` in code; both unread-eligible) stay unread in-app until the detail page is opened, marked read (API / mark-all), or any Apprise send succeeds (`external_ok`); they require a `task_id`. **Info** digests are stored already-read with no `task_id`. Alert/warning rows always link the task. UI: History → Notifications (bell = info, amber triangle = warning, red megaphone = alert); detail `/notification/{id}` (opening marks unread events read); top-nav bell dropdown **Unread alerts** + badge for unread alert/warning count. Test button sends to that channel’s URL without requiring an event subscription (not logged in-app).
+Settings channel event checkboxes list events **alert → warning → info**, then by label within a level.
+
+**Alerts** and **warnings** (`AlertEvents` / `WarningEvents` in code; both unread-eligible) stay unread in-app until the detail page is opened, marked read (API / mark-all), or any Apprise send succeeds (`external_ok`); they require a `task_id`. **Info** events are stored already-read; `download_digest` has no `task_id`, while `live_skipped` sets `task_id` so detail links the task. Alert/warning rows always link the task. UI: History → Notifications (bell = info, amber triangle = warning, red megaphone = alert); detail `/notification/{id}` (opening marks unread events read); top-nav bell dropdown **Unread alerts** + badge for unread alert/warning count. Test button sends to that channel’s URL without requiring an event subscription (not logged in-app).
 
 **Stats sampling** lives in `internal/stats` only - fixed every-minute poll (change-only writes) plus daily library-size sample; do not fold into the main scheduler. Chart JSON forward-fills across change timestamps and appends a synthetic tip at request time (current minute for queue/library charts, current UTC day for storage) so the series reaches "now" without writing an unchanged sample. Live library size pies (`GET /stats/library-size.json?group=root|series`) are not sampled. Storage development chart uses daily samples (display capped at 1 year).
 

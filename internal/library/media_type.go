@@ -77,6 +77,10 @@ func MediaTypeExcluded(exclude []string, mediaType string) bool {
 	return false
 }
 
+// LiveBroadcastMatchFilter is always AND'd into archive download --match-filters.
+// Incomplete-match `?` so missing is_live still passes (normal VODs).
+const LiveBroadcastMatchFilter = "is_live!=?1"
+
 // MediaTypeMatchFilter builds a yt-dlp --match-filters expression from an exclude list.
 // Empty exclude → empty string (omit the flag). Absent media_type still passes.
 func MediaTypeMatchFilter(exclude []string) string {
@@ -94,6 +98,16 @@ func MediaTypeMatchFilter(exclude []string) string {
 		}
 	}
 	return strings.Join(parts, " & ")
+}
+
+// BuildDownloadMatchFilter always includes LiveBroadcastMatchFilter; joins series
+// media-type excludes when present.
+func BuildDownloadMatchFilter(exclude []string) string {
+	mt := MediaTypeMatchFilter(exclude)
+	if mt == "" {
+		return LiveBroadcastMatchFilter
+	}
+	return mt + " & " + LiveBroadcastMatchFilter
 }
 
 func needsMatchFilterQuote(s string) bool {

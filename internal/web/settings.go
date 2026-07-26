@@ -164,7 +164,7 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	evOpts := make([]notifyEventOption, 0, len(notify.AllEvents))
-	for _, id := range notify.AllEvents {
+	for _, id := range notify.EventsSortedByLevel() {
 		evOpts = append(evOpts, notifyEventOption{ID: id, Label: notify.EventLabels[id]})
 	}
 	render(w, "settings_general", struct {

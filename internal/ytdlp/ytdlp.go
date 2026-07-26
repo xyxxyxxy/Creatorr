@@ -328,6 +328,9 @@ func withDuration(result map[string]any, info map[string]any) map[string]any {
 	if mt := strings.TrimSpace(strField(info, "media_type")); mt != "" {
 		result["media_type"] = mt
 	}
+	if boolField(info, "is_live") {
+		result["is_live"] = true
+	}
 	return result
 }
 
@@ -754,15 +757,15 @@ func downloadMedia(ctx context.Context, url, outdir, format, cookiesPath, userAg
 	stderrTail, err := runStream(ctx, o, args, outdir, onProgress)
 	notePOTOutput(ctx, o, stderrTail)
 	if err != nil {
-		if isMediaTypeFilterReject(string(stderrTail), o.matchFilter) {
-			return "", wrapYtdlpFail(apperrors.CodeMediaTypeExcluded, "media type excluded", stderrTail, nil, err)
+		if code, msg := classifyMatchFilterReject(string(stderrTail), o.matchFilter); code != "" {
+			return "", wrapYtdlpFail(code, msg, stderrTail, nil, err)
 		}
 		return "", wrapYtdlpFail(apperrors.CodeDownloadFailed, "yt-dlp download failed", stderrTail, nil, err)
 	}
 	media, err := findMedia(outdir)
 	if err != nil {
-		if strings.TrimSpace(o.matchFilter) != "" {
-			return "", appErr(apperrors.CodeMediaTypeExcluded, "media type excluded", strings.TrimSpace(string(stderrTail)))
+		if code, msg := classifyMatchFilterReject(string(stderrTail), o.matchFilter); code != "" {
+			return "", appErr(code, msg, strings.TrimSpace(string(stderrTail)))
 		}
 		return "", appErr(apperrors.CodeDownloadFailed, "no media file found after download", err.Error())
 	}
@@ -942,18 +945,49 @@ func wrapYtdlpFail(code, message string, stderr, stdout []byte, err error) *appe
 	return appErr(code, msg, detail)
 }
 
-// isMediaTypeFilterReject reports whether yt-dlp skipped due to --match-filters on media_type.
-func isMediaTypeFilterReject(stderr, matchFilter string) bool {
-	if strings.TrimSpace(matchFilter) == "" {
-		return false
+// classifyMatchFilterReject maps a yt-dlp --match-filters skip to a stable AppError code.
+// Empty code means the stderr is not a match-filter reject.
+func classifyMatchFilterReject(stderr, matchFilter string) (code, message string) {
+	mf := strings.TrimSpace(matchFilter)
+	if mf == "" {
+		return "", ""
 	}
 	low := strings.ToLower(stderr)
-	if strings.Contains(low, "media_type") {
-		return true
+	looksLikeSkip := strings.Contains(low, "media_type") ||
+		strings.Contains(low, "is_live") ||
+		(strings.Contains(low, "[download]") && (strings.Contains(low, "does not pass filter") ||
+			strings.Contains(low, "did not match") || strings.Contains(low, "skipping"))) ||
+		strings.Contains(low, "does not pass filter") ||
+		strings.Contains(low, "did not match")
+	if !looksLikeSkip {
+		return "", ""
 	}
-	// Generic skip line when a match-filter was active and nothing downloaded.
-	return strings.Contains(low, "[download]") && (strings.Contains(low, "does not pass filter") ||
-		strings.Contains(low, "did not match") || strings.Contains(low, "skipping"))
+	hasLive := strings.Contains(mf, "is_live")
+	hasMedia := strings.Contains(mf, "media_type")
+	stderrMedia := strings.Contains(low, "media_type")
+	stderrLive := strings.Contains(low, "is_live")
+	switch {
+	case stderrMedia && !stderrLive:
+		return apperrors.CodeMediaTypeExcluded, "media type excluded"
+	case stderrLive && !stderrMedia:
+		return apperrors.CodeLiveBroadcastSkipped, "currently live"
+	case hasLive && hasMedia:
+		// Ambiguous: prefer soft-skip over permanent ignore.
+		return apperrors.CodeLiveBroadcastSkipped, "currently live"
+	case hasMedia:
+		return apperrors.CodeMediaTypeExcluded, "media type excluded"
+	case hasLive:
+		return apperrors.CodeLiveBroadcastSkipped, "currently live"
+	default:
+		return apperrors.CodeMediaTypeExcluded, "media type excluded"
+	}
+}
+
+// isMediaTypeFilterReject reports whether yt-dlp skipped due to --match-filters on media_type.
+// Deprecated path kept for older call sites; prefer classifyMatchFilterReject.
+func isMediaTypeFilterReject(stderr, matchFilter string) bool {
+	code, _ := classifyMatchFilterReject(stderr, matchFilter)
+	return code == apperrors.CodeMediaTypeExcluded
 }
 
 // upgradeCode reclassifies a generic failure as CookieInvalid / RateLimited

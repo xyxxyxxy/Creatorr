@@ -216,7 +216,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest]
+            enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest, live_skipped]
         - name: level
           in: query
           required: false
@@ -1349,13 +1349,14 @@ components:
           format: date-time
         event:
           type: string
-          enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest]
+          enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest, live_skipped]
         level:
           type: string
           enum: [info, warning, alert]
           description: |
             Presentation level. warning and alert share in-app unread behavior
-            (badge, mark-read, task_id required); info digests are stored already-read.
+            (badge, mark-read, task_id required); info is stored already-read
+            (`download_digest` has no task_id; `live_skipped` sets task_id for linking).
         title:
           type: string
         body:

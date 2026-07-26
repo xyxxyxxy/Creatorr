@@ -56,8 +56,10 @@ func TestIsYtDlpPauseCode(t *testing.T) {
 	}
 	if apperrors.IsYtDlpPauseCode(apperrors.CodeRemuxFailed) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodePackFailed) ||
-		apperrors.IsYtDlpPauseCode(apperrors.CodeMediaVerifyFailed) {
-		t.Fatal("remux/pack/verify must not pause")
+		apperrors.IsYtDlpPauseCode(apperrors.CodeMediaVerifyFailed) ||
+		apperrors.IsYtDlpPauseCode(apperrors.CodeLiveBroadcastSkipped) ||
+		apperrors.IsYtDlpPauseCode(apperrors.CodeMediaTypeExcluded) {
+		t.Fatal("remux/pack/verify/live-skip/media-type must not pause")
 	}
 }
 

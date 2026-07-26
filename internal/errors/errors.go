@@ -61,6 +61,7 @@ const (
 	CodePublicBaseURLRequired = "PublicBaseURLRequired"
 	CodeStreamFailed = "StreamFailed"
 	CodeMediaTypeExcluded = "MediaTypeExcluded"
+	CodeLiveBroadcastSkipped = "LiveBroadcastSkipped"
 	CodeMediaVerifyFailed = "MediaVerifyFailed"
 )
 

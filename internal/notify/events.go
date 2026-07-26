@@ -3,6 +3,7 @@ package notify
 import (
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 
 	apprise "github.com/unraid/apprise-go"
@@ -17,6 +18,7 @@ const (
 	EventFileSyncIssues = "file_sync_issues"
 	EventPOTProvider    = "pot_provider"
 	EventDownloadDigest = "download_digest"
+	EventLiveSkipped    = "live_skipped"
 )
 
 // Notification levels (in-app icon / API). Warning matches alert for unread behavior.
@@ -35,6 +37,7 @@ const (
 // AllEvents is the closed set of selectable channel events (UI checkboxes).
 var AllEvents = []string{
 	EventDownloadDigest,
+	EventLiveSkipped,
 	EventYtDlpFailed,
 	EventVerifyFailed,
 	EventFileSyncIssues,
@@ -52,6 +55,7 @@ var EventLabels = map[string]string{
 	EventFileSyncIssues: "File sync issues",
 	EventPOTProvider:    "PO token provider",
 	EventDownloadDigest: "Downloads finished (digest)",
+	EventLiveSkipped:    "Live broadcast skipped",
 }
 
 // AlertEvents are unread-eligible failure notifications (red megaphone in UI).
@@ -127,6 +131,35 @@ func UnreadEvents() []string {
 	return out
 }
 
+// EventsSortedByLevel returns AllEvents ordered alert → warning → info, then by label.
+// Used for Settings channel event checkboxes.
+func EventsSortedByLevel() []string {
+	out := append([]string(nil), AllEvents...)
+	sort.SliceStable(out, func(i, j int) bool {
+		ri, rj := levelSortRank(out[i]), levelSortRank(out[j])
+		if ri != rj {
+			return ri < rj
+		}
+		li, lj := EventLabels[out[i]], EventLabels[out[j]]
+		if li != lj {
+			return li < lj
+		}
+		return out[i] < out[j]
+	})
+	return out
+}
+
+func levelSortRank(event string) int {
+	switch EventLevel(event) {
+	case LevelAlert:
+		return 0
+	case LevelWarning:
+		return 1
+	default:
+		return 2
+	}
+}
+
 // AliasEvent maps legacy channel event ids to canonical ids.
 func AliasEvent(id string) string {
 	switch id {
@@ -168,6 +201,8 @@ func notifyTypeFor(event string) apprise.NotifyType {
 		return apprise.NotifyFailure
 	case EventDownloadDigest:
 		return apprise.NotifySuccess
+	case EventLiveSkipped:
+		return apprise.NotifyInfo
 	default:
 		return apprise.NotifyInfo
 	}

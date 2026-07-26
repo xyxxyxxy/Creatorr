@@ -75,7 +75,8 @@ func Send(ctx context.Context, urls []string, title, body string) error {
 
 // SendEvent delivers to every channel subscribed to event: in-app inserts a
 // notifications row; Apprise channels call sendFn. taskID is required (>0) for
-// unread events (alert + warning); may be 0 for download_digest (stored NULL).
+// unread events (alert + warning); may be 0 for info digests (stored NULL).
+// Info events like live_skipped may still pass task_id so the detail page links the task.
 // Successful Apprise delivery sets external_ok and marks unread notifications read.
 func SendEvent(ctx context.Context, database *db.DB, event, title, body string, taskID int64) error {
 	if database == nil {
@@ -224,6 +225,26 @@ func DownloadDigest(ctx context.Context, database *db.DB, items []DigestItem) er
 	}
 	title := fmt.Sprintf("%d download(s) finished", len(items))
 	return SendEvent(ctx, database, EventDownloadDigest, title, FormatDigestBody(items), 0)
+}
+
+// LiveSkipped records an info notification when download/pack_stream soft-skips a
+// currently live broadcast. taskID links notification detail → task (video history
+// live_skipped uses the same task_id). Status stays wanted for later retry.
+func LiveSkipped(ctx context.Context, database *db.DB, taskID int64, series, title string) error {
+	label := strings.TrimSpace(series)
+	vid := strings.TrimSpace(title)
+	if vid != "" {
+		if label != "" {
+			label += " / "
+		}
+		label += vid
+	}
+	if label == "" {
+		label = "(unknown)"
+	}
+	nTitle := "Live broadcast skipped"
+	body := label + "\n\nCurrently live; download/pack deferred. Video stays wanted and will retry after the broadcast ends."
+	return SendEvent(ctx, database, EventLiveSkipped, nTitle, body, taskID)
 }
 
 // FileSyncIssueItem is one media or sidecar row in a file_sync_issues digest.

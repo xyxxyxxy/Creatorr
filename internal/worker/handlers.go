@@ -228,6 +228,9 @@ func PackStreamHandler(d Deps) TaskHandler {
 		runtimeSec := 0
 		if err == nil {
 			runtimeSec = resolved.RuntimeSec
+			if resolved.IsLive {
+				return apperrors.New(apperrors.CodeLiveBroadcastSkipped, "currently live")
+			}
 			ignored, ierr := ApplyPackStreamAutoIgnore(d.Library, resolved.SeriesID, videoID, t.ID, resolved.MediaType)
 			if ierr != nil {
 				return ierr
@@ -701,6 +704,7 @@ type packStreamResolve struct {
 	MediaType  string
 	SeriesID   int64
 	Kind       string // urls kind; written only after auto-ignore check
+	IsLive     bool
 }
 
 func resolveStreamForPack(ctx context.Context, d Deps, videoID int64) (packStreamResolve, error) {
@@ -743,6 +747,7 @@ func resolveStreamForPack(ctx context.Context, d Deps, videoID int64) (packStrea
 		return out, err
 	}
 	out.MediaType = library.NormalizeMediaType(urls.MediaType)
+	out.IsLive = urls.IsLive
 	kind := strings.TrimSpace(strings.ToLower(urls.Kind))
 	if kind == "" {
 		kind = ytdlp.UrlsKindProgressive
@@ -752,7 +757,7 @@ func resolveStreamForPack(ctx context.Context, d Deps, videoID int64) (packStrea
 		out.RuntimeSec = int(urls.DurationSeconds + 0.5)
 		return out, nil
 	}
-	// Fallback: resolve metadata for duration (and media_type if still unknown).
+	// Fallback: resolve metadata for duration (and media_type / is_live if still unknown).
 	e, err := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
 		URL: dlctx.URL, CookiesPath: jar, FlareSolverrURL: flare,
 	})
@@ -761,6 +766,9 @@ func resolveStreamForPack(ctx context.Context, d Deps, videoID int64) (packStrea
 	}
 	if out.MediaType == "" {
 		out.MediaType = library.NormalizeMediaType(e.MediaType)
+	}
+	if e.IsLive {
+		out.IsLive = true
 	}
 	out.RuntimeSec = int(e.Duration + 0.5)
 	return out, nil
@@ -1297,9 +1305,9 @@ func DownloadHandler(d Deps) TaskHandler {
 		progress("Downloading…", nil)
 		lim, _ := settings.LimitsForDomain(d.Library.DB, t.Domain)
 		subOpts, _ := settings.GetSubtitleOpts(d.Library.DB)
-		matchFilter := ""
+		matchFilter := library.BuildDownloadMatchFilter(nil)
 		if exclude, err := d.Library.SeriesAutoIgnoreMediaTypes(dlctx.Video.SeriesID); err == nil {
-			matchFilter = library.MediaTypeMatchFilter(exclude)
+			matchFilter = library.BuildDownloadMatchFilter(exclude)
 		}
 		dlMap := ytdlp.ProgressMapper{Lo: 0, Hi: 1}
 		media, err := downloadMedia(ctx, d, ytdlp.DownloadOpts{
