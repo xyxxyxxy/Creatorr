@@ -15,6 +15,7 @@ func TestDetectPauseCode(t *testing.T) {
 		{"ERROR: Unable to download", ""},
 		{"ERROR: cookies are no longer valid", apperrors.CodeCookieInvalid},
 		{"HTTP Error 403: Please sign in", apperrors.CodeCookieInvalid},
+		{"ERROR: [mdetv] id: mde.tv stream sign HTTP 403: login required, or this video is outside your membership tier", apperrors.CodeCookieInvalid},
 		{"ERROR: Unable to download webpage: HTTP Error 429: Too Many Requests", apperrors.CodeRateLimited},
 		{"ERROR: [generic] xyz: This IP has been blocked", apperrors.CodeRateLimited},
 		{"got rate-limited by the site", apperrors.CodeRateLimited},

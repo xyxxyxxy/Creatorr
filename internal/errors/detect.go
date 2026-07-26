@@ -16,12 +16,14 @@ var (
 		`re-?export\s+cookies|` +
 		`token\s+refresh\s+failed|` +
 		`missing\s+.*token|` +
-		`missing\s+cookies` +
+		`missing\s+cookies|` +
+		`membership\s+tier|` +
+		`outside\s+your\s+membership` +
 		`)`)
 
 	cookieHTTPRe = regexp.MustCompile(`(?i)` +
-		`HTTP\s*Error\s*(401|403).*(cookie|login|auth|sign\s*in)|` +
-		`(cookie|login|auth|sign\s*in).*HTTP\s*Error\s*(401|403)`)
+		`HTTP\s*(?:Error\s*)?(401|403).*(cookie|login|auth|sign\s*in|membership)|` +
+		`(cookie|login|auth|sign\s*in|membership).*HTTP\s*(?:Error\s*)?(401|403)`)
 
 	rateLimitRe = regexp.MustCompile(`(?i)(` +
 		`HTTP\s*Error\s*429|` +
