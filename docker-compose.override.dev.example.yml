@@ -10,4 +10,8 @@ services:
     volumes:
       # Uncomment when a sibling checkout exists:
       # - ../yt-dlp-mde.tv:/yt-dlp-plugins/mde:ro
+      # - ../yt-dlp-tylerraw.com:/yt-dlp-plugins/tyler:ro
       # - ../Creatorr-handler-example.com:/yt-dlp-plugins/example:ro
+      #
+      # tylerraw.com: also enable Use FlareSolverr for that host under
+      # Settings → Queue / Domains (cf_clearance is short-lived; member jar alone is not enough).
