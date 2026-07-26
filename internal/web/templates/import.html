@@ -26,7 +26,7 @@
     <select id="import-scan-scope" class="select select-bordered join-item font-mono text-sm grow min-w-0" aria-label="Scan folder">
       <option value="0" selected>Inbox: {{.ImportPath}}</option>
       {{range .Roots}}
-      <option value="{{.ID}}">{{.Name}}: {{.Path}}</option>
+      <option value="{{.ID}}">{{if .Name}}{{.Name}}: {{.Path}}{{else}}{{.Path}}{{end}}</option>
       {{end}}
     </select>
     <button type="button" class="btn join-item shrink-0" id="btn-import-rescan" title="Scan again for new files without changing current matches">Rescan</button>

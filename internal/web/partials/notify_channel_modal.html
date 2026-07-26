@@ -23,16 +23,11 @@
 
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Name (optional)</legend>
-        <input name="name" class="input w-full" value="{{.Name}}" placeholder="Optional name" autocomplete="off" />
+        <input name="name" class="input w-full" value="{{.Name}}" placeholder="Notification channel name" autocomplete="off" />
       </fieldset>
 
       <fieldset class="fieldset">
-        <legend class="fieldset-legend flex flex-wrap items-center gap-2">
-          <span class="inline-flex items-center gap-1">
-            Apprise URL
-            {{template "field_info" (dict "Info" "Apprise notification URL (scheme and tokens). See supported services for construction.")}}
-          </span>
-        </legend>
+        <legend class="fieldset-legend">Apprise URL</legend>
         {{template "notify_url_field" (dict
           "FieldID" $urlFieldID
           "URL" .URL

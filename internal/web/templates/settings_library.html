@@ -9,13 +9,13 @@
 {{template "list_empty" "No roots yet."}}
 {{else}}
 {{template "list_table"}}
-<thead><tr><th>Name</th><th>Path</th><th>Retention (days)</th><th></th></tr></thead>
+<thead><tr><th>Name</th><th>Path</th><th>Retention</th><th></th></tr></thead>
 <tbody>
   {{range .Roots}}
   <tr>
-    <td>{{.Name}}</td>
+    <td>{{if .Name}}{{.Name}}{{else}}{{template "empty_value"}}{{end}}</td>
     <td class="font-mono text-xs">{{.Path}}</td>
-    <td>{{if .RetentionTTLSeconds.Valid}}{{retentionDays .RetentionTTLSeconds}}{{else}}<span class="tooltip tooltip-top inline-flex" data-tip="Keep forever"><i data-lucide="infinity" class="size-4 opacity-70" aria-label="Keep forever"></i></span>{{end}}</td>
+    <td>{{if .RetentionTTLSeconds.Valid}}{{retentionDays .RetentionTTLSeconds}} days{{else}}<span class="tooltip tooltip-top inline-flex" data-tip="Keep forever"><i data-lucide="infinity" class="size-4 opacity-70" aria-label="Keep forever"></i></span>{{end}}</td>
     <td><label for="modal-edit-root-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
       <i data-lucide="pencil" class="size-3.5"></i>
     </label></td>
@@ -64,15 +64,15 @@
             </tr>
             <tr>
               <td><code class="text-xs">{series}</code> / <code class="text-xs">{series:N}</code></td>
-              <td>series title for the stem or subfolders (optional); series folder itself is always fixed. <code class="text-xs">:N</code> caps runes (bare is not truncated)</td>
+              <td>series title for the stem or subfolders (optional); series folder itself is always fixed. <code class="text-xs">:N</code> caps runes</td>
             </tr>
             <tr>
               <td><code class="text-xs">{title}</code> / <code class="text-xs">{title:N}</code></td>
               <td>video title; <code class="text-xs">:N</code> caps runes</td>
             </tr>
             <tr>
-              <td><code class="text-xs">{episode}</code> / <code class="text-xs">{episode:000000}</code></td>
-              <td><code class="text-xs">MMDD</code> + same-day index (<code class="text-xs">00</code>…; oldest upload first that UTC day). Equal times use arrival order. Default format uses <code class="text-xs">:000000</code> so January is <code class="text-xs">01…</code> (6 digits).</td>
+              <td><code class="text-xs">{episode}</code></td>
+              <td><code class="text-xs">MMDD</code> + same-day index (<code class="text-xs">00</code>…; oldest upload first that UTC day). Equal times use arrival order. Zero-padded to 6 digits (January is <code class="text-xs">01…</code>).</td>
             </tr>
             <tr>
               <td><code class="text-xs">{date}</code></td>
@@ -146,12 +146,15 @@
       )}}
       {{template "checkbox_field" (dict
         "Name" "subtitle_auto"
-        "Label" "Include auto-generated captions"
+        "Label" "Include auto-generated subtitles"
         "Checked" .SubtitleAuto
-        "Info" "Also download auto-generated captions when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt)."
+        "Hint" "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt)."
       )}}
     </div>
-    <div class="card-actions"><button type="submit" class="btn btn-primary">Save</button></div>
+    <div class="card-actions items-center gap-2">
+      <button type="submit" class="btn btn-primary">Save</button>
+      {{template "field_info" (dict "Info" "Saving does not re-fetch existing episodes.")}}
+    </div>
   </form>
 </section>
 
@@ -172,12 +175,7 @@
       {{if .StreamURLToken}}
       <div class="w-full">
         <fieldset class="fieldset">
-          <legend class="fieldset-legend">
-            <span class="inline-flex items-center gap-1">
-              Stream URL token
-              {{template "field_info" (dict "Info" "Embedded in every .strm proxy URL. Generate a new token to invalidate existing .strm links. All .strm files can be regenerated in the maintenance section below.")}}
-            </span>
-          </legend>
+          <legend class="fieldset-legend">Stream URL token</legend>
           <div class="join w-full">
             <input type="text" name="stream_url_token_display" id="setting-stream-url-token"
                    class="input join-item grow min-w-0 font-mono"
@@ -188,6 +186,7 @@
               </label>
             </span>
           </div>
+          <p class="label whitespace-normal">Embedded in every .strm proxy URL. Generate a new token to invalidate existing .strm links. All .strm files can be regenerated in the maintenance section below.</p>
         </fieldset>
       </div>
       {{end}}
@@ -217,17 +216,16 @@
     </span>
   </legend>
   <input name="path" id="add-root-path" class="input w-full" required autocomplete="off"
-                   data-autofill-name="#add-root-name" />
+                   placeholder="/media/library" />
 </fieldset>
       <fieldset class="fieldset">
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
-            Name
-            {{template "field_info" (dict "Info" "Display label in the UI. Empty = last folder of Path.")}}
+            Name (optional)
+            {{template "field_info" (dict "Info" "Optional display label. Leave empty to show no name in the UI.")}}
           </span>
         </legend>
-        <input name="name" id="add-root-name" class="input w-full" placeholder="Last folder of Path"
-               data-user-edited="" oninput="this.dataset.userEdited='1'" />
+        <input name="name" id="add-root-name" class="input w-full" placeholder="Root folder name" autocomplete="off" />
       </fieldset>
       {{template "field_input" (dict
         "Name" "retention_ttl_days"
@@ -235,8 +233,8 @@
         "Type" "number"
         "Min" "1"
         "Placeholder" "Forever"
+        "JoinSuffix" "days"
         "Info" "Days after pack before retention delete may remove artifacts."
-        "Hint" "Empty = keep forever."
       )}}
       <div class="modal-action">
         <label for="modal-add-root" class="btn btn-ghost modal-cancel">Cancel</label>
@@ -251,7 +249,7 @@
 <input type="checkbox" id="modal-edit-root-{{.ID}}" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Edit root {{.Name}}</h3>
+    <h3 class="font-bold text-lg mb-2">Edit root{{if .Name}} {{.Name}}{{end}}</h3>
         <form method="post" action="/actions/update-root" class="space-y-2">
       <input type="hidden" name="id" value="{{.ID}}" />
       <input type="hidden" name="redirect" value="/settings/library" />
@@ -264,10 +262,10 @@
       )}}
       {{template "field_input" (dict
         "Name" "name"
-        "Label" "Name"
+        "Label" "Name (optional)"
         "Value" .Name
-        "Placeholder" "Last folder of Path"
-        "Info" "Display label in the UI. Empty = last folder of Path."
+        "Placeholder" "Root folder name"
+        "Info" "Optional display label. Leave empty to show no name in the UI."
       )}}
       {{template "field_input" (dict
         "Name" "retention_ttl_days"
@@ -276,8 +274,8 @@
         "Min" "1"
         "Placeholder" "Forever"
         "Value" (retentionDaysValue .RetentionTTLSeconds)
+        "JoinSuffix" "days"
         "Info" "Days after pack before retention delete may remove artifacts."
-        "Hint" "Empty = keep forever."
       )}}
       <div class="modal-action">
         <label for="modal-edit-root-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
@@ -295,7 +293,7 @@
     <h1 class="font-bold text-lg mb-2">Add quality profile</h1>
         <form method="post" action="/actions/add-profile" class="space-y-2">
       <input type="hidden" name="redirect" value="/settings/library" />
-      {{template "field_input" (dict "Name" "name" "Label" "Name" "Required" true)}}
+      {{template "field_input" (dict "Name" "name" "Label" "Name" "Placeholder" "Quality profile name" "Required" true)}}
       {{template "field_input" (dict
         "Name" "format_selector"
         "Label" "Format selector"
@@ -308,7 +306,7 @@
         "Name" "verify_media"
         "Label" "Verify downloaded videos"
         "Checked" false
-        "Info" "After pack, queue a low-priority null-decode of the video file. Fail keeps the file and sets status verify_failed. When media maturity hours are set, only mature packs are verified automatically."
+        "Hint" "After pack, queue a low-priority null-decode of the video file. Fail keeps the file and sets status verify_failed. When media maturity hours are set, only mature packs are verified automatically."
       )}}
       {{template "profile_maturity_fields" (dict
         "MediaPreset" 0
@@ -334,7 +332,7 @@
         <form method="post" action="/actions/update-profile" class="space-y-2">
       <input type="hidden" name="id" value="{{.ID}}" />
       <input type="hidden" name="redirect" value="/settings/library" />
-      {{template "field_input" (dict "Name" "name" "Label" "Name" "Value" .Name "Required" true)}}
+      {{template "field_input" (dict "Name" "name" "Label" "Name" "Value" .Name "Placeholder" "Quality profile name" "Required" true)}}
       {{template "field_input" (dict
         "Name" "format_selector"
         "Label" "Format selector"
@@ -347,7 +345,7 @@
         "Name" "verify_media"
         "Label" "Verify downloaded videos"
         "Checked" .VerifyMedia
-        "Info" "After pack, queue a low-priority null-decode of the video file. Fail keeps the file and sets status verify_failed. When media maturity hours are set, only mature packs are verified automatically."
+        "Hint" "After pack, queue a low-priority null-decode of the video file. Fail keeps the file and sets status verify_failed. When media maturity hours are set, only mature packs are verified automatically."
       )}}
       {{template "profile_maturity_fields" (dict
         "MediaPreset" .MaturityMediaPreset

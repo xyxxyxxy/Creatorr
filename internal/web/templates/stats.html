@@ -35,7 +35,7 @@
 
 {{template "list_panel"}}
 <h2 class="text-lg font-semibold">Queue depth</h2>
-<p class="text-sm -mt-1 mb-2">Pending + running download and scan tasks. Dashed line is Domain defaults max download queue.</p>
+<p class="text-sm -mt-1 mb-2">Pending + running download and scan tasks.</p>
 <div id="chart-queue" class="w-full h-80 bg-base-200 rounded-box"></div>
 {{template "list_panel_end"}}
 
@@ -105,7 +105,7 @@ document.addEventListener("DOMContentLoaded", function () {
     } catch (e) { return v; }
   }
 
-  function lineOption(title, times, series, caps, opts) {
+  function lineOption(title, times, series, opts) {
     opts = opts || {};
     const bytes = !!opts.bytes;
     const daily = !!opts.daily;
@@ -120,24 +120,6 @@ document.addEventListener("DOMContentLoaded", function () {
         data: s.data
       };
     });
-    if (title === "queue" && caps && caps.length && times && times.length) {
-      const c = caps[0];
-      const n = Number(c.max_download_queue) || 0;
-      if (n > 0) {
-        const flat = [];
-        for (let i = 0; i < times.length; i++) flat.push(n);
-        seriesOpts.push({
-          name: "max download queue",
-          type: "line",
-          showSymbol: false,
-          silent: true,
-          tooltip: { valueFormatter: function (v) { return v + " (Domain defaults max download queue)"; } },
-          lineStyle: { type: "dashed", width: 1.5 },
-          itemStyle: { opacity: 0.85 },
-          data: flat
-        });
-      }
-    }
     const muted = mutedText();
     return {
       backgroundColor: "transparent",
@@ -266,9 +248,9 @@ document.addEventListener("DOMContentLoaded", function () {
       if (empty) {
         emptyEl.querySelector("span").textContent = "No samples yet. Wait about a minute for the first sample.";
       }
-      queueChart.setOption(lineOption("queue", data.times || [], data.queue || [], data.queue_caps || []), true);
+      queueChart.setOption(lineOption("queue", data.times || [], data.queue || []), true);
       videoChart.setOption(lineOption("video_status", data.times || [], data.video_status || []), true);
-      storageChart.setOption(lineOption("storage", data.storage_times || [], data.storage || [], null, { bytes: true, daily: true }), true);
+      storageChart.setOption(lineOption("storage", data.storage_times || [], data.storage || [], { bytes: true, daily: true }), true);
       await refreshSize();
     } catch (err) {
       emptyEl.classList.remove("hidden");

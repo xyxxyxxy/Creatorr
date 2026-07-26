@@ -944,8 +944,10 @@
     }
   }
 
-  // Full-page nav that should not jump to top: mark link/form with js-keep-scroll.
-  // Live panels (e.g. #series-videos-live) use HTMX + dataset restore instead.
+  // Full-page nav that should not jump to top:
+  // - mark link/form with js-keep-scroll, or
+  // - POST forms with hidden redirect back to the current pathname (Settings Save, etc.)
+  // Opt out with js-no-keep-scroll. Live panels use HTMX + dataset restore instead.
   const SCROLL_KEY = "creatorr:keep-scroll";
 
   function saveKeepScroll() {
@@ -969,6 +971,28 @@
     const top = Number(data.y);
     if (!Number.isFinite(top)) return;
     requestAnimationFrame(() => window.scrollTo(0, top));
+  }
+
+  function formRedirectPathname(form) {
+    const redir = form.querySelector('input[name="redirect"]');
+    if (!redir) return "";
+    const raw = String(redir.value || "").trim();
+    if (!raw) return "";
+    try {
+      return new URL(raw, location.origin).pathname;
+    } catch {
+      return "";
+    }
+  }
+
+  function shouldKeepScrollForm(form) {
+    if (!(form instanceof HTMLFormElement)) return false;
+    if (form.classList.contains("js-no-keep-scroll")) return false;
+    if (form.hasAttribute("hx-get") || form.hasAttribute("hx-post")) return false;
+    if (form.classList.contains("js-keep-scroll")) return true;
+    // Creatorr actions: hidden redirect back to this page → restore after reload.
+    const dest = formRedirectPathname(form);
+    return dest !== "" && dest === location.pathname;
   }
 
   function saveSeriesScroll() {
@@ -1419,9 +1443,8 @@
     saveKeepScroll();
   });
   document.body.addEventListener("submit", (ev) => {
-    const form = ev.target.closest("form.js-keep-scroll");
-    if (!form) return;
-    if (form.hasAttribute("hx-get") || form.hasAttribute("hx-post")) return;
+    const form = ev.target.closest("form");
+    if (!form || !shouldKeepScrollForm(form)) return;
     saveKeepScroll();
   });
   function openAddSeriesModal() {
@@ -2305,34 +2328,6 @@
     } else {
       toggle.form.submit();
     }
-  });
-
-  function lastPathSegment(path) {
-    let p = String(path || "").replace(/\\/g, "/").replace(/\/+$/, "");
-    if (!p) return "";
-    const i = p.lastIndexOf("/");
-    return i >= 0 ? p.slice(i + 1) : p;
-  }
-
-  function autofillNameFromPath(pathInput) {
-    const nameSel = pathInput.getAttribute("data-autofill-name");
-    if (!nameSel) return;
-    const nameEl = document.querySelector(nameSel);
-    if (!nameEl || nameEl.dataset.userEdited === "1") return;
-    const seg = lastPathSegment(pathInput.value);
-    if (!seg) return;
-    nameEl.value = seg;
-  }
-
-  document.body.addEventListener("input", (ev) => {
-    const el = ev.target;
-    if (!(el instanceof HTMLInputElement)) return;
-    if (el.hasAttribute("data-autofill-name")) autofillNameFromPath(el);
-  });
-  document.body.addEventListener("change", (ev) => {
-    const el = ev.target;
-    if (!(el instanceof HTMLInputElement)) return;
-    if (el.hasAttribute("data-autofill-name")) autofillNameFromPath(el);
   });
 
   // Approximate Go normalizeSourceURL: trim, lower host, strip leading www.

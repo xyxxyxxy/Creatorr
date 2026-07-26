@@ -58,19 +58,15 @@
 
   <fieldset class="fieldset gap-2">
     <legend class="fieldset-legend"><h3 class="font-semibold m-0 text-inherit">Encoding</h3></legend>
-    <p>By default, cuts are only spliced at keyframes, so cut points are often early or late. Re-encode will cut at exact timestamps without needing keyframes. Because re-encode is heavy on the host, Creatorr schedules it as a separate task on the system queue.</p>
-    <p>Applies to downloads only. Streams do not re-encode, so high accuracy cuts and info cards are not available.</p>
+    <p>By default, cuts are only spliced at keyframes, so cut points are often early or late. Re-encode will cut at exact timestamps without needing keyframes. Because re-encode is heavy on the host, it is scheduled as a separate low priority system task.</p>
     <label class="label cursor-pointer gap-2 justify-start">
       <input type="hidden" name="sponsorblock_reencode_cut" value="0" />
       <input type="checkbox" class="checkbox checkbox-sm" name="sponsorblock_reencode_cut" value="1"
         {{if $reenc}}checked{{end}} data-sb-reencode />
-      <span class="label-text inline-flex items-center gap-1">
-        Re-encode on cut for higher accuracy
-        {{template "field_info" (dict "Info" "Targets similar bitrate and file size as the source when possible.")}}
-      </span>
+      <span class="label-text">Re-encode on cut for higher accuracy</span>
     </label>
+    <p>Applies to downloads only. Streams do not re-encode, so high accuracy cuts and info cards are not available.</p>
 
-    <p>When a section is cut, Creatorr can insert a short info card (~2s) naming the removed category and the duration skipped.</p>
     <span class="inline-flex w-fit max-w-full{{if not $reenc}} tooltip tooltip-top{{end}}"
           {{if not $reenc}}data-tip="Requires re-encode to be enabled"{{end}}
           data-sb-cards-wrap>
@@ -81,6 +77,7 @@
         <span class="label-text">Insert info cards on cut</span>
       </label>
     </span>
+    <p>When a section is cut, Creatorr can insert a short info card (~2s) naming the removed category and the duration skipped.</p>
     <div>
       <p class="text-xs opacity-60 mb-1">Example</p>
       <div class="aspect-video w-full max-w-sm rounded-box bg-black text-white flex items-center justify-center text-center px-6" role="img" aria-label="Example info card: SponsorBlock, skipped 1 min 4 sec of Sponsor">

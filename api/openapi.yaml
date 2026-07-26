@@ -1453,7 +1453,7 @@ components:
       properties:
         name:
           type: string
-          description: Display label; empty uses the last path segment.
+          description: Optional display label; empty is allowed (not derived from path).
         path:
           type: string
           description: Absolute path on disk (relative paths are rejected).

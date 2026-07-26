@@ -10,7 +10,7 @@
       <i data-lucide="clapperboard" class="size-5 shrink-0"></i>
       <span class="truncate">{{.Series.Title}}</span>
     </h1>
-    <p class="text-xs opacity-60">{{.Series.RootName}} · {{.Series.QualityProfileName}}</p>
+    <p class="text-xs opacity-60">{{if .Series.RootName}}{{.Series.RootName}} · {{end}}{{.Series.QualityProfileName}}</p>
   </div>
   <div class="flex-none flex flex-wrap gap-2">
     <label for="modal-edit-series" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Edit series</label>

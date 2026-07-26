@@ -21,7 +21,7 @@ const (
 
 // SeedDefaults inserts the shipped root folder and quality profiles when tables are empty.
 // Root path comes from cfg.LibraryRoot (/media/library in container; var/media/library local),
-// stored as an absolute path. Root name is the last path segment (same as empty Name on create).
+// stored as an absolute path. Seeded root name is the last path segment (operator create may leave name empty).
 // Profiles: best (strict bv*+ba, no fallback), 1080p, 720p (soft unrestricted tails).
 // Seed insert order is unrelated to UI order (ListProfiles sorts by name).
 // Remux is always MKV (library.RemuxContainer; not a Setting).
@@ -45,10 +45,7 @@ func SeedDefaults(database *db.DB, cfg config.Config) error {
 		return err
 	}
 	if roots == 0 {
-		name, err := resolveRootName("", path)
-		if err != nil {
-			return fmt.Errorf("seed root name: %w", err)
-		}
+		name := filepath.Base(path)
 		_, err = database.SQL.Exec(`
 			INSERT INTO root_folders (name, path, retention_ttl_seconds) VALUES (?, ?, NULL)
 		`, name, path)

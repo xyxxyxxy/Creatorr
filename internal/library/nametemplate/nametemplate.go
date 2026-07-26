@@ -86,7 +86,7 @@ func Expand(format string, v Values) (string, error) {
 		case TokYear:
 			return formatYear(v.Year, pad)
 		case TokEpisode:
-			return formatInt(v.Episode, pad)
+			return formatEpisode(v.Episode, pad)
 		case TokTitle:
 			return v.Title
 		case TokID:
@@ -112,6 +112,14 @@ func formatInt(n int, pad string) string {
 	}
 	width := len(pad)
 	return fmt.Sprintf("%0*d", width, n)
+}
+
+// formatEpisode expands {episode}; bare form zero-pads to 6 digits (same as :000000).
+func formatEpisode(n int, pad string) string {
+	if pad == "" {
+		pad = "000000"
+	}
+	return formatInt(n, pad)
 }
 
 // formatYear expands {year}; undated year-season 0 renders as 0000 (min 4 digits).
@@ -212,7 +220,7 @@ func isSafeFilenameRune(r rune) bool {
 // ExpandAndSanitize expands tokens with per-field sanitize.
 // {series:N}: N = max runes; bare {series} is not truncated.
 // {title:N}: N = max runes; bare {title} is not truncated.
-// {year:0000} / {episode:000} / {month:02} / {day:02}: zero-pad width. Undated year-season 0 → 0000 (min 4 digits).
+// {year:0000} / {episode} (bare = 6-digit pad) / {episode:000} / {month:02} / {day:02}: zero-pad width. Undated year-season 0 → 0000 (min 4 digits).
 // {month} / {day}: UTC release-date parts (empty when unknown).
 func ExpandAndSanitize(format string, v Values) (string, error) {
 	if err := Validate(format); err != nil {
@@ -231,7 +239,7 @@ func ExpandAndSanitize(format string, v Values) (string, error) {
 		case TokYear:
 			return formatYear(v.Year, pad)
 		case TokEpisode:
-			return formatInt(v.Episode, pad)
+			return formatEpisode(v.Episode, pad)
 		case TokTitle:
 			return SanitizeFilename(v.Title, titleMaxFromSuffix(pad))
 		case TokID:

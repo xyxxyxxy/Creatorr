@@ -82,17 +82,14 @@ func (s *Store) CreateRoot(name, path string, retention *int64) (*RootFolder, er
 	if err := requireAbsoluteRootPath(path); err != nil {
 		return nil, err
 	}
-	resolved, err := resolveRootName(name, path)
-	if err != nil {
-		return nil, err
-	}
+	name = strings.TrimSpace(name)
 	var ttl any
 	if retention != nil {
 		ttl = *retention
 	}
 	res, err := s.DB.SQL.Exec(`
 		INSERT INTO root_folders (name, path, retention_ttl_seconds) VALUES (?, ?, ?)
-	`, resolved, path, ttl)
+	`, name, path, ttl)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
@@ -115,11 +112,7 @@ func (s *Store) UpdateRoot(id int64, name, path *string, retention *int64, clear
 		p = cleaned
 	}
 	if name != nil {
-		resolved, err := resolveRootName(*name, p)
-		if err != nil {
-			return nil, err
-		}
-		n = resolved
+		n = strings.TrimSpace(*name)
 	}
 	if clearRetention {
 		ttl = sql.NullInt64{}
@@ -147,30 +140,4 @@ func requireAbsoluteRootPath(path string) error {
 		return fmt.Errorf("%w: path must be absolute", ErrInvalid)
 	}
 	return nil
-}
-
-// resolveRootName returns trimmed name, or the last path segment when name is empty.
-func resolveRootName(name, path string) (string, error) {
-	name = strings.TrimSpace(name)
-	if name != "" {
-		return name, nil
-	}
-	base := rootNameFromPath(path)
-	if base == "" {
-		return "", fmt.Errorf("%w: name required when path has no folder name", ErrInvalid)
-	}
-	return base, nil
-}
-
-func rootNameFromPath(path string) string {
-	path = strings.TrimSpace(path)
-	path = strings.TrimRight(path, `/\`)
-	if path == "" {
-		return ""
-	}
-	base := filepath.Base(filepath.Clean(path))
-	if base == "." || base == string(filepath.Separator) || base == "/" {
-		return ""
-	}
-	return base
 }

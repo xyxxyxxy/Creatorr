@@ -137,7 +137,13 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 		}
 		line2Parts := []string{s.QualityProfileName}
 		if len(roots) > 1 {
-			line2Parts = append(line2Parts, s.RootName)
+			rootLabel := strings.TrimSpace(s.RootName)
+			if rootLabel == "" {
+				rootLabel = rootPath[s.RootID]
+			}
+			if rootLabel != "" {
+				line2Parts = append(line2Parts, rootLabel)
+			}
 		}
 		line2Parts = append(line2Parts, srcLabel)
 		var statusInd *seriesStatusView
@@ -179,9 +185,13 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 	if len(roots) > 1 {
 		opts := make([]listFilterOpt, 0, len(roots))
 		for _, root := range roots {
+			label := strings.TrimSpace(root.Name)
+			if label == "" {
+				label = root.Path
+			}
 			opts = append(opts, listFilterOpt{
 				Value:    strconv.FormatInt(root.ID, 10),
-				Label:    root.Name,
+				Label:    label,
 				Selected: filter.RootID == root.ID,
 			})
 		}

@@ -9,10 +9,6 @@
 {{$ph := ""}}
 {{if eq .Key "external_base_url"}}{{$ph = "http://creatorr.example.com:8787"}}{{end}}
 {{$info := .Help}}
-{{if eq .Key "cache_beginning_seconds"}}{{$info = "Piped streams need a few seconds before playback can start. Caching the beginning beforehand enables instant playback while the rest of the stream loads in the background. Changing this does not alter beginnings already cached."}}{{end}}
-{{if eq .Key "stream_playback_cache"}}{{$info = .Help}}{{end}}
-{{if eq .Key "stream_playback_cache_max_hours"}}{{$info = .Help}}{{end}}
-{{if eq .Key "external_base_url"}}{{$info = .Help}}{{end}}
 {{$id := printf "setting-%s" .Key}}
 <div class="w-full {{if .Wide}}md:col-span-2{{end}} {{if eq .Key "external_base_url"}}md:col-span-2{{end}} {{if eq .Key "stream_playback_cache"}}md:col-span-2{{end}}">
   {{if .Textarea}}
@@ -35,7 +31,7 @@
     "Label" $label
     "Type" "range"
     "Value" .Value
-    "Info" $info
+    "Hint" "Piped streams need a few seconds before playback can start. Caching the beginning beforehand enables instant playback while the rest of the stream loads in the background. Changing this does not alter beginnings already cached."
     "Min" "0"
     "Max" "120"
     "Step" "10"
@@ -46,7 +42,7 @@
   {{template "checkbox_field" (dict
     "Name" .Key
     "Label" $label
-    "Info" $info
+    "Hint" .Help
     "Checked" (eq .Value "1")
     "InputClass" "js-playback-cache-toggle"
   )}}
@@ -57,7 +53,7 @@
     "Label" $label
     "Type" "range"
     "Value" .Value
-    "Info" $info
+    "Hint" .Help
     "Min" "10"
     "Max" "100"
     "Step" "10"
@@ -82,7 +78,7 @@
     "ID" $id
     "Label" $label
     "Value" .Value
-    "Info" $info
+    "Hint" .Help
     "Placeholder" $ph
     "Mono" true
   )}}

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 CREATE TABLE IF NOT EXISTS root_folders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL DEFAULT '',
   path TEXT NOT NULL UNIQUE,
   retention_ttl_seconds INTEGER
 );

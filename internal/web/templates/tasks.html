@@ -131,13 +131,13 @@
       </h2>
     </div>
   </div>
+  {{if .Tasks}}
   <ul class="list bg-base-100 rounded-box border border-base-300 mt-1">
-    {{if .Tasks}}
     {{range .Tasks}}{{template "task_row" .}}{{end}}
-    {{else}}
-    <li class="list-row"><div class="list-col-grow text-sm opacity-60">No tasks.</div></li>
-    {{end}}
   </ul>
+  {{else}}
+  {{template "list_empty" "No tasks."}}
+  {{end}}
   {{template "pagination" .Page}}
   {{template "list_panel_end"}}
   {{end}}

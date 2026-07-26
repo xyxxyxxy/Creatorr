@@ -40,7 +40,7 @@ var Help = map[string]string{
 	KeyStreamPlaybackCacheMaxHours:  "Rolling total hours of playback cache kept. When over budget, least-recently-played whole-video caches are removed. Does not apply to beginning caches.",
 	KeyExternalBaseURL:              "Essential for Creatorr streaming: the external media server (Emby/Jellyfin/Kodi/etc.) plays .strm entries by streaming through Creatorr’s proxy. Absolute origin clients can reach (scheme+host+port, no trailing slash). Empty disables stream delivery. Changing this requires Regenerate all .strm files under Settings → Maintenance.",
 	KeySubtitleLangs:                "Supports all, regex (en.*), and -TAG exclusions. Saving does not re-fetch existing episodes.",
-	KeySubtitleAuto:                 "Also download auto-generated captions when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",
+	KeySubtitleAuto:                 "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",
 }
 
 // Labels are human-readable Settings titles (DB/API keys are snake_case).
@@ -51,14 +51,14 @@ var Labels = map[string]string{
 	KeyDownloadWantedOrder:          "Download wanted order",
 	KeySyncFilesCron:                "File sync schedule",
 	KeyRetentionDeleteCron:          "Retention delete schedule",
-	KeyStatsRetentionDays:           "Stats retention",
+	KeyStatsRetentionDays:           "Retention",
 	KeySourceDownloadErrorThreshold: "Source download error threshold",
 	KeyCacheBeginningSeconds:        "Cache beginning of streams",
 	KeyStreamPlaybackCache:          "Build cache on playback",
 	KeyStreamPlaybackCacheMaxHours:  "Max playback cache",
 	KeyExternalBaseURL:              "External Creatorr URL",
 	KeySubtitleLangs:                "Subtitle languages",
-	KeySubtitleAuto:                 "Include auto-generated captions",
+	KeySubtitleAuto:                 "Include auto-generated subtitles",
 }
 
 // generalOrder is Settings → General (not schedules).

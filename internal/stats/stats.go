@@ -438,16 +438,10 @@ type SeriesPoint struct {
 	Data   []int  `json:"data"`
 }
 
-// QueueCap is the Domain-defaults max_download_queue (hard auto-download cap).
-type QueueCap struct {
-	MaxDownloadQueue int `json:"max_download_queue"`
-}
-
 // ChartPayload is JSON for the Stats page charts.
 type ChartPayload struct {
 	Times            []string      `json:"times"`
 	Queue            []SeriesPoint `json:"queue"`
-	QueueCaps        []QueueCap    `json:"queue_caps"`
 	VideoStatus      []SeriesPoint `json:"video_status"`
 	StorageTimes     []string      `json:"storage_times"`
 	Storage          []SeriesPoint `json:"storage"`
@@ -516,10 +510,6 @@ func LoadChartAt(database *db.DB, now time.Time) (ChartPayload, error) {
 		{MetricVideosDownloaded, "downloaded", "video_status"},
 		{MetricVideosStreamable, "streamable", "video_status"},
 	})
-
-	if lim, err := settings.DefaultLimits(database); err == nil && lim.MaxDownloadQueue > 0 {
-		out.QueueCaps = []QueueCap{{MaxDownloadQueue: lim.MaxDownloadQueue}}
-	}
 
 	storageCutoff := now.AddDate(0, 0, -StorageChartMaxDays).Truncate(24 * time.Hour).Format(time.RFC3339)
 	storageTimes := timesForMetrics(allTimes, byTime, []string{MetricLibrarySizeBytes})

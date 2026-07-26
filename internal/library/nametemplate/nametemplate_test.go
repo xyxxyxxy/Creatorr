@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestExpandBareEpisodePadsSix(t *testing.T) {
+	got, err := ExpandAndSanitize("E{episode}", Values{Episode: 101})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "E000101" {
+		t.Fatalf("got %q want E000101", got)
+	}
+	got2, err := ExpandAndSanitize("E{episode:000}", Values{Episode: 101})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got2 != "E101" {
+		t.Fatalf("explicit pad: got %q want E101", got2)
+	}
+}
+
 func TestExpandPads(t *testing.T) {
 	got, err := Expand("{series} - S{year:00}E{episode:000} - {title} [{id}]", Values{
 		Series: "Show", Year: 1, Episode: 42, Title: "Hello", ID: "abc",

@@ -40,7 +40,7 @@
     </legend>
     <select class="select w-full pointer-events-none" disabled>
       {{range .Roots}}
-      <option value="{{.ID}}"{{if eq .ID $.RootID}} selected{{end}}>{{.Name}} ({{.Path}})</option>
+      <option value="{{.ID}}"{{if eq .ID $.RootID}} selected{{end}}>{{if .Name}}{{.Name}} ({{.Path}}){{else}}{{.Path}}{{end}}</option>
       {{end}}
     </select>
   </fieldset>
@@ -55,7 +55,7 @@
   </legend>
   <select name="root_id" class="select w-full validator" required {{if not .Roots}}disabled{{end}}>
     {{range .Roots}}
-    <option value="{{.ID}}"{{if eq .ID $.RootID}} selected{{end}}>{{.Name}} ({{.Path}})</option>
+    <option value="{{.ID}}"{{if eq .ID $.RootID}} selected{{end}}>{{if .Name}}{{.Name}} ({{.Path}}){{else}}{{.Path}}{{end}}</option>
     {{end}}
   </select>
   <p class="validator-hint hidden">Root folder is required</p>

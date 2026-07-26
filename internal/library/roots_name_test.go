@@ -1,7 +1,6 @@
 package library_test
 
 import (
-	"path/filepath"
 	"testing"
 )
 
@@ -12,20 +11,19 @@ func TestCreateRootRejectsRelativePath(t *testing.T) {
 	}
 }
 
-func TestCreateRootEmptyNameUsesPathBase(t *testing.T) {
+func TestCreateRootEmptyNameAllowed(t *testing.T) {
 	s := openLib(t)
 	dir := t.TempDir()
 	root, err := s.CreateRoot("", dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Base(dir)
-	if root.Name != want {
-		t.Fatalf("name=%q want %q", root.Name, want)
+	if root.Name != "" {
+		t.Fatalf("name=%q want empty", root.Name)
 	}
 }
 
-func TestUpdateRootEmptyNameUsesPathBase(t *testing.T) {
+func TestUpdateRootEmptyNameAllowed(t *testing.T) {
 	s := openLib(t)
 	dir := t.TempDir()
 	root, err := s.CreateRoot("old", dir, nil)
@@ -37,8 +35,19 @@ func TestUpdateRootEmptyNameUsesPathBase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Base(dir)
-	if updated.Name != want {
-		t.Fatalf("name=%q want %q", updated.Name, want)
+	if updated.Name != "" {
+		t.Fatalf("name=%q want empty", updated.Name)
+	}
+}
+
+func TestCreateRootAllowsDuplicateEmptyNames(t *testing.T) {
+	s := openLib(t)
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	if _, err := s.CreateRoot("", dir1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateRoot("", dir2, nil); err != nil {
+		t.Fatal(err)
 	}
 }
