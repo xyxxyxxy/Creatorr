@@ -8,42 +8,33 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 )
 
-// EnvFlareSolverrURL is the optional first-boot seed for flare_solverr_url.
+// EnvFlareSolverrURL is the process env for the FlareSolverr base URL (not a Settings key).
 const EnvFlareSolverrURL = "CREATORR_FLARESOLVERR_URL"
+
+// legacyFlareSolverrURLKey is the removed Settings key; deleted on boot.
+const legacyFlareSolverrURLKey = "flare_solverr_url"
 
 // NormalizeFlareSolverrURL trims space and strips a trailing slash.
 func NormalizeFlareSolverrURL(raw string) string {
 	return strings.TrimRight(strings.TrimSpace(raw), "/")
 }
 
-// FlareSolverrURL returns the Settings FlareSolverr base URL (may be empty).
-func FlareSolverrURL(database *db.DB) (string, error) {
-	if database == nil {
-		return "", fmt.Errorf("database required")
-	}
-	v, err := Get(database, KeyFlareSolverrURL)
-	if err != nil {
-		return "", err
-	}
-	return NormalizeFlareSolverrURL(v), nil
+// FlareSolverrURL returns CREATORR_FLARESOLVERR_URL (may be empty).
+func FlareSolverrURL() string {
+	return NormalizeFlareSolverrURL(os.Getenv(EnvFlareSolverrURL))
 }
 
-// MigrateFlareSolverrURLFromEnv copies CREATORR_FLARESOLVERR_URL into settings when
-// the settings value is empty (one-shot bootstrap for Compose sidecar installs).
-func MigrateFlareSolverrURLFromEnv(database *db.DB) error {
+// DropFlareSolverrURLSetting removes the legacy Settings row and clears Use FlareSolverr
+// flags when the env URL is empty.
+func DropFlareSolverrURLSetting(database *db.DB) error {
 	if database == nil {
 		return fmt.Errorf("database required")
 	}
-	cur, err := FlareSolverrURL(database)
-	if err != nil {
+	if _, err := database.SQL.Exec(`DELETE FROM settings WHERE key = ?`, legacyFlareSolverrURLKey); err != nil {
 		return err
 	}
-	if cur != "" {
-		return nil
+	if FlareSolverrURL() == "" {
+		return ClearUseFlareSolverr(database)
 	}
-	env := NormalizeFlareSolverrURL(os.Getenv(EnvFlareSolverrURL))
-	if env == "" {
-		return nil
-	}
-	return Set(database, KeyFlareSolverrURL, env)
+	return nil
 }

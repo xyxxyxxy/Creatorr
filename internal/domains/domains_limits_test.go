@@ -18,11 +18,9 @@ func TestScopedLimitUpdatesLeaveOtherColumns(t *testing.T) {
 	if err := settings.SeedDefaults(d); err != nil {
 		t.Fatal(err)
 	}
-	if err := settings.Set(d, settings.KeyFlareSolverrURL, "http://flaresolverr.example.com"); err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv(settings.EnvFlareSolverrURL, "http://flaresolverr.example.com")
 
-	if err := domains.UpdateHostOverrides(d, "example.com", "60", "", "", "5M", "2", "on"); err != nil {
+	if err := domains.UpdateHostOverrides(d, "example.com", "60", "", "", "5M", "", "2", "on"); err != nil {
 		t.Fatal(err)
 	}
 	lim, err := settings.LimitsForDomain(d, "example.com")
@@ -32,8 +30,22 @@ func TestScopedLimitUpdatesLeaveOtherColumns(t *testing.T) {
 	if lim.TaskCooldownSeconds != 60 || lim.DownloadRateLimit != "5M" || lim.SleepRequests != 2 {
 		t.Fatalf("after upsert: %+v", lim)
 	}
+	if lim.StreamPlayRateLimit != "off" {
+		t.Fatalf("stream play should stay default off: %+v", lim)
+	}
 
-	if err := domains.UpdateHostOverrides(d, "example.com", "90", "", "", "", "", "on"); err != nil {
+	if err := domains.UpdateHostOverrides(d, "example.com", "60", "", "", "5M", "750K", "2", "on"); err != nil {
+		t.Fatal(err)
+	}
+	lim, err = settings.LimitsForDomain(d, "example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lim.StreamPlayRateLimit != "750K" || lim.DownloadRateLimit != "5M" || lim.SleepRequests != 2 || lim.TaskCooldownSeconds != 60 {
+		t.Fatalf("stream play with other overrides: %+v", lim)
+	}
+
+	if err := domains.UpdateHostOverrides(d, "example.com", "90", "", "", "", "", "", "on"); err != nil {
 		t.Fatal(err)
 	}
 	lim, err = settings.LimitsForDomain(d, "example.com")
@@ -46,6 +58,9 @@ func TestScopedLimitUpdatesLeaveOtherColumns(t *testing.T) {
 	}
 	if lim.DownloadRateLimit != def.DownloadRateLimit || lim.SleepRequests != def.SleepRequests {
 		t.Fatalf("cleared rate/sleep should inherit default: got %+v want rate=%s sleep=%v", lim, def.DownloadRateLimit, def.SleepRequests)
+	}
+	if lim.StreamPlayRateLimit != def.StreamPlayRateLimit {
+		t.Fatalf("cleared stream play rate should inherit default: got %s want %s", lim.StreamPlayRateLimit, def.StreamPlayRateLimit)
 	}
 
 	if err := domains.Delete(d, "example.com"); err != nil {

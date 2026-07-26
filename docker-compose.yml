@@ -8,8 +8,6 @@ services:
     depends_on:
       - creatorr-po-token
       - creatorr-flaresolverr
-    # Image USER is 1000:1000. Host ./var trees must be writable by uid 1000
-    # (e.g. sudo chown -R 1000:1000 var).
     ports:
       - "8787:8787"
     volumes:
@@ -30,8 +28,8 @@ services:
       CREATORR_PUBLIC_BASE_URL: ${CREATORR_PUBLIC_BASE_URL:-}
       # PO Token provider (creatorr-po-token sidecar). Empty disables Settings pot_fetch.
       CREATORR_POT_PROVIDER_URL: ${CREATORR_POT_PROVIDER_URL:-http://creatorr-po-token:4416}
-      # First-boot seed for Settings flare_solverr_url (creatorr-flaresolverr sidecar).
-      # Chrome-based; uses notable RAM. Empty skips health probe and Use FlareSolverr.
+      # FlareSolverr base URL (creatorr-flaresolverr sidecar). Chrome-based; notable RAM.
+      # Empty skips health probe and Use FlareSolverr (flags cleared on boot).
       CREATORR_FLARESOLVERR_URL: ${CREATORR_FLARESOLVERR_URL:-http://creatorr-flaresolverr:8191}
       # UI cron labels use process local time (fires stay UTC). Override via .env TZ=.
       TZ: ${TZ:-UTC}

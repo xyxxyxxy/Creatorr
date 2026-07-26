@@ -6,9 +6,9 @@
   before a binary rebuild). Per-key placeholders: branch on .Key below.
 */}}
 {{$label := .Label}}{{if not $label}}{{$label = .Key}}{{end}}
-{{$ph := ""}}{{if eq .Key "flare_solverr_url"}}{{$ph = "http://"}}{{end}}
+{{$ph := ""}}
 {{if eq .Key "external_base_url"}}{{$ph = "http://creatorr.example.com:8787"}}{{end}}
-{{$info := .Help}}{{if eq .Key "flare_solverr_url"}}{{$info = "Required for domains behind CloudFlare protection. Configure FlareSolverr here before enabling Use FlareSolverr on Domain defaults or a host On override (Settings → Queue). Compose may seed from CREATORR_FLARESOLVERR_URL."}}{{end}}
+{{$info := .Help}}
 {{if eq .Key "cache_beginning_seconds"}}{{$info = "Piped streams need a few seconds before playback can start. Caching the beginning beforehand enables instant playback while the rest of the stream loads in the background. Changing this does not alter beginnings already cached."}}{{end}}
 {{if eq .Key "stream_playback_cache"}}{{$info = .Help}}{{end}}
 {{if eq .Key "stream_playback_cache_max_hours"}}{{$info = .Help}}{{end}}

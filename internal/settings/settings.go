@@ -11,7 +11,6 @@ import (
 
 // Keys stored in the settings table (SQLite + UI). Process bootstrap env is config.Load only - never Settings.
 const (
-	KeyFlareSolverrURL              = "flare_solverr_url"
 	KeyPotFetch                     = "pot_fetch"
 	KeyEpisodeFormat                = "episode_format"
 	KeyDownloadWantedCron           = "download_wanted_cron"
@@ -29,27 +28,25 @@ const (
 
 // Help is one-line UI help text per key.
 var Help = map[string]string{
-	KeyFlareSolverrURL:              "Required for domains behind CloudFlare protection. Configure FlareSolverr here before enabling Use FlareSolverr on Domain defaults or a host On override (Settings → Queue). Compose can one-shot seed from CREATORR_FLARESOLVERR_URL (default http://creatorr-flaresolverr:8191).",
-	KeyPotFetch:                     "PO token means proof-of-origin token. When to ask the provider for attestation tokens: only when needed, always, or never. Requires CREATORR_POT_PROVIDER_URL. Compose defaults to http://creatorr-po-token:4416.",
+	KeyPotFetch:                     "",
 	KeyEpisodeFormat:                "Relative path under the series folder for packed episodes (no extension). Saving does not rename existing files - use Apply episode format.",
 	KeyDownloadWantedCron:           "Schedule to enqueue wanted videos for monitored series.",
 	KeyDownloadNewOnScan:            "Queues new videos after a scan until the download queue is full. Download wanted schedule is used to fill gaps. Does not apply to full scan.",
 	KeyDownloadWantedOrder:          "Within each series, enqueue wanted downloads oldest-first or newest-first (upload date; undated by id). Series are fair-shared (round-robin, least-loaded first).",
-	KeySyncFilesCron:                "Schedule for detecting external file deletions.",
+	KeySyncFilesCron:                "Schedule for library file sync: missing/restore, packed media size vs DB (mismatch → verify_failed), and beginning-cache reconcile.",
 	KeyRetentionDeleteCron:          "Schedule for deleting files past root retention TTL.",
-	KeyStatsRetentionDays:           "How long to keep Stats samples. Shorter retention drops older samples on save. Forever never prunes. Default 1 year.",
+	KeyStatsRetentionDays:           "",
 	KeySourceDownloadErrorThreshold: "When this many videos on a source are wanted_download_error, other wanted videos become wanted_source_error (auto-download held). Minimum 1 (hold after the first error). Default 2.",
 	KeyCacheBeginningSeconds:        "Piped streams need a few seconds before playback can start. Caching the beginning beforehand enables instant playback while the rest of the stream loads in the background. Changing this does not alter beginnings already cached.",
 	KeyStreamPlaybackCache:          "Enables later plays to stream without re-fetching via yt-dlp.",
 	KeyStreamPlaybackCacheMaxHours:  "Rolling total hours of playback cache kept. When over budget, least-recently-played whole-video caches are removed. Does not apply to beginning caches.",
-	KeyExternalBaseURL:              "Essential for Creatorr streaming: the external media server (Emby/Jellyfin/Kodi/etc.) plays .strm entries by streaming through Creatorr’s proxy. Absolute origin clients can reach (scheme+host+port, no trailing slash). Empty disables stream delivery. Changing this requires Regenerate all .strm files under Maintenance.",
+	KeyExternalBaseURL:              "Essential for Creatorr streaming: the external media server (Emby/Jellyfin/Kodi/etc.) plays .strm entries by streaming through Creatorr’s proxy. Absolute origin clients can reach (scheme+host+port, no trailing slash). Empty disables stream delivery. Changing this requires Regenerate all .strm files under Settings → Maintenance.",
 	KeySubtitleLangs:                "Supports all, regex (en.*), and -TAG exclusions. Saving does not re-fetch existing episodes.",
 	KeySubtitleAuto:                 "Also download auto-generated captions when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",
 }
 
 // Labels are human-readable Settings titles (DB/API keys are snake_case).
 var Labels = map[string]string{
-	KeyFlareSolverrURL:              "FlareSolverr URL",
 	KeyPotFetch:                     "PO token fetch",
 	KeyEpisodeFormat:                "Episode format",
 	KeyDownloadWantedCron:           "Download wanted schedule",
@@ -69,7 +66,6 @@ var Labels = map[string]string{
 
 // generalOrder is Settings → General (not schedules).
 var generalOrder = []string{
-	KeyFlareSolverrURL,
 	KeyPotFetch,
 	KeyStatsRetentionDays,
 }
@@ -122,7 +118,6 @@ func SeedDefaults(database *db.DB) error {
 		return err
 	}
 	defaults := map[string]string{
-		KeyFlareSolverrURL:              "",
 		KeyPotFetch:                     PotFetchAuto,
 		KeyEpisodeFormat:                DefaultEpisodeFormat,
 		KeyDownloadWantedCron:           "@hourly",
@@ -198,6 +193,7 @@ func migrateLegacyTaskKinds(database *db.DB) error {
 		{"series_meta_prefetch", "prefetch_series_meta"},
 		{"video_meta_prefetch", "prefetch_video_meta"},
 		{"add_series_prefetch", "prefetch_add_series"},
+		{"add_video_prefetch", "prefetch_add_video"},
 	}
 	for _, r := range renames {
 		if _, err := database.SQL.Exec(`UPDATE tasks SET kind = ? WHERE kind = ?`, r.neu, r.old); err != nil {
@@ -342,23 +338,25 @@ func SetMany(database *db.DB, values map[string]string) error {
 
 // DomainQueueRow is one host override row for Settings → Queue (domain != default).
 type DomainQueueRow struct {
-	Domain              string
-	TaskCooldownSeconds int     // effective value for display
-	MaxDownloadQueue    int     // effective
-	MaxParallelTasks    int     // effective
-	DownloadRateLimit   string  // effective value for display
-	SleepRequests       float64 // effective value for display
-	CooldownOverride    string  // empty = using default
-	QueueOverride       string  // empty = using default
-	ParallelOverride    string  // empty = using default
-	RateOverride        string  // empty = using default
-	SleepOverride       string  // empty = using default
-	FlareOverride       string  // "", "on", "off" - empty = inherit Domain defaults
-	Active              bool
-	UseFlareSolverr     bool // effective resolved flare (defaults + override)
-	HasCookies          bool
-	CookieContent       string // Netscape jar text for edit modal
-	HasRow              bool   // true when domains row exists
+	Domain               string
+	TaskCooldownSeconds  int     // effective value for display
+	MaxDownloadQueue     int     // effective
+	MaxParallelTasks     int     // effective
+	DownloadRateLimit    string  // effective value for display
+	StreamPlayRateLimit  string  // effective value for display
+	SleepRequests        float64 // effective value for display
+	CooldownOverride      string  // empty = using default
+	QueueOverride        string  // empty = using default
+	ParallelOverride     string  // empty = using default
+	RateOverride         string  // empty = using default
+	StreamPlayRateOverride string // empty = using default
+	SleepOverride        string  // empty = using default
+	FlareOverride        string  // "", "on", "off" - empty = inherit Domain defaults
+	Active               bool
+	UseFlareSolverr      bool // effective resolved flare (defaults + override)
+	HasCookies           bool
+	CookieContent        string // Netscape jar text for edit modal
+	HasRow               bool   // true when domains row exists
 }
 
 // DomainOverrideRows returns host override rows (excludes domain=default).
@@ -387,7 +385,7 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 	}
 	rows, err := database.SQL.Query(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-		       download_rate_limit, sleep_requests, use_flaresolverr
+		       download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr
 		FROM domains WHERE domain != ? ORDER BY domain
 	`, DomainDefault)
 	if err != nil {
@@ -400,10 +398,10 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 		var host string
 		var active int
 		var delay, maxQ, maxP sql.NullInt64
-		var rate sql.NullString
+		var rate, streamRate sql.NullString
 		var sleep sql.NullFloat64
 		var flare sql.NullInt64
-		if err := rows.Scan(&host, &active, &delay, &maxQ, &maxP, &rate, &sleep, &flare); err != nil {
+		if err := rows.Scan(&host, &active, &delay, &maxQ, &maxP, &rate, &streamRate, &sleep, &flare); err != nil {
 			return nil, err
 		}
 		r := DomainQueueRow{
@@ -412,6 +410,7 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 			MaxDownloadQueue:    def.MaxDownloadQueue,
 			MaxParallelTasks:    def.MaxParallelTasks,
 			DownloadRateLimit:   def.DownloadRateLimit,
+			StreamPlayRateLimit: def.StreamPlayRateLimit,
 			SleepRequests:       def.SleepRequests,
 			UseFlareSolverr:     def.UseFlareSolverr,
 			CookieContent:       cookieByDomain[NormalizeDomain(host)],
@@ -436,6 +435,14 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 			}
 			r.DownloadRateLimit = s
 			r.RateOverride = s
+		}
+		if streamRate.Valid {
+			s := strings.TrimSpace(streamRate.String)
+			if s == "" {
+				s = "off"
+			}
+			r.StreamPlayRateLimit = s
+			r.StreamPlayRateOverride = s
 		}
 		if sleep.Valid && sleep.Float64 >= 0 {
 			r.SleepRequests = sleep.Float64
@@ -468,6 +475,7 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 			MaxDownloadQueue:    def.MaxDownloadQueue,
 			MaxParallelTasks:    def.MaxParallelTasks,
 			DownloadRateLimit:   def.DownloadRateLimit,
+			StreamPlayRateLimit: def.StreamPlayRateLimit,
 			SleepRequests:       def.SleepRequests,
 			UseFlareSolverr:     def.UseFlareSolverr,
 			CookieContent:       content,

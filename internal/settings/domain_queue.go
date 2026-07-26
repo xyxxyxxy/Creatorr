@@ -69,12 +69,13 @@ func IsReservedDomain(domain string) bool {
 
 // DomainLimits is queue/yt-dlp knobs (global default or effective resolved values).
 type DomainLimits struct {
-	TaskCooldownSeconds int
-	MaxDownloadQueue    int     // pending+running download-family on this domain
-	MaxParallelTasks    int     // concurrent running non-interactive tasks on this domain
-	DownloadRateLimit   string  // yt-dlp --limit-rate; "off"/"0"/"none" = unlimited
-	SleepRequests       float64 // yt-dlp --sleep-requests + --sleep-subtitles + --sleep-interval; 0 = off
-	UseFlareSolverr     bool    // pre-solve via Settings flare_solverr_url when effective
+	TaskCooldownSeconds  int
+	MaxDownloadQueue     int     // pending+running download-family on this domain
+	MaxParallelTasks     int     // concurrent running non-interactive tasks on this domain
+	DownloadRateLimit    string  // yt-dlp --limit-rate for archive/scan/beginning; "off"/"0"/"none" = unlimited
+	StreamPlayRateLimit  string  // yt-dlp --limit-rate for stream_play mux/pipe only; default off
+	SleepRequests        float64 // yt-dlp --sleep-requests + --sleep-subtitles + --sleep-interval; 0 = off
+	UseFlareSolverr      bool    // pre-solve via CREATORR_FLARESOLVERR_URL when effective
 }
 
 func defaultDomainLimits() DomainLimits {
@@ -83,6 +84,7 @@ func defaultDomainLimits() DomainLimits {
 		MaxDownloadQueue:    DefaultMaxDownloadQueue,
 		MaxParallelTasks:    DefaultMaxParallelTasks,
 		DownloadRateLimit:   "10M",
+		StreamPlayRateLimit: "off",
 		SleepRequests:       1,
 		UseFlareSolverr:     false,
 	}
@@ -111,6 +113,9 @@ func normalizeLimits(v DomainLimits) DomainLimits {
 	if strings.TrimSpace(d.DownloadRateLimit) == "" {
 		d.DownloadRateLimit = defaultDomainLimits().DownloadRateLimit
 	}
+	if strings.TrimSpace(d.StreamPlayRateLimit) == "" {
+		d.StreamPlayRateLimit = defaultDomainLimits().StreamPlayRateLimit
+	}
 	if d.SleepRequests < 0 {
 		d.SleepRequests = defaultDomainLimits().SleepRequests
 	}
@@ -138,18 +143,18 @@ func EnsureDefaultDomain(database *db.DB) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := database.SQL.Exec(`
 		INSERT INTO domains (domain, active, task_cooldown_seconds, max_download_queue,
-			max_parallel_tasks, download_rate_limit, sleep_requests, use_flaresolverr, updated_at)
-		VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)
+			max_parallel_tasks, download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr, updated_at)
+		VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(domain) DO NOTHING
 	`, DomainDefault, d.TaskCooldownSeconds, d.MaxDownloadQueue, d.MaxParallelTasks,
-		d.DownloadRateLimit, d.SleepRequests, 0, now)
+		d.DownloadRateLimit, d.StreamPlayRateLimit, d.SleepRequests, 0, now)
 	return err
 }
 
 const domainLimitsSelect = `task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-	download_rate_limit, sleep_requests, use_flaresolverr`
+	download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr`
 
-func scanDomainLimits(delay, maxQ, maxP sql.NullInt64, rate sql.NullString, sleep sql.NullFloat64, flare sql.NullInt64, base DomainLimits) DomainLimits {
+func scanDomainLimits(delay, maxQ, maxP sql.NullInt64, rate, streamRate sql.NullString, sleep sql.NullFloat64, flare sql.NullInt64, base DomainLimits) DomainLimits {
 	out := base
 	if delay.Valid && delay.Int64 >= 0 {
 		out.TaskCooldownSeconds = int(delay.Int64)
@@ -163,6 +168,9 @@ func scanDomainLimits(delay, maxQ, maxP sql.NullInt64, rate sql.NullString, slee
 	if rate.Valid && strings.TrimSpace(rate.String) != "" {
 		out.DownloadRateLimit = strings.TrimSpace(rate.String)
 	}
+	if streamRate.Valid && strings.TrimSpace(streamRate.String) != "" {
+		out.StreamPlayRateLimit = strings.TrimSpace(streamRate.String)
+	}
 	if sleep.Valid && sleep.Float64 >= 0 {
 		out.SleepRequests = sleep.Float64
 	}
@@ -172,24 +180,36 @@ func scanDomainLimits(delay, maxQ, maxP sql.NullInt64, rate sql.NullString, slee
 	return normalizeLimits(out)
 }
 
+func applyRateOverride(out *string, rate sql.NullString) {
+	if !rate.Valid {
+		return
+	}
+	s := strings.TrimSpace(rate.String)
+	if s == "" {
+		*out = "off"
+	} else {
+		*out = s
+	}
+}
+
 // DefaultLimits returns limits from domains row domain=default (always non-NULL after seed).
 func DefaultLimits(database *db.DB) (DomainLimits, error) {
 	_ = EnsureDefaultDomain(database)
 	var delay, maxQ, maxP sql.NullInt64
-	var rate sql.NullString
+	var rate, streamRate sql.NullString
 	var sleep sql.NullFloat64
 	var flare sql.NullInt64
 	err := database.SQL.QueryRow(`
 		SELECT `+domainLimitsSelect+`
 		FROM domains WHERE domain = ?
-	`, DomainDefault).Scan(&delay, &maxQ, &maxP, &rate, &sleep, &flare)
+	`, DomainDefault).Scan(&delay, &maxQ, &maxP, &rate, &streamRate, &sleep, &flare)
 	if err == sql.ErrNoRows {
 		return defaultDomainLimits(), nil
 	}
 	if err != nil {
 		return DomainLimits{}, err
 	}
-	return scanDomainLimits(delay, maxQ, maxP, rate, sleep, flare, defaultDomainLimits()), nil
+	return scanDomainLimits(delay, maxQ, maxP, rate, streamRate, sleep, flare, defaultDomainLimits()), nil
 }
 
 // LimitsForDomain resolves effective limits: host domains row overrides → default row.
@@ -203,13 +223,13 @@ func LimitsForDomain(database *db.DB, domain string) (DomainLimits, error) {
 		return def, nil
 	}
 	var delay, maxQ, maxP sql.NullInt64
-	var rate sql.NullString
+	var rate, streamRate sql.NullString
 	var sleep sql.NullFloat64
 	var flare sql.NullInt64
 	err = database.SQL.QueryRow(`
 		SELECT `+domainLimitsSelect+`
 		FROM domains WHERE domain = ?
-	`, domain).Scan(&delay, &maxQ, &maxP, &rate, &sleep, &flare)
+	`, domain).Scan(&delay, &maxQ, &maxP, &rate, &streamRate, &sleep, &flare)
 	if err == sql.ErrNoRows {
 		return def, nil
 	}
@@ -226,14 +246,8 @@ func LimitsForDomain(database *db.DB, domain string) (DomainLimits, error) {
 	if maxP.Valid && maxP.Int64 >= 1 {
 		out.MaxParallelTasks = int(maxP.Int64)
 	}
-	if rate.Valid {
-		s := strings.TrimSpace(rate.String)
-		if s == "" {
-			out.DownloadRateLimit = "off"
-		} else {
-			out.DownloadRateLimit = s
-		}
-	}
+	applyRateOverride(&out.DownloadRateLimit, rate)
+	applyRateOverride(&out.StreamPlayRateLimit, streamRate)
 	if sleep.Valid && sleep.Float64 >= 0 {
 		out.SleepRequests = sleep.Float64
 	}
@@ -243,30 +257,22 @@ func LimitsForDomain(database *db.DB, domain string) (DomainLimits, error) {
 	return normalizeLimits(out), nil
 }
 
-// FlareSolverrConfigured reports whether Settings flare_solverr_url is non-empty.
-func FlareSolverrConfigured(database *db.DB) (bool, error) {
-	u, err := Get(database, KeyFlareSolverrURL)
-	if err != nil {
-		return false, err
-	}
-	return strings.TrimSpace(u) != "", nil
+// FlareSolverrConfigured reports whether CREATORR_FLARESOLVERR_URL is non-empty.
+func FlareSolverrConfigured() bool {
+	return FlareSolverrURL() != ""
 }
 
 // RequireFlareSolverrConfigured errors when Use FlareSolverr would be turned on
-// without a Settings URL.
-func RequireFlareSolverrConfigured(database *db.DB) error {
-	ok, err := FlareSolverrConfigured(database)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return fmt.Errorf("set FlareSolverr URL in Settings → General first")
+// without CREATORR_FLARESOLVERR_URL.
+func RequireFlareSolverrConfigured() error {
+	if !FlareSolverrConfigured() {
+		return fmt.Errorf("set CREATORR_FLARESOLVERR_URL first")
 	}
 	return nil
 }
 
 // ClearUseFlareSolverr turns off Domain defaults Use FlareSolverr and clears host
-// On overrides (NULL inherit). Call when flare_solverr_url is emptied.
+// On overrides (NULL inherit). Call when the FlareSolverr env URL is emptied.
 func ClearUseFlareSolverr(database *db.DB) error {
 	if err := EnsureDefaultDomain(database); err != nil {
 		return err
@@ -285,7 +291,7 @@ func ClearUseFlareSolverr(database *db.DB) error {
 }
 
 // SetDomainDefault writes non-NULL limit values onto domains row domain=default.
-func SetDomainDefault(database *db.DB, delay, maxQueue, maxParallel int, rate, sleepStr string, useFlare bool) error {
+func SetDomainDefault(database *db.DB, delay, maxQueue, maxParallel int, rate, streamPlayRate, sleepStr string, useFlare bool) error {
 	if delay < 0 {
 		return fmt.Errorf("invalid task_cooldown_seconds")
 	}
@@ -296,6 +302,10 @@ func SetDomainDefault(database *db.DB, delay, maxQueue, maxParallel int, rate, s
 	if rate == "" {
 		return fmt.Errorf("download_rate_limit required")
 	}
+	streamPlayRate = strings.TrimSpace(streamPlayRate)
+	if streamPlayRate == "" {
+		return fmt.Errorf("stream_play_rate_limit required")
+	}
 	sleepStr = strings.TrimSpace(sleepStr)
 	if sleepStr == "" {
 		return fmt.Errorf("sleep_requests required")
@@ -305,7 +315,7 @@ func SetDomainDefault(database *db.DB, delay, maxQueue, maxParallel int, rate, s
 		return fmt.Errorf("invalid sleep_requests")
 	}
 	if useFlare {
-		if err := RequireFlareSolverrConfigured(database); err != nil {
+		if err := RequireFlareSolverrConfigured(); err != nil {
 			return err
 		}
 	}
@@ -319,8 +329,8 @@ func SetDomainDefault(database *db.DB, delay, maxQueue, maxParallel int, rate, s
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = database.SQL.Exec(`
 		UPDATE domains SET task_cooldown_seconds = ?, max_download_queue = ?, max_parallel_tasks = ?,
-			download_rate_limit = ?, sleep_requests = ?, use_flaresolverr = ?, active = 1, updated_at = ?
+			download_rate_limit = ?, stream_play_rate_limit = ?, sleep_requests = ?, use_flaresolverr = ?, active = 1, updated_at = ?
 		WHERE domain = ?
-	`, delay, maxQueue, maxParallel, rate, sleep, flare, now, DomainDefault)
+	`, delay, maxQueue, maxParallel, rate, streamPlayRate, sleep, flare, now, DomainDefault)
 	return err
 }

@@ -15,15 +15,16 @@ import (
 
 // Domain is one known hostname (queue lane + optional limit overrides).
 type Domain struct {
-	Domain              string
-	Active              bool
-	TaskCooldownSeconds sql.NullInt64   // Valid=false → use default
-	MaxDownloadQueue    sql.NullInt64   // Valid=false → use default
-	MaxParallelTasks    sql.NullInt64   // Valid=false → use default
-	DownloadRateLimit   sql.NullString  // Valid=false → use default
-	SleepRequests       sql.NullFloat64 // Valid=false → use default
-	UseFlareSolverr     sql.NullBool    // Valid=false → inherit default; Bool = on/off override
-	UpdatedAt           string
+	Domain               string
+	Active               bool
+	TaskCooldownSeconds  sql.NullInt64   // Valid=false → use default
+	MaxDownloadQueue     sql.NullInt64   // Valid=false → use default
+	MaxParallelTasks     sql.NullInt64   // Valid=false → use default
+	DownloadRateLimit    sql.NullString  // Valid=false → use default
+	StreamPlayRateLimit  sql.NullString  // Valid=false → use default
+	SleepRequests        sql.NullFloat64 // Valid=false → use default
+	UseFlareSolverr      sql.NullBool    // Valid=false → inherit default; Bool = on/off override
+	UpdatedAt            string
 }
 
 // FlareOverrideValue is the form/storage tri-state for use_flaresolverr on host rows.
@@ -76,8 +77,8 @@ func EnsureHost(database *db.DB, host string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := database.SQL.Exec(`
 		INSERT INTO domains (domain, active, task_cooldown_seconds, max_download_queue,
-			max_parallel_tasks, download_rate_limit, sleep_requests, use_flaresolverr, updated_at)
-		VALUES (?, 1, NULL, NULL, NULL, NULL, NULL, NULL, ?)
+			max_parallel_tasks, download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr, updated_at)
+		VALUES (?, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?)
 		ON CONFLICT(domain) DO NOTHING
 	`, host, now)
 	return err
@@ -91,7 +92,7 @@ func Get(database *db.DB, domain string) (Domain, bool, error) {
 	}
 	row := database.SQL.QueryRow(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-			download_rate_limit, sleep_requests, use_flaresolverr, updated_at
+			download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr, updated_at
 		FROM domains WHERE domain = ?
 	`, domain)
 	d, err := scanDomain(row)
@@ -108,7 +109,7 @@ func Get(database *db.DB, domain string) (Domain, bool, error) {
 func List(database *db.DB) ([]Domain, error) {
 	rows, err := database.SQL.Query(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-			download_rate_limit, sleep_requests, use_flaresolverr, updated_at
+			download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr, updated_at
 		FROM domains ORDER BY domain
 	`)
 	if err != nil {
@@ -130,7 +131,7 @@ func List(database *db.DB) ([]Domain, error) {
 func ListInactive(database *db.DB) ([]Domain, error) {
 	rows, err := database.SQL.Query(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-			download_rate_limit, sleep_requests, use_flaresolverr, updated_at
+			download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr, updated_at
 		FROM domains WHERE active = 0 ORDER BY domain
 	`)
 	if err != nil {
@@ -252,7 +253,7 @@ func UpdateSiteLimits(database *db.DB, domain string, rateStr, sleepStr, flareSt
 		return err
 	}
 	if flare == 1 {
-		if err := settings.RequireFlareSolverrConfigured(database); err != nil {
+		if err := settings.RequireFlareSolverrConfigured(); err != nil {
 			return err
 		}
 	}
@@ -264,11 +265,11 @@ func UpdateSiteLimits(database *db.DB, domain string, rateStr, sleepStr, flareSt
 	return err
 }
 
-// UpdateHostOverrides sets cooldown/queue/parallel/rate/sleep/Flare on a host row (empty = NULL inherit).
+// UpdateHostOverrides sets cooldown/queue/parallel/rate/stream-play-rate/sleep/Flare on a host row (empty = NULL inherit).
 // Creates the row if missing. Rejects reserved domain=default.
 // flareStr: default|on|off (empty = default / inherit).
 // When queue or parallel is set, effective pair must satisfy parallel ≤ queue (resolved vs defaults).
-func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelStr, rateStr, sleepStr, flareStr string) error {
+func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelStr, rateStr, streamPlayRateStr, sleepStr, flareStr string) error {
 	if err := settings.ValidateOverrideDomain(domain); err != nil {
 		return err
 	}
@@ -282,7 +283,7 @@ func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelSt
 	}
 	effQueue := def.MaxDownloadQueue
 	effParallel := def.MaxParallelTasks
-	var delay, maxQ, maxP, rate, sleep any
+	var delay, maxQ, maxP, rate, streamRate, sleep any
 	if s := strings.TrimSpace(delayStr); s != "" {
 		n, err := strconv.Atoi(s)
 		if err != nil || n < 0 {
@@ -312,6 +313,9 @@ func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelSt
 	if s := strings.TrimSpace(rateStr); s != "" {
 		rate = s
 	}
+	if s := strings.TrimSpace(streamPlayRateStr); s != "" {
+		streamRate = s
+	}
 	if s := strings.TrimSpace(sleepStr); s != "" {
 		f, err := strconv.ParseFloat(s, 64)
 		if err != nil || f < 0 {
@@ -324,16 +328,16 @@ func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelSt
 		return err
 	}
 	if flare == 1 {
-		if err := settings.RequireFlareSolverrConfigured(database); err != nil {
+		if err := settings.RequireFlareSolverrConfigured(); err != nil {
 			return err
 		}
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = database.SQL.Exec(`
 		UPDATE domains SET task_cooldown_seconds = ?, max_download_queue = ?, max_parallel_tasks = ?,
-			download_rate_limit = ?, sleep_requests = ?, use_flaresolverr = ?, updated_at = ?
+			download_rate_limit = ?, stream_play_rate_limit = ?, sleep_requests = ?, use_flaresolverr = ?, updated_at = ?
 		WHERE domain = ?
-	`, delay, maxQ, maxP, rate, sleep, flare, now, domain)
+	`, delay, maxQ, maxP, rate, streamRate, sleep, flare, now, domain)
 	return err
 }
 
@@ -358,9 +362,9 @@ func ListHosts(database *db.DB) ([]Domain, error) {
 	return out, nil
 }
 
-// FlareSolverrURL returns the Settings FlareSolverr URL when this hostname has
+// FlareSolverrURL returns CREATORR_FLARESOLVERR_URL when this hostname has
 // Use FlareSolverr enabled (host override or Domain defaults). Empty string means
-// skip FlareSolverr pre-solve. Opt-in without flare_solverr_url → FlareSolverrRequired.
+// skip FlareSolverr pre-solve. Opt-in without env URL → FlareSolverrRequired.
 func FlareSolverrURL(database *db.DB, host string) (string, error) {
 	host = settings.NormalizeDomain(host)
 	if host == "" || host == "unknown" || host == "system" || host == settings.DomainDefault {
@@ -373,15 +377,11 @@ func FlareSolverrURL(database *db.DB, host string) (string, error) {
 	if !lim.UseFlareSolverr {
 		return "", nil
 	}
-	url, err := settings.Get(database, settings.KeyFlareSolverrURL)
-	if err != nil {
-		return "", err
-	}
-	url = strings.TrimSpace(url)
+	url := settings.FlareSolverrURL()
 	if url == "" {
 		return "", apperrors.WithDetail(
 			apperrors.New(apperrors.CodeFlareSolverrRequired, "FlareSolverr required for this domain"),
-			"enable Use FlareSolverr (Domain defaults or host override) and set FlareSolverr URL in Settings → General",
+			"enable Use FlareSolverr (Domain defaults or host override) and set CREATORR_FLARESOLVERR_URL",
 		)
 	}
 	return url, nil
@@ -397,7 +397,7 @@ func scanDomain(row interface{ Scan(dest ...any) error }) (Domain, error) {
 	var active int
 	var flare sql.NullInt64
 	err := row.Scan(&d.Domain, &active, &d.TaskCooldownSeconds, &d.MaxDownloadQueue, &d.MaxParallelTasks,
-		&d.DownloadRateLimit, &d.SleepRequests, &flare, &d.UpdatedAt)
+		&d.DownloadRateLimit, &d.StreamPlayRateLimit, &d.SleepRequests, &flare, &d.UpdatedAt)
 	d.Active = active != 0
 	if flare.Valid {
 		d.UseFlareSolverr = sql.NullBool{Bool: flare.Int64 != 0, Valid: true}

@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS domain_runtime (
 );
 
 -- Known hostnames + reserved domain=default (global limit defaults).
--- Host rows: NULL task_cooldown_seconds / max_download_queue / max_parallel_tasks / download_rate_limit / sleep_requests / use_flaresolverr → use domain=default.
+-- Host rows: NULL task_cooldown_seconds / max_download_queue / max_parallel_tasks / download_rate_limit / stream_play_rate_limit / sleep_requests / use_flaresolverr → use domain=default.
 -- domain=default limit columns + use_flaresolverr must be non-NULL. Domains are never auto-deleted when sources go away.
 CREATE TABLE IF NOT EXISTS domains (
   domain TEXT PRIMARY KEY,
@@ -164,6 +164,7 @@ CREATE TABLE IF NOT EXISTS domains (
   max_download_queue INTEGER,
   max_parallel_tasks INTEGER,
   download_rate_limit TEXT,
+  stream_play_rate_limit TEXT,
   sleep_requests REAL,
   use_flaresolverr INTEGER,
   updated_at TEXT NOT NULL

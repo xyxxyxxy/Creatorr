@@ -22,6 +22,7 @@ func TestFlareSolverrURLPerDomain(t *testing.T) {
 	if err := domains.EnsureHost(d, "example.com"); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv(settings.EnvFlareSolverrURL, "")
 
 	url, err := domains.FlareSolverrURL(d, "example.com")
 	if err != nil || url != "" {
@@ -29,17 +30,15 @@ func TestFlareSolverrURLPerDomain(t *testing.T) {
 	}
 
 	err = domains.UpdateLimits(d, "example.com", "", "", "", "on")
-	if err == nil || !strings.Contains(err.Error(), "FlareSolverr URL") {
-		t.Fatalf("opt-in without URL: want URL required, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "CREATORR_FLARESOLVERR_URL") {
+		t.Fatalf("opt-in without URL: want env required, got %v", err)
 	}
-	err = settings.SetDomainDefault(d, 30, 8, 1, "10M", "1", true)
-	if err == nil || !strings.Contains(err.Error(), "FlareSolverr URL") {
-		t.Fatalf("default on without URL: want URL required, got %v", err)
+	err = settings.SetDomainDefault(d, 30, 8, 1, "10M", "off", "1", true)
+	if err == nil || !strings.Contains(err.Error(), "CREATORR_FLARESOLVERR_URL") {
+		t.Fatalf("default on without URL: want env required, got %v", err)
 	}
 
-	if err := settings.Set(d, settings.KeyFlareSolverrURL, "http://flaresolverr.example.com"); err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv(settings.EnvFlareSolverrURL, "http://flaresolverr.example.com")
 	if err := domains.UpdateLimits(d, "example.com", "", "", "", "on"); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +56,7 @@ func TestFlareSolverrURLPerDomain(t *testing.T) {
 	}
 
 	// Default on + host inherit (NULL) → on
-	if err := settings.SetDomainDefault(d, 30, 8, 1, "10M", "1", true); err != nil {
+	if err := settings.SetDomainDefault(d, 30, 8, 1, "10M", "off", "1", true); err != nil {
 		t.Fatal(err)
 	}
 	if err := domains.UpdateLimits(d, "example.com", "", "", "", "default"); err != nil {
@@ -94,19 +93,15 @@ func TestClearUseFlareSolverr(t *testing.T) {
 	if err := settings.SeedDefaults(d); err != nil {
 		t.Fatal(err)
 	}
-	if err := settings.Set(d, settings.KeyFlareSolverrURL, "http://flaresolverr.example.com"); err != nil {
+	t.Setenv(settings.EnvFlareSolverrURL, "http://flaresolverr.example.com")
+	if err := settings.SetDomainDefault(d, 30, 8, 1, "10M", "off", "1", true); err != nil {
 		t.Fatal(err)
 	}
-	if err := settings.SetDomainDefault(d, 30, 8, 1, "10M", "1", true); err != nil {
-		t.Fatal(err)
-	}
-	if err := domains.UpdateHostOverrides(d, "example.com", "", "", "", "", "", "on"); err != nil {
+	if err := domains.UpdateHostOverrides(d, "example.com", "", "", "", "", "", "", "on"); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := settings.Set(d, settings.KeyFlareSolverrURL, ""); err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv(settings.EnvFlareSolverrURL, "")
 	if err := settings.ClearUseFlareSolverr(d); err != nil {
 		t.Fatal(err)
 	}
@@ -121,8 +116,8 @@ func TestClearUseFlareSolverr(t *testing.T) {
 	if err != nil || url != "" {
 		t.Fatalf("host after clear: got %q, %v", url, err)
 	}
-	err = domains.UpdateHostOverrides(d, "example.com", "", "", "", "", "", "on")
-	if err == nil || !strings.Contains(err.Error(), "FlareSolverr URL") {
+	err = domains.UpdateHostOverrides(d, "example.com", "", "", "", "", "", "", "on")
+	if err == nil || !strings.Contains(err.Error(), "CREATORR_FLARESOLVERR_URL") {
 		t.Fatalf("re-enable without URL: got %v", err)
 	}
 }
