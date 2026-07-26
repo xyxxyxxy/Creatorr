@@ -2,7 +2,10 @@ package web
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -18,8 +21,11 @@ type videoMetadataView struct {
 	PrefetchTaskID    int64
 	PrefetchPending   bool
 	PrefetchDraft     library.VideoPrefetchDraft
+	PrefetchArt       map[string]string
 	FetchURL          string
 	HasPackAnchor     bool
+	HasThumb          bool
+	ThumbMtime        int64
 	Open              bool
 	SeasonEpisodeHint string
 	AiredHint         string
@@ -27,13 +33,18 @@ type videoMetadataView struct {
 
 func (h *Handler) buildVideoMetadataView(ser *library.Series, video *library.Video) videoMetadataView {
 	v := videoMetadataView{
-		Series: ser,
-		Video:  video,
+		Series:      ser,
+		Video:       video,
+		PrefetchArt: map[string]string{},
 	}
 	if h.Library != nil {
 		v.Suggestions, _ = h.Library.ListMetaSuggestions()
 		if _, ok, _ := h.Library.HasPackAnchor(video.ID); ok {
 			v.HasPackAnchor = true
+		}
+		if path, ok, _ := h.Library.VideoThumbPath(video.ID); ok && path != "" {
+			v.HasThumb = true
+			v.ThumbMtime = h.Library.VideoThumbMtime(video.ID)
 		}
 	}
 	if video.SourceURL.Valid {
@@ -99,8 +110,37 @@ func applyVideoPrefetchDraft(video *library.Video, d library.VideoPrefetchDraft)
 	return &out
 }
 
+func videoPrefetchArtFromDraft(d library.VideoPrefetchDraft) map[string]string {
+	out := map[string]string{}
+	if d.ArtFiles == nil {
+		return out
+	}
+	for role, path := range d.ArtFiles {
+		path = strings.TrimSpace(path)
+		if path == "" || !fileExistsWeb(path) {
+			continue
+		}
+		out[role] = path
+	}
+	return out
+}
+
 func (h *Handler) actionSaveVideoMetadata(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
+	ct := r.Header.Get("Content-Type")
+	if strings.HasPrefix(strings.ToLower(ct), "multipart/") {
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
+			sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
+			if sid > 0 && vid > 0 {
+				http.Redirect(w, r, fmt.Sprintf("/series/%d/videos/%d?err=%s", sid, vid, urlQuery(err.Error())), http.StatusSeeOther)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	} else {
+		_ = r.ParseForm()
+	}
 	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
 	video, err := h.Library.GetVideo(vid)
@@ -108,6 +148,43 @@ func (h *Handler) actionSaveVideoMetadata(w http.ResponseWriter, r *http.Request
 		http.NotFound(w, r)
 		return
 	}
+	redir := fmt.Sprintf("/series/%d/videos/%d", sid, vid)
+
+	tmpDir, err := os.MkdirTemp("", "creatorr-video-meta-upload-*")
+	if err != nil {
+		http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	thumbSrc := ""
+	thumbClear := false
+	if f, hdr, ferr := r.FormFile(library.ArtThumb); ferr == nil && hdr != nil && strings.TrimSpace(hdr.Filename) != "" {
+		ext := strings.ToLower(filepath.Ext(hdr.Filename))
+		if ext == "" {
+			ext = ".jpg"
+		}
+		dest := filepath.Join(tmpDir, library.ArtThumb+ext)
+		out, createErr := os.Create(dest)
+		if createErr != nil {
+			_ = f.Close()
+			http.Redirect(w, r, redir+"?err="+urlQuery(createErr.Error()), http.StatusSeeOther)
+			return
+		}
+		_, copyErr := io.Copy(out, f)
+		_ = out.Close()
+		_ = f.Close()
+		if copyErr != nil {
+			http.Redirect(w, r, redir+"?err="+urlQuery(copyErr.Error()), http.StatusSeeOther)
+			return
+		}
+		thumbSrc = dest
+	} else if r.FormValue("clear_"+library.ArtThumb) == "1" {
+		thumbClear = true
+	} else if pref := strings.TrimSpace(r.FormValue("prefetch_"+library.ArtThumb)); pref != "" && fileExistsWeb(pref) {
+		thumbSrc = pref
+	}
+
 	draftTID, _ := strconv.ParseInt(r.FormValue("prefetch_task_id"), 10, 64)
 	uidType, uidVal := "", ""
 	if draftTID > 0 {
@@ -130,11 +207,15 @@ func (h *Handler) actionSaveVideoMetadata(w http.ResponseWriter, r *http.Request
 		Tagline:       r.FormValue("tagline"),
 		Country:       r.FormValue("country"),
 		MPAA:          r.FormValue("mpaa"),
+		ThumbSrc:      thumbSrc,
+		ThumbClear:    thumbClear,
 	})
-	redir := fmt.Sprintf("/series/%d/videos/%d", sid, vid)
 	if err != nil {
 		http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
 		return
+	}
+	if draftTID > 0 {
+		_ = h.Library.ClearVideoPrefetchDraft(vid, draftTID)
 	}
 	http.Redirect(w, r, redir+"?ok=video-metadata", http.StatusSeeOther)
 }
@@ -225,10 +306,54 @@ func (h *Handler) videoMetadataPrefetchStatus(w http.ResponseWriter, r *http.Req
 		if d, err := h.Library.ReadVideoPrefetchDraft(vid, tid); err == nil {
 			draft = d
 			view.Video = applyVideoPrefetchDraft(video, draft)
+			view.PrefetchArt = videoPrefetchArtFromDraft(draft)
 		}
 	}
 	view.PrefetchDraft = draft
 	render(w, "video_metadata_body", view)
+}
+
+func (h *Handler) videoPrefetchArtFile(w http.ResponseWriter, r *http.Request) {
+	sid, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	vid, _ := strconv.ParseInt(chi.URLParam(r, "vid"), 10, 64)
+	tid, _ := strconv.ParseInt(chi.URLParam(r, "tid"), 10, 64)
+	role := chi.URLParam(r, "role")
+	if role != library.ArtThumb {
+		http.NotFound(w, r)
+		return
+	}
+	video, err := h.Library.GetVideo(vid)
+	if err != nil || video.SeriesID != sid {
+		http.NotFound(w, r)
+		return
+	}
+	task, err := h.Queue.GetTask(tid)
+	if err != nil || task == nil || (task.VideoID.Valid && task.VideoID.Int64 != vid) {
+		http.NotFound(w, r)
+		return
+	}
+	draft, err := h.Library.ReadVideoPrefetchDraft(vid, tid)
+	if err != nil || draft.ArtFiles == nil {
+		http.NotFound(w, r)
+		return
+	}
+	path := strings.TrimSpace(draft.ArtFiles[role])
+	if path == "" || !fileExistsWeb(path) {
+		http.NotFound(w, r)
+		return
+	}
+	cacheRoot := strings.TrimSpace(h.Library.CacheDir)
+	if cacheRoot == "" {
+		cacheRoot = filepath.Join("data", "cache")
+	}
+	cacheRoot = filepath.Clean(filepath.Join(cacheRoot, "video-meta", strconv.FormatInt(vid, 10)))
+	clean := filepath.Clean(path)
+	rel, err := filepath.Rel(cacheRoot, clean)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		http.NotFound(w, r)
+		return
+	}
+	http.ServeFile(w, r, clean)
 }
 
 func (h *Handler) actionRefreshSidecarsVideo(w http.ResponseWriter, r *http.Request) {

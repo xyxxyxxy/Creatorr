@@ -1,6 +1,8 @@
 package library_test
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,6 +134,126 @@ func TestBuildVideoPrefetchDraftFromEntry(t *testing.T) {
 	}
 	if d.SortTitle != "" || d.OriginalTitle != "" {
 		t.Fatalf("prefetch must not copy title into sort/original: %+v", d)
+	}
+}
+
+func TestSaveVideoMetadataInstallsAndClearsThumb(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	root, err := s.GetRoot(rootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "ThumbEp", SourceURL: "https://www.example.com/@thumbep",
+		RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "th1", Title: "Ep", WebpageURL: "https://www.example.com/watch?v=th1",
+		UploadDate: "2024-02-01", SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root.Path, "ThumbEp")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	media := filepath.Join(dir, "ep.mkv")
+	if err := os.WriteFile(media, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`INSERT INTO files (video_id, path, kind, acquired_at) VALUES (?, ?, 'video', datetime('now'))`, res.VideoID, media); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(t.TempDir(), "up.jpg")
+	if err := os.WriteFile(src, []byte("JPG"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveVideoMetadata(res.VideoID, library.SaveVideoMetadataParams{
+		Title: "Ep", ThumbSrc: src,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := strings.TrimSuffix(media, filepath.Ext(media)) + "-thumb.jpg"
+	if _, err := os.Stat(want); err != nil {
+		t.Fatal("thumb missing after install", err)
+	}
+	path, ok, err := s.VideoThumbPath(res.VideoID)
+	if err != nil || !ok || path != want {
+		t.Fatalf("VideoThumbPath path=%q ok=%v err=%v", path, ok, err)
+	}
+	if err := s.SaveVideoMetadata(res.VideoID, library.SaveVideoMetadataParams{
+		Title: "Ep", ThumbClear: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(want); !os.IsNotExist(err) {
+		t.Fatal("thumb should be cleared")
+	}
+	if _, ok, err := s.VideoThumbPath(res.VideoID); err != nil || ok {
+		t.Fatalf("thumb row should be gone ok=%v err=%v", ok, err)
+	}
+}
+
+func TestSaveVideoMetadataThumbRequiresPack(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "NoPack", SourceURL: "https://www.example.com/@nopack",
+		RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "np1", Title: "Ep", WebpageURL: "https://www.example.com/watch?v=np1",
+		UploadDate: "2024-02-01", SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(t.TempDir(), "up.jpg")
+	if err := os.WriteFile(src, []byte("JPG"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err = s.SaveVideoMetadata(res.VideoID, library.SaveVideoMetadataParams{
+		Title: "Ep", ThumbSrc: src,
+	})
+	if err == nil {
+		t.Fatal("expected error without pack")
+	}
+}
+
+func TestPersistVideoPrefetchThumb(t *testing.T) {
+	s := openLib(t)
+	s.CacheDir = t.TempDir()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("THUMB"))
+	}))
+	defer srv.Close()
+
+	draft := library.VideoPrefetchDraft{ThumbnailURL: srv.URL + "/t.jpg"}
+	s.PersistVideoPrefetchThumb(42, 7, &draft)
+	path := draft.ArtFiles[library.ArtThumb]
+	if path == "" {
+		t.Fatal("expected art file path")
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "THUMB" {
+		t.Fatalf("body=%q", body)
+	}
+	if err := s.ClearVideoPrefetchDraft(42, 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("clear should remove art file")
 	}
 }
 

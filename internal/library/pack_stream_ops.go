@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
@@ -243,14 +242,12 @@ func (s *Store) PackStreamForVideo(videoID, taskID int64, runtimeSeconds int, su
 		aired = v.UploadDate.String
 	}
 	meta := episodeMetaFromVideo(v, ser.Title, season, episode, aired, runtimeSeconds)
-	var thumbSrc string
-	if v.ThumbnailURL.Valid && strings.TrimSpace(v.ThumbnailURL.String) != "" {
-		tmp := filepath.Join(os.TempDir(), fmt.Sprintf("creatorr-thumb-%d", videoID))
-		if err := downloadURLToFile(v.ThumbnailURL.String, tmp); err == nil {
-			thumbSrc = tmp
-			defer os.Remove(tmp)
-		}
+	thumbURL := ""
+	if v.ThumbnailURL.Valid {
+		thumbURL = v.ThumbnailURL.String
 	}
+	thumbSrc, cleanupThumb := MaterializeThumbSrc("", thumbURL)
+	defer cleanupThumb()
 	allowPaths, _ := s.filePathsForVideo(videoID)
 	strmPath, nfoPath, thumbPath, subPaths, err := PackStream(streamURL, root.Path, meta, LoadNamingConfig(s.DB), thumbSrc, subSrcs, allowPaths)
 	if err != nil {

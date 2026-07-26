@@ -216,19 +216,20 @@ func (s *Store) RefreshDiskSidecars(videoID int64, bundle SidecarBundle, taskID 
 	stem := strings.TrimSuffix(mediaPath, filepath.Ext(mediaPath))
 	stemBase := filepath.Base(stem)
 	thumbPath := ""
-	if bundle.ThumbSrc != "" && fileExists(bundle.ThumbSrc) {
-		ext := strings.ToLower(filepath.Ext(bundle.ThumbSrc))
+	thumbURL := ""
+	if v.ThumbnailURL.Valid {
+		thumbURL = v.ThumbnailURL.String
+	}
+	thumbSrc, cleanupThumb := MaterializeThumbSrc(bundle.ThumbSrc, thumbURL)
+	defer cleanupThumb()
+	if thumbSrc != "" {
+		ext := strings.ToLower(filepath.Ext(thumbSrc))
 		if ext == "" {
 			ext = ".jpg"
 		}
 		thumbPath = filepath.Join(dir, stemBase+"-thumb"+ext)
-		if err := copyFile(bundle.ThumbSrc, thumbPath); err != nil {
+		if err := copyFile(thumbSrc, thumbPath); err != nil {
 			return fmt.Errorf("copy thumb: %w", err)
-		}
-	} else if v.ThumbnailURL.Valid && v.ThumbnailURL.String != "" {
-		dest := filepath.Join(dir, stemBase+"-thumb.jpg")
-		if err := downloadURLToFile(v.ThumbnailURL.String, dest); err == nil {
-			thumbPath = dest
 		}
 	}
 
@@ -487,6 +488,31 @@ func episodeMetaFromVideo(v *Video, seriesTitle string, season, episode int, air
 		Domain:         domain,
 		RuntimeSeconds: runtime,
 	}
+}
+
+// MaterializeThumbSrc returns an on-disk thumbnail path for packing/refresh.
+// Prefer an existing thumbSrc file; otherwise soft-download thumbnailURL to a temp .jpg.
+// Caller must invoke cleanup (no-op when nothing was downloaded). Soft-ok on HTTP failure.
+func MaterializeThumbSrc(thumbSrc, thumbnailURL string) (path string, cleanup func()) {
+	cleanup = func() {}
+	if thumbSrc != "" && fileExists(thumbSrc) {
+		return thumbSrc, cleanup
+	}
+	url := strings.TrimSpace(thumbnailURL)
+	if url == "" {
+		return "", cleanup
+	}
+	tmp, err := os.CreateTemp("", "creatorr-thumb-*.jpg")
+	if err != nil {
+		return "", cleanup
+	}
+	tmpPath := tmp.Name()
+	_ = tmp.Close()
+	if err := downloadURLToFile(url, tmpPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", cleanup
+	}
+	return tmpPath, func() { _ = os.Remove(tmpPath) }
 }
 
 func downloadURLToFile(rawURL, dest string) error {

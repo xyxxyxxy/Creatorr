@@ -20,7 +20,7 @@
     "Info" "Not stored - fills the form for review. Defaults to this video URL. May use another host for the same video."
   )}}
 
-  <form method="post" action="/actions/save-video-metadata" class="space-y-3" {{if .PrefetchPending}}aria-busy="true"{{end}}>
+  <form method="post" action="/actions/save-video-metadata" enctype="multipart/form-data" class="space-y-3" {{if .PrefetchPending}}aria-busy="true"{{end}}>
     <input type="hidden" name="series_id" value="{{.Series.ID}}" />
     <input type="hidden" name="video_id" value="{{.Video.ID}}" />
     {{if .PrefetchTaskID}}<input type="hidden" name="prefetch_task_id" value="{{.PrefetchTaskID}}" />{{end}}
@@ -64,10 +64,32 @@
       )}}
     </div>
 
+    <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
+      <legend class="fieldset-legend text-base">Images</legend>
+      {{if .HasPackAnchor}}
+      <div class="grid gap-3 sm:grid-cols-2">
+        {{template "metadata_art_slot" (dict
+          "Role" "thumb"
+          "Label" "Thumbnail"
+          "SeriesID" .Series.ID
+          "VideoID" .Video.ID
+          "HasFile" .HasThumb
+          "ArtVersion" .ThumbMtime
+          "PrefetchPath" (index .PrefetchArt "thumb")
+          "PrefetchTaskID" .PrefetchTaskID
+          "Info" "Episode thumbnail beside packed media (stem-thumb.jpg). Save installs or clears it; Refresh sidecars re-fetches from the source."
+        )}}
+      </div>
+      {{else}}
+      <p class="text-sm opacity-70">Pack media or stream first to edit the episode thumbnail.</p>
+      {{end}}
+    </fieldset>
+
     <p class="text-sm opacity-70">
-      Save rewrites the episode <code class="text-xs">.nfo</code> beside packed media or <code class="text-xs">.strm</code>.
-      Files are not renamed - run <strong>Apply episode format</strong> under Settings → Library → Maintenance for that.
-      Use <strong>Refresh sidecars</strong> on the video page for thumb / subs.
+      Save rewrites the episode <code class="text-xs">.nfo</code> beside packed media or <code class="text-xs">.strm</code>
+      and applies thumbnail changes.
+      Files are not renamed - run <strong>Apply episode format</strong> under Settings → Maintenance for that.
+      Use <strong>Refresh sidecars</strong> on the video page to re-fetch thumb / subs from the source.
     </p>
     </fieldset>
 
