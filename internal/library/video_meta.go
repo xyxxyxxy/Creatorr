@@ -1,23 +1,25 @@
 package library
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/xyxxyxxy/Creatorr/internal/sponsorblock"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 // MediaCompleteMeta is Creatorr-owned state written on download/import complete.
 type MediaCompleteMeta struct {
-	Tool                   string  // yt-dlp | import
-	DownloadFormatSelector string  // archive download only
-	DownloadRemuxContainer string  // "mkv" only when remux ran; empty when skipped
-	ImportSrc              string  // original path at import
-	InPlace                bool    // transient: history message only (not a column)
-	DurationSeconds        int     // optional; 0 → try info.json
+	Tool                   string // yt-dlp | import
+	DownloadFormatSelector string // archive download only
+	DownloadRemuxContainer string // "mkv" only when remux ran; empty when skipped
+	ImportSrc              string // original path at import
+	InPlace                bool   // transient: history message only (not a column)
+	DurationSeconds        int    // optional; 0 → try info.json
 	Width                  int
 	Height                 int
 	FPS                    float64
@@ -123,6 +125,30 @@ func (s *Store) SetDurationSecondsIfEmpty(videoID int64, sec int) error {
 		WHERE id = ? AND (duration_seconds IS NULL OR duration_seconds <= 0)
 	`, sec, videoID)
 	return err
+}
+
+// SoftFillDurationFromMedia probes media with ffprobe and soft-fills duration_seconds
+// when the column is still NULL/0. Probe errors are ignored (import must not fail).
+func (s *Store) SoftFillDurationFromMedia(ctx context.Context, videoID int64, mediaPath string) error {
+	mediaPath = strings.TrimSpace(mediaPath)
+	if videoID < 1 || mediaPath == "" || !fileExists(mediaPath) {
+		return nil
+	}
+	v, err := s.GetVideo(videoID)
+	if err != nil {
+		return err
+	}
+	if v.DurationSeconds.Valid && v.DurationSeconds.Int64 > 0 {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	p, err := sponsorblock.ProbeMedia(ctx, mediaPath)
+	if err != nil || p.Duration <= 0 {
+		return nil
+	}
+	return s.SetDurationSecondsIfEmpty(videoID, int(p.Duration+0.5))
 }
 
 // SetStreamURLsKind stores progressive|pipe|hls (empty clears).
@@ -338,4 +364,3 @@ func ResolutionLabel(width, height int) string {
 func (v Video) ResolutionLabel() string {
 	return ResolutionLabelFromCols(v.Width, v.Height)
 }
-

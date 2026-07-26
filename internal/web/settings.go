@@ -415,6 +415,29 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) settingsMaintenance(w http.ResponseWriter, r *http.Request) {
+	data := h.maintenancePageData(r)
+	if r.Header.Get("HX-Target") == "maintenance-live" {
+		data.OOB = false
+		render(w, "maintenance_live", data)
+		return
+	}
+	render(w, "settings_maintenance", data)
+}
+
+type maintenancePageData struct {
+	pageBase
+	OOB                  bool
+	StreamEnabled        bool
+	StreamDisabledReason string
+	ApplyNamingBusy      bool
+	NFORegenBusy         bool
+	StrmRegenBusy        bool
+	BeginClearBusy       bool
+	PlaybackClearBusy    bool
+	SyncFilesBusy        bool
+}
+
+func (h *Handler) maintenancePageData(r *http.Request) maintenancePageData {
 	applyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain)
 	nfoBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateNFO, queue.SystemDomain)
 	strmBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateStrm, queue.SystemDomain)
@@ -422,17 +445,7 @@ func (h *Handler) settingsMaintenance(w http.ResponseWriter, r *http.Request) {
 	playbackClearBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindClearPlaybackCache, queue.SystemDomain)
 	syncBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain)
 	streamOK, streamReason := h.streamGate()
-	render(w, "settings_maintenance", struct {
-		pageBase
-		StreamEnabled        bool
-		StreamDisabledReason string
-		ApplyNamingBusy      bool
-		NFORegenBusy         bool
-		StrmRegenBusy        bool
-		BeginClearBusy       bool
-		PlaybackClearBusy    bool
-		SyncFilesBusy        bool
-	}{
+	return maintenancePageData{
 		pageBase:             newSettingsPage("Settings · Maintenance", "maintenance", flashFromQuery(r)),
 		StreamEnabled:        streamOK,
 		StreamDisabledReason: streamReason,
@@ -442,7 +455,7 @@ func (h *Handler) settingsMaintenance(w http.ResponseWriter, r *http.Request) {
 		BeginClearBusy:       beginClearBusy,
 		PlaybackClearBusy:    playbackClearBusy,
 		SyncFilesBusy:        syncBusy,
-	})
+	}
 }
 
 func (h *Handler) settingsDomains(w http.ResponseWriter, r *http.Request) {

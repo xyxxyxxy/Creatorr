@@ -1,6 +1,7 @@
 package library
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"os"
@@ -10,19 +11,21 @@ import (
 
 // episodeNFOXML is a minimal episodedetails decode for import apply.
 type episodeNFOXML struct {
-	XMLName       xml.Name `xml:"episodedetails"`
-	Title         string   `xml:"title"`
-	SortTitle     string   `xml:"sorttitle"`
-	OriginalTitle string   `xml:"originaltitle"`
-	Plot          string   `xml:"plot"`
-	Tagline       string   `xml:"tagline"`
-	Studio        string   `xml:"studio"`
-	Country       string   `xml:"country"`
-	MPAA          string   `xml:"mpaa"`
-	Aired         string   `xml:"aired"`
-	Genres        []string `xml:"genre"`
-	Tags          []string `xml:"tag"`
-	UniqueIDs     []struct {
+	XMLName           xml.Name `xml:"episodedetails"`
+	Title             string   `xml:"title"`
+	SortTitle         string   `xml:"sorttitle"`
+	OriginalTitle     string   `xml:"originaltitle"`
+	Plot              string   `xml:"plot"`
+	Tagline           string   `xml:"tagline"`
+	Studio            string   `xml:"studio"`
+	Country           string   `xml:"country"`
+	MPAA              string   `xml:"mpaa"`
+	Aired             string   `xml:"aired"`
+	Runtime           int      `xml:"runtime"`           // Emby/Kodi: minutes
+	DurationInSeconds int      `xml:"durationinseconds"` // rare top-level
+	Genres            []string `xml:"genre"`
+	Tags              []string `xml:"tag"`
+	UniqueIDs         []struct {
 		Type    string `xml:"type,attr"`
 		Default string `xml:"default,attr"`
 		Value   string `xml:",chardata"`
@@ -32,19 +35,42 @@ type episodeNFOXML struct {
 		Role  string `xml:"role"`
 		Order int    `xml:"order"`
 	} `xml:"actor"`
+	FileInfo struct {
+		StreamDetails struct {
+			Video struct {
+				DurationInSeconds int `xml:"durationinseconds"`
+			} `xml:"video"`
+		} `xml:"streamdetails"`
+	} `xml:"fileinfo"`
+}
+
+// durationSecondsFromEpisodeNFO prefers fileinfo durationinseconds, then top-level
+// durationinseconds, then runtime minutes × 60.
+func durationSecondsFromEpisodeNFO(doc episodeNFOXML) int {
+	if d := doc.FileInfo.StreamDetails.Video.DurationInSeconds; d > 0 {
+		return d
+	}
+	if doc.DurationInSeconds > 0 {
+		return doc.DurationInSeconds
+	}
+	if doc.Runtime > 0 {
+		return doc.Runtime * 60
+	}
+	return 0
 }
 
 // ParseEpisodeNFOFile reads editable episode metadata from an on-disk .nfo.
 // Season / episode / remote_id are not returned (index identity stays operator/scan owned).
 // aired is YYYY-MM-DD or empty (soft-fill upload_date only when the video has none).
-func ParseEpisodeNFOFile(path string) (p SaveVideoMetadataParams, aired string, err error) {
+// durationSec is soft-fill only (NULL/0 duration_seconds); 0 when unknown.
+func ParseEpisodeNFOFile(path string) (p SaveVideoMetadataParams, aired string, durationSec int, err error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return p, "", err
+		return p, "", 0, err
 	}
 	var doc episodeNFOXML
 	if err := xml.Unmarshal(b, &doc); err != nil {
-		return p, "", fmt.Errorf("%w: parse nfo: %v", ErrInvalid, err)
+		return p, "", 0, fmt.Errorf("%w: parse nfo: %v", ErrInvalid, err)
 	}
 	p.Title = strings.TrimSpace(doc.Title)
 	p.SortTitle = strings.TrimSpace(doc.SortTitle)
@@ -87,7 +113,8 @@ func ParseEpisodeNFOFile(path string) (p SaveVideoMetadataParams, aired string, 
 		}
 	}
 	aired = strings.TrimSpace(doc.Aired)
-	return p, aired, nil
+	durationSec = durationSecondsFromEpisodeNFO(doc)
+	return p, aired, durationSec, nil
 }
 
 // ApplyImportNFOMetadata writes editable video columns from an episode NFO (no on-disk rewrite).
@@ -103,7 +130,7 @@ func (s *Store) applyImportNFOMetadata(videoID int64, nfoPath string) error {
 	if err != nil {
 		return err
 	}
-	p, aired, err := ParseEpisodeNFOFile(nfoPath)
+	p, aired, durationSec, err := ParseEpisodeNFOFile(nfoPath)
 	if err != nil {
 		return err
 	}
@@ -128,6 +155,9 @@ func (s *Store) applyImportNFOMetadata(videoID int64, nfoPath string) error {
 		encodeActors(p.Actors), strings.TrimSpace(p.Tagline), strings.TrimSpace(p.Country),
 		strings.TrimSpace(p.MPAA), videoID)
 	if err != nil {
+		return err
+	}
+	if err := s.SetDurationSecondsIfEmpty(videoID, durationSec); err != nil {
 		return err
 	}
 	if aired == "" {
@@ -155,11 +185,15 @@ func (s *Store) ApplyImportNFO(videoID int64, nfoPath string, taskID int64) erro
 	if err := s.applyImportNFOMetadata(videoID, nfoPath); err != nil {
 		return err
 	}
-	if _, err := s.RewriteVideoNFO(videoID, 0); err != nil {
-		return err
-	}
 	mediaPath, ok, err := s.HasPackAnchor(videoID)
 	if err != nil {
+		return err
+	}
+	if ok {
+		// NFO first (above); ffprobe only when duration still empty so rewrite can emit runtime.
+		_ = s.SoftFillDurationFromMedia(context.Background(), videoID, mediaPath)
+	}
+	if _, err := s.RewriteVideoNFO(videoID, 0); err != nil {
 		return err
 	}
 	if ok {

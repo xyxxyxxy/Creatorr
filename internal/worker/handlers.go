@@ -850,8 +850,11 @@ func ImportHandler(d Deps) TaskHandler {
 				if err := d.Library.ApplyImportNFO(t.VideoID.Int64, nfoBeside, t.ID); err != nil {
 					return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "apply nfo failed"), err.Error())
 				}
-			} else if _, err := d.Library.RewriteVideoNFO(t.VideoID.Int64, 0); err != nil {
-				return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "write nfo failed"), err.Error())
+			} else {
+				_ = d.Library.SoftFillDurationFromMedia(ctx, t.VideoID.Int64, abs)
+				if _, err := d.Library.RewriteVideoNFO(t.VideoID.Int64, 0); err != nil {
+					return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "write nfo failed"), err.Error())
+				}
 			}
 			if payload.Verify {
 				_ = d.Library.CancelMediaVerifyForVideo(t.VideoID.Int64, "Superseded by import")
@@ -973,6 +976,11 @@ func ImportHandler(d Deps) TaskHandler {
 		}
 		if err := d.Library.CompleteImport(t.VideoID.Int64, mediaPath, nfoPath, infoPath, meta, t.ID); err != nil {
 			return err
+		}
+		// NFO soft-fill already ran above when present; ffprobe when duration still empty.
+		_ = d.Library.SoftFillDurationFromMedia(ctx, t.VideoID.Int64, mediaPath)
+		if _, err := d.Library.RewriteVideoNFO(t.VideoID.Int64, 0); err != nil {
+			return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "write nfo failed"), err.Error())
 		}
 		if payload.Verify {
 			_ = d.Library.CancelMediaVerifyForVideo(t.VideoID.Int64, "Superseded by import")
@@ -2004,14 +2012,13 @@ func PrefetchSeriesMetaHandler(d Deps) TaskHandler {
 			return err
 		}
 		domain := queue.DomainFromURL(fetchURL)
-		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
 		flare, err := domains.FlareSolverrURL(d.Library.DB, domain)
 		if err != nil {
 			return err
 		}
+		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
 		info, err := d.YtDlp.DumpPlaylistInfo(ctx, ytdlp.ListOpts{
 			URL: fetchURL, CookiesPath: jar, PlaylistEnd: 1, FlareSolverrURL: flare,
-			LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 		})
 		if err != nil {
 			draft := library.PrefetchDraft{Error: err.Error(), ArtFiles: map[string]string{}}
@@ -2085,16 +2092,15 @@ func PrefetchAddSeriesHandler(d Deps) TaskHandler {
 			jar = ""
 		}
 		domain := queue.DomainFromURL(fetchURL)
-		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
 		flare, err := domains.FlareSolverrURL(d.Library.DB, domain)
 		if err != nil {
 			draft := library.PrefetchDraft{Error: err.Error(), ArtFiles: map[string]string{}}
 			_ = d.Library.WriteAddSeriesDraft(token, draft)
 			return err
 		}
+		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
 		info, err := d.YtDlp.DumpPlaylistInfo(ctx, ytdlp.ListOpts{
 			URL: fetchURL, CookiesPath: jar, PlaylistEnd: 1, FlareSolverrURL: flare,
-			LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 		})
 		if err != nil {
 			draft := library.PrefetchDraft{Error: err.Error(), ArtFiles: map[string]string{}}
@@ -2150,16 +2156,15 @@ func PrefetchAddVideoHandler(d Deps) TaskHandler {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 		}
 		domain := queue.DomainFromURL(fetchURL)
-		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
 		flare, err := domains.FlareSolverrURL(d.Library.DB, domain)
 		if err != nil {
 			draft := library.AddVideoDraft{Error: err.Error()}
 			_ = d.Library.WriteAddVideoDraft(token, draft)
 			return err
 		}
+		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
 		e, err := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
 			URL: fetchURL, CookiesPath: jar, FlareSolverrURL: flare,
-			LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 		})
 		if err != nil {
 			draft := library.AddVideoDraft{Error: err.Error()}
@@ -2212,14 +2217,13 @@ func PrefetchVideoMetaHandler(d Deps) TaskHandler {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 		}
 		domain := queue.DomainFromURL(fetchURL)
-		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
 		flare, err := domains.FlareSolverrURL(d.Library.DB, domain)
 		if err != nil {
 			return err
 		}
+		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
 		e, err := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
 			URL: fetchURL, CookiesPath: jar, FlareSolverrURL: flare,
-			LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 		})
 		if err != nil {
 			draft := library.VideoPrefetchDraft{Error: err.Error()}

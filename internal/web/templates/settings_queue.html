@@ -100,7 +100,17 @@
 {{template "list_empty" "No domain overrides yet."}}
 {{else}}
 {{template "list_table"}}
-<thead><tr><th>Domain</th><th>Cooldown</th><th>Queue</th><th>Tasks</th><th>Rate</th><th>Sleep</th><th>Flare</th><th>Cookies</th><th></th></tr></thead>
+<thead><tr>
+  <th>Domain</th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Cooldown" aria-label="Cooldown"><i data-lucide="timer" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Queue" aria-label="Queue"><i data-lucide="list" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Tasks" aria-label="Tasks"><i data-lucide="layers-2" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Rate" aria-label="Rate"><i data-lucide="download" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Sleep" aria-label="Sleep"><i data-lucide="snail" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Flare" aria-label="Flare"><i data-lucide="flame" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Cookies" aria-label="Cookies"><i data-lucide="cookie" class="size-4"></i></span></th>
+  <th></th>
+</tr></thead>
 <tbody>
   {{range .DomainOverrides}}
   <tr>

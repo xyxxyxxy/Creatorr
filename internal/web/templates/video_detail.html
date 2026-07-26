@@ -15,10 +15,10 @@
   <div class="flex-none flex flex-wrap gap-2 items-center">
     {{if .Deleting}}
     <span class="text-xs opacity-60">Queued for deletion</span>
-    <label for="modal-edit-video-metadata" class="btn btn-outline btn-disabled" aria-disabled="true">Metadata</label>
+    <label for="modal-edit-video-metadata" class="btn btn-outline btn-disabled" aria-disabled="true">Edit metadata</label>
     <button type="button" class="btn btn-outline btn-disabled" aria-disabled="true" disabled>Refresh sidecars</button>
     {{else}}
-    <label for="modal-edit-video-metadata" class="btn btn-outline">Metadata</label>
+    <label for="modal-edit-video-metadata" class="btn btn-outline">Edit metadata</label>
     {{$canRefreshSidecars := and .HasPackAnchor .DomainActive}}
     <form method="post" action="/actions/refresh-sidecars-video" class="inline">
       <input type="hidden" name="video_id" value="{{.Video.ID}}" />

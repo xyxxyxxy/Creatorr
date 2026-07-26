@@ -176,15 +176,15 @@ func flashFromQuery(r *http.Request) *flash {
 	case "profile-updated":
 		return flashOK("Quality profile updated.")
 	case "nfo-regen-queued":
-		return flashOK("NFO regenerate queued - see Tasks (system lane). Resumes after restart.")
+		return flashOK("NFO regenerate queued.")
 	case "strm-regen-queued":
-		return flashOK("strm regenerate queued - see Tasks (system lane). Resumes after restart.")
+		return flashOK("strm regenerate queued.")
 	case "begin-clear-queued":
-		return flashOK("Clear beginning cache queued - see Tasks (system lane).")
+		return flashOK("Clear beginning cache queued.")
 	case "playback-clear-queued":
-		return flashOK("Clear progressive stream cache queued - see Tasks (system lane).")
+		return flashOK("Clear progressive stream cache queued.")
 	case "sync-files-queued":
-		return flashOK("File sync queued - see Tasks (system lane).")
+		return flashOK("File sync queued.")
 	case "sync-files-empty":
 		return flashWarn("No videos to sync.")
 	case "stream-token-rotated":
@@ -199,7 +199,7 @@ func flashFromQuery(r *http.Request) *flash {
 		}
 		return flashOK(msg)
 	case "apply-naming":
-		return flashOK("'Apply episode format' queued - see 'Tasks' (system lane).")
+		return flashOK("'Apply episode format' queued.")
 	case "delete-queued":
 		return flashOK("Delete queued - files remove in the background.")
 	case "domain-queue":

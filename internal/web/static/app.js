@@ -909,6 +909,40 @@
     }
   }
 
+  function onMaintenancePage() {
+    return location.pathname === "/settings/maintenance";
+  }
+
+  const maintenanceTaskKinds = new Set([
+    "sync_files",
+    "rename_episodes",
+    "regenerate_nfo",
+    "regenerate_strm",
+    "clear_beginning_cache",
+    "clear_playback_cache",
+  ]);
+
+  function refreshMaintenanceLive() {
+    if (!onMaintenancePage() || !document.getElementById("maintenance-live") || !window.htmx) return;
+    window.htmx.ajax("GET", "/settings/maintenance", {
+      target: "#maintenance-live",
+      select: "#maintenance-live",
+      swap: "outerHTML",
+    });
+  }
+
+  function maybeRefreshMaintenance(ev) {
+    if (!onMaintenancePage()) return;
+    if (ev.type !== "task.done" && ev.type !== "task.failed") return;
+    let kind = "";
+    try {
+      const data = JSON.parse(ev.data || "{}");
+      kind = data.kind || "";
+    } catch (_) {}
+    if (!maintenanceTaskKinds.has(kind)) return;
+    refreshMaintenanceLive();
+  }
+
   function onSSE(ev) {
     refreshBadge();
     if (ev.type === "notification.created" || ev.type === "notification.read") {
@@ -939,6 +973,7 @@
     }
     maybeRefreshSeriesVideos(ev);
     maybeRefreshSeriesList(ev);
+    maybeRefreshMaintenance(ev);
     if (typeof window.refreshImportFullScanNote === "function") {
       window.refreshImportFullScanNote(ev);
     }
