@@ -56,7 +56,7 @@ func TestStreamPlayOccupiesParallelSlot(t *testing.T) {
 
 func TestStreamPlayFinishSkipsCooldown(t *testing.T) {
 	s := openStore(t)
-	_ = settings.SetDomainDefault(s.DB, 30, 8, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(s.DB, 30, 8, 1, "10M", "off", "0", false)
 	_ = domains.EnsureHost(s.DB, "example.com")
 	vid := seedVideo(t, s, "v-cd")
 	var seriesID int64

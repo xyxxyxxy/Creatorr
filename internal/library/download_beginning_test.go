@@ -113,12 +113,12 @@ SourceID: src.ID,
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
-	n, err := s.FileSyncPass(seedTaskID(t, s))
+	resSync, err := s.FileSyncPass(seedTaskID(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n < 1 {
-		t.Fatalf("expected file sync change, got %d", n)
+	if resSync.Total() < 1 {
+		t.Fatalf("expected file sync change, got %d", resSync.Total())
 	}
 	v, err = s.GetVideo(vid)
 	if err != nil {
@@ -154,12 +154,12 @@ SourceID: src.ID,
 	if err := os.WriteFile(filepath.Join(dir, "meta.json"), []byte(meta), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	n, err = s.FileSyncPass(seedTaskID(t, s))
+	resSync, err = s.FileSyncPass(seedTaskID(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n < 1 {
-		t.Fatalf("expected restore change, got %d", n)
+	if resSync.Total() < 1 {
+		t.Fatalf("expected restore change, got %d", resSync.Total())
 	}
 	v, err = s.GetVideo(vid)
 	if err != nil {
@@ -204,12 +204,12 @@ SourceID: src.ID,
 		t.Fatal(err)
 	}
 
-	n, err := s.FileSyncPass(seedTaskID(t, s))
+	resSync, err := s.FileSyncPass(seedTaskID(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n < 1 {
-		t.Fatalf("expected beginning_missing change, got %d", n)
+	if resSync.Total() < 1 {
+		t.Fatalf("expected beginning_missing change, got %d", resSync.Total())
 	}
 	var beginTasks int
 	if err := s.DB.SQL.QueryRow(`

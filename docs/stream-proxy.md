@@ -68,11 +68,11 @@ Manual **Prepare stream** enqueues one `pack_stream` at front of the domain lane
 
 Creatorr stores a random **`stream_url_token`** in SQLite (auto-created). Shown under Streaming when the external URL is set; **Generate new token** invalidates existing `.strm` URLs (confirm modal warns to run **Regenerate all .strm files**). Every proxy request must include `?token=` matching the stored value.
 
-**Regenerate all .strm files** (Maintenance): system-lane `regenerate_strm` rewrites on-disk `.strm` lines to the current external URL + token (no yt-dlp). Run after rotating the token or changing the external URL.
+**Regenerate all .strm files** (Settings → Maintenance): system-lane `regenerate_strm` rewrites on-disk `.strm` lines to the current external URL + token (no yt-dlp). Run after rotating the token or changing the external URL.
 
-**Clear beginning of stream cache** (Maintenance): system-lane `clear_beginning_cache` deletes beginning caches under `{CacheDir}/download-beginnings`, clears `stream_beginning_cached`, and cancels pending `cache_beginning` tasks.
+**Clear beginning of stream cache** (Settings → Maintenance): system-lane `clear_beginning_cache` deletes beginning caches under `{CacheDir}/download-beginnings`, clears `stream_beginning_cached`, and cancels pending `cache_beginning` tasks.
 
-**Clear progressive stream cache** (Maintenance): system-lane `clear_playback_cache` deletes `{CacheDir}/playback-cache`, zeros progressive cache columns. Does not touch beginning caches.
+**Clear progressive stream cache** (Settings → Maintenance): system-lane `clear_playback_cache` deletes `{CacheDir}/playback-cache`, zeros progressive cache columns. Does not touch beginning caches.
 
 ## Stream proxy
 
@@ -91,7 +91,7 @@ Flow when a client opens a `.strm` URL:
 1. Validate token and load video; require stream-mode series and status **`streamable`**.
 2. Resolve page URL (video `source_url` only - no feed URL fallback).
 3. Gate: domain **active**, yt-dlp binary present.
-4. Invoke yt-dlp **`urls`** with quality profile format selector, domain cookies, optional FlareSolverr. **Does not** pass `download_rate_limit` (avoids throttling play bytes).
+4. Invoke yt-dlp **`urls`** with quality profile format selector, domain cookies, optional FlareSolverr. Resolve has **no** pace flags (`download_rate_limit` / `sleep_requests` / `stream_play_rate_limit`). Mux/pipe uses optional domain **`stream_play_rate_limit`** (`--limit-rate` only; never sleep). **`cache_beginning`** uses `download_rate_limit` + `sleep_requests` like archive download.
 5. **Play path:** master/`.strm` always **pipe** (Emby cancels native CDN HLS on `.strm`). When a **download beginning** is on disk: beginning segs immediately, live mux at N (`--hls-start-sec`), one playlist with `#EXT-X-DISCONTINUITY`, VOD + START:0 + duration pad + ENDLIST. Without beginning: pipe from 0 + pad. Native `/hls?u=` and progressive routes remain for non-master use.
 
 | `kind` from `urls` | Used for | Seek |

@@ -111,6 +111,7 @@ func (h *Handler) ensureHLSSession(pc playCtx, urls ytdlp.UrlsResult, cookiesSrc
 		URL: pc.pageURL, FormatSelector: pc.format,
 		CookiesPath: jar, FlareSolverrURL: pc.flare,
 		HLSDir: dir, HLSStartSec: startSec,
+		LimitRate: pc.streamPlayRateLimit,
 	}, urls)
 	if h.YtDlp == nil {
 		cancel()

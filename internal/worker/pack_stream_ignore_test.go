@@ -19,7 +19,7 @@ func TestApplyPackStreamAutoIgnoreSkipsBeginning(t *testing.T) {
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
 	_ = settings.Set(d, settings.KeyCacheBeginningSeconds, "20")
-	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "off", "0", false)
 
 	lib := &library.Store{DB: d, Queue: queue.NewStore(d)}
 	root, err := lib.CreateRoot("archive", t.TempDir(), nil)

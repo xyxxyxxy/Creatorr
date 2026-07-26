@@ -22,6 +22,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/sponsorblock"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
@@ -72,15 +73,16 @@ func (h *Handler) Mount(r chi.Router) {
 }
 
 type playCtx struct {
-	videoID  int64
-	seriesID int64
-	domain   string
-	pageURL  string
-	format   string
-	jar      string
-	flare    string
-	token    string
-	taskID   int64
+	videoID             int64
+	seriesID            int64
+	domain              string
+	pageURL             string
+	format              string
+	jar                 string
+	flare               string
+	token               string
+	taskID              int64
+	streamPlayRateLimit string // yt-dlp --limit-rate for mux/pipe; never sleep
 }
 
 func (h *Handler) serveVideo(w http.ResponseWriter, r *http.Request) {
@@ -369,12 +371,18 @@ func (h *Handler) resolvePlay(w http.ResponseWriter, r *http.Request) (playCtx, 
 		return playCtx{}, ytdlp.UrlsResult{}, noop, false
 	}
 
-	// Resolve only - do not pass download_rate_limit (avoids throttling play).
+	// Resolve has no pace flags (fast start). Media mux/pipe uses stream_play_rate_limit only -
+	// never download_rate_limit or sleep_requests (client waits on play bytes).
+	streamRate := ""
+	if lim, err := settings.LimitsForDomain(h.Library.DB, domain); err == nil {
+		streamRate = lim.StreamPlayRateLimit
+	}
 	taskID := h.touchOccupancy(vid, v.SeriesID, domain, token)
 	pcBase := playCtx{
 		videoID: vid, seriesID: v.SeriesID, domain: domain,
 		pageURL: pageURL, format: format,
 		jar: jar, flare: flare, token: token, taskID: taskID,
+		streamPlayRateLimit: streamRate,
 	}
 
 	if cached, ok := getCachedUrls(vid, format); ok {
@@ -601,6 +609,7 @@ func (h *Handler) servePipeMatroska(w http.ResponseWriter, r *http.Request, pc p
 	opts := ytdlp.StreamOptsFromUrls(ytdlp.StreamOpts{
 		URL: pc.pageURL, FormatSelector: pc.format,
 		CookiesPath: pc.jar, FlareSolverrURL: pc.flare,
+		LimitRate: pc.streamPlayRateLimit,
 	}, urls)
 	err := h.YtDlp.PipeStream(r.Context(), opts, flushWriter{w: w, f: flusher})
 	if err != nil && r.Context().Err() == nil {

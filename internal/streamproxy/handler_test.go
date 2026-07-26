@@ -33,7 +33,7 @@ func openStreamLib(t *testing.T) *library.Store {
 		t.Fatal(err)
 	}
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "off", "0", false)
 	q := queue.NewStore(d)
 	s := library.NewStore(d, q)
 	s.PublicBaseURL = "http://creatorr.example.com:8787"
