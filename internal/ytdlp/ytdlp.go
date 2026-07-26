@@ -178,13 +178,13 @@ func secondsOff(v string) bool {
 	return err == nil && f <= 0
 }
 
-// normalizeFormat returns the profile format selector as-is, or the strict
-// default merge selector when empty. Does not append /best - height-capped
-// profiles keep their own soft tails; the best profile is strict bv*+ba.
+// normalizeFormat returns the profile format selector as-is, or the default
+// merge-with-progressive-fallback selector when empty. Does not append further
+// /best - height-capped profiles keep their own soft tails.
 func normalizeFormat(sel string) string {
 	sel = strings.TrimSpace(sel)
 	if sel == "" {
-		return "bv*+ba"
+		return "bv*+ba/b"
 	}
 	return sel
 }
@@ -195,7 +195,7 @@ func normalizeFormat(sel string) string {
 func normalizeHDFormat(sel string) string {
 	sel = strings.TrimSpace(sel)
 	if sel == "" || sel == "best" {
-		return "bv*+ba"
+		return "bv*+ba/b"
 	}
 	return normalizeFormat(sel)
 }
@@ -838,6 +838,7 @@ var mediaExt = map[string]bool{
 
 // findMedia picks the downloaded media file, preferring mkv (yt-dlp's default
 // merge container) so a stray leftover of a different extension doesn't win.
+// Skips HLS playlists misnamed as .mp4/.mkv (content starts with #EXTM3U).
 func findMedia(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -853,6 +854,9 @@ func findMedia(dir string) (string, error) {
 			continue
 		}
 		path := filepath.Join(dir, e.Name())
+		if looksLikeHLSPlaylist(path) {
+			continue
+		}
 		if ext == ".mkv" {
 			return path, nil
 		}
@@ -864,6 +868,20 @@ func findMedia(dir string) (string, error) {
 		return "", os.ErrNotExist
 	}
 	return best, nil
+}
+
+func looksLikeHLSPlaylist(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	var buf [8]byte
+	n, err := f.Read(buf[:])
+	if err != nil && n == 0 {
+		return false
+	}
+	return strings.HasPrefix(string(buf[:n]), "#EXTM3U")
 }
 
 func runCapture(ctx context.Context, o options, args []string, cwd string) (stdout, stderr []byte, err error) {

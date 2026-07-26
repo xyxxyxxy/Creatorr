@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1614,5 +1615,40 @@ func TestMarkDownloadFailedStage(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected download_failed history")
+	}
+}
+
+func TestSaveSeriesMetadataOmitsRedundantTitles(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Same Show", SourceURL: "https://www.example.com/@sameshow",
+		RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveSeriesMetadata(ser.ID, library.SaveSeriesMetadataParams{
+		SortTitle: "Same Show", OriginalTitle: "Same Show", Plot: "About",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetSeries(ser.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Meta.SortTitle != "" || got.Meta.OriginalTitle != "" {
+		t.Fatalf("want cleared sort/original, got sort=%q orig=%q", got.Meta.SortTitle, got.Meta.OriginalTitle)
+	}
+	root, err := s.GetRoot(ser.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(root.Path, "Same Show", "tvshow.nfo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "<sorttitle>") || strings.Contains(string(body), "<originaltitle>") {
+		t.Fatalf("nfo should omit dups:\n%s", body)
 	}
 }

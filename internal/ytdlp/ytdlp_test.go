@@ -2,6 +2,8 @@ package ytdlp
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -72,7 +74,7 @@ func TestAppendSubtitleFlags(t *testing.T) {
 }
 
 func TestNormalizeFormat(t *testing.T) {
-	if got := normalizeFormat(""); got != "bv*+ba" {
+	if got := normalizeFormat(""); got != "bv*+ba/b" {
 		t.Fatalf("normalizeFormat(\"\") = %q", got)
 	}
 	if got := normalizeFormat("bestvideo+bestaudio"); got != "bestvideo+bestaudio" {
@@ -100,10 +102,10 @@ func TestNormalizeStreamFormat(t *testing.T) {
 }
 
 func TestNormalizeHDFormat(t *testing.T) {
-	if got := normalizeHDFormat(""); got != "bv*+ba" {
+	if got := normalizeHDFormat(""); got != "bv*+ba/b" {
 		t.Fatalf("empty = %q", got)
 	}
-	if got := normalizeHDFormat("best"); got != "bv*+ba" {
+	if got := normalizeHDFormat("best"); got != "bv*+ba/b" {
 		t.Fatalf("best = %q", got)
 	}
 	if got := normalizeHDFormat("bv*[height<=1080]+ba/b"); got != "bv*[height<=1080]+ba/b" {
@@ -247,5 +249,24 @@ func TestProgressiveURLFromInfoSeparateStreams(t *testing.T) {
 	_, _, err := progressiveURLFromInfo(info)
 	if !errors.Is(err, errSeparateStreams) {
 		t.Fatalf("err = %v, want errSeparateStreams", err)
+	}
+}
+
+func TestFindMediaSkipsHLSPlaylist(t *testing.T) {
+	dir := t.TempDir()
+	playlist := filepath.Join(dir, "clip [id].mp4")
+	real := filepath.Join(dir, "other [id2].mp4")
+	if err := os.WriteFile(playlist, []byte("#EXTM3U\n#EXT-X-VERSION:6\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(real, []byte("not-a-playlist"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := findMedia(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != real {
+		t.Fatalf("got %q want %q", got, real)
 	}
 }

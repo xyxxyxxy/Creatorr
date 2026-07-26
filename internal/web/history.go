@@ -273,6 +273,9 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 	nFilter := parseNotifyListFilter(r)
 	now := time.Now().UTC()
 
+	// Visiting History clears the unread badge (list then renders as read).
+	_, _ = notify.MarkAllRead(h.Queue.DB)
+
 	nTotal, err := notify.CountNotifications(h.Queue.DB, nFilter)
 	if err != nil {
 		http.Error(w, err.Error(), 500)

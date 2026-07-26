@@ -202,13 +202,14 @@
   async function refreshNotifyDropdown() {
     const menu = document.getElementById("notify-menu");
     const empty = document.getElementById("notify-dropdown-empty");
+    const markAll = document.getElementById("notify-menu-mark-all");
     const viewAll = document.getElementById("notify-menu-view-all");
     if (!menu || !empty || !viewAll) return;
     try {
-      const res = await fetch("/api/notifications?limit=8");
+      const res = await fetch("/api/notifications?limit=4");
       if (!res.ok) return;
       const items = await res.json();
-      // Drop previous notification rows (keep empty, view-all).
+      // Drop previous notification rows (keep empty, mark-all, view-all).
       menu.querySelectorAll("[data-notify-item]").forEach((el) => el.remove());
       if (!Array.isArray(items) || items.length === 0) {
         empty.classList.remove("hidden");
@@ -255,8 +256,18 @@
         li.appendChild(a);
         frag.appendChild(li);
       });
-      menu.insertBefore(frag, viewAll);
+      menu.insertBefore(frag, markAll || viewAll);
       createLucideIcons(menu);
+    } catch (_) {}
+  }
+
+  async function markAllNotificationsRead() {
+    try {
+      const res = await fetch("/api/notifications/read-all", { method: "POST" });
+      if (!res.ok) return;
+      const data = await res.json();
+      refreshNotifyBadge(data && data.count);
+      await refreshNotifyDropdown();
     } catch (_) {}
   }
 
@@ -1415,6 +1426,13 @@
     refreshBadge();
     refreshNotifyBadge();
     refreshNotifyDropdown();
+    const markAllBtn = document.getElementById("notify-mark-all-read");
+    if (markAllBtn) {
+      markAllBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        markAllNotificationsRead();
+      });
+    }
     document.querySelectorAll("[data-notify-redirect]").forEach((el) => {
       el.value = location.pathname + location.search + location.hash;
     });
@@ -1652,9 +1670,8 @@
       field = form.querySelector('select[name="root_id"]');
     } else if (/quality|profile/.test(lower)) {
       field = form.querySelector('select[name="quality_profile_id"]');
-    } else if ((form.dataset.addSeriesStep || "") === "source") {
-      field = form.querySelector("#add-series-url");
     }
+    // yt-dlp / prefetch failures stay in the alert (not URL field validators).
     if (field) {
       if (field.id === "add-series-url") {
         form.dataset.addSeriesStep = "source";

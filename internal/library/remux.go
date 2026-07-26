@@ -17,6 +17,8 @@ const RemuxContainer = "mkv"
 
 // RemuxIfNeeded remuxes media into MKV via ffmpeg when the file extension is not
 // already .mkv. Returns the path to use, whether a remux ran, and any error (CodeRemuxFailed).
+// Maps only video (excluding attached pics) and audio; drops data streams such as
+// QuickTime tmcd that Matroska cannot store (otherwise -c copy fails).
 func RemuxIfNeeded(ctx context.Context, mediaPath string) (path string, remuxed bool, err error) {
 	if mediaPath == "" {
 		return mediaPath, false, nil
@@ -28,14 +30,19 @@ func RemuxIfNeeded(ctx context.Context, mediaPath string) (path string, remuxed 
 	dir := filepath.Dir(mediaPath)
 	base := strings.TrimSuffix(filepath.Base(mediaPath), filepath.Ext(mediaPath))
 	out := filepath.Join(dir, base+"."+RemuxContainer)
-	args := []string{"-y", "-i", mediaPath, "-c", "copy", out}
+	args := []string{
+		"-y", "-i", mediaPath,
+		"-map", "0:V", "-map", "0:a?",
+		"-dn",
+		"-c", "copy", out,
+	}
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 	exectrace.Record(ctx, "ffmpeg", args...)
 	outb, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", false, apperrors.WithDetail(
 			apperrors.New(apperrors.CodeRemuxFailed, "ffmpeg remux failed"),
-			fmt.Sprintf("%v: %s", err, truncateBytes(outb, 400)),
+			fmt.Sprintf("%v: %s", err, truncateBytesTail(outb, 600)),
 		)
 	}
 	_ = os.Remove(mediaPath)
@@ -48,4 +55,14 @@ func truncateBytes(b []byte, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+// truncateBytesTail keeps the end of ffmpeg logs (banner is at the start; the
+// failure line is usually last).
+func truncateBytesTail(b []byte, n int) string {
+	s := string(b)
+	if len(s) <= n {
+		return s
+	}
+	return "…" + s[len(s)-n:]
 }

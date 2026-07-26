@@ -67,7 +67,7 @@ docker compose up -d
 
 Commented examples in compose: second library at `/media/other`, `/yt-dlp-plugins`, custom yt-dlp binary.
 
-First boot seeds one root (`library` → `/media/library`, no TTL) and quality profiles `best` (format `bv*+ba`), `1080p`, `720p`.
+First boot seeds one root (`library` → `/media/library`, no TTL) and quality profiles `best` (format `bv*+ba/b`), `1080p`, `720p`.
 
 The container runs as **uid/gid 1000** (non-root). Host `./var` must be writable by that user: `sudo chown -R 1000:1000 var`.
 

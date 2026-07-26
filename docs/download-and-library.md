@@ -39,7 +39,7 @@ Same cron tick as download-wanted: media maturity first when both due. History: 
 
 ## Remux (always MKV)
 
-Creatorr remuxes downloaded media to **MKV** via ffmpeg when needed (`library.RemuxIfNeeded` → `library.RemuxContainer`). When SponsorBlock **remove** is set, remux runs in the **`sponsorblock_cut`** task only for copy-cut (reencode already outputs MKV). Mark-only / no-remove still remux inside the download task. Quality profiles supply the format selector (`--format` / yt-dlp `-f`) and optional maturity delays. There is **no** Settings key or UI for container choice.
+Creatorr remuxes downloaded media to **MKV** via ffmpeg when needed (`library.RemuxIfNeeded` → `library.RemuxContainer`). Remux maps video + audio only (`-map 0:V -map 0:a? -dn`) so QuickTime timecode / other data streams from progressive MP4 sources do not break Matroska stream-copy. When SponsorBlock **remove** is set, remux runs in the **`sponsorblock_cut`** task only for copy-cut (reencode already outputs MKV). Mark-only / no-remove still remux inside the download task. Quality profiles supply the format selector (`--format` / yt-dlp `-f`) and optional maturity delays. There is **no** Settings key or UI for container choice.
 
 **Why MKV (not MP4 / webm / mov):**
 
@@ -63,7 +63,7 @@ Creatorr remuxes downloaded media to **MKV** via ffmpeg when needed (`library.Re
 
 ## Series metadata (tvshow.nfo)
 
-Editable show fields (plot, sorttitle, originaltitle, studio, genres, tags, actors, tagline, country, mpaa) live on the series row. Art (`poster.jpg`, `banner.jpg`, `fanart.jpg`, `clearlogo.png`) and `tvshow.nfo` live under the series folder only (not in the DB). **Fresh schema only** - wipe existing DBs to adopt new columns. Studio / genres / country / content rating / tags / actor name / actor role each use one library-wide datalist pool (`ListMetaSuggestions`) - values from **both** `series` and `videos` for that field name. Series Metadata and video Metadata share the same pools (never entity-scoped).
+Editable show fields (plot, sorttitle, originaltitle, studio, genres, tags, actors, tagline, country, mpaa) live on the series row. Art (`poster.jpg`, `banner.jpg`, `fanart.jpg`, `clearlogo.png`) and `tvshow.nfo` live under the series folder only (not in the DB). **Fresh schema only** - wipe existing DBs to adopt new columns. Studio / genres / country / content rating / tags / actor name / actor role each use one library-wide datalist pool (`ListMetaSuggestions`) - values from **both** `series` and `videos` for that field name. Series Metadata and video Metadata share the same pools (never entity-scoped). **sorttitle** / **originaltitle** that equal **title** are stored empty and omitted from tvshow NFO (redundant with `<title>`). Prefetch fills draft `title` for Add series naming; it does not copy that name into sorttitle / originaltitle.
 
 ### Metadata suggestion pool
 

@@ -8,5 +8,6 @@
 services:
   creatorr:
     volumes:
-      # Uncomment when a sibling handler checkout exists:
+      # Uncomment when a sibling checkout exists:
+      # - ../yt-dlp-mde.tv:/yt-dlp-plugins/mde:ro
       # - ../Creatorr-handler-example.com:/yt-dlp-plugins/example:ro

@@ -70,7 +70,8 @@ func (s *Store) EnqueueAddSeriesPrefetch(sourceURL, draftToken string) (int64, e
 // SeriesTitleFromDraft picks a display title from prefetch draft fields.
 // Empty when the dump had no usable name (caller should fail the create).
 func SeriesTitleFromDraft(d PrefetchDraft) string {
-	for _, t := range []string{d.OriginalTitle, d.SortTitle, d.Studio} {
+	// Title is preferred; OriginalTitle/SortTitle remain as fallbacks for older drafts.
+	for _, t := range []string{d.Title, d.OriginalTitle, d.SortTitle, d.Studio} {
 		if s := strings.TrimSpace(t); s != "" {
 			return s
 		}
@@ -79,7 +80,8 @@ func SeriesTitleFromDraft(d PrefetchDraft) string {
 }
 
 // BuildPrefetchDraftFromInfo maps a yt-dlp playlist/channel dump to a form draft.
-// Never sets series.title. Playlist URLs skip images.
+// Sets draft.Title for Add series naming; does not copy that name into sorttitle /
+// originaltitle (redundant with series.title). Playlist URLs skip images.
 func BuildPrefetchDraftFromInfo(info map[string]any, artDir string) PrefetchDraft {
 	draft := PrefetchDraft{ArtFiles: map[string]string{}}
 	if info == nil {
@@ -93,8 +95,7 @@ func BuildPrefetchDraftFromInfo(info map[string]any, artDir string) PrefetchDraf
 	draft.Plot = desc
 	draft.PlaylistOnly = isPlaylistOnlyInfo(info)
 	if title != "" {
-		draft.OriginalTitle = title
-		draft.SortTitle = title
+		draft.Title = title
 	}
 	if uploader != "" {
 		draft.Studio = uploader

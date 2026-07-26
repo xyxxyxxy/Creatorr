@@ -52,7 +52,18 @@
             <ul tabindex="0" id="notify-menu"
                 class="dropdown-content menu menu-sm bg-base-200 rounded-box z-50 w-80 max-w-[calc(100vw-1rem)] p-2 shadow-lg border border-base-300 max-h-[min(24rem,70vh)] overflow-y-auto">
               <li id="notify-dropdown-empty" class="disabled"><a>No notifications</a></li>
-              <li id="notify-menu-view-all"><a href="/history#notifications">View all</a></li>
+              <li id="notify-menu-mark-all">
+                <button type="button" id="notify-mark-all-read" class="gap-2">
+                  <span class="size-4 shrink-0" aria-hidden="true"></span>
+                  Mark all as read
+                </button>
+              </li>
+              <li id="notify-menu-view-all">
+                <a href="/history#notifications" class="gap-2">
+                  <span class="size-4 shrink-0" aria-hidden="true"></span>
+                  View all
+                </a>
+              </li>
             </ul>
           </div>
         </div>
