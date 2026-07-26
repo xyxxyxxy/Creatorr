@@ -10,8 +10,12 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 )
 
-func (s *Server) ScanImport(w http.ResponseWriter, r *http.Request) {
-	res, err := s.Library.ScanImportInbox()
+func (s *Server) ScanImport(w http.ResponseWriter, r *http.Request, params gen.ScanImportParams) {
+	var rootID int64
+	if params.RootId != nil {
+		rootID = *params.RootId
+	}
+	res, err := s.Library.ScanImport(rootID)
 	if err != nil {
 		writeLibraryErr(w, err, "import scan failed")
 		return
@@ -48,6 +52,7 @@ func (s *Server) ImportManual(w http.ResponseWriter, r *http.Request) {
 	}
 
 	verify := body.Verify != nil && *body.Verify
+	replace := body.Replace != nil && *body.Replace
 
 	var taskID int64
 	var err error
@@ -55,7 +60,7 @@ func (s *Server) ImportManual(w http.ResponseWriter, r *http.Request) {
 		if len(paths) > 0 {
 			taskID, err = s.Library.EnqueueAttachSidecars(*body.VideoId, paths)
 		} else if path != "" {
-			taskID, err = s.Library.EnqueueImport(path, *body.VideoId, verify)
+			taskID, err = s.Library.EnqueueImport(path, *body.VideoId, verify, replace)
 		} else {
 			writeErr(w, http.StatusBadRequest, apperrors.CodeInternal, "path or paths required", "")
 			return
@@ -117,6 +122,18 @@ func mapImportScan(res *library.ImportScanResult) gen.ImportScanResponse {
 		if c.SuggestedRemoteID != "" {
 			rid := c.SuggestedRemoteID
 			gc.SuggestedRemoteId = &rid
+		}
+		if c.SuggestedRemoteIDGenerated {
+			g := true
+			gc.SuggestedRemoteIdGenerated = &g
+		}
+		if c.SuggestedUploadDate != "" {
+			ud := c.SuggestedUploadDate
+			gc.SuggestedUploadDate = &ud
+		}
+		if c.SuggestedUploadDateFromMtime {
+			m := true
+			gc.SuggestedUploadDateFromMtime = &m
 		}
 		if c.SuggestedHandler != "" {
 			h := c.SuggestedHandler

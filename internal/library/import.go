@@ -37,10 +37,17 @@ type ImportCandidate struct {
 	SuggestedSeriesID *int64             `json:"suggested_series_id"`
 	SuggestedTitle    string             `json:"suggested_title,omitempty"`
 	SuggestedRemoteID string             `json:"suggested_remote_id,omitempty"`
-	SuggestedHandler  string             `json:"suggested_handler_id,omitempty"`
-	MatchType         string             `json:"match_type,omitempty"`
-	MatchLabel        string             `json:"match_label,omitempty"`
-	VideoSuggestions  []VideoSuggestion  `json:"video_suggestions"`
+	// SuggestedRemoteIDGenerated is true when SuggestedRemoteID was derived (no id in filename/sidecars).
+	SuggestedRemoteIDGenerated bool `json:"suggested_remote_id_generated,omitempty"`
+	// SuggestedUploadDate is RFC3339 UTC prefill for unmatched create (sidecar, else file mtime).
+	SuggestedUploadDate string `json:"suggested_upload_date,omitempty"`
+	// SuggestedUploadDateFromMtime is true when SuggestedUploadDate came from file mtime (not sidecar).
+	SuggestedUploadDateFromMtime bool   `json:"suggested_upload_date_from_mtime,omitempty"`
+	SuggestedHandler             string `json:"suggested_handler_id,omitempty"`
+	SuggestedWebpageURL          string `json:"suggested_webpage_url,omitempty"`
+	MatchType                    string `json:"match_type,omitempty"`
+	MatchLabel                   string `json:"match_label,omitempty"`
+	VideoSuggestions             []VideoSuggestion `json:"video_suggestions"`
 	SeriesSuggestions []SeriesSuggestion `json:"series_suggestions"`
 }
 
@@ -78,15 +85,30 @@ const (
 	ImportSourceLibrary = "library"
 )
 
-// ScanImportInbox lists media under ImportRoot plus unmatched library orphans.
-// Never binds. Prefer ScanImport (alias).
+// ScanImportInbox lists untracked files under ImportRoot only. Never binds.
 func (s *Store) ScanImportInbox() (*ImportScanResult, error) {
-	return s.ScanImport()
+	return s.ScanImport(0)
 }
 
-// ScanImport lists every untracked file under the import inbox and online library
-// roots (media, sidecars, and other files). Never binds.
-func (s *Store) ScanImport() (*ImportScanResult, error) {
+// ScanImport lists untracked files under the import inbox (rootID 0) or one
+// online library root (rootID > 0). Never binds.
+func (s *Store) ScanImport(rootID int64) (*ImportScanResult, error) {
+	known, err := s.knownTrackedPaths()
+	if err != nil {
+		return nil, err
+	}
+	videoByStem, err := s.videoStemIndex()
+	if err != nil {
+		return nil, err
+	}
+
+	if rootID > 0 {
+		return s.scanImportLibraryRoot(rootID, known, videoByStem)
+	}
+	return s.scanImportInboxOnly(known, videoByStem)
+}
+
+func (s *Store) scanImportInboxOnly(known map[string]struct{}, videoByStem map[string]videoStemRef) (*ImportScanResult, error) {
 	root := strings.TrimSpace(s.ImportRoot)
 	if root == "" {
 		return nil, fmt.Errorf("%w: import root not configured", ErrInvalid)
@@ -95,15 +117,6 @@ func (s *Store) ScanImport() (*ImportScanResult, error) {
 		return nil, err
 	}
 	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return nil, err
-	}
-
-	known, err := s.knownTrackedPaths()
-	if err != nil {
-		return nil, err
-	}
-	videoByStem, err := s.videoStemIndex()
 	if err != nil {
 		return nil, err
 	}
@@ -122,13 +135,43 @@ func (s *Store) ScanImport() (*ImportScanResult, error) {
 			out.Candidates = append(out.Candidates, *c)
 		}
 	}
+	return out, nil
+}
 
-	libFiles, err := s.listLibraryOrphanFiles(known)
+func (s *Store) scanImportLibraryRoot(rootID int64, known map[string]struct{}, videoByStem map[string]videoStemRef) (*ImportScanResult, error) {
+	root, err := s.GetRoot(rootID)
 	if err != nil {
 		return nil, err
 	}
-	for _, path := range libFiles {
-		c, err := s.buildImportCandidate(path, ImportSourceLibrary, known, videoByStem)
+	absRoot, err := filepath.Abs(root.Path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: library root path", ErrInvalid)
+	}
+	if !rootOnline(absRoot) {
+		return nil, fmt.Errorf("%w: library root offline", ErrInvalid)
+	}
+	importAbs := ""
+	if ir := strings.TrimSpace(s.ImportRoot); ir != "" {
+		importAbs, _ = filepath.Abs(ir)
+	}
+	if importAbs != "" && absRoot == importAbs {
+		return nil, fmt.Errorf("%w: use inbox scan for the import folder", ErrInvalid)
+	}
+
+	out := &ImportScanResult{ImportPath: absRoot, Candidates: []ImportCandidate{}}
+	found, err := listAllFilesUnder(absRoot)
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range found {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			abs = path
+		}
+		if _, ok := known[abs]; ok {
+			continue
+		}
+		c, err := s.buildImportCandidate(abs, ImportSourceLibrary, known, videoByStem)
 		if err != nil {
 			return nil, err
 		}
@@ -192,7 +235,7 @@ type videoStemRef struct {
 }
 
 func videoStemKey(dir, stemBase string) string {
-	return filepath.Clean(dir) + "\x00" + stemBase
+	return filepath.Clean(dir) + "\x00" + NormalizeImportGroupStem(stemBase)
 }
 
 func (s *Store) videoStemIndex() (map[string]videoStemRef, error) {
@@ -226,61 +269,6 @@ func (s *Store) videoStemIndex() (map[string]videoStemRef, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) listLibraryOrphanFiles(known map[string]struct{}) ([]string, error) {
-	roots, err := s.ListRoots()
-	if err != nil {
-		return nil, err
-	}
-	importAbs := ""
-	if ir := strings.TrimSpace(s.ImportRoot); ir != "" {
-		importAbs, _ = filepath.Abs(ir)
-	}
-
-	var files []string
-	for _, r := range roots {
-		absRoot, err := filepath.Abs(r.Path)
-		if err != nil {
-			continue
-		}
-		if !rootOnline(absRoot) {
-			continue
-		}
-		if importAbs != "" && absRoot == importAbs {
-			continue
-		}
-		found, err := listAllFilesUnder(absRoot)
-		if err != nil {
-			return nil, err
-		}
-		for _, path := range found {
-			abs, err := filepath.Abs(path)
-			if err != nil {
-				abs = path
-			}
-			if _, ok := known[abs]; ok {
-				continue
-			}
-			files = append(files, abs)
-		}
-	}
-	sort.Strings(files)
-	return files, nil
-}
-
-func listMediaUnder(absRoot string) ([]string, error) {
-	all, err := listAllFilesUnder(absRoot)
-	if err != nil {
-		return nil, err
-	}
-	var media []string
-	for _, path := range all {
-		if mediaExts[strings.ToLower(filepath.Ext(path))] {
-			media = append(media, path)
-		}
-	}
-	return media, nil
-}
-
 func (s *Store) buildImportCandidate(path, source string, known map[string]struct{}, videoByStem map[string]videoStemRef) (*ImportCandidate, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -306,16 +294,20 @@ func (s *Store) buildImportCandidate(path, source string, known map[string]struc
 			c.SuggestedVideoID = &vid
 			c.SuggestedSeriesID = &sid
 			c.MatchType = "sidecar_stem"
-			c.MatchLabel = fmt.Sprintf("%s beside %s / %s", role, ref.SeriesTitle, ref.Title)
+			c.MatchLabel = fmt.Sprintf("Matched by filename stem (%s) to %s / %s", role, ref.SeriesTitle, ref.Title)
 			c.VideoSuggestions = []VideoSuggestion{{
 				VideoID: ref.VideoID, SeriesID: ref.SeriesID,
 				Title: ref.Title, SeriesTitle: ref.SeriesTitle, Score: 1,
 			}}
 		}
+		// Orphan NFO/thumb without a same-stem sibling video is list-only (needs
+		// that video beside it, either untracked in a media group or already packed).
 		return &c, nil
 	}
 
-	if role == ImportRoleOther {
+	// info.json is download-time provenance: list only; never stem-match or attach alone.
+	// .strm must be regenerated with the current external URL + token (never import/bind).
+	if role == ImportRoleJSON || role == ImportRoleStrm || role == ImportRoleOther {
 		return &c, nil
 	}
 
@@ -324,7 +316,17 @@ func (s *Store) buildImportCandidate(path, source string, known map[string]struc
 	meta := readImportMeta(abs, c.IDs)
 	c.SuggestedTitle = meta.Title
 	c.SuggestedRemoteID = meta.RemoteID
+	if c.SuggestedRemoteID == "" {
+		c.SuggestedRemoteID = deriveImportRemoteID(abs)
+		c.SuggestedRemoteIDGenerated = true
+	}
+	c.SuggestedUploadDate = meta.UploadDate
+	if c.SuggestedUploadDate == "" {
+		c.SuggestedUploadDate = fileModTimeUploadDate(abs)
+		c.SuggestedUploadDateFromMtime = c.SuggestedUploadDate != ""
+	}
 	c.SuggestedHandler = meta.HandlerID
+	c.SuggestedWebpageURL = meta.WebpageURL
 	for _, hint := range c.IDs {
 		vid, seriesID, title, seriesTitle, ok, err := s.findVideoByRemote(hint.RemoteID)
 		if err != nil {
@@ -334,7 +336,7 @@ func (s *Store) buildImportCandidate(path, source string, known map[string]struc
 			c.SuggestedVideoID = &vid
 			c.SuggestedSeriesID = &seriesID
 			c.MatchType = "id"
-			c.MatchLabel = fmt.Sprintf("ID %s → %s / %s", hint.RemoteID, seriesTitle, title)
+			c.MatchLabel = fmt.Sprintf("Matched by remote ID to %s / %s", seriesTitle, title)
 			break
 		}
 	}
@@ -352,12 +354,12 @@ func (s *Store) buildImportCandidate(path, source string, known map[string]struc
 		c.SuggestedVideoID = &top.VideoID
 		c.SuggestedSeriesID = &top.SeriesID
 		c.MatchType = "title"
-		c.MatchLabel = fmt.Sprintf("title ~%.3f → %s / %s", top.Score, top.SeriesTitle, top.Title)
+		c.MatchLabel = fmt.Sprintf("Matched by title (%.0f%%) to %s / %s", top.Score*100, top.SeriesTitle, top.Title)
 	} else if c.SuggestedSeriesID == nil && len(c.SeriesSuggestions) > 0 {
 		top := c.SeriesSuggestions[0]
 		c.SuggestedSeriesID = &top.SeriesID
 		c.MatchType = "series_title"
-		c.MatchLabel = fmt.Sprintf("series ~%.3f → %s", top.Score, top.Title)
+		c.MatchLabel = fmt.Sprintf("Matched by series title (%.0f%%) to %s", top.Score*100, top.Title)
 	}
 	return &c, nil
 }
@@ -369,12 +371,16 @@ type ImportPickerVideo struct {
 	Title       string `json:"title"`
 	SeriesTitle string `json:"series_title"`
 	Status      string `json:"status"`
+	HasMedia    bool   `json:"has_media"` // true when a kind=video files row exists
+	HasThumb    bool   `json:"has_thumb"` // true when a kind=thumb files row exists
 }
 
 // ListImportPickerVideos returns all indexed videos for Import dropdowns.
 func (s *Store) ListImportPickerVideos() ([]ImportPickerVideo, error) {
 	rows, err := s.DB.SQL.Query(`
-		SELECT v.id, v.series_id, v.title, s.title, v.status
+		SELECT v.id, v.series_id, v.title, s.title, v.status,
+		  EXISTS(SELECT 1 FROM files f WHERE f.video_id = v.id AND f.kind = 'video') AS has_media,
+		  EXISTS(SELECT 1 FROM files f WHERE f.video_id = v.id AND f.kind = 'thumb') AS has_thumb
 		FROM videos v
 		JOIN series s ON s.id = v.series_id
 		ORDER BY s.title COLLATE NOCASE, v.title COLLATE NOCASE, v.id
@@ -386,9 +392,12 @@ func (s *Store) ListImportPickerVideos() ([]ImportPickerVideo, error) {
 	var out []ImportPickerVideo
 	for rows.Next() {
 		var v ImportPickerVideo
-		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.SeriesTitle, &v.Status); err != nil {
+		var hasMedia, hasThumb int
+		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.SeriesTitle, &v.Status, &hasMedia, &hasThumb); err != nil {
 			return nil, err
 		}
+		v.HasMedia = hasMedia != 0
+		v.HasThumb = hasThumb != 0
 		out = append(out, v)
 	}
 	return out, rows.Err()
@@ -401,7 +410,7 @@ type CreateImportVideoParams struct {
 	RemoteID    string // empty → derived from path/sidecars
 	HandlerID   string // site hint for history only (not a DB column)
 	WebpageURL  string
-	UploadDate  string // RFC3339 UTC (sidecars may still be date-only; adapted below)
+	UploadDate  string // required after merge (RFC3339 UTC; sidecars / UI date-only adapted)
 	Description string
 	Verify      bool // enqueue media_verify after pack/bind
 }
@@ -439,6 +448,12 @@ func (s *Store) EnqueueImportCreate(path string, p CreateImportVideoParams) (tas
 	if strings.TrimSpace(p.UploadDate) != "" {
 		meta.UploadDate = sidecarUploadTime(p.UploadDate)
 	}
+	if meta.UploadDate == "" {
+		meta.UploadDate = fileModTimeUploadDate(abs)
+	}
+	if meta.UploadDate == "" {
+		return 0, 0, fmt.Errorf("%w: upload_date required for unmatched import", ErrInvalid)
+	}
 	if strings.TrimSpace(p.Description) != "" {
 		meta.Description = strings.TrimSpace(p.Description)
 	}
@@ -468,21 +483,12 @@ func (s *Store) EnqueueImportCreate(path string, p CreateImportVideoParams) (tas
 		webpage = meta.WebpageURL
 	}
 	var res sql.Result
-	if s.videoHasHandlerID() {
-		res, err = s.DB.SQL.Exec(`
-			INSERT INTO videos (
-			  series_id, source_id, handler_id, remote_id, title, upload_date,
-			  source_url, status, season, episode, description, thumbnail_url
-			) VALUES (?, NULL, ?, ?, ?, ?, ?, 'wanted', ?, ?, ?, NULL)
-		`, p.SeriesID, "yt-dlp", meta.RemoteID, meta.Title, uploadVal, webpage, seasonVal, episodeVal, meta.Description)
-	} else {
-		res, err = s.DB.SQL.Exec(`
-			INSERT INTO videos (
-			  series_id, source_id, remote_id, title, upload_date,
-			  source_url, status, season, episode, description, thumbnail_url
-			) VALUES (?, NULL, ?, ?, ?, ?, 'wanted', ?, ?, ?, NULL)
-		`, p.SeriesID, meta.RemoteID, meta.Title, uploadVal, webpage, seasonVal, episodeVal, meta.Description)
-	}
+	res, err = s.DB.SQL.Exec(`
+		INSERT INTO videos (
+		  series_id, source_id, remote_id, title, upload_date,
+		  source_url, status, season, episode, description, thumbnail_url
+		) VALUES (?, NULL, ?, ?, ?, ?, 'wanted', ?, ?, ?, NULL)
+	`, p.SeriesID, meta.RemoteID, meta.Title, uploadVal, webpage, seasonVal, episodeVal, meta.Description)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return 0, 0, fmt.Errorf("%w: video with this remote_id already exists in series", ErrConflict)
@@ -490,7 +496,7 @@ func (s *Store) EnqueueImportCreate(path string, p CreateImportVideoParams) (tas
 		return 0, 0, err
 	}
 	videoID, _ = res.LastInsertId()
-	taskID, err = s.EnqueueImport(abs, videoID, p.Verify)
+	taskID, err = s.EnqueueImport(abs, videoID, p.Verify, false)
 	if err != nil {
 		// Best-effort cleanup so a failed enqueue does not leave an orphan wanted row.
 		_, _ = s.DB.SQL.Exec(`DELETE FROM videos WHERE id = ?`, videoID)
@@ -627,11 +633,23 @@ func deriveImportRemoteID(path string) string {
 	return fmt.Sprintf("import-%x", sum[:6])
 }
 
+// fileModTimeUploadDate returns the file's modification time as RFC3339 UTC (creation
+// time is not portable across filesystems; mtime is the fallback when sidecars omit date).
+func fileModTimeUploadDate(path string) string {
+	st, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	return st.ModTime().UTC().Format(time.RFC3339)
+}
+
 // EnqueueImport queues an import task that installs media into the series folder
 // (inbox) or binds a library orphan in place. Sidecar paths attach to a video that
 // already has media (in-place files row update). When verify is true, the import
 // task enqueues media_verify after a successful pack/bind (ignores profile mature gate).
-func (s *Store) EnqueueImport(path string, videoID int64, verify bool) (int64, error) {
+// When replace is true and the video already has packed media, existing library
+// media (and companion sidecars) are removed during the import task.
+func (s *Store) EnqueueImport(path string, videoID int64, verify, replace bool) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
 	}
@@ -644,6 +662,12 @@ func (s *Store) EnqueueImport(path string, videoID int64, verify bool) (int64, e
 		return 0, err
 	}
 	role, _ := ClassifyImportFile(filepath.Base(abs))
+	if role == ImportRoleJSON {
+		return 0, fmt.Errorf("%w: info.json cannot be imported alone (provenance travels with media)", ErrInvalid)
+	}
+	if role == ImportRoleStrm {
+		return 0, fmt.Errorf("%w: .strm cannot be imported (regenerate with current External Creatorr URL)", ErrInvalid)
+	}
 	if IsImportSidecarRole(role) {
 		return s.EnqueueAttachSidecars(videoID, []string{abs})
 	}
@@ -658,10 +682,14 @@ func (s *Store) EnqueueImport(path string, videoID int64, verify bool) (int64, e
 	if err != nil {
 		return 0, err
 	}
+	hasMedia := false
 	if _, ok, err := s.HasVideoFile(videoID); err != nil {
 		return 0, err
 	} else if ok {
-		return 0, fmt.Errorf("%w: video already has a file on disk", ErrConflict)
+		if !replace {
+			return 0, fmt.Errorf("%w: video already has a file on disk", ErrConflict)
+		}
+		hasMedia = true
 	}
 	busy, err := s.hasPendingImport(videoID, abs)
 	if err != nil {
@@ -674,13 +702,19 @@ func (s *Store) EnqueueImport(path string, videoID int64, verify bool) (int64, e
 	if inPlace {
 		msg = fmt.Sprintf("Bind library file %s", filepath.Base(abs))
 	}
+	if hasMedia {
+		msg = fmt.Sprintf("Replace %s", filepath.Base(abs))
+	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
 		Kind:     queue.KindImport,
 		Domain:   queue.SystemDomain,
 		SeriesID: v.SeriesID,
 		VideoID:  videoID,
-		Payload:  map[string]any{"path": abs, "video_id": videoID, "in_place": inPlace, "verify": verify},
-		Message:  msg,
+		Payload: map[string]any{
+			"path": abs, "video_id": videoID, "in_place": inPlace,
+			"verify": verify, "replace": hasMedia,
+		},
+		Message: msg,
 	})
 }
 
@@ -697,7 +731,8 @@ func (s *Store) EnqueueAttachSidecars(videoID int64, paths []string) (int64, err
 	if err != nil {
 		return 0, err
 	}
-	if _, ok, err := s.HasVideoFile(videoID); err != nil {
+	mediaPath, ok, err := s.HasVideoFile(videoID)
+	if err != nil {
 		return 0, err
 	} else if !ok {
 		return 0, fmt.Errorf("%w: video has no media file to attach sidecars to", ErrInvalid)
@@ -710,8 +745,17 @@ func (s *Store) EnqueueAttachSidecars(videoID int64, paths []string) (int64, err
 			return 0, err
 		}
 		role, _ := ClassifyImportFile(filepath.Base(abs))
+		if role == ImportRoleJSON {
+			return 0, fmt.Errorf("%w: info.json cannot be attached alone (provenance travels with media)", ErrInvalid)
+		}
 		if !IsImportSidecarRole(role) {
 			return 0, fmt.Errorf("%w: %s is not a sidecar", ErrInvalid, filepath.Base(abs))
+		}
+		if role == ImportRoleNFO && !ImportSidecarStemMatchesMedia(abs, mediaPath) {
+			return 0, fmt.Errorf("%w: .nfo data import requires a same-basename video file beside it", ErrInvalid)
+		}
+		if role == ImportRoleThumb && !ImportSidecarStemMatchesMedia(abs, mediaPath) {
+			return 0, fmt.Errorf("%w: thumbnail import requires a same-basename video file beside it", ErrInvalid)
 		}
 		if _, ok := seen[abs]; ok {
 			continue
@@ -746,8 +790,10 @@ func (s *Store) EnqueueAttachSidecars(videoID int64, paths []string) (int64, err
 }
 
 // AttachSidecarFiles registers on-disk sidecar paths for a video that already has media.
-// Paths must live in the same directory as the video media file. Replaces existing
-// nfo/json/thumb rows of the same kind; adds subtitle rows.
+// Paths must live in the same directory as the video media file. NFO is data import only:
+// requires the same normalized basename stem as the media file; updates editable metadata
+// then regenerates the episode .nfo from DB (source XML is not kept as the library file).
+// Thumb/sub rows are registered in place. Rejects info.json (provenance packs only with media).
 func (s *Store) AttachSidecarFiles(videoID int64, paths []string, taskID int64) error {
 	mediaPath, ok, err := s.HasVideoFile(videoID)
 	if err != nil {
@@ -767,6 +813,7 @@ func (s *Store) AttachSidecarFiles(videoID int64, paths []string, taskID int64) 
 		path string
 	}
 	var items []item
+	var nfoPaths []string
 	for _, p := range paths {
 		abs, err := filepath.Abs(strings.TrimSpace(p))
 		if err != nil {
@@ -779,13 +826,35 @@ func (s *Store) AttachSidecarFiles(videoID int64, paths []string, taskID int64) 
 			return fmt.Errorf("%w: sidecar must be beside the video media file", ErrInvalid)
 		}
 		role, _ := ClassifyImportFile(filepath.Base(abs))
+		if role == ImportRoleJSON {
+			return fmt.Errorf("%w: info.json cannot be attached alone (provenance travels with media)", ErrInvalid)
+		}
+		if role == ImportRoleNFO {
+			if !ImportSidecarStemMatchesMedia(abs, mediaAbs) {
+				return fmt.Errorf("%w: .nfo data import requires a same-basename video file beside it", ErrInvalid)
+			}
+			nfoPaths = append(nfoPaths, abs)
+			continue
+		}
+		if role == ImportRoleThumb && !ImportSidecarStemMatchesMedia(abs, mediaAbs) {
+			return fmt.Errorf("%w: thumbnail import requires a same-basename video file beside it", ErrInvalid)
+		}
 		if !IsImportSidecarRole(role) {
 			return fmt.Errorf("%w: not a sidecar: %s", ErrInvalid, filepath.Base(abs))
 		}
 		items = append(items, item{kind: role, path: abs})
 	}
-	if len(items) == 0 {
+	if len(items) == 0 && len(nfoPaths) == 0 {
 		return fmt.Errorf("%w: paths required", ErrInvalid)
+	}
+
+	for _, nfo := range nfoPaths {
+		if err := s.ApplyImportNFO(videoID, nfo, taskID); err != nil {
+			return err
+		}
+	}
+	if len(items) == 0 {
+		return nil
 	}
 
 	acquired := nowRFC3339()
@@ -1010,16 +1079,10 @@ func (s *Store) seriesSuggestions(mediaPath string, limit int) ([]SeriesSuggesti
 }
 
 func extractImportIDs(path string) []ImportIDHint {
+	// Priority for ID match: filename [id], then info.json, then NFO uniqueid.
 	var found []ImportIDHint
-	nfo := strings.TrimSuffix(path, filepath.Ext(path)) + ".nfo"
-	if b, err := os.ReadFile(nfo); err == nil {
-		text := string(b)
-		for _, m := range uniqueIDTyped.FindAllStringSubmatch(text, -1) {
-			found = append(found, ImportIDHint{HandlerID: strings.ToLower(m[1]), RemoteID: strings.TrimSpace(m[2])})
-		}
-		for _, m := range uniqueIDAny.FindAllStringSubmatch(text, -1) {
-			found = append(found, ImportIDHint{HandlerID: "unknown", RemoteID: strings.TrimSpace(m[1])})
-		}
+	for _, m := range bracketID.FindAllStringSubmatch(filepath.Base(path), -1) {
+		found = append(found, ImportIDHint{HandlerID: "yt-dlp", RemoteID: strings.TrimSpace(m[1])})
 	}
 	for _, cand := range []string{
 		strings.TrimSuffix(path, filepath.Ext(path)) + ".info.json",
@@ -1056,8 +1119,15 @@ func extractImportIDs(path string) []ImportIDHint {
 		}
 		found = append(found, ImportIDHint{HandlerID: handler, RemoteID: id})
 	}
-	for _, m := range bracketID.FindAllStringSubmatch(filepath.Base(path), -1) {
-		found = append(found, ImportIDHint{HandlerID: "yt-dlp", RemoteID: strings.TrimSpace(m[1])})
+	nfo := strings.TrimSuffix(path, filepath.Ext(path)) + ".nfo"
+	if b, err := os.ReadFile(nfo); err == nil {
+		text := string(b)
+		for _, m := range uniqueIDTyped.FindAllStringSubmatch(text, -1) {
+			found = append(found, ImportIDHint{HandlerID: strings.ToLower(m[1]), RemoteID: strings.TrimSpace(m[2])})
+		}
+		for _, m := range uniqueIDAny.FindAllStringSubmatch(text, -1) {
+			found = append(found, ImportIDHint{HandlerID: "unknown", RemoteID: strings.TrimSpace(m[1])})
+		}
 	}
 	seen := map[string]bool{}
 	var out []ImportIDHint
