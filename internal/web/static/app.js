@@ -1390,7 +1390,13 @@
     const on = !!toggle.checked;
     hours.disabled = !on;
     const fieldset = hours.closest("fieldset");
-    if (fieldset) fieldset.classList.toggle("opacity-60", !on);
+    if (!fieldset) return;
+    const legendLabel = fieldset.querySelector(".fieldset-legend .inline-flex > span:first-child");
+    if (legendLabel) legendLabel.classList.toggle("opacity-60", !on);
+    const out = fieldset.querySelector("[id$='-out']");
+    if (out) out.classList.toggle("opacity-60", !on);
+    const hint = fieldset.querySelector(":scope > p.label");
+    if (hint) hint.classList.toggle("opacity-60", !on);
   }
 
   function initPlaybackCacheHoursGate() {
@@ -1521,7 +1527,8 @@
           }
         }
       } else {
-        el.value = "";
+        // Restore HTML default (e.g. scan_cron @weekly), do not wipe to empty.
+        el.value = el.defaultValue;
       }
     });
   }
@@ -1919,6 +1926,7 @@
     setAddSeriesFetchErr(form, "");
     form.dataset.addSeriesMode = mode;
     form.dataset.addSeriesStep = mode === "url" ? "source" : "series";
+    syncAllScanCronJoins(form);
     syncAddSeriesForm(form);
     if (mode === "url") form.querySelector("#add-series-url")?.focus();
     else form.querySelector("#add-series-title")?.focus();

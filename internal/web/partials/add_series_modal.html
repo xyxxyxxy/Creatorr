@@ -55,12 +55,11 @@
         {{template "field_input" (dict
           "Name" "source_label"
           "Label" "Name (optional)"
-          "Placeholder" "name"
+          "Placeholder" "Source name"
         )}}
         {{template "scan_cron_field" (dict
           "Value" "@weekly"
           "ID" "add-series-scan-cron"
-          "Info" "How often this source is checked for new videos. Higher values mean less requests to the external site, but also slower video arrival."
           "CronDescriptors" .ScanCronDescriptors
         )}}
         {{template "source_filter_fields" (dict "CutoffID" "add-series-scan-cutoff")}}

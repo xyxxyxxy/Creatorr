@@ -3,7 +3,7 @@
 {{template "list_header" (dict "level" "page" "title" "Overview" "icon" .Icon "help" "Library at a glance: series, videos, and packed media on disk." "add_modal" "modal-add-series" "add_label" "Add series")}}
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 
-<div class="stats stats-vertical lg:stats-horizontal shadow bg-base-100 border border-base-300 w-full mt-4">
+<div class="stats stats-vertical lg:stats-horizontal shadow bg-base-100 border border-base-300 w-full mt-4 mb-4">
   <div class="stat">
     <div class="stat-figure text-primary">
       <i data-lucide="tv" class="size-8"></i>
@@ -29,6 +29,34 @@
     <div class="stat-desc">Packed video media</div>
   </div>
 </div>
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Recent additions" "icon" "square-play" "help" "Latest downloaded or stream-packed videos across all series.")}}
+{{if not .RecentVideos}}
+{{template "list_empty" "No packed videos yet. Download or pack a stream first."}}
+{{else}}
+<ul class="list bg-base-100 rounded-box border border-base-300">
+  {{range .RecentVideos}}
+  {{template "video_list_row" (dict
+    "ID" .ID
+    "Title" .Title
+    "Status" .Status
+    "UploadDate" .UploadDate
+    "SizeLabel" .SizeLabel
+    "ResolutionLabel" .ResolutionLabel
+    "StreamTypeLabel" .StreamTypeLabel
+    "DurationLabel" .DurationLabel
+    "MediaTypeLabel" .MediaTypeLabel
+    "ThumbURL" .ThumbURL
+    "SeriesID" .SeriesID
+    "SeriesTitle" (index $.SeriesTitles .SeriesID)
+    "IsStream" (eq .Status "streamable")
+    "NoActions" true
+  )}}
+  {{end}}
+</ul>
+{{end}}
+{{template "list_panel_end"}}
 
 {{template "add_series_modal" .}}
 {{template "foot" .}}

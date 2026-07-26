@@ -82,6 +82,22 @@ func TestBuildPrefetchDraftPlaylistNoArt(t *testing.T) {
 	}
 }
 
+func TestBuildPrefetchDraftStudioNotActors(t *testing.T) {
+	d := BuildPrefetchDraftFromInfo(map[string]any{
+		"extractor_key": "Youtube",
+		"title":         "Channel Videos",
+		"uploader":      "iFixit",
+		"channel":       "iFixit",
+		"channel_id":    "UCexample",
+	}, "")
+	if d.Studio != "iFixit" {
+		t.Fatalf("studio=%q", d.Studio)
+	}
+	if len(d.Actors) != 0 {
+		t.Fatalf("prefetch must not auto-fill actors from channel: %+v", d.Actors)
+	}
+}
+
 func TestSeriesTitleFromDraft(t *testing.T) {
 	if got := SeriesTitleFromDraft(PrefetchDraft{Studio: "Creator"}); got != "Creator" {
 		t.Fatalf("studio fallback=%q", got)

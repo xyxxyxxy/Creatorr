@@ -40,9 +40,9 @@
              data-cron-placeholder="{{$ph}}"
              {{if .FieldRequired}}{{if not $off}}required{{end}}{{end}}
              {{if $off}}disabled{{end}} />
-      <label class="label join-item gap-2 px-3 cursor-pointer shrink-0">
+      <label class="btn join-item gap-2 no-animation shrink-0">
         <input type="checkbox" class="checkbox checkbox-sm" data-cron-regular{{if not $off}} checked{{end}} />
-        <span class="label-text whitespace-nowrap">{{$regularLabel}}</span>
+        <span class="whitespace-nowrap font-normal">{{$regularLabel}}</span>
       </label>
     </div>
     <datalist id="{{$listID}}">

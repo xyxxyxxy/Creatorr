@@ -1,7 +1,7 @@
 {{define "video_list_row"}}
 {{/* Dot is a dict: ID Title Status UploadDate SizeLabel ResolutionLabel StreamTypeLabel DurationLabel MediaTypeLabel ThumbURL TaskInd DownloadRunning
      DeliveryQueued DomainActive DomainDisabledTitle SeriesID IsStream KeepScroll LiveSwap Redirect FormClass Deleting
-     NoActions - thumb + title + meta only (history detail) */}}
+     SeriesTitle? (cross-series lists: link in meta), NoActions - thumb + title + meta only */}}
 <li class="list-row">
   <div class="relative shrink-0 w-[112px] aspect-video">
     {{if .ThumbURL}}
@@ -21,6 +21,7 @@
       <a class="link link-hover font-medium truncate{{if eq .Status "ignored"}} opacity-40{{end}}" href="/series/{{.SeriesID}}/videos/{{.ID}}">{{.Title}}</a>
     </div>
     <div class="text-xs opacity-60 flex flex-wrap gap-x-2">
+      {{if .SeriesTitle}}<a class="link link-hover" href="/series/{{.SeriesID}}">{{.SeriesTitle}}</a>{{end}}
       {{if .UploadDate.Valid}}<time datetime="{{.UploadDate.String}}" data-local-time>{{.UploadDate.String}}</time>{{end}}
       {{if eq .MediaTypeLabel "-"}}{{template "empty_value"}}{{else if .MediaTypeLabel}}<span>{{.MediaTypeLabel}}</span>{{end}}
       {{if and .IsStream .StreamTypeLabel}}<span>{{.StreamTypeLabel}}</span>{{end}}

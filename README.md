@@ -7,6 +7,8 @@
 Repo: [github.com/xyxxyxxy/Creatorr](https://github.com/xyxxyxxy/Creatorr).  
 Go module: `github.com/xyxxyxxy/Creatorr`
 
+![Creatorr Overview](screenshot.png)
+
 ## Features
 
 - **Index first, then download** - scan sources into a video index, then download wanted videos automatically on schedule (or on demand).

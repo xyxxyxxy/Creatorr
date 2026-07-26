@@ -91,3 +91,62 @@ func TestSoftFillVideoGenresFromInfoJSON(t *testing.T) {
 		t.Fatalf("genres=%v", v.Genres)
 	}
 }
+
+func TestSaveVideoMetadataClearedGenresStayCleared(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	root, err := s.GetRoot(rootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "ClearGenres", SourceURL: "https://www.example.com/@cg",
+		RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "cg1", Title: "Ep", WebpageURL: "https://www.example.com/watch?v=cg1",
+		SourceID: ser.Sources[0].ID,
+	}, seedTaskID(t, s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root.Path, "ClearGenres")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	media := filepath.Join(dir, "ep.mkv")
+	info := filepath.Join(dir, "ep.info.json")
+	if err := os.WriteFile(media, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(info, []byte(`{"categories":["Science & Technology"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`INSERT INTO files (video_id, path, kind, acquired_at) VALUES (?, ?, 'video', datetime('now'))`, res.VideoID, media); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`INSERT INTO files (video_id, path, kind, acquired_at) VALUES (?, ?, 'json', datetime('now'))`, res.VideoID, info); err != nil {
+		t.Fatal(err)
+	}
+	ok, err := s.SoftFillVideoGenresFromPackedInfo(res.VideoID)
+	if err != nil || !ok {
+		t.Fatalf("seed fill: ok=%v err=%v", ok, err)
+	}
+
+	_, err = s.SaveVideoMetadata(res.VideoID, library.SaveVideoMetadataParams{
+		Title: "Ep", Genres: nil,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.GetVideo(res.VideoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Genres) != 0 {
+		t.Fatalf("cleared genres came back: %v", v.Genres)
+	}
+}

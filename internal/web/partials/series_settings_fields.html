@@ -8,7 +8,7 @@
             AutoIgnoreItems, AutoIgnoreOptions, AutoIgnoreListID,
             RootInfo, RootDisabled, RootDisabledTitle, ProfileInfo.
 */}}
-{{$titlePH := .TitlePlaceholder}}{{if not $titlePH}}{{$titlePH = "Creator / show name"}}{{end}}
+{{$titlePH := .TitlePlaceholder}}{{if not $titlePH}}{{$titlePH = "Series title"}}{{end}}
 {{$ignoreListID := .AutoIgnoreListID}}{{if not $ignoreListID}}{{$ignoreListID = "series-auto-ignore-media-types"}}{{end}}
 {{template "delivery_mode_field" (dict
   "Value" .DeliveryMode
@@ -30,21 +30,21 @@
 )}}
 {{if .RootDisabled}}
 <input type="hidden" name="root_id" value="{{.RootID}}" />
-<span class="tooltip tooltip-top block w-full" {{if .RootDisabledTitle}}data-tip="{{.RootDisabledTitle}}"{{end}}>
-  <fieldset class="fieldset opacity-60">
-    <legend class="fieldset-legend">
-      <span class="inline-flex items-center gap-1">
-        Root folder
-        {{if .RootInfo}}{{template "field_info" (dict "Info" .RootInfo)}}{{end}}
-      </span>
-    </legend>
+<fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      <span class="opacity-60">Root folder</span>
+      {{if .RootInfo}}{{template "field_info" (dict "Info" .RootInfo)}}{{end}}
+    </span>
+  </legend>
+  <span class="tooltip tooltip-top block w-full" {{if .RootDisabledTitle}}data-tip="{{.RootDisabledTitle}}"{{end}}>
     <select class="select w-full pointer-events-none" disabled>
       {{range .Roots}}
       <option value="{{.ID}}"{{if eq .ID $.RootID}} selected{{end}}>{{if .Name}}{{.Name}} ({{.Path}}){{else}}{{.Path}}{{end}}</option>
       {{end}}
     </select>
-  </fieldset>
-</span>
+  </span>
+</fieldset>
 {{else}}
 <fieldset class="fieldset">
   <legend class="fieldset-legend">

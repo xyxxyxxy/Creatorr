@@ -98,7 +98,6 @@ func BuildPrefetchDraftFromInfo(info map[string]any, artDir string) PrefetchDraf
 	}
 	if uploader != "" {
 		draft.Studio = uploader
-		draft.Actors = []SeriesActor{{Name: uploader, Role: "Creator", Order: 0}}
 	}
 	if channelID != "" {
 		draft.UniqueIDType = "yt-dlp"

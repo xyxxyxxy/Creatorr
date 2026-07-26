@@ -206,6 +206,9 @@ func TestOverviewRenders(t *testing.T) {
 	if !strings.Contains(body, "stat-title") || !strings.Contains(body, "On disk") {
 		t.Fatalf("missing stat blocks: %s", truncate(body, 400))
 	}
+	if !strings.Contains(body, "Recent additions") {
+		t.Fatalf("missing recent additions section: %s", truncate(body, 400))
+	}
 }
 
 func TestSettingsAndTasksUseListPanel(t *testing.T) {

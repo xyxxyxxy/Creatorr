@@ -144,6 +144,62 @@ func likeContainsPattern(s string) string {
 	return `%` + replacer.Replace(s) + `%`
 }
 
+// ListRecentVideos returns newest packed library videos (downloaded / streamable)
+// across all series, ordered by acquired_at then id (highest first).
+func (s *Store) ListRecentVideos(limit int) ([]Video, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.DB.SQL.Query(`
+		SELECT `+videoSelectCols+`
+		FROM videos
+		WHERE status IN ('downloaded', 'streamable')
+		ORDER BY (acquired_at IS NULL OR acquired_at = ''), acquired_at DESC, id DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Video
+	for rows.Next() {
+		v, err := scanVideo(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// SeriesTitles returns id → title for the given series ids (missing ids omitted).
+func (s *Store) SeriesTitles(ids []int64) (map[int64]string, error) {
+	out := map[int64]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.DB.SQL.Query(`
+		SELECT id, title FROM series WHERE id IN (`+sqlIntPlaceholders(len(ids))+`)
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var title string
+		if err := rows.Scan(&id, &title); err != nil {
+			return nil, err
+		}
+		out[id] = title
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ListVideos(seriesID int64) ([]Video, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT `+videoSelectCols+`
