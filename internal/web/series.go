@@ -176,7 +176,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !canScan {
-			blocked = "All source domains are inactive. Activate under 'Settings → Queue'."
+			blocked = "All source domains are inactive. Activate under 'Settings → Queue / Domains'."
 		}
 	}
 	type sourceRow struct {
@@ -217,7 +217,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		dAct, _ := domains.IsActive(h.Queue.DB, host)
 		disTitle := ""
 		if !dAct {
-			disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue'."
+			disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
 		}
 		best := pickBestTask(bySource[src.ID])
 		retryable, _ := h.Library.SourceHasRetryableVideos(src.ID)
@@ -412,7 +412,7 @@ func (h *Handler) seriesTaskIndicators(w http.ResponseWriter, r *http.Request) {
 		dAct, _ := domains.IsActive(h.Queue.DB, host)
 		disTitle := ""
 		if !dAct {
-			disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue'."
+			disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
 		}
 		summary, lastAt, errMsg, errCode, taskID, hasScanned, hasError := sourceStatusFields(h.Library, src.ID, now)
 		tipAt, _ := h.Library.LatestTipScannedAt(src.ID)
@@ -471,7 +471,7 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 	dAct, _ := domains.IsActive(h.Queue.DB, host)
 	disTitle := ""
 	if !dAct {
-		disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue'."
+		disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
 	}
 	retryable, _ := h.Library.SourceHasRetryableVideos(src.ID)
 	videoTotal, _ := h.Library.CountVideosForSource(src.ID)
@@ -715,7 +715,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 			host := queue.DomainFromURL(src.URL)
 			dAct, _ = domains.IsActive(h.Queue.DB, host)
 			if !dAct {
-				disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue'."
+				disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
 			}
 		}
 	}

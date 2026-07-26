@@ -32,7 +32,7 @@ Compose service **`creatorr-flaresolverr`** (`ghcr.io/flaresolverr/flaresolverr`
 | Piece | Detail |
 | --- | --- |
 | Env | `CREATORR_FLARESOLVERR_URL` (Compose default `http://creatorr-flaresolverr:8191`). Empty = skip health probe and FlareSolverr pre-solve; boot clears Use FlareSolverr flags. |
-| Opt-in | Domain defaults / per-host **Use FlareSolverr** (Settings → Queue). UI/API refuse On without the env URL. |
+| Opt-in | Domain defaults / per-host **Use FlareSolverr** (Settings → Queue / Domains). UI/API refuse On without the env URL. |
 | Pre-solve | Creatorr calls FlareSolverr `request.get` (not yt-dlp `--flaresolverr`), merges cookies into a Netscape jar, passes `--cookies` / `--user-agent` to yt-dlp. |
 | Session | One browser session per hostname (`sessions.create`) while that domain lane has pending/running work; destroyed when the lane drains. `session_ttl_minutes` safety net on each get. |
 | Cookie cache | Successful clearance cookies are cached in-process (2–30 min) so warm lanes often skip Flare HTTP; cache miss still hits the warm session when open. |
@@ -58,7 +58,7 @@ Creatorr passes `--extractor-args youtubepot-bgutilhttp:base_url=…` when the e
 
 - FlareSolverr pre-solve when effective **Use FlareSolverr** is on for the host (Domain defaults or host On override) and `CREATORR_FLARESOLVERR_URL` is set (see **FlareSolverr** above).
 - PO Token provider URL (env) + Settings **PO token fetch** mode (see above).
-- Netscape cookie jars (Settings → Queue; host jar, else `default`).
+- Netscape cookie jars (Settings → Queue / Domains; host jar, else `default`).
 - Pace flags from domain limits: `--limit-rate` from `download_rate_limit` (archive/scan/`cache_beginning`) or `stream_play_rate_limit` (stream_play mux/pipe only); when `sleep_requests` > 0 also `--sleep-requests`, `--sleep-subtitles`, and `--sleep-interval` (same seconds; no `--max-sleep-interval`). **`stream_play` never gets sleep** (client waits on bytes). Resolve (`urls`) for play has no pace flags.
 - Subtitle sidecars from Library settings (`subtitle_langs` / `subtitle_auto`): `--write-subs` + `--convert-subs srt` (never `--embed-subs`). Used on archive download, stream `pack_stream`, and Replace sidecars. Empty langs = off. Auto-only tracks are renamed to `.lang.auto.srt` after download.
 - Archive downloads **always** pass `--match-filters` `is_live!=?1` (soft-skip while broadcasting; missing `is_live` passes). Series `auto_ignore_media_types` → additional `media_type!=…` clauses AND'd into the same filter; media-type reject → `MediaTypeExcluded` (ignored, not download error). Live reject → `LiveBroadcastSkipped` (stay `wanted`). Stream `pack_stream` reads `is_live` and `media_type` from the `urls` extract (live soft-skip first, then media-type ignore before `.strm` / `cache_beginning`).

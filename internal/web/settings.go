@@ -199,7 +199,7 @@ func externalServiceJoinViews(h *Handler) (flare, pot externalServiceURLView) {
 	flare = externalServiceURLView{
 		Label: "FlareSolverr URL",
 		Value: strings.TrimSpace(h.FlareSolverrURL),
-		Hint: "Set CREATORR_FLARESOLVERR_URL and restart. Compose default http://creatorr-flaresolverr:8191.\nEnable 'Use FlareSolverr' on 'Domain defaults' or a host 'On' override ('Settings → Queue').",
+		Hint: "Set CREATORR_FLARESOLVERR_URL and restart. Compose default http://creatorr-flaresolverr:8191.\nEnable 'Use FlareSolverr' on 'Domain defaults' or a host 'On' override ('Settings → Queue / Domains').",
 	}
 	pot = externalServiceURLView{
 		Label: "PO token provider URL",
@@ -305,7 +305,7 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 		DomainDatalist  []string
 		FlareConfigured bool
 	}{
-		pageBase:        newSettingsPage("Settings · Queue", "queue", flashFromQuery(r)),
+		pageBase:        newSettingsPage("Settings · Queue / Domains", "queue", flashFromQuery(r)),
 		Settings:        rows,
 		DefaultLimits:   defLim,
 		DefaultCookies:  defCookies,

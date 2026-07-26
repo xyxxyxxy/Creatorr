@@ -337,6 +337,7 @@
   }
 
   function tickDomainCooldowns() {
+    let anyActive = false;
     document.querySelectorAll("[data-domain-cooldown]").forEach((wrap) => {
       if (wrap.hasAttribute("data-paused")) return;
       const endsAttr = wrap.getAttribute("data-ends-at");
@@ -346,14 +347,17 @@
         showCooldownReady(wrap);
         return;
       }
-      let rem = Math.ceil((ends - Date.now()) / 1000);
-      if (rem <= 0) {
+      const remMs = ends - Date.now();
+      if (remMs <= 0) {
         showCooldownReady(wrap);
         return;
       }
+      anyActive = true;
+      const remSec = Math.ceil(remMs / 1000);
+      const remFrac = remMs / 1000;
       let total = parseInt(wrap.getAttribute("data-total-sec") || "0", 10);
-      if (!Number.isFinite(total) || total < 1) total = rem;
-      if (rem > total) total = rem;
+      if (!Number.isFinite(total) || total < 1) total = remSec;
+      if (remSec > total) total = remSec;
       clearCooldownBusyTip(wrap);
       let bar = wrap.querySelector("[data-cd-bar]");
       let label = wrap.querySelector("[data-cd-label]");
@@ -361,7 +365,7 @@
         wrap.innerHTML =
           '<span data-cd-label class="shrink-0 leading-none">Cooldown</span>' +
           '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="' +
-          rem +
+          remFrac +
           '" max="' +
           total +
           '" aria-hidden="true"></progress>';
@@ -375,13 +379,24 @@
       if (bar) {
         bar.className = "progress progress-primary w-24 sm:w-32 h-2 shrink-0";
         bar.max = total;
-        bar.value = rem;
+        bar.value = remFrac;
       }
-      wrap.setAttribute("aria-label", "Cooldown " + rem + "s remaining");
+      wrap.setAttribute("aria-label", "Cooldown " + remSec + "s remaining");
     });
+    return anyActive;
   }
 
-  setInterval(tickDomainCooldowns, 250);
+  (function runDomainCooldownLoop() {
+    function frame() {
+      if (tickDomainCooldowns()) {
+        requestAnimationFrame(frame);
+      } else {
+        // Idle: poll slowly so HTMX lane swaps still pick up a new cooldown.
+        setTimeout(() => requestAnimationFrame(frame), 250);
+      }
+    }
+    requestAnimationFrame(frame);
+  })();
 
   function refreshHistoryPanel() {
     if (!location.pathname.startsWith("/history")) return;

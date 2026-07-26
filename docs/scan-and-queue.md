@@ -66,7 +66,7 @@ Flat listing only (newest-first). No full metadata extract during scan. YouTube 
 
 **Tip scan** indexes new `wanted` videos only (no immediate download enqueue). Full scan stays index-only. Wanted videos wait for `download_wanted_cron` / **Download now**.
 
-**Per-domain settings (UI: default + overrides on Settings → Queue):**
+**Per-domain settings (UI: default + overrides on Settings → Queue / Domains):**
 
 | Field | Default | Role |
 |---|---|---|
@@ -77,7 +77,7 @@ Flat listing only (newest-first). No full metadata extract during scan. YouTube 
 | `stream_play_rate_limit` | `off` | Passed to yt-dlp as `--limit-rate` for **`stream_play` mux/pipe only** (not resolve). Default Unlimited. Never applies sleep. Same UI join as download rate. Must be ≥ effective `download_rate_limit` (Unlimited highest); validated on Domain defaults / override save |
 | `sleep_requests` | `1` | Seconds for yt-dlp pacing: `--sleep-requests`, `--sleep-subtitles`, and `--sleep-interval` (same value). `0` = off. Applies to archive/scan/beginning; **not** to `stream_play` or interactive metadata prefetch. |
 
-Global defaults live on `domains` row **`default`** (non-NULL limit columns). Per-host overrides are other `domains` rows (NULL = inherit `default`). Missing host row = implicitly active + `default` limits. Operator creates/deletes overrides on Settings → Queue. Reserved name `default` is not a host override.
+Global defaults live on `domains` row **`default`** (non-NULL limit columns). Per-host overrides are other `domains` rows (NULL = inherit `default`). Missing host row = implicitly active + `default` limits. Operator creates/deletes overrides on Settings → Queue / Domains. Reserved name `default` is not a host override.
 
 **Enqueue guards (all task kinds):** `queue.Enqueue` rejects duplicates - equivalent pending/running task already exists (download by `video_id`, scan by `source_id` in payload, metadata rescan by video or series, import by video, video removal one global). Scan enqueue also pre-checks pending+running via `HasActiveScanForSource` and returns `conflict: scan already queued or running` (UI flash strips the `conflict: ` prefix). Download and `cache_beginning` also reject when that domain’s `max_download_queue` is full (pending+running download + cache_beginning on that hostname).
 
@@ -137,7 +137,7 @@ Store in `tasks` table. Never use kind name `poll`. Boot renames legacy kind str
 - Tasks that touch a site belong to a **domain** (from URL hostname).
 - One ordered queue per domain: position number, FIFO processing.
 - **Pause** (Tasks lane / `PUT /api/domains/{domain}/paused`): soft stop - no new **ClaimNext** claims; pending stay queued; running continue to Finish. Stored in `domain_runtime` (no `domains` override row). **Interactive** metadata prefetch (`prefetch_series_meta` / `prefetch_video_meta` / `prefetch_add_series` / `prefetch_add_video` via ClaimInteractive) and **`stream_play`** occupancy (`InsertRunning` for live or cache playback) still run while paused. Prefetch ignores busy/cooldown slots; `stream_play` **occupies** `max_parallel_tasks` so ClaimNext stays blocked. Cookie-auth, rate-limit, IP-block, download, and resolve (`CookieInvalid` / `RateLimited` / `DownloadFailed` / `ResolveFailed`) failures **auto soft-pause** that hostname and notify as **alerts** (`cookie_invalid` / `rate_limited` / `ytdlp_failed`; always recorded in-app) - including the same codes from stream proxy play. Remux/pack/verify failures notify as alerts but do **not** auto-pause. Domains are never auto-deactivated. `GET /api/domains/paused` lists soft-paused hosts. Tasks page shows an alert above the lanes summarizing Pause vs interactive; each host lane links to History filtered by that domain.
-- **Inactive** (`domains.active=0`, API): hard stop - no claims; deactivate cancels pending+running and creates a host `domains` row. Not shown on Settings → Queue overrides UI.
+- **Inactive** (`domains.active=0`, API): hard stop - no claims; deactivate cancels pending+running and creates a host `domains` row. Not shown on Settings → Queue / Domains overrides UI.
 - Cooldown between tasks is **per-domain** (`task_cooldown_seconds`; applies after **ClaimNext** / Finish for host lanes, not after interactive prefetch, and never on the `system` lane). On `/tasks` each host lane always shows queue status on line 1 left of History: labeled daisyUI [progress](https://daisyui.com/components/progress/) for pause / cooldown / busy (all parallel slots taken, indeterminate), or muted `Ready for tasks` when idle.
 - UI **Tasks** page: in-progress + queued tasks grouped by domain (`system` always first, then every known host from domains rows and source URLs, including empty lanes); each lane is one daisyUI task list; Pause/Resume per host lane; kind/message link to `/task/{id}`.
 - **Task detail** (`/task/{id}`): any status; live status/message/progress via SSE; in-memory progress logs while running (one auto Refresh on open, then manual Refresh). Running indicators/bars show numeric progress only for mid values `(0,1)`; nil / 0% / 100% use the spinner. **Commands** panel lists each yt-dlp / ffmpeg / ffprobe argv (shell-quoted) recorded while the task ran; stored on `tasks.commands` and kept after finish (unlike live Logs). Pretty toggle (same as JSON file view) switches one-line vs `--`-flag line breaks.
@@ -145,7 +145,7 @@ Store in `tasks` table. Never use kind name `poll`. Boot renames legacy kind str
 - Series detail: per-source combined **Status** (icon + short label: running/pending/error/incomplete/indexed/…). Tooltip covers cutoff, next/last scan. Kind icon on the URL row. Remonitor does not auto-enqueue scans.
 - **Source detail** (`/series/{id}/sources/{sid}`): same Status chip in the subtitle; details and History for that source (videos live on the series video list, filterable by source).
 - Series / source **Full scan**: enqueues immediately (no confirm); videos kept; new findings added; resets `full_scan_done` only; OK when series unmonitored.
-- Inactive domain: source/video action buttons disabled with tooltip to Settings → Queue.
+- Inactive domain: source/video action buttons disabled with tooltip to Settings → Queue / Domains.
 
 ## Scan vs metadata rescan
 

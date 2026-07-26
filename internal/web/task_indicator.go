@@ -496,7 +496,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 			v.Label = "pending"
 			line2 = p.DomainDisabledTitle
 			if line2 == "" {
-				line2 = "Domain is inactive - activate it under 'Settings → Queue', then use 'Full scan'"
+				line2 = "Domain is inactive - activate it under 'Settings → Queue / Domains', then use 'Full scan'"
 			}
 		} else {
 			v.Label = "incomplete"

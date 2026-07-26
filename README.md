@@ -39,7 +39,7 @@ Go module: `github.com/xyxxyxxy/Creatorr`
 | [`AGENTS.md`](AGENTS.md) | AI agent contract (hard rules, architecture, workflow); UI details in [`docs/ui.md`](docs/ui.md) |
 | [`api/openapi.yaml`](api/openapi.yaml) | REST contract |
 
-**FlareSolverr:** Compose runs `creatorr-flaresolverr` (headless Chrome; notable RAM). Set `CREATORR_FLARESOLVERR_URL` (default `http://creatorr-flaresolverr:8191`). Enable **Use FlareSolverr** on Domain defaults and/or per-host override under Settings → Queue. Creatorr pre-solves via the FlareSolverr HTTP API (per-host session while the lane has work; short cookie cache), then passes `--cookies` / `--user-agent` to yt-dlp.
+**FlareSolverr:** Compose runs `creatorr-flaresolverr` (headless Chrome; notable RAM). Set `CREATORR_FLARESOLVERR_URL` (default `http://creatorr-flaresolverr:8191`). Enable **Use FlareSolverr** on Domain defaults and/or per-host override under Settings → Queue / Domains. Creatorr pre-solves via the FlareSolverr HTTP API (per-host session while the lane has work; short cookie cache), then passes `--cookies` / `--user-agent` to yt-dlp.
 
 **PO tokens:** Compose runs `creatorr-po-token`; set `CREATORR_POT_PROVIDER_URL` (default `http://creatorr-po-token:4416`) and **PO token fetch** under Settings → General (`auto` / `always` / `never`). See [`docs/ytdlp.md`](docs/ytdlp.md).
 

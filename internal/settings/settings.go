@@ -74,7 +74,7 @@ var schedulerOrder = []string{
 	KeyRetentionDeleteCron,
 }
 
-// queueOrder is Settings → Queue (order, source error threshold).
+// queueOrder is Settings → Queue / Domains (order, source error threshold).
 var queueOrder = []string{
 	KeyDownloadWantedOrder,
 	KeySourceDownloadErrorThreshold,
@@ -219,7 +219,7 @@ func Scheduler(database *db.DB) ([]Entry, error) {
 	return entriesFor(database, schedulerOrder)
 }
 
-// Queue returns Settings → Queue rows.
+// Queue returns Settings → Queue / Domains rows.
 func Queue(database *db.DB) ([]Entry, error) {
 	return entriesFor(database, queueOrder)
 }
@@ -326,7 +326,7 @@ func SetMany(database *db.DB, values map[string]string) error {
 	return tx.Commit()
 }
 
-// DomainQueueRow is one host override row for Settings → Queue (domain != default).
+// DomainQueueRow is one host override row for Settings → Queue / Domains (domain != default).
 type DomainQueueRow struct {
 	Domain               string
 	TaskCooldownSeconds  int     // effective value for display
