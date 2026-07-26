@@ -22,18 +22,18 @@ Use these terms consistently in code comments, UI copy, OpenAPI, tests, and docs
 | **Auto ignore filters** | Series `auto_ignore_media_types` (JSON string array of yt-dlp `media_type` values). Videos are **indexed**, then marked **`ignored`** when type is known and listed (create-time if list has type; download `--match-filters` or stream `pack_stream` `urls` extract when type appears then). Empty = none. Missing/empty media type is never auto-ignored. |
 | **Scan cutoff** | Optional source `scan_cutoff` (YYYY-MM-DD UTC). Full scan and tip Scan stop at the first listing on/before that day; those videos are not indexed. Empty = walk full history (until known id on tip Scan). |
 | **Active** | Domain flag (`domains.active`). Inactive → no queue claims + enqueue gates; deactivate cancels pending+running. API only (not on Settings → Queue overrides UI). |
-| **Paused** | Soft claim stop (`domain_runtime`) for **ClaimNext** only. Pending stay queued; running continue; resume deletes runtime row. Interactive metadata prefetch (`prefetch_series_meta` / `prefetch_video_meta` / `prefetch_add_series`) still claims. Never creates a `domains` override row. Operator control on Tasks; also set automatically on yt-dlp-facing task failures (`CookieInvalid` / `RateLimited` / `DownloadFailed` / `ResolveFailed`). |
+| **Paused** | Soft claim stop (`domain_runtime`) for **ClaimNext** only. Pending stay queued; running continue; resume deletes runtime row. Interactive metadata prefetch (`prefetch_series_meta` / `prefetch_video_meta` / `prefetch_add_series` / `prefetch_add_video`) still claims. Never creates a `domains` override row. Operator control on Tasks; also set automatically on yt-dlp-facing task failures (`CookieInvalid` / `RateLimited` / `DownloadFailed` / `ResolveFailed`). |
 | **wanted_download_error** / **wanted_source_error** | Download failure status / held-wanted when source error threshold hit. Source **Retry** → `wanted`. |
 | **Root folder** / **Quality profile** | Named absolute path (+ optional retention TTL) / named yt-dlp `--format` selector plus optional maturity delays and optional SponsorBlock mark/remove/reencode/info-cards. Remux always MKV. |
 | **Series warn** | Virtual UI health (not a column): `incomplete` (full scan stalled with **no** tip schedule) or `error` (download/source errors - overwrites incomplete). Scheduled incomplete does not escalate (tip cron continues full scan). Shown via series status indicator. |
 | **Job** / **Task** / **Queue** | Implicit schedule only / one domain-queue unit / per-domain ordered pending+running. |
 | **Domain** | Hostname from source URLs: optional limit overrides, FlareSolverr (inherit/on/off), cookies; soft **Paused** via `domain_runtime`. Never auto-deleted. |
 | **History** | `/history` UI: shared UTC **From**/**To** range, then **Notifications** (in-app `notifications` log) above **Tasks** (finished tasks). Task rows link to **Task** detail (`/task/{id}`). Notification rows link to `/notification/{id}`. Outcome JSON in `tasks.detail`. Task statuses `done` / `failed` / `cancelled`. Cancelled ≠ download error. |
-| **Notification** | In-app row for every notify event (`notifications`), delivered by the fixed Creatorr channel. **Alert** events (`cookie_invalid` / `rate_limited` / `ytdlp_failed` / `verify_failed`) stay unread until detail open, mark-read, or any Apprise success and require `task_id`. **Info** digests (`download_digest`) are stored read with no `task_id`. Apprise channels are optional fan-out. |
+| **Notification** | In-app row for every notify event (`notifications`), delivered by the fixed Creatorr channel. **Alert** events (`cookie_invalid` / `rate_limited` / `ytdlp_failed` / `verify_failed` / `file_sync_issues`) stay unread until detail open, mark-read, or any Apprise success and require `task_id`. **Info** digests (`download_digest`) are stored read with no `task_id`. Apprise channels are optional fan-out. |
 | **Task detail** | `/task/{id}` for any status (pending/running/finished). Live pages SSE-patch status/message/progress; Logs panel (in-memory progress lines + Refresh) only while pending/running. Scan `created_ids` rows show scan-time state (`wanted`\|`ignored`) and optional ignore reason. `skipped_title_regexp_include` / `skipped_title_regexp_exclude` list titles not indexed by title filters. |
 | **Scan** | Index from a source (**Full scan** or tip **Scan**). Index-only - see [scan-and-queue.md](scan-and-queue.md). |
 | **Download** / **Download wanted** | Fetch→remux→pack task / cron enqueue for `wanted` on monitored download-mode series - see [download-and-library.md](download-and-library.md). |
-| **Pack** / **Import** / **Retention** / **File sync** | Turn a **video** into an on-disk **episode** under the root (TV path + NFO + optional sidecars) / inbox+library orphan bind / root TTL purge (`retention_delete`) / missing·restore·beginning-cache pass (`sync_files`). |
+| **Pack** / **Import** / **Retention** / **File sync** | Turn a **video** into an on-disk **episode** under the root (TV path + NFO + optional sidecars) / inbox or per-root library orphan bind / root TTL purge (`retention_delete`) / missing·restore·size-mismatch (media + sidecars)·beginning-cache pass (`sync_files`). |
 | **Wanted** / **Ignored** / **Missing** / **Deleted** | Statuses: eligible / not auto-downloaded / path gone (recoverable) / intentional remove (Import or Want to recover). |
 | **Metadata rescan** | Refresh metadata for existing videos only (no discovery). |
 | **Cookies** / **Settings** | Netscape jar per domain (`default` fallback) / SQLite runtime config (env seeds first boot). |
@@ -83,10 +83,10 @@ When introducing a new domain term, add it here (or the topic doc above if it be
 
 When media disappears or is purged:
 
-1. **File sync (path gone, root online):** keep file rows; set status **`missing`**; history `file_missing`. Applies to `downloaded` and `verify_failed`. If path returns later → **`downloaded`** + `file_restored`.
+1. **File sync (path gone, root online):** keep file rows; set status **`missing`**; history `file_missing`. Applies to `downloaded` and `verify_failed`. If path returns later → **`downloaded`** + `file_restored`. Registered **sidecars** use the same keep-row / restore path with history `sidecar_missing` / `sidecar_restored` and `size_bytes = -1` while known missing; **video status is not changed** for sidecar-only loss. Sidecar size drift → `sidecar_externally_changed` (status unchanged).
 2. **Retention / user delete:** delete artifacts; clear file rows; set status **`deleted`**; history `file_deleted` (reason `retention` | `manual`).
 3. **Root offline** (path missing or not a directory): file sync and retention purge skip that root (neither missing nor restore nor retention).
-4. **`deleted` is intentional.** File sync does **not** detect files put back on disk for a `deleted` video (no path kept after clear). Operator must **Import** (scan finds the library orphan → confirm bind) or Want + download - do not drop files straight into the library tree and expect auto-bind.
+4. **`deleted` is intentional.** File sync does **not** detect files put back on disk for a `deleted` video (no path kept after clear). Operator must **Import** (scan that library root finds the orphan → confirm bind) or Want + download - do not drop files straight into the library tree and expect auto-bind.
 
 User **Want** → status **`wanted`**; download-wanted cron or manual download (no immediate enqueue). From **`verify_failed`**, Want clears the verify hold without deleting the file.
 
@@ -114,8 +114,12 @@ Lifecycle entries per video (DB: `video_history`, required `task_id`), e.g.:
 - stream pack (`stream_packed`); beginning cached (`beginning_cached`). Older rows may still use `stream_pack` / `download_beginning`.
 - cancelled (`cancelled`) when a video-scoped task (`download` / `cache_beginning` / `pack_stream` / `sponsorblock_cut` / `media_verify` / video `rescan_metadata`) is cancelled; detail `kind`; message e.g. `Cancelled` or `Cancelled (video ignored)`. UI Event column shows `detail.kind` (not the literal `cancelled`). Cancelling `sponsorblock_cut` deletes staging under `{CacheDir}/sponsorblock-cut/{videoID}/`.
 - import packed (`imported`); unmatched import row created (`import_created`). Older rows may still use `import` / `import_create`.
+- import NFO applied to editable episode columns then library NFO regenerated (`nfo_applied`). Older rows may still use event `nfo_imported`.
 - maturity media refresh (`maturity_repacked`); maturity sidecar refresh (`maturity_sidecars_refreshed`). Older rows may still use `maturity_redownload` / `maturity_sidecars`.
 - file missing / restored (file sync)
+- file externally changed / size mismatch (file sync → `verify_failed`)
+- sidecar missing / restored / size mismatch (file sync; video status unchanged)
+- sidecar deleted individually (`sidecar_deleted`; registered `sub` / `thumb` / `other` only; sync unlink + drop `files` row; bookkeeping task `delete_sidecar`)
 - beginning cache missing / restored (file sync; streamable)
 - file deleted (manual `delete_files` task or retention via `retention_delete`)
 - episode NFO regenerated (`nfo_regenerated`; task kind `regenerate_nfo`; only when on-disk bytes changed). Older rows may still use event `nfo_regenerate`.
@@ -123,7 +127,7 @@ Lifecycle entries per video (DB: `video_history`, required `task_id`), e.g.:
 
 **Not** written on list passes: `discovered` / `updated` / per-video `rescan_metadata`. Those appear on video detail History as **projections** from `source_history` where the video id is in `created_ids` or `updated_ids` (display event from `mode`). Older source_history modes may still use `metadata_rescan`.
 
-Task-driven rows always set `video_history.task_id` (download, sync_files, import, rename_episodes, regenerate_nfo, delete_files, …). Manual video file delete enqueues **`delete_files`**; worker writes `file_deleted` with that task’s id. Retention delete links to the `retention_delete` task. Series purge with files removes disk then `DELETE series` (no lasting per-video history; the finished `delete_files` task in History is the durable record).
+Task-driven rows always set `video_history.task_id` (download, sync_files, import, rename_episodes, regenerate_nfo, delete_files, …). Manual video file delete enqueues **`delete_files`**; worker writes `file_deleted` with that task’s id. Per-sidecar Delete (`sub` / `thumb` / `other`) is sync: finished system bookkeeping task `delete_sidecar` + history `sidecar_deleted` (no status change). Retention delete links to the `retention_delete` task. Series purge with files removes disk then `DELETE series` (no lasting per-video history; the finished `delete_files` task in History is the durable record).
 
 Global **History** (`/history`) shows Notifications (top) then Tasks (finished tasks `done` / `failed` / `cancelled`); task rows open **Task detail** (`/task/{id}`); notification rows open `/notification/{id}`. Optional outcome JSON in `tasks.detail`. Source detail History is paginated `source_history`. Video detail History merges `video_history` + projected source list-pass events.
 

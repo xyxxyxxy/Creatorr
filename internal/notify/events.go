@@ -13,6 +13,7 @@ const (
 	EventRateLimited    = "rate_limited"
 	EventYtDlpFailed    = "ytdlp_failed"
 	EventVerifyFailed   = "verify_failed"
+	EventFileSyncIssues = "file_sync_issues"
 	EventPOTProvider    = "pot_provider"
 	EventDownloadDigest = "download_digest"
 )
@@ -35,6 +36,7 @@ var AllEvents = []string{
 	EventDownloadDigest,
 	EventYtDlpFailed,
 	EventVerifyFailed,
+	EventFileSyncIssues,
 	EventCookieInvalid,
 	EventRateLimited,
 	EventPOTProvider,
@@ -46,6 +48,7 @@ var EventLabels = map[string]string{
 	EventRateLimited:    "Rate limit / IP block",
 	EventYtDlpFailed:    "yt-dlp / site failure",
 	EventVerifyFailed:   "Verify failed",
+	EventFileSyncIssues: "File sync issues",
 	EventPOTProvider:    "PO token provider",
 	EventDownloadDigest: "Downloads finished (digest)",
 }
@@ -56,6 +59,7 @@ var AlertEvents = []string{
 	EventRateLimited,
 	EventYtDlpFailed,
 	EventVerifyFailed,
+	EventFileSyncIssues,
 }
 
 // WarningEvents are unread-eligible warnings (same in-app unread rules as alerts).
@@ -139,7 +143,7 @@ func notifyTypeFor(event string) apprise.NotifyType {
 	switch event {
 	case EventCookieInvalid, EventRateLimited, EventPOTProvider:
 		return apprise.NotifyWarning
-	case EventYtDlpFailed, EventVerifyFailed:
+	case EventYtDlpFailed, EventVerifyFailed, EventFileSyncIssues:
 		return apprise.NotifyFailure
 	case EventDownloadDigest:
 		return apprise.NotifySuccess

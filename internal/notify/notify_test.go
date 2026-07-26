@@ -3,13 +3,14 @@ package notify_test
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
+	apprise "github.com/unraid/apprise-go"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
-	apprise "github.com/unraid/apprise-go"
 )
 
 func TestNormalizeEvents(t *testing.T) {
@@ -144,15 +145,82 @@ func TestInAppChannelReadOnly(t *testing.T) {
 	}
 }
 
-func TestFormatDigestBody(t *testing.T) {
-	body := notify.FormatDigestBody([]notify.DigestItem{
-		{Series: "A", Title: "One", Kind: "archive"},
-		{Series: "B", Title: "Two", Kind: "stream", Beginning: true},
-		{Series: "C", Title: "Three", Kind: "stream"},
+func TestFormatFileSyncIssuesBody(t *testing.T) {
+	body := notify.FormatFileSyncIssuesBody(
+		[]notify.FileSyncIssueItem{
+			{Series: "S1", Title: "Gone"},
+			{Series: "S1", Title: "Gone", Detail: "nfo: ep.nfo"},
+		},
+		[]notify.FileSyncIssueItem{
+			{Series: "S2", Title: "Changed"},
+			{Series: "S2", Title: "Changed", Detail: "thumb: ep-thumb.jpg"},
+		},
+	)
+	if !strings.Contains(body, "Missing (2):") || !strings.Contains(body, "- S1 / Gone\n") {
+		t.Fatalf("missing section: %q", body)
+	}
+	if !strings.Contains(body, "- S1 / Gone (nfo: ep.nfo)") {
+		t.Fatalf("missing sidecar detail: %q", body)
+	}
+	if !strings.Contains(body, "Size changed (2):") || !strings.Contains(body, "- S2 / Changed\n") {
+		t.Fatalf("changed section: %q", body)
+	}
+	if !strings.Contains(body, "- S2 / Changed (thumb: ep-thumb.jpg)") {
+		t.Fatalf("changed sidecar detail: %q", body)
+	}
+	if !strings.Contains(body, "verify_failed") || !strings.Contains(body, "sidecar") {
+		t.Fatalf("want verify_failed + sidecar hint: %q", body)
+	}
+}
+
+func TestFileSyncIssuesEmptyNoop(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "fsi-empty.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
+		t.Fatal("should not send")
+		return nil
 	})
-	want := "- A / One (downloaded)\n- B / Two (stream, beginning cached)\n- C / Three (stream)"
-	if body != want {
-		t.Fatalf("got %q want %q", body, want)
+	defer notify.SetSendFnForTest(old)
+	if err := notify.FileSyncIssues(context.Background(), d, 0, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFileSyncIssuesRecordsOnce(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "fsi.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	taskID := seedTask(t, d)
+	sends := 0
+	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
+		sends++
+		return nil
+	})
+	defer notify.SetSendFnForTest(old)
+	if err := notify.FileSyncIssues(context.Background(), d, taskID,
+		[]notify.FileSyncIssueItem{{Series: "A", Title: "M"}},
+		[]notify.FileSyncIssueItem{{Series: "B", Title: "C"}},
+	); err != nil {
+		t.Fatal(err)
+	}
+	items, err := notify.ListNotifications(d, notify.ListFilter{}, 10, 0)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%v err=%v", items, err)
+	}
+	if items[0].Event != notify.EventFileSyncIssues {
+		t.Fatalf("event=%s", items[0].Event)
+	}
+	if !items[0].Unread() {
+		t.Fatal("want unread alert")
+	}
+	if sends != 0 {
+		// no Apprise channels configured
+		t.Fatalf("unexpected external sends=%d", sends)
 	}
 }
 
@@ -337,4 +405,3 @@ func TestPOTProviderWarningUnread(t *testing.T) {
 		t.Fatalf("unread after mark-all=%d", n)
 	}
 }
-
