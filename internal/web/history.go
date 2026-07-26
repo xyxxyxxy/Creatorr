@@ -190,8 +190,15 @@ func parseHistoryFilter(r *http.Request) queue.HistoryFilter {
 
 func parseNotifyListFilter(r *http.Request) notify.ListFilter {
 	_, _, fromBound, toBound := parseHistoryTimeRange(r)
+	level := strings.TrimSpace(r.URL.Query().Get("nlevel"))
+	switch level {
+	case notify.LevelInfo, notify.LevelWarning, notify.LevelAlert:
+	default:
+		level = ""
+	}
 	return notify.ListFilter{
 		Event: strings.TrimSpace(r.URL.Query().Get("nevent")),
+		Level: level,
 		From:  fromBound,
 		To:    toBound,
 	}
@@ -257,7 +264,7 @@ func historyFilterActive(f queue.HistoryFilter) bool {
 }
 
 func notifyFilterActive(f notify.ListFilter) bool {
-	return f.Event != "" || f.From != "" || f.To != ""
+	return f.Event != "" || f.Level != "" || f.From != "" || f.To != ""
 }
 
 func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
@@ -334,15 +341,21 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 		Name: "kind", AriaLabel: "Kind", EmptyLabel: "All kinds", Options: kindOpts,
 	})
 
+	levelOpts := []listFilterOpt{
+		{Value: notify.LevelInfo, Label: "Info", Selected: nFilter.Level == notify.LevelInfo},
+		{Value: notify.LevelWarning, Label: "Warning", Selected: nFilter.Level == notify.LevelWarning},
+		{Value: notify.LevelAlert, Label: "Alert", Selected: nFilter.Level == notify.LevelAlert},
+	}
 	eventOpts := make([]listFilterOpt, 0, len(notify.AllEvents))
 	for _, id := range notify.AllEvents {
 		eventOpts = append(eventOpts, listFilterOpt{
 			Value: id, Label: notify.EventLabels[id], Selected: nFilter.Event == id,
 		})
 	}
-	notifySelects := []listFilterSelect{{
-		Name: "nevent", AriaLabel: "Event", EmptyLabel: "All events", Options: eventOpts,
-	}}
+	notifySelects := []listFilterSelect{
+		{Name: "nlevel", AriaLabel: "Type", EmptyLabel: "All types", Options: levelOpts},
+		{Name: "nevent", AriaLabel: "Event", EmptyLabel: "All events", Options: eventOpts},
+	}
 
 	rangeHidden := []hiddenFilter{}
 	if fromUI != "" {
@@ -367,6 +380,9 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	taskHidden := append([]hiddenFilter{}, rangeHidden...)
+	if nFilter.Level != "" {
+		taskHidden = append(taskHidden, hiddenFilter{Name: "nlevel", Value: nFilter.Level})
+	}
 	if nFilter.Event != "" {
 		taskHidden = append(taskHidden, hiddenFilter{Name: "nevent", Value: nFilter.Event})
 	}
@@ -383,6 +399,9 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if filter.Kind != "" {
 		rangeHiddenForTop = append(rangeHiddenForTop, hiddenFilter{Name: "kind", Value: filter.Kind})
+	}
+	if nFilter.Level != "" {
+		rangeHiddenForTop = append(rangeHiddenForTop, hiddenFilter{Name: "nlevel", Value: nFilter.Level})
 	}
 	if nFilter.Event != "" {
 		rangeHiddenForTop = append(rangeHiddenForTop, hiddenFilter{Name: "nevent", Value: nFilter.Event})

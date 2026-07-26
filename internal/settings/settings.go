@@ -14,7 +14,6 @@ const (
 	KeyPotFetch                     = "pot_fetch"
 	KeyEpisodeFormat                = "episode_format"
 	KeyDownloadWantedCron           = "download_wanted_cron"
-	KeyDownloadNewOnScan            = "download_new_on_scan"
 	KeyDownloadWantedOrder          = "download_wanted_order"
 	KeySyncFilesCron                = "sync_files_cron"
 	KeyRetentionDeleteCron          = "retention_delete_cron"
@@ -31,7 +30,6 @@ var Help = map[string]string{
 	KeyPotFetch:                     "",
 	KeyEpisodeFormat:                "Relative path under the series folder for packed episodes (no extension). Saving does not rename existing files - use Apply episode format.",
 	KeyDownloadWantedCron:           "Schedule to enqueue wanted videos for monitored series.",
-	KeyDownloadNewOnScan:            "Queues new videos after a scan until the download queue is full. Download wanted schedule is used to fill gaps. Does not apply to full scan.",
 	KeyDownloadWantedOrder:          "Within each series, enqueue wanted downloads oldest-first or newest-first (upload date; undated by id). Series are fair-shared (round-robin, least-loaded first).",
 	KeySyncFilesCron:                "Schedule for library file sync: missing/restore, packed media size vs DB (mismatch → verify_failed), and beginning-cache reconcile.",
 	KeyRetentionDeleteCron:          "Schedule for deleting files past root retention TTL.",
@@ -50,7 +48,6 @@ var Labels = map[string]string{
 	KeyPotFetch:                     "PO token fetch",
 	KeyEpisodeFormat:                "Episode format",
 	KeyDownloadWantedCron:           "Download wanted schedule",
-	KeyDownloadNewOnScan:            "Download new videos immediately",
 	KeyDownloadWantedOrder:          "Download wanted order",
 	KeySyncFilesCron:                "File sync schedule",
 	KeyRetentionDeleteCron:          "Retention delete schedule",
@@ -70,9 +67,8 @@ var generalOrder = []string{
 	KeyStatsRetentionDays,
 }
 
-// schedulerOrder is Settings → Scheduler (cron schedules + tip-scan auto-download).
+// schedulerOrder is Settings → Scheduler (cron schedules).
 var schedulerOrder = []string{
-	KeyDownloadNewOnScan,
 	KeyDownloadWantedCron,
 	KeySyncFilesCron,
 	KeyRetentionDeleteCron,
@@ -121,7 +117,6 @@ func SeedDefaults(database *db.DB) error {
 		KeyPotFetch:                     PotFetchAuto,
 		KeyEpisodeFormat:                DefaultEpisodeFormat,
 		KeyDownloadWantedCron:           "@hourly",
-		KeyDownloadNewOnScan:            "1",
 		KeyDownloadWantedOrder:          DownloadWantedOrderOldest,
 		KeySyncFilesCron:                "@daily",
 		KeyRetentionDeleteCron:          "@daily",
@@ -175,6 +170,8 @@ func migrateLegacySettingKeys(database *db.DB) error {
 			return fmt.Errorf("rename setting %s→%s: %w", r.old, r.neu, err)
 		}
 	}
+	// Drop removed tip-scan auto-download toggle (no longer used).
+	_, _ = database.SQL.Exec(`DELETE FROM settings WHERE key = ?`, "download_new_on_scan")
 	return nil
 }
 
@@ -270,9 +267,6 @@ func Set(database *db.DB, key, value string) error {
 	if key == KeyExternalBaseURL {
 		value = NormalizeExternalBaseURL(value)
 	}
-	if key == KeyDownloadNewOnScan {
-		value = NormalizeDownloadNewOnScan(value)
-	}
 	if key == KeySubtitleLangs {
 		value = SubtitleLangsJSON(ParseSubtitleLangsJSON(value))
 	}
@@ -305,10 +299,6 @@ func SetMany(database *db.DB, values map[string]string) error {
 		}
 		if k == KeyExternalBaseURL {
 			v = NormalizeExternalBaseURL(v)
-			values[k] = v
-		}
-		if k == KeyDownloadNewOnScan {
-			v = NormalizeDownloadNewOnScan(v)
 			values[k] = v
 		}
 		if k == KeySubtitleLangs {

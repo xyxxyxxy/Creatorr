@@ -81,7 +81,7 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 					} else {
 						dAct, _ = domains.IsActive(h.Queue.DB, host)
 						if !dAct {
-							disTitle = "Domain " + host + " is inactive. Activate it under Settings → Queue."
+							disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue'."
 						}
 						domainCache[host] = struct {
 							active bool
@@ -152,7 +152,7 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 		dAct, _ := domains.IsActive(h.Queue.DB, host)
 		disTitle := ""
 		if !dAct {
-			disTitle = "Domain " + host + " is inactive. Activate it under Settings → Queue."
+			disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue'."
 		}
 		domainBySource[src.ID] = struct {
 			active bool

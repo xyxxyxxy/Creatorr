@@ -29,6 +29,7 @@ func (n Notification) Unread() bool {
 // ListFilter selects notification rows.
 type ListFilter struct {
 	Event      string
+	Level      string // info | warning | alert; empty = all
 	From       string // inclusive UTC RFC3339Nano on created_at
 	To         string // inclusive UTC RFC3339Nano on created_at
 	UnreadOnly bool
@@ -197,6 +198,14 @@ func notificationWhere(f ListFilter) (string, []any) {
 	if ev := strings.TrimSpace(f.Event); ev != "" {
 		parts = append(parts, `event = ?`)
 		args = append(args, AliasEvent(ev))
+	}
+	if evs := EventsForLevel(f.Level); len(evs) > 0 {
+		ph := strings.Repeat("?,", len(evs))
+		ph = ph[:len(ph)-1]
+		parts = append(parts, `event IN (`+ph+`)`)
+		for _, e := range evs {
+			args = append(args, e)
+		}
 	}
 	if from := strings.TrimSpace(f.From); from != "" {
 		parts = append(parts, `datetime(created_at) >= datetime(?)`)

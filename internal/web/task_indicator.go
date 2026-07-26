@@ -343,6 +343,7 @@ type sourceStatusParams struct {
 	Best                *queue.Task
 	HasError            bool
 	ErrMsg              string
+	ErrCode             string
 	Stalled             bool
 	SeriesMonitored     bool
 	DomainActive        bool
@@ -430,7 +431,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 	}
 	cutoffTip := ""
 	if src.ScanCutoff.Valid {
-		cutoffTip = "cutoff " + src.ScanCutoff.String + " (older not indexed)"
+		cutoffTip = "cutoff " + src.ScanCutoff.String + " (older days not indexed)"
 	}
 	lastTip := ""
 	if p.HasScanned && p.Summary != "" {
@@ -471,10 +472,11 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 		if v.Label == "" {
 			v.Label = "error"
 		}
-		v.Title = joinStatusTip(p.ErrMsg, scheduleTip, cutoffTip, lastTip)
-		if v.Title == "" {
-			v.Title = "Scan error"
+		errTip := strings.TrimSpace(p.ErrCode)
+		if errTip == "" {
+			errTip = "Scan error"
 		}
+		v.Title = joinStatusTip(errTip, scheduleTip, cutoffTip, lastTip)
 		if p.HistoryID > 0 {
 			v.Href = fmt.Sprintf("/task/%d", p.HistoryID)
 		}
@@ -494,7 +496,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 			v.Label = "pending"
 			line2 = p.DomainDisabledTitle
 			if line2 == "" {
-				line2 = "Domain is inactive - activate it under Settings → Queue, then use Full scan"
+				line2 = "Domain is inactive - activate it under 'Settings → Queue', then use 'Full scan'"
 			}
 		} else {
 			v.Label = "incomplete"

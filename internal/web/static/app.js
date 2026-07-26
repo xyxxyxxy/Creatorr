@@ -157,38 +157,112 @@
     } catch (_) {}
   }
 
+  function formatNotifyAgo(raw) {
+    const then = new Date(raw);
+    if (Number.isNaN(then.getTime())) return "";
+    let t = then.getTime();
+    let n = Date.now();
+    if (t > n) {
+      const swap = t;
+      t = n;
+      n = swap;
+    }
+    let years = 0;
+    while (true) {
+      const d = new Date(t);
+      d.setUTCFullYear(d.getUTCFullYear() + years + 1);
+      if (d.getTime() > n) break;
+      years++;
+    }
+    const afterYears = new Date(t);
+    afterYears.setUTCFullYear(afterYears.getUTCFullYear() + years);
+    t = afterYears.getTime();
+    let months = 0;
+    while (true) {
+      const d = new Date(t);
+      d.setUTCMonth(d.getUTCMonth() + months + 1);
+      if (d.getTime() > n) break;
+      months++;
+    }
+    const afterMonths = new Date(t);
+    afterMonths.setUTCMonth(afterMonths.getUTCMonth() + months);
+    let rem = n - afterMonths.getTime();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const hourMs = 60 * 60 * 1000;
+    const minMs = 60 * 1000;
+    const days = Math.floor(rem / dayMs);
+    rem -= days * dayMs;
+    const hours = Math.floor(rem / hourMs);
+    rem -= hours * hourMs;
+    const minutes = Math.floor(rem / minMs);
+    const parts = [];
+    if (years > 0) parts.push(years + " y");
+    if (months > 0) parts.push(months + " mo");
+    if (days > 0) parts.push(days + " d");
+    if (hours > 0) parts.push(hours + " h");
+    if (minutes > 0) parts.push(minutes + " m");
+    if (!parts.length) return "just now";
+    return parts.slice(0, 2).join(" ") + " ago";
+  }
+
   async function refreshNotifyDropdown() {
-    const list = document.getElementById("notify-dropdown-list");
+    const menu = document.getElementById("notify-menu");
     const empty = document.getElementById("notify-dropdown-empty");
-    if (!list || !empty) return;
+    const viewAll = document.getElementById("notify-menu-view-all");
+    if (!menu || !empty || !viewAll) return;
     try {
-      const res = await fetch("/api/notifications?unread_only=true&limit=10");
+      const res = await fetch("/api/notifications?limit=8");
       if (!res.ok) return;
       const items = await res.json();
-      list.replaceChildren();
+      // Drop previous notification rows (keep empty, view-all).
+      menu.querySelectorAll("[data-notify-item]").forEach((el) => el.remove());
       if (!Array.isArray(items) || items.length === 0) {
-        list.classList.add("hidden");
         empty.classList.remove("hidden");
         return;
       }
       empty.classList.add("hidden");
-      list.classList.remove("hidden");
+      const frag = document.createDocumentFragment();
       items.forEach((n) => {
         const li = document.createElement("li");
+        li.setAttribute("data-notify-item", "");
         const a = document.createElement("a");
         a.href = "/notification/" + n.id;
-        a.className = "flex flex-col items-start gap-0.5 whitespace-normal";
+        a.className = "items-start gap-2 whitespace-normal h-auto min-h-0 py-2";
+        if (n.unread) a.classList.add("menu-active");
+        const level = String(n.level || "info");
+        const iconWrap = document.createElement("span");
+        iconWrap.className = "inline-flex shrink-0 mt-0.5";
+        const icon = document.createElement("i");
+        if (level === "alert") {
+          icon.setAttribute("data-lucide", "megaphone");
+          icon.className = "size-4 text-error";
+        } else if (level === "warning") {
+          icon.setAttribute("data-lucide", "siren");
+          icon.className = "size-4 text-warning";
+        } else {
+          icon.setAttribute("data-lucide", "bell");
+          icon.className = "size-4 opacity-70";
+        }
+        iconWrap.appendChild(icon);
+        const text = document.createElement("span");
+        text.className = "flex flex-col items-start gap-0.5 min-w-0";
         const title = document.createElement("span");
         title.className = "font-medium text-sm";
         title.textContent = n.title || n.event || "Notification";
         const meta = document.createElement("span");
         meta.className = "text-xs opacity-60";
-        meta.textContent = n.event || "";
-        a.appendChild(title);
-        a.appendChild(meta);
+        const event = n.event || "";
+        const ago = formatNotifyAgo(n.created_at);
+        meta.textContent = [event, ago].filter(Boolean).join(" · ");
+        text.appendChild(title);
+        text.appendChild(meta);
+        a.appendChild(iconWrap);
+        a.appendChild(text);
         li.appendChild(a);
-        list.appendChild(li);
+        frag.appendChild(li);
       });
+      menu.insertBefore(frag, viewAll);
+      createLucideIcons(menu);
     } catch (_) {}
   }
 
@@ -428,6 +502,7 @@
 
   let videoHistoryRefreshAt = 0;
   let taskHistoryRefreshAt = 0;
+  let videoStreamCacheRefreshAt = 0;
 
   /** Refresh video History panel while a related task is progressing. */
   function refreshVideoHistoryIfMatch(ev) {
@@ -450,6 +525,39 @@
     window.htmx.ajax("GET", location.pathname + q, {
       target: "#video-history-live",
       select: "#video-history-live",
+      swap: "outerHTML",
+    });
+  }
+
+  /** Refresh Stream cache row while stream_play / cache_beginning / download progresses. */
+  function refreshVideoStreamCacheIfMatch(ev) {
+    if (!window.htmx) return;
+    let data;
+    try {
+      data = JSON.parse(ev.data || "{}");
+    } catch (_) {
+      return;
+    }
+    const kind = data.kind || "";
+    if (
+      kind !== "stream_play" &&
+      kind !== "cache_beginning" &&
+      kind !== "download"
+    ) {
+      return;
+    }
+    const m = location.pathname.match(/^\/series\/(\d+)\/videos\/(\d+)/);
+    if (!m) return;
+    const pageVid = Number(m[2]);
+    if (!pageVid || !data.video_id || Number(data.video_id) !== pageVid) return;
+    if (!document.getElementById("video-stream-cache-live")) return;
+    const now = Date.now();
+    if (now - videoStreamCacheRefreshAt < 1500) return;
+    videoStreamCacheRefreshAt = now;
+    const q = location.search || "";
+    window.htmx.ajax("GET", location.pathname + q, {
+      target: "#video-stream-cache-live",
+      select: "#video-stream-cache-live",
       swap: "outerHTML",
     });
   }
@@ -630,6 +738,29 @@
     });
   }
 
+  function onSeriesListPage() {
+    return /^\/series\/?$/.test(location.pathname);
+  }
+
+  function refreshSeriesList(preserveScroll) {
+    if (!window.htmx) return;
+    if (!onSeriesListPage() || !document.getElementById("series-list-live")) return;
+    const y = preserveScroll ? window.scrollY : null;
+    const q = location.search || "";
+    window.htmx.ajax("GET", "/series/list-live" + q, {
+      target: "#series-list-live",
+      select: "#series-list-live",
+      swap: "outerHTML",
+    });
+    if (y == null) return;
+    const restore = () => window.scrollTo(0, y);
+    document.body.addEventListener("htmx:afterSwap", function onSwap(ev) {
+      if (!ev.detail || !ev.detail.target || ev.detail.target.id !== "series-list-live") return;
+      document.body.removeEventListener("htmx:afterSwap", onSwap);
+      requestAnimationFrame(restore);
+    });
+  }
+
   let videosRefreshAt = 0;
   function maybeRefreshSeriesVideos(ev) {
     let kind = "";
@@ -646,6 +777,27 @@
       if (now - videosRefreshAt < 2000) return;
       videosRefreshAt = now;
       refreshSeriesVideos(true);
+    }
+  }
+
+  let seriesListRefreshAt = 0;
+  function maybeRefreshSeriesList(ev) {
+    if (!onSeriesListPage()) return;
+    let kind = "";
+    try {
+      const data = JSON.parse(ev.data || "{}");
+      kind = data.kind || "";
+    } catch (_) {}
+    // Drop deleted series (and clear deleting state) when delete_files finishes.
+    if ((ev.type === "task.done" || ev.type === "task.failed") && kind === "delete_files") {
+      refreshSeriesList(true);
+      return;
+    }
+    if (ev.type === "task.updated" && kind === "delete_files") {
+      const now = Date.now();
+      if (now - seriesListRefreshAt < 2000) return;
+      seriesListRefreshAt = now;
+      refreshSeriesList(true);
     }
   }
 
@@ -668,6 +820,7 @@
       patchTaskDetail(ev);
       refreshTaskIndicators();
       refreshVideoHistoryIfMatch(ev);
+      refreshVideoStreamCacheIfMatch(ev);
       refreshTaskVideoHistoryIfMatch(ev);
     } else if (ev.type === "task.done" || ev.type === "task.failed") {
       refreshTasksPanel();
@@ -677,6 +830,10 @@
       reloadVideoDetailIfMatch(ev);
     }
     maybeRefreshSeriesVideos(ev);
+    maybeRefreshSeriesList(ev);
+    if (typeof window.refreshImportFullScanNote === "function") {
+      window.refreshImportFullScanNote(ev);
+    }
   }
 
   // Full-page nav that should not jump to top: mark link/form with js-keep-scroll.
@@ -1108,6 +1265,7 @@
     initSponsorBlockReencodeGate();
     initPlaybackCacheHoursGate();
     syncAllRateLimitJoins();
+    syncAllScanCronJoins();
     document.querySelectorAll("form.js-add-series-form").forEach(syncAddSeriesForm);
     openAddSeriesModal();
     openSeriesMetadataModal();
@@ -1173,12 +1331,25 @@
 
   function setPanelControls(panel, enabled) {
     if (!panel) return;
-    panel.classList.toggle("hidden", !enabled);
+    // Caller owns panel visibility (.hidden). Only soft-enable/disable controls here.
     panel.querySelectorAll("input, select, textarea").forEach((el) => {
-      if (el.dataset.defaultDisabled == null) {
-        el.dataset.defaultDisabled = el.disabled ? "1" : "0";
+      // Remember HTML-permanent disabled (e.g. Stream when External Creatorr URL unset)
+      // before we soft-disable for a hidden wizard step.
+      if (el.dataset.permanentlyDisabled == null) {
+        el.dataset.permanentlyDisabled =
+          el.disabled && el.dataset.panelSoftDisabled !== "1" ? "1" : "0";
       }
-      el.disabled = !enabled || el.dataset.defaultDisabled === "1";
+      if (el.dataset.permanentlyDisabled === "1") {
+        el.disabled = true;
+        return;
+      }
+      if (enabled) {
+        el.disabled = false;
+        delete el.dataset.panelSoftDisabled;
+      } else {
+        el.disabled = true;
+        el.dataset.panelSoftDisabled = "1";
+      }
     });
   }
 
@@ -1213,6 +1384,54 @@
     }
   }
 
+  /** daisyUI validator hint sibling (https://daisyui.com/components/validator/). */
+  function controlValidatorHint(el) {
+    if (!el) return null;
+    const join = el.closest(".join.validator");
+    if (join) {
+      let n = join.nextElementSibling;
+      while (n && n.tagName === "DATALIST") n = n.nextElementSibling;
+      if (n && n.classList.contains("validator-hint")) return n;
+    }
+    let n = el.nextElementSibling;
+    while (n && n.tagName === "DATALIST") n = n.nextElementSibling;
+    if (n && n.classList.contains("validator-hint")) return n;
+    const fs = el.closest("fieldset");
+    if (fs) {
+      const hints = fs.querySelectorAll(":scope > .validator-hint");
+      if (hints.length) return hints[hints.length - 1];
+    }
+    return null;
+  }
+
+  /** Mark control invalid via aria-invalid; daisyUI paints error + shows sibling .validator-hint. */
+  function setControlValidity(el, msg) {
+    if (!el) return;
+    const text = String(msg || "").trim();
+    const invalid = !!text;
+    if (invalid) el.setAttribute("aria-invalid", "true");
+    else el.removeAttribute("aria-invalid");
+    const join = el.closest(".join.validator");
+    if (join) {
+      if (invalid) join.setAttribute("aria-invalid", "true");
+      else join.removeAttribute("aria-invalid");
+    }
+    const hint = controlValidatorHint(el);
+    if (hint && text) hint.textContent = text;
+  }
+  window.setControlValidity = setControlValidity;
+
+  function clearControlValidity(el) {
+    setControlValidity(el, "");
+  }
+  window.clearControlValidity = clearControlValidity;
+
+  function clearFormControlValidity(root) {
+    if (!root) return;
+    root.querySelectorAll("[aria-invalid]").forEach((el) => el.removeAttribute("aria-invalid"));
+  }
+  window.clearFormControlValidity = clearFormControlValidity;
+
   function addSeriesURLClash(form) {
     if (!form) return false;
     const urlEl = form.querySelector("#add-series-url");
@@ -1231,33 +1450,176 @@
   function syncAddSeriesSourceNav(form) {
     const urlEl = form.querySelector("#add-series-url");
     const cont = form.querySelector(".js-add-series-fetch");
-    const help = form.querySelector(".js-add-series-url-help");
-    const dup = form.querySelector(".js-add-series-url-dup");
-    const invalidEl = form.querySelector(".js-add-series-url-invalid");
     if (!urlEl) return;
     const has = String(urlEl.value || "").trim() !== "";
     const invalid = addSeriesURLInvalid(form);
     const clash = !invalid && addSeriesURLClash(form);
     const blocked = form.querySelector("[data-add-series-submit]")?.getAttribute("data-blocked") === "1";
     if (cont) cont.disabled = blocked || !has || clash || invalid || cont.dataset.busy === "1";
-    if (dup) dup.classList.toggle("hidden", !clash);
-    if (invalidEl) invalidEl.classList.toggle("hidden", !invalid);
-    if (help) help.classList.toggle("hidden", clash || invalid);
-    urlEl.classList.toggle("input-error", clash || invalid);
+    if (invalid) {
+      setControlValidity(urlEl, "Enter a valid http(s) URL with a host.");
+    } else if (clash) {
+      setControlValidity(urlEl, "This URL is already a source on another series.");
+    } else {
+      clearControlValidity(urlEl);
+    }
   }
 
-  function setAddSeriesFetchErr(form, msg) {
+  function setAddSeriesAlert(form, msg) {
     const errEl = form.querySelector(".js-add-series-fetch-err");
     if (!errEl) return;
     const span = errEl.querySelector("span") || errEl;
-    if (msg) {
-      span.textContent = msg;
-      errEl.classList.remove("hidden");
-    } else {
-      span.textContent = "";
-      errEl.classList.add("hidden");
-    }
+    span.textContent = String(msg || "").replace(/^conflict:\s*/i, "").trim();
+    // Visibility is owned by syncAddSeriesForm (needs step + message).
   }
+
+  /** Route create/fetch errors to daisyUI validators when the message maps to a field. */
+  function setAddSeriesFetchErr(form, msg) {
+    if (!form) return;
+    clearFormControlValidity(form);
+    const text = String(msg || "").replace(/^conflict:\s*/i, "").trim();
+    if (!text) {
+      setAddSeriesAlert(form, "");
+      return;
+    }
+    const lower = text.toLowerCase();
+    let field = null;
+    if (/\btitle\b/.test(lower) && /required|already exists|same root/.test(lower)) {
+      field = form.querySelector("#add-series-title");
+    } else if (/source url|url already|valid http|with a host|already used by series/.test(lower)) {
+      field = form.querySelector("#add-series-url");
+    } else if (/\broot\b/.test(lower)) {
+      field = form.querySelector('select[name="root_id"]');
+    } else if (/quality|profile/.test(lower)) {
+      field = form.querySelector('select[name="quality_profile_id"]');
+    } else if ((form.dataset.addSeriesStep || "") === "source") {
+      field = form.querySelector("#add-series-url");
+    }
+    if (field) {
+      if (field.id === "add-series-url") {
+        form.dataset.addSeriesStep = "source";
+      } else {
+        form.dataset.addSeriesStep = "series";
+      }
+      setControlValidity(field, text);
+      setAddSeriesAlert(form, "");
+      try {
+        field.focus();
+        if (typeof field.select === "function") field.select();
+      } catch (_) {}
+      return;
+    }
+    setAddSeriesAlert(form, text);
+  }
+  window.setAddSeriesFetchErr = setAddSeriesFetchErr;
+
+  /** Snapshot form as urlencoded body (matches server ParseForm / tests). Includes disabled fields. */
+  function serializeAddSeriesForm(form) {
+    const params = new URLSearchParams();
+    form.querySelectorAll("input, select, textarea").forEach((el) => {
+      if (!el.name || el.type === "submit" || el.type === "button" || el.type === "file" || el.type === "reset") {
+        return;
+      }
+      if (el.type === "checkbox") {
+        // Disabled checkbox: companion hidden may carry the value.
+        // Disabled radio: Import-forced index_as_ignored uses a companion hidden.
+        if (el.disabled) return;
+        if (el.checked) params.append(el.name, el.value || "1");
+        return;
+      }
+      if (el.type === "radio") {
+        if (el.disabled || !el.checked) return;
+        params.append(el.name, el.value);
+        return;
+      }
+      params.append(el.name, el.value);
+    });
+    // Title must always win over any earlier empty same-name control.
+    const titleEl = form.querySelector("#add-series-title") || form.querySelector('input[name="title"]');
+    if (titleEl) params.set("title", String(titleEl.value || ""));
+    // Manual path: drop empty source_url so the handler takes the manual branch cleanly.
+    if ((form.dataset.addSeriesMode || "") !== "url") {
+      const su = String(params.get("source_url") || "").trim();
+      if (!su) params.delete("source_url");
+    }
+    return params;
+  }
+
+  // AJAX create: keep modal + draft on error so the operator can fix the title.
+  document.body.addEventListener("submit", async (ev) => {
+    const form = ev.target.closest("form.js-add-series-form");
+    if (!form) return;
+    ev.preventDefault();
+    const submitBtn = form.querySelector("[data-add-series-submit]");
+    if (submitBtn) submitBtn.disabled = true;
+    setAddSeriesFetchErr(form, "");
+    // Enable series controls before read so soft-disable cannot drop title.
+    const seriesPanel = form.querySelector('[data-add-series-step="series"]');
+    if (seriesPanel) setPanelControls(seriesPanel, true);
+    const titleEl = form.querySelector("#add-series-title") || form.querySelector('input[name="title"]');
+    const titleVal = String((titleEl && titleEl.value) || "").trim();
+    if (!titleVal) {
+      const mode = form.dataset.addSeriesMode || "";
+      setAddSeriesFetchErr(
+        form,
+        mode === "manual"
+          ? "title is required when creating manually"
+          : "title is required - fetch metadata again or enter a title"
+      );
+      form.dataset.addSeriesStep = "series";
+      syncAddSeriesForm(form);
+      return;
+    }
+    const body = serializeAddSeriesForm(form);
+    // Belt: ensure title is present after snapshot (defends against empty append races).
+    body.set("title", titleVal);
+    syncAddSeriesForm(form);
+    try {
+      const res = await fetch("/actions/add-series", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        },
+        body: body.toString(),
+        credentials: "same-origin",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = (data && (data.error || data.message)) || ("Create series failed (" + res.status + ")");
+        setAddSeriesFetchErr(form, msg);
+        if (!form.dataset.addSeriesStep || form.dataset.addSeriesStep === "fetching") {
+          form.dataset.addSeriesStep = "series";
+        }
+        syncAddSeriesForm(form);
+        return;
+      }
+      if (!data || data.id == null) {
+        setAddSeriesFetchErr(form, "Create series failed: invalid response");
+        form.dataset.addSeriesStep = "series";
+        syncAddSeriesForm(form);
+        return;
+      }
+      if (form.dataset.importMatchLock === "1") {
+        form.dispatchEvent(new CustomEvent("creatorr:series-created", {
+          bubbles: true,
+          detail: { id: data.id, title: data.title || "", warning: data.warning || "" },
+        }));
+        return;
+      }
+      if (data.warning) {
+        location.assign("/series/" + data.id + "?err=" + encodeURIComponent(data.warning));
+        return;
+      }
+      location.assign("/series/" + data.id);
+    } catch (e) {
+      setAddSeriesFetchErr(form, e && e.message ? e.message : "Create series failed");
+      form.dataset.addSeriesStep = "series";
+      syncAddSeriesForm(form);
+    } finally {
+      syncAddSeriesForm(form);
+    }
+  });
 
   // Steps: "" (choice) | "source" | "fetching" | "series". Mode: "url" | "manual".
   function syncAddSeriesForm(form) {
@@ -1289,10 +1651,10 @@
         li.classList.toggle("step-primary", showSteps && i >= 0 && i <= cur);
       });
     }
-    // Keep alert under steps; only show on source step when it has text.
+    // Keep alert under steps; show on source or series when it has text (title conflicts stay editable).
     if (errEl) {
-      const hasMsg = !!(errEl.querySelector("span") || errEl).textContent;
-      errEl.classList.toggle("hidden", !(mode === "url" && step === "source" && hasMsg));
+      const hasMsg = !!(errEl.querySelector("span") || errEl).textContent.trim();
+      errEl.classList.toggle("hidden", !hasMsg || step === "" || step === "fetching");
     }
     if (source) {
       // Keep source fields enabled on later URL steps so they still submit; only hide.
@@ -1306,7 +1668,9 @@
     if (series) {
       const showSeries = step === "series";
       series.classList.toggle("hidden", !showSeries);
-      setPanelControls(series, showSeries);
+      // Keep series fields enabled for the whole URL/manual flow (hide-only when off-step).
+      // Soft-disable made title look filled while submit omitted it (browser skips disabled).
+      setPanelControls(series, mode === "manual" || mode === "url");
     }
     if (titleInfo) {
       titleInfo.textContent = mode === "manual"
@@ -1323,7 +1687,68 @@
       submit.disabled = blocked || !onSeries;
     }
     if (step === "source") syncAddSeriesSourceNav(form);
+    syncImportAddSeriesIgnored(form);
   }
+
+  /** On 'Import', force discovered status to 'Ignored' + disable join (tooltip); hidden keeps value. */
+  function syncImportAddSeriesIgnored(form) {
+    if (!form) return;
+    const join = form.querySelector("[data-index-as-ignored-join]");
+    if (!join) return;
+    const radios = join.querySelectorAll('input[type="radio"][name="index_as_ignored"]');
+    if (!radios.length) return;
+    const lock =
+      form.dataset.importMatchLock === "1" ||
+      location.pathname === "/import" ||
+      location.pathname.endsWith("/import");
+    const tip =
+      "Required on 'Import' so new videos are indexed for matching without downloading.";
+    let tipWrap = join.parentElement;
+    if (tipWrap && !tipWrap.classList.contains("tooltip")) tipWrap = null;
+    let hidden = form.querySelector('input[type="hidden"][name="index_as_ignored"][data-import-force]');
+
+    if (lock) {
+      radios.forEach((r) => {
+        r.checked = r.value === "1";
+        r.disabled = true;
+      });
+      if (!hidden) {
+        hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.name = "index_as_ignored";
+        hidden.value = "1";
+        hidden.dataset.importForce = "1";
+        join.insertAdjacentElement("beforebegin", hidden);
+      } else {
+        hidden.value = "1";
+      }
+      join.classList.add("opacity-60", "pointer-events-none");
+      if (!tipWrap) {
+        tipWrap = document.createElement("span");
+        tipWrap.className = "tooltip tooltip-top block w-full";
+        join.parentNode.insertBefore(tipWrap, join);
+        tipWrap.appendChild(join);
+      }
+      tipWrap.setAttribute("data-tip", tip);
+      return;
+    }
+
+    if (hidden) hidden.remove();
+    radios.forEach((r) => {
+      r.disabled = false;
+    });
+    join.classList.remove("opacity-60", "pointer-events-none");
+    if (tipWrap) {
+      tipWrap.removeAttribute("data-tip");
+      const parent = tipWrap.parentNode;
+      if (parent) {
+        parent.insertBefore(join, tipWrap);
+        tipWrap.remove();
+      }
+    }
+  }
+
+  window.syncAddSeriesForm = syncAddSeriesForm;
 
   document.body.addEventListener("click", (ev) => {
     const pick = ev.target.closest(".js-add-series-pick");
@@ -1518,12 +1943,14 @@
       delete form.dataset.addSeriesStep;
       delete form.dataset.importMatchLock;
       if (form.classList.contains("js-add-series-form")) setAddSeriesFetchErr(form, "");
+      clearFormControlValidity(form);
       form.querySelectorAll("[data-user-edited]").forEach((el) => {
         el.dataset.userEdited = "";
         el.disabled = false;
         el.removeAttribute("aria-busy");
       });
       form.querySelectorAll("input.preset-fill-input").forEach(syncPresetChips);
+      syncAllScanCronJoins(form);
       syncSourceURLForm(form);
       syncAddSeriesForm(form);
     });
@@ -1575,6 +2002,55 @@
     }
     // Hide wrap as a unit - never hide the indicator-item alone (that jumps the X).
     if (wrap) wrap.classList.add("hidden");
+  }
+
+  function syncScanCronJoin(join) {
+    if (!join) return;
+    const input = join.querySelector("[data-cron-input]");
+    const regular = join.querySelector("[data-cron-regular]");
+    if (!(input instanceof HTMLInputElement) || !(regular instanceof HTMLInputElement)) return;
+    const cronPh = input.dataset.cronPlaceholder || "* * * * *";
+    const cronName = input.dataset.cronName || "scan_cron";
+    let hidden = join.querySelector("[data-cron-submit]");
+    if (!regular.checked) {
+      const cur = input.value.trim();
+      if (cur && cur !== "never") input.dataset.prevCron = input.value;
+      input.value = "never";
+      input.disabled = true;
+      input.removeAttribute("name");
+      input.removeAttribute("required");
+      input.placeholder = cronPh;
+      input.classList.add("opacity-60");
+      if (!hidden) {
+        hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.setAttribute("data-cron-submit", "");
+        join.insertBefore(hidden, input);
+      }
+      hidden.name = cronName;
+      hidden.value = "";
+    } else {
+      input.disabled = false;
+      input.name = cronName;
+      input.placeholder = cronPh;
+      input.classList.remove("opacity-60");
+      if (hidden) hidden.remove();
+      if (!input.value.trim() || input.value.trim() === "never") {
+        input.value = input.dataset.prevCron || "";
+      }
+    }
+  }
+
+  function syncAllScanCronJoins(root) {
+    (root || document).querySelectorAll("[data-cron-join]").forEach((join) => {
+      const input = join.querySelector("[data-cron-input]");
+      const regular = join.querySelector("[data-cron-regular]");
+      if (!(input instanceof HTMLInputElement) || !(regular instanceof HTMLInputElement)) return;
+      // After form.reset(), HTML may restore name/value/disabled; derive from cron text.
+      const v = input.value.trim();
+      regular.checked = !!v && v !== "never";
+      syncScanCronJoin(join);
+    });
   }
 
   function syncRateLimitJoin(join) {
@@ -1651,12 +2127,25 @@
 
   document.body.addEventListener("input", (ev) => {
     const el = ev.target;
-    if (!(el instanceof HTMLInputElement)) return;
+    if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement) && !(el instanceof HTMLSelectElement)) {
+      return;
+    }
     if (el.id === "add-series-url") {
       const form = el.closest("form.js-add-series-form");
       if (form) syncAddSeriesSourceNav(form);
+    } else if (el.getAttribute("aria-invalid") || el.closest(".join.validator")?.hasAttribute("aria-invalid")) {
+      // Clear server/client field errors as the operator edits (URL sync re-applies when still bad).
+      clearControlValidity(el);
     }
-    if (el.classList.contains("preset-fill-input")) syncPresetChips(el);
+    if (el instanceof HTMLInputElement && el.classList.contains("preset-fill-input")) syncPresetChips(el);
+    if (el instanceof HTMLInputElement && el.hasAttribute("data-cron-input")) {
+      const join = el.closest("[data-cron-join]");
+      const regular = join && join.querySelector("[data-cron-regular]");
+      if (regular instanceof HTMLInputElement && el.value.trim() && el.value.trim() !== "never") {
+        regular.checked = true;
+        syncScanCronJoin(join);
+      }
+    }
     const rateJoin = el.closest("[data-rate-limit-join]");
     if (rateJoin && el.hasAttribute("data-rate-value")) {
       rateJoin.classList.remove("opacity-70");
@@ -1665,6 +2154,17 @@
 
   document.body.addEventListener("change", (ev) => {
     const el = ev.target;
+    if (el instanceof HTMLSelectElement && (el.getAttribute("aria-invalid") || el.classList.contains("validator"))) {
+      clearControlValidity(el);
+    }
+  });
+  document.body.addEventListener("change", (ev) => {
+    const el = ev.target;
+    if (el instanceof HTMLInputElement && el.hasAttribute("data-cron-regular")) {
+      const join = el.closest("[data-cron-join]");
+      if (join) syncScanCronJoin(join);
+      return;
+    }
     if (!(el instanceof HTMLSelectElement) || !el.hasAttribute("data-rate-unit")) return;
     const join = el.closest("[data-rate-limit-join]");
     if (!join) return;
@@ -1757,9 +2257,6 @@
     if (!form || !form.classList.contains("js-source-url-form")) return;
     const input = form.querySelector(".js-source-url");
     const submit = form.querySelector(".js-source-url-submit");
-    const help = form.querySelector(".js-source-url-help");
-    const dup = form.querySelector(".js-source-url-dup");
-    const invalidEl = form.querySelector(".js-source-url-invalid");
     if (!input || !submit) return;
     const raw = String(input.value || "").trim();
     const cur = normalizeSourceURLClient(form.getAttribute("data-current-url") || "");
@@ -1768,10 +2265,13 @@
     const existing = existingSourceURLs();
     const clash = !invalid && typed !== "" && existing.some((u) => u === typed && u !== cur);
     submit.disabled = clash || invalid;
-    if (dup) dup.classList.toggle("hidden", !clash);
-    if (invalidEl) invalidEl.classList.toggle("hidden", !invalid);
-    if (help) help.classList.toggle("hidden", clash || invalid);
-    input.classList.toggle("input-error", clash || invalid);
+    if (invalid) {
+      setControlValidity(input, "Enter a valid http(s) URL with a host.");
+    } else if (clash) {
+      setControlValidity(input, "This URL is already a source on this series.");
+    } else {
+      clearControlValidity(input);
+    }
   }
 
   document.body.addEventListener("input", (ev) => {

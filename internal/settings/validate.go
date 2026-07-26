@@ -17,9 +17,6 @@ func validateValue(key, value string) error {
 	if key == KeyDownloadWantedOrder {
 		return validateDownloadWantedOrder(value)
 	}
-	if key == KeyDownloadNewOnScan {
-		return validateDownloadNewOnScan(value)
-	}
 	if key == KeyCacheBeginningSeconds {
 		return validateCacheBeginningSeconds(value)
 	}

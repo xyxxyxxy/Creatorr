@@ -3,11 +3,13 @@ package streamproxy
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/xyxxyxxy/Creatorr/internal/exectrace"
+	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
@@ -160,6 +162,84 @@ func (h *Handler) occupancyTaskID(videoID int64, token string) int64 {
 	return 0
 }
 
+// occupancyForVideo returns one active stream_play occupancy for videoID (any token).
+func (h *Handler) occupancyForVideo(videoID int64) *streamOccupancy {
+	if videoID <= 0 {
+		return nil
+	}
+	occMu.Lock()
+	defer occMu.Unlock()
+	for _, o := range occByKey {
+		if o != nil && o.videoID == videoID {
+			// Copy so caller can use fields without holding occMu.
+			cp := *o
+			return &cp
+		}
+	}
+	return nil
+}
+
+var (
+	streamCacheProgressMu   sync.Mutex
+	streamCacheProgressLast = map[int64]streamCacheProgressStamp{}
+)
+
+type streamCacheProgressStamp struct {
+	at  time.Time
+	pct int
+}
+
+const streamCacheProgressMinInterval = 1500 * time.Millisecond
+
+// publishPlaybackCacheProgress updates stream_play task progress from progressive cache
+// and emits task.updated (throttled) so video detail Stream cache can live-refresh.
+func (h *Handler) publishPlaybackCacheProgress(videoID int64) {
+	if h == nil || h.Library == nil || videoID <= 0 {
+		return
+	}
+	o := h.occupancyForVideo(videoID)
+	if o == nil || o.taskID <= 0 {
+		return
+	}
+	m, ok := h.Library.LoadPlaybackMeta(videoID)
+	if !ok {
+		return
+	}
+	dur := 0.0
+	if sec := h.durationSeconds(videoID); sec > 0 {
+		dur = float64(sec)
+	}
+	pctInt := library.StreamCachePercent(m.CachedSeconds, dur, m.Complete)
+	streamCacheProgressMu.Lock()
+	prev, seen := streamCacheProgressLast[videoID]
+	now := time.Now()
+	// Emit when % changes; throttle identical % (playlist re-fetch spam).
+	if seen && pctInt == prev.pct && (pctInt >= 100 || now.Sub(prev.at) < streamCacheProgressMinInterval) {
+		streamCacheProgressMu.Unlock()
+		return
+	}
+	streamCacheProgressLast[videoID] = streamCacheProgressStamp{at: now, pct: pctInt}
+	streamCacheProgressMu.Unlock()
+
+	msg := "Streaming playback"
+	if pctInt >= 0 {
+		msg = "Caching stream " + strconv.Itoa(pctInt) + "%"
+	} else if m.CachedSeconds > 0 {
+		msg = "Caching stream"
+	}
+	var prog *float64
+	if pctInt >= 0 {
+		p := float64(pctInt) / 100
+		prog = &p
+	}
+	if h.Queue != nil {
+		_ = h.Queue.UpdateProgress(o.taskID, msg, prog)
+	}
+	if h.Events != nil {
+		h.Events.TaskUpdated(o.taskID, queue.KindStreamPlay, o.domain, queue.StatusRunning, msg, o.seriesID, videoID, prog)
+	}
+}
+
 func (h *Handler) withOccupancyTrace(ctx context.Context, taskID int64) context.Context {
 	if h == nil || h.Queue == nil || taskID <= 0 {
 		return ctx
@@ -194,6 +274,9 @@ func (h *Handler) finishOccupancyDone(key string, o *streamOccupancy) {
 	if h.Events != nil {
 		h.Events.TaskDone(o.taskID, queue.KindStreamPlay, o.domain, "Stream session ended", o.seriesID, o.videoID)
 	}
+	streamCacheProgressMu.Lock()
+	delete(streamCacheProgressLast, o.videoID)
+	streamCacheProgressMu.Unlock()
 	releaseFlareIfIdle(h.Queue, o.domain)
 }
 
@@ -223,6 +306,9 @@ func (h *Handler) failOccupancy(videoID int64, token, code, message, detail stri
 	if h.Events != nil {
 		h.Events.TaskFailed(tid, queue.KindStreamPlay, domain, message, code, seriesID, videoID)
 	}
+	streamCacheProgressMu.Lock()
+	delete(streamCacheProgressLast, videoID)
+	streamCacheProgressMu.Unlock()
 	releaseFlareIfIdle(h.Queue, domain)
 }
 

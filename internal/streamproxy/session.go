@@ -202,8 +202,8 @@ func reapHLSSession(h *Handler, key string, s *hlsSession) {
 		hlsMu.Unlock()
 		h.clearHLSCancel(s.videoID, s.token)
 		// Final promote before deleting live dir so ENDLIST can mark cache complete.
-		if h != nil && h.Library != nil && h.Library.PlaybackCacheEnabled() {
-			_ = h.Library.PromoteLiveSegmentsToPlayback(s.videoID, s.dir, s.durationSec)
+		if h != nil {
+			h.promotePlaybackCache(s.videoID, s.dir, s.durationSec)
 		}
 		s.cancel()
 		_ = os.RemoveAll(s.dir)

@@ -42,22 +42,11 @@
               <i data-lucide="bell" class="size-5"></i>
               <span id="notify-badge" class="badge badge-error badge-xs absolute top-1 right-1 hidden">0</span>
             </div>
-            <div tabindex="0" class="dropdown-content z-50 mt-2 w-80 max-w-[calc(100vw-1rem)] bg-base-200 rounded-box shadow-lg border border-base-300">
-              <div class="p-3 flex items-center justify-between gap-2 border-b border-base-300">
-                <span class="font-semibold text-sm">Unread alerts</span>
-                <form method="post" action="/actions/mark-all-notifications-read" class="inline">
-                  <input type="hidden" name="redirect" value="" data-notify-redirect />
-                  <button type="submit" class="btn btn-ghost btn-xs">Mark all read</button>
-                </form>
-              </div>
-              <div class="max-h-72 overflow-y-auto">
-                <ul id="notify-dropdown-list" class="menu menu-sm p-1 hidden"></ul>
-                <p id="notify-dropdown-empty" class="px-3 py-4 text-xs opacity-60 m-0">No unread notifications</p>
-              </div>
-              <div class="p-2 border-t border-base-300">
-                <a href="/history#notifications" class="btn btn-ghost btn-sm w-full">View all</a>
-              </div>
-            </div>
+            <ul tabindex="0" id="notify-menu"
+                class="dropdown-content menu menu-sm bg-base-200 rounded-box z-50 w-80 max-w-[calc(100vw-1rem)] p-2 shadow-lg border border-base-300 max-h-[min(24rem,70vh)] overflow-y-auto">
+              <li id="notify-dropdown-empty" class="disabled"><a>No notifications</a></li>
+              <li id="notify-menu-view-all"><a href="/history#notifications">View all</a></li>
+            </ul>
           </div>
           <div class="dropdown dropdown-end">
             <div tabindex="0" role="button" class="btn btn-ghost btn-square" aria-label="Theme">
@@ -74,7 +63,7 @@
           </label>
         </div>
       </header>
-      <main class="p-4 md:p-6 flex-1">
+      <main class="p-4 md:p-6 flex-1 w-full max-w-5xl mx-auto">
 {{end}}
 
 {{define "foot"}}

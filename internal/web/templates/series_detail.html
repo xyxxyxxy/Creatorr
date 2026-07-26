@@ -28,21 +28,22 @@
      hx-swap="none"></div>
 
 {{template "list_panel"}}
-{{if not .Sources}}
+{{if and (not .Sources) (not .HasVideos)}}
 {{template "list_header" (dict "level" "section" "title" "Sources")}}
 <script type="application/json" id="series-source-urls">{{toJSON .SourceURLs}}</script>
 <div class="py-10 px-4 w-full">
   <div class="flex w-full max-w-2xl mx-auto flex-col items-center">
-    <div class="flex w-full flex-col items-stretch">
-      <label for="modal-add-source" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal">Add channel/playlist URL</label>
-      <div class="divider">OR</div>
+    <div class="flex w-full flex-row items-stretch">
       <label for="modal-add-single" class="btn btn-outline grow h-auto min-h-12 py-3 whitespace-normal">Add single video</label>
+      <div class="divider divider-horizontal">OR</div>
+      <label for="modal-add-source" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal">Add channel/playlist</label>
     </div>
   </div>
 </div>
 {{else}}
-{{template "list_header" (dict "level" "section" "title" "Sources" "add_modal" "modal-add-source" "add_label" "Add channel/playlist URL" "add_modal2" "modal-add-single" "add_label2" "Add single video")}}
+{{template "list_header" (dict "level" "section" "title" "Sources" "add_modal" "modal-add-source" "add_label" "Add channel/playlist" "add_modal2" "modal-add-single" "add_label2" "Add single video")}}
 <script type="application/json" id="series-source-urls">{{toJSON .SourceURLs}}</script>
+{{if .Sources}}
 {{template "list_table"}}
 <thead><tr><th>URL / Name</th><th>Status</th><th class="w-0"></th></tr></thead>
 <tbody>
@@ -86,6 +87,7 @@
 {{template "list_table_end"}}
 {{template "pagination" .SourcesPage}}
 {{end}}
+{{end}}
 {{template "list_panel_end"}}
 
 {{template "series_videos_live" .VideosLive}}
@@ -122,7 +124,7 @@
 <input type="checkbox" id="modal-add-source" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Add channel/playlist URL</h3>
+    <h3 class="font-bold text-lg mb-2">Add channel/playlist source</h3>
         <form method="post" action="/actions/add-source" class="space-y-2 js-source-url-form">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="kind" value="feed" />
@@ -130,21 +132,21 @@
         {{template "field_input" (dict
           "Name" "url"
           "Label" "URL"
+          "Placeholder" "https://…"
           "Required" true
           "InputClass" "js-source-url"
-          "Info" "Channel or playlist URL. After full scan is done, Scan runs on schedule."
+          "Validator" true
+          "ValidatorHint" "Enter a valid http(s) URL with a host."
+          "Info" "Channel or playlist URL. After 'Full scan' is done, 'Scan' runs on schedule."
         )}}
-        <p class="label whitespace-normal text-error hidden js-source-url-dup">This URL is already a source on this series.</p>
-        <p class="label whitespace-normal text-error hidden js-source-url-invalid">Enter a valid http(s) URL with a host.</p>
       </div>
-      {{template "field_input" (dict "Name" "label" "Label" "Name (optional)")}}
+      {{template "field_input" (dict "Name" "label" "Label" "Name (optional)" "Placeholder" "Source name")}}
       {{template "scan_cron_field" (dict
         "Value" "@weekly"
         "ID" "add-source-scan-cron"
         "CronDescriptors" .ScanCronDescriptors
       )}}
-      {{template "checkbox_field" (dict "Name" "index_as_ignored" "Label" "Mark new videos as ignored" "Info" "Ignored videos are indexed and need to be marked as wanted before they are downloaded.")}}
-      {{template "source_filter_fields" (dict)}}
+      {{template "source_filter_fields" (dict "CutoffID" "add-source-scan-cutoff")}}
       <div class="modal-action">
         <label for="modal-add-source" class="btn btn-ghost modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
@@ -157,7 +159,7 @@
 <input type="checkbox" id="modal-add-single" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Add single video</h3>
+    <h3 class="font-bold text-lg mb-2">Add single video source</h3>
         <form method="post" action="/actions/add-source" class="space-y-2 js-source-url-form">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="kind" value="single" />
@@ -165,14 +167,15 @@
         {{template "field_input" (dict
           "Name" "url"
           "Label" "URL"
+          "Placeholder" "https://…"
           "Required" true
           "InputClass" "js-source-url"
-          "Info" "One video URL. Indexed once; skipped by Scan. Use Full scan to re-index."
+          "Validator" true
+          "ValidatorHint" "Enter a valid http(s) URL with a host."
+          "Info" "One video URL. Indexed once; skipped by 'Scan'. Use 'Full scan' to re-index."
         )}}
-        <p class="label whitespace-normal text-error hidden js-source-url-dup">This URL is already a source on this series.</p>
-        <p class="label whitespace-normal text-error hidden js-source-url-invalid">Enter a valid http(s) URL with a host.</p>
       </div>
-      {{template "field_input" (dict "Name" "label" "Label" "Name (optional)")}}
+      {{template "field_input" (dict "Name" "label" "Label" "Name (optional)" "Placeholder" "Source name")}}
       <div class="modal-action">
         <label for="modal-add-single" class="btn btn-ghost modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
@@ -201,10 +204,9 @@
           {{end}}
     </span>
   </legend>
-  <input name="url" class="input w-full js-source-url" required value="{{.URL}}" />
+  <input name="url" class="input w-full js-source-url validator" required value="{{.URL}}" />
+  <p class="validator-hint hidden">Enter a valid http(s) URL with a host.</p>
 </fieldset>
-      <p class="label whitespace-normal text-error hidden js-source-url-dup">This URL is already a source on this series.</p>
-      <p class="label whitespace-normal text-error hidden js-source-url-invalid">Enter a valid http(s) URL with a host.</p>
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Name (optional)</legend>
         <input name="label" class="input w-full" value="{{if .Label.Valid}}{{.Label.String}}{{end}}" />
@@ -218,10 +220,11 @@
       )}}
       {{end}}
       {{if ne .Kind "single"}}
-      {{template "checkbox_field" (dict "Name" "index_as_ignored" "Label" "Mark new videos as ignored" "Checked" .IndexAsIgnored "Info" "Ignored videos are indexed and need to be marked as wanted before they are downloaded.")}}
       {{$cutoff := ""}}{{if .ScanCutoff.Valid}}{{$cutoff = .ScanCutoff.String}}{{end}}
       {{template "source_filter_fields" (dict
         "Cutoff" $cutoff
+        "CutoffID" (printf "edit-source-scan-cutoff-%d" .ID)
+        "IndexAsIgnored" .IndexAsIgnored
         "TitleRegexpInclude" .TitleRegexpInclude
         "TitleRegexpIncludeID" (printf "edit-source-title-include-%d" .ID)
         "TitleRegexpExclude" .TitleRegexpExclude
@@ -242,7 +245,7 @@
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Delete source</h3>
     <p class="text-sm mb-2">Removes this source and <strong>all of its indexed videos</strong> ({{.VideoCount}}) including library files on disk. Related scan/download tasks are cancelled.</p>
-    <p class="text-sm opacity-70 mb-4">To keep videos and only stop scanning, set Scan to Never or deactivate the domain under Settings → Queue.</p>
+    <p class="text-sm opacity-70 mb-4">To keep videos and only stop scanning, edit this source and turn off 'enabled' on 'Scan schedule'.</p>
     <form method="post" action="/actions/delete-source" class="space-y-3 js-confirm-submit">
       <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.ID}}" />
@@ -283,10 +286,10 @@
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Edit series</h3>
     {{if not .Roots}}
-    <div class="alert alert-warning mb-2"><span>Add a root folder under Settings first.</span></div>
+    <div class="alert alert-warning mb-2"><span>Add a root folder under 'Settings' first.</span></div>
     {{end}}
     {{if not .Profiles}}
-    <div class="alert alert-warning mb-2"><span>Add a quality profile under Settings first.</span></div>
+    <div class="alert alert-warning mb-2"><span>Add a quality profile under 'Settings' first.</span></div>
     {{end}}
         <form method="post" action="/actions/update-series" class="space-y-2">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
@@ -295,14 +298,14 @@
         "CanStream" .CanStream
         "StreamDisabledReason" .StreamDisabledReason
         "Title" .Series.Title
-        "TitleInfo" "Changing the title updates Creatorr and renames the on-disk series folder immediately. Episode filenames that include the series name are not rewritten until you run Apply episode format under Settings → Library."
+        "TitleInfo" "Changing the title updates Creatorr and renames the on-disk series folder immediately. Episode filenames that include the series name are not rewritten until you run 'Apply episode format' under 'Settings → Library'."
         "TitleDisabled" .FolderRenameBusy
-        "TitleDisabledTitle" "Title and root are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
+        "TitleDisabledTitle" "'Title' and 'Root folder' are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
         "Roots" .Roots
         "RootID" .Series.RootID
         "RootInfo" "Where downloads and series NFO/art are written. Changing root moves the series folder on disk."
         "RootDisabled" .FolderRenameBusy
-        "RootDisabledTitle" "Title and root are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
+        "RootDisabledTitle" "'Title' and 'Root folder' are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
         "Profiles" .Profiles
         "ProfileID" .Series.QualityProfileID
         "ProfileInfo" "yt-dlp format selector for new downloads; stream mode uses the same --format on resolved URLs."

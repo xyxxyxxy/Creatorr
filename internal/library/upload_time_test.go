@@ -14,17 +14,20 @@ func TestParseUploadTime(t *testing.T) {
 	}
 }
 
-func TestBeforeOrOnCutoff(t *testing.T) {
-	if !BeforeOrOnCutoff("2024-01-15T23:59:59Z", "2024-01-15") {
-		t.Fatal("same calendar day afternoon should be on/before cutoff")
+func TestBeforeCutoff(t *testing.T) {
+	if BeforeCutoff("2024-01-15T23:59:59Z", "2024-01-15") {
+		t.Fatal("same calendar day must be indexed (not before cutoff)")
 	}
-	if !BeforeOrOnCutoff("2024-01-15T00:00:00Z", "2024-01-15") {
-		t.Fatal("midnight on cutoff day should match")
+	if BeforeCutoff("2024-01-15T00:00:00Z", "2024-01-15") {
+		t.Fatal("midnight on cutoff day must be indexed")
 	}
-	if BeforeOrOnCutoff("2024-01-16T00:00:00Z", "2024-01-15") {
-		t.Fatal("next day must not match")
+	if !BeforeCutoff("2024-01-14T23:59:59Z", "2024-01-15") {
+		t.Fatal("previous day should be before cutoff")
 	}
-	if BeforeOrOnCutoff("2024-01-15T12:00:00Z", "") {
+	if BeforeCutoff("2024-01-16T00:00:00Z", "2024-01-15") {
+		t.Fatal("next day must not be before cutoff")
+	}
+	if BeforeCutoff("2024-01-15T12:00:00Z", "") {
 		t.Fatal("empty cutoff never matches")
 	}
 }

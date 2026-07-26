@@ -69,10 +69,12 @@
 }
 
 /*
-  Delivery mode join: label.btn wrapping a radio - highlight when checked.
-  Stock daisyUI join radios are input.btn (aria-label only); we need Lucide icons inside.
+  Radio button joins (delivery mode, discovered status): label.btn wrapping a
+  radio - highlight when checked. Stock daisyUI join radios are input.btn
+  (aria-label only); we need label text / Lucide icons inside.
 */
-.delivery-mode-join > label:has(> input[type="radio"]:checked) {
+.delivery-mode-join > label:has(> input[type="radio"]:checked),
+.radio-btn-join > label:has(> input[type="radio"]:checked) {
   background-color: var(--color-primary);
   color: var(--color-primary-content);
   border-color: var(--color-primary);
@@ -104,3 +106,16 @@
   content: counter(meta-ord);
 }
 
+/*
+  daisyUI validator paints success green on :user-valid. We only want error
+  styling on invalid fields (:user-invalid / aria-invalid). Reset to the stock
+  .input border mix so valid fields stay neutral.
+  https://daisyui.com/components/validator/
+*/
+:is(.validator:user-valid, .validator:has(:user-valid)),
+:is(.validator:user-valid, .validator:has(:user-valid)):focus,
+:is(.validator:user-valid, .validator:has(:user-valid)):checked,
+:is(.validator:user-valid, .validator:has(:user-valid))[aria-checked="true"],
+:is(.validator:user-valid, .validator:has(:user-valid)):focus-within {
+  --input-color: color-mix(in oklab, var(--color-base-content) 20%, #0000);
+}

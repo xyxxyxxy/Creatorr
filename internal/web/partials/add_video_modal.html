@@ -23,11 +23,12 @@
             {{template "field_info" (dict "Info" "Primary path. Resolve fills title, upload date, and remote ID. No other fields required after a successful fetch.")}}
           </span>
         </legend>
-        <div class="join w-full">
+        <div class="join w-full validator">
           <input type="url" name="fetch_url" id="add-video-url" class="input join-item grow min-w-0"
                  placeholder="https://…" autocomplete="url" />
           <button type="button" class="btn btn-outline join-item shrink-0 js-add-video-fetch">Fetch</button>
         </div>
+        <p class="validator-hint hidden">URL is required</p>
       </fieldset>
 
       <div class="hidden js-add-video-fetching">
@@ -43,6 +44,8 @@
           "ID" "add-video-title"
           "Label" "Title"
           "Placeholder" "Video title"
+          "Validator" true
+          "ValidatorHint" "Title is required"
         )}}
         <fieldset class="fieldset">
           <legend class="fieldset-legend">
@@ -56,7 +59,8 @@
             Upload date
             <span id="add-video-upload-note" class="font-normal opacity-60"></span>
           </legend>
-          <input type="date" class="input w-full" name="upload_date" id="add-video-upload" />
+          <input type="date" class="input w-full validator" name="upload_date" id="add-video-upload" />
+          <p class="validator-hint hidden">Upload date is required</p>
         </fieldset>
       </div>
 

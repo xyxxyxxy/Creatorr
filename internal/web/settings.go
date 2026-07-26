@@ -199,7 +199,7 @@ func externalServiceJoinViews(h *Handler) (flare, pot externalServiceURLView) {
 	flare = externalServiceURLView{
 		Label: "FlareSolverr URL",
 		Value: strings.TrimSpace(h.FlareSolverrURL),
-		Hint: "Set CREATORR_FLARESOLVERR_URL and restart. Compose default http://creatorr-flaresolverr:8191.\nEnable 'Use FlareSolverr' on Domain defaults or a host 'On' override (Settings → Queue).",
+		Hint: "Set CREATORR_FLARESOLVERR_URL and restart. Compose default http://creatorr-flaresolverr:8191.\nEnable 'Use FlareSolverr' on 'Domain defaults' or a host 'On' override ('Settings → Queue').",
 	}
 	pot = externalServiceURLView{
 		Label: "PO token provider URL",
@@ -255,11 +255,6 @@ func (h *Handler) settingsScheduler(w http.ResponseWriter, r *http.Request) {
 		row := settingsRowView{
 			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
 			Cron: settings.CronKeys[e.Key],
-		}
-		if e.Key == settings.KeyDownloadNewOnScan {
-			row.Checkbox = true
-			row.Checked = settings.DownloadNewOnScanValue(e.Value)
-			row.Cron = false
 		}
 		rows = append(rows, row)
 	}
@@ -525,14 +520,6 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	if raw, ok := vals[settings.KeyPotFetch]; ok {
 		vals[settings.KeyPotFetch] = settings.NormalizePotFetch(raw)
 	}
-	// Checkbox: absent from form when unchecked; only update when Scheduler POST includes the field intent.
-	if r.FormValue("redirect") == "/settings/scheduler" {
-		if r.FormValue(settings.KeyDownloadNewOnScan) == "1" {
-			vals[settings.KeyDownloadNewOnScan] = "1"
-		} else {
-			vals[settings.KeyDownloadNewOnScan] = "0"
-		}
-	}
 	namingPosted := false
 	if r.FormValue("redirect") == "/settings/library" {
 		if _, ok := r.Form[settings.KeyEpisodeFormat]; ok {
@@ -551,7 +538,7 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	// Reject naming changes while Apply rename is pending/running.
 	if namingPosted {
 		if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain); busy {
-			redirectSettings(w, r, "/settings/library", "err="+urlQuery("Cancel or wait for Apply episode format before changing formats"))
+			redirectSettings(w, r, "/settings/library", "err="+urlQuery("Cancel or wait for 'Apply episode format' before changing formats"))
 			return
 		}
 	}

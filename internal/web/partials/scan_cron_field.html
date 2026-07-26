@@ -1,13 +1,12 @@
 {{define "scan_cron_field"}}
 {{/*
-  Per-source Scan cron (datalist @…). Empty = never / manual only.
+  Per-source Scan schedule: shared cron join (partials/preset_fill.html).
   Expects: Value (stored scan_cron). Optional: Name (default scan_cron), ID, Info, Hint,
            CronDescriptors (from page).
 */}}
 {{$name := .Name}}{{if not $name}}{{$name = "scan_cron"}}{{end}}
 {{$id := .ID}}{{if not $id}}{{$id = "scan-cron"}}{{end}}
-{{$info := .Info}}{{if not $info}}{{$info = "How often this source is checked for new videos. Higher values mean slower video arrival but also less requests to external site."}}{{end}}
-{{$hint := .Hint}}{{if not $hint}}{{$hint = "Empty = off / no automatic scans."}}{{end}}
+{{$info := .Info}}{{if not $info}}{{$info = "How often this source is checked for new videos. Higher values mean less requests to the external site, but also slower video arrival."}}{{end}}
 {{template "preset_fill" (dict
   "FieldName" $name
   "FieldID" $id
@@ -16,7 +15,7 @@
   "FieldPlaceholder" "* * * * *"
   "FieldClass" "font-mono"
   "FieldInfo" $info
-  "FieldHint" $hint
+  "FieldHint" .Hint
   "CronDescriptors" .CronDescriptors
 )}}
 {{end}}

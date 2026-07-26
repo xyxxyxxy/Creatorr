@@ -3,7 +3,7 @@
   Add/edit Apprise notify channel.
   Mode: "add" | "edit"
   Expects: Redirect, Name, URL, Events ([]string selected), EventOptions ([]{ID,Label}), ID (edit)
-  Optional: URLError (string - inline validation message under URL)
+  Optional: URLError (string - daisyUI validator message on URL)
 */}}
 {{$edit := eq .Mode "edit"}}
 {{$id := "modal-add-notify-channel"}}
@@ -72,12 +72,14 @@
 {{/*
   Apprise URL input + help + optional error. HTMX swap target for upsert validation.
   Expects: FieldID, URL, URLError (optional)
+  Uses daisyUI validator (https://daisyui.com/components/validator/).
 */}}
 <div id="{{.FieldID}}">
-  <input name="url" class="input w-full font-mono text-sm{{if .URLError}} input-error{{end}}" value="{{.URL}}" placeholder="gotifys://... or smtp2go://" required autocomplete="off" />
+  <input name="url" class="input w-full font-mono text-sm validator" value="{{.URL}}" placeholder="gotifys://... or smtp2go://" required autocomplete="off"{{if .URLError}} aria-invalid="true"{{end}} />
+  <p class="validator-hint hidden">{{if .URLError}}{{.URLError}}{{else}}URL is required{{end}}</p>
   <p class="label whitespace-normal">
     <a href="https://appriseit.com/services/" target="_blank" rel="noopener noreferrer" class="link link-primary">Supported services</a>
-    for scheme and tokens.{{if .URLError}}<br /><span class="text-error">{{.URLError}}</span>{{end}}
+    for scheme and tokens.
   </p>
 </div>
 {{end}}

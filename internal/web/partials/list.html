@@ -1,5 +1,6 @@
+{{/* list_panel: optional pipeline = extra Tailwind classes on the section (e.g. "w-full max-w-5xl") */}}
 {{define "list_panel"}}
-<section class="list-panel card bg-base-100 border border-base-300 mb-4">
+<section class="list-panel card bg-base-100 border border-base-300 mb-4{{with .}} {{.}}{{end}}">
   <div class="card-body gap-3">
 {{end}}
 

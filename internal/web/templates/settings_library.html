@@ -28,7 +28,7 @@
 <form method="post" action="/actions/save-settings" class="space-y-3 border-t border-base-300 pt-3 max-w-3xl">
   <input type="hidden" name="redirect" value="/settings/library" />
   {{if .NamingLocked}}
-  <div class="alert alert-info text-sm"><span>Episode format is locked while Apply episode format is pending or running. Cancel that task on Tasks or wait until it finishes.</span></div>
+  <div class="alert alert-info text-sm"><span>'Episode format' is locked while 'Apply episode format' is pending or running. Cancel that task on 'Tasks' or wait until it finishes.</span></div>
   {{end}}
   {{template "field_input" (dict
     "Name" "episode_format"
@@ -40,7 +40,7 @@
     "JoinPrefix" "Series/"
     "JoinSuffix" ".ext"
     "Disabled" .NamingLocked
-    "DisabledTitle" "Episode format is locked while Apply episode format is pending or running."
+    "DisabledTitle" "'Episode format' is locked while 'Apply episode format' is pending or running."
   )}}
   <details class="collapse collapse-arrow bg-base-100 border border-base-300 max-w-3xl">
     <summary class="collapse-title font-medium text-sm min-h-0 py-3">Available format tokens</summary>
@@ -376,7 +376,7 @@
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Generate new stream URL token?</h3>
     <p class="text-sm opacity-80 mb-4">A new token invalidates every existing <code class="text-xs">.strm</code> file immediately.</p>
-    <p class="text-sm opacity-80 mb-4">After confirming, run <strong>Regenerate all .strm files</strong> under Settings → Maintenance so library <code class="text-xs">.strm</code> files pick up the new token.</p>
+    <p class="text-sm opacity-80 mb-4">After confirming, run 'Regenerate all .strm files' under 'Settings → Maintenance' so library <code class="text-xs">.strm</code> files pick up the new token.</p>
     <form method="post" action="/actions/regenerate-stream-token">
       <div class="modal-action">
         <label for="modal-regen-stream-token" class="btn btn-ghost modal-cancel">Cancel</label>

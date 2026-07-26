@@ -53,7 +53,7 @@
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
             Max download queue
-            {{template "field_info" (dict "Info" "Maximum number of download tasks to be queued for the given domain. \"Download now\" user action bypasses this limit.")}}
+            {{template "field_info" (dict "Info" "Maximum number of download tasks to be queued for the given domain. 'Download now' user action bypasses this limit.")}}
           </span>
         </legend>
         <input type="number" min="1" name="max_download_queue" class="input w-full" value="{{.DefaultLimits.MaxDownloadQueue}}" required />
@@ -101,7 +101,7 @@
         <p class="label whitespace-normal">0 = off.</p>
       </fieldset>
       <div class="md:col-span-2 space-y-3">
-        <p class="label whitespace-normal">FlareSolverr and cookies can be set on Domain defaults, but prefer a Domain override per hostname for FlareSolverr. Keep cookies per host too so expired sessions are easier to replace individually.</p>
+        <p class="label whitespace-normal">FlareSolverr and cookies can be set on 'Domain defaults', but prefer a 'Domain override' per hostname for FlareSolverr. Keep cookies per host too so expired sessions are easier to replace individually.</p>
         {{template "checkbox_field" (dict
           "Name" "use_flaresolverr"
           "Label" "Use FlareSolverr"
@@ -122,7 +122,7 @@
 </section>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Domain overrides" "help" "Optional per-host overrides. Hosts are not created when you add a source - add an override here or via Edit on Tasks. Empty fields inherit Domain defaults. Delete removes the override row." "add_modal" "modal-add-domain-override" "add_label" "Add override")}}
+{{template "list_header" (dict "level" "section" "title" "Domain overrides" "help" "Optional per-host overrides. Hosts are not created when you add a source - add an override here or via 'Edit' on 'Tasks'. Empty fields inherit 'Domain defaults'. Delete removes the override row." "add_modal" "modal-add-domain-override" "add_label" "Add override")}}
 {{if not .DomainOverrides}}
 {{template "list_empty" "No domain overrides yet."}}
 {{else}}
@@ -188,7 +188,7 @@
 <div class="modal">
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Delete override - {{.Domain}}</h3>
-    <p class="text-sm mb-4">Removes this host’s domains row and cookie jar. Limits fall back to Domain defaults. Sources are unchanged.</p>
+    <p class="text-sm mb-4">Removes this host’s domains row and cookie jar. Limits fall back to 'Domain defaults'. Sources are unchanged.</p>
     <form method="post" action="/actions/delete-domain-override">
       <input type="hidden" name="redirect" value="{{$redir}}" />
       <input type="hidden" name="domain" value="{{.Domain}}" />

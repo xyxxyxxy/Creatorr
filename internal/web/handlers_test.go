@@ -117,7 +117,7 @@ func TestImportPageRequiresSeries(t *testing.T) {
 	if !strings.Contains(body, `for="modal-add-series"`) || !strings.Contains(body, "modal-add-series") {
 		t.Fatalf("missing Add series CTA/modal: %s", truncate(body, 400))
 	}
-	if strings.Contains(body, `id="btn-scan"`) || strings.Contains(body, "Import process details") {
+	if strings.Contains(body, `id="btn-scan"`) || strings.Contains(body, "File matching") {
 		t.Fatalf("import UI should be disabled with no series: %s", truncate(body, 400))
 	}
 
@@ -140,7 +140,13 @@ func TestImportPageRequiresSeries(t *testing.T) {
 		t.Fatalf("with series status %d", rec2.Code)
 	}
 	body2 := rec2.Body.String()
-	if !strings.Contains(body2, `id="btn-import"`) || !strings.Contains(body2, "Import process details") {
+	if !strings.Contains(body2, `id="import-full-scan-note"`) || !strings.Contains(body2, "Not all videos may be indexed yet") {
+		t.Fatalf("expected full-scan import note after create series: %s", truncate(body2, 400))
+	}
+	if strings.Contains(body2, `id="import-full-scan-note" role="alert" class="alert alert-info text-sm hidden"`) {
+		t.Fatalf("full-scan note should be visible while full_scan_done=0: %s", truncate(body2, 400))
+	}
+	if !strings.Contains(body2, `id="btn-import"`) || !strings.Contains(body2, "File matching") {
 		t.Fatalf("expected import UI with series: %s", truncate(body2, 400))
 	}
 	if strings.Contains(body2, `id="btn-scan"`) {
@@ -275,8 +281,8 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "/settings/scheduler") || !strings.Contains(body, "download_wanted_cron") || !strings.Contains(body, "sync_files_cron") || !strings.Contains(body, "retention_delete_cron") {
 				t.Fatalf("%s missing scheduler form", path)
 			}
-			if !strings.Contains(body, "download_new_on_scan") {
-				t.Fatalf("%s missing download_new_on_scan", path)
+			if strings.Contains(body, "download_new_on_scan") {
+				t.Fatalf("%s still has download_new_on_scan", path)
 			}
 			if strings.Contains(body, "download_wanted_order") || strings.Contains(body, "source_download_error_threshold") {
 				t.Fatalf("%s still has queue settings", path)
@@ -289,7 +295,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 				t.Fatalf("%s missing queue form fields", path)
 			}
 			if strings.Contains(body, "download_new_on_scan") {
-				t.Fatalf("%s should not have download_new_on_scan (Scheduler)", path)
+				t.Fatalf("%s should not have download_new_on_scan", path)
 			}
 			if !strings.Contains(body, "Domain defaults") || !strings.Contains(body, "Domain overrides") || !strings.Contains(body, "modal-add-domain-override") {
 				t.Fatalf("%s missing domain defaults/overrides", path)

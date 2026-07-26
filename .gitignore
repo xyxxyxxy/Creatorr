@@ -9,6 +9,8 @@ docker-compose.override.yml
 
 # Runtime state (SQLite, media, cache, plugins) - mirrors container mounts
 /var/
+# Accidental CacheDir under package path (tests/tools); never commit
+internal/streamproxy/var/
 
 # Build / caches
 /bin/

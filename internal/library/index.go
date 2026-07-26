@@ -82,9 +82,10 @@ func ParseCutoffDate(raw string) (time.Time, bool) {
 	return t, true
 }
 
-// BeforeOrOnCutoff reports whether upload falls on or before the cutoff calendar day (UTC).
-// cutoff is YYYY-MM-DD from the UI date picker; upload must be RFC3339.
-func BeforeOrOnCutoff(upload, cutoff string) bool {
+// BeforeCutoff reports whether upload falls strictly before the cutoff calendar day (UTC).
+// Cutoff day itself is indexed; older days are not. cutoff is YYYY-MM-DD from the UI
+// date picker; upload must be RFC3339.
+func BeforeCutoff(upload, cutoff string) bool {
 	if cutoff == "" || upload == "" {
 		return false
 	}
@@ -95,7 +96,7 @@ func BeforeOrOnCutoff(upload, cutoff string) bool {
 	}
 	uy, um, ud := u.UTC().Date()
 	cy, cm, cd := c.UTC().Date()
-	return !time.Date(uy, um, ud, 0, 0, 0, 0, time.UTC).After(time.Date(cy, cm, cd, 0, 0, 0, 0, time.UTC))
+	return time.Date(uy, um, ud, 0, 0, 0, 0, time.UTC).Before(time.Date(cy, cm, cd, 0, 0, 0, 0, time.UTC))
 }
 
 // CutoffExpanded reports whether the new cutoff reaches further into the past
@@ -125,7 +126,7 @@ func CutoffExpanded(oldCutoff, newCutoff string) bool {
 // UpsertListed inserts or updates a video from a scan listing (index-only).
 // taskID links episode repack history when season/episode shift; list-pass
 // discover/update facts live on source_history, not video_history.
-// Callers must not pass videos on/before source scan cutoff - the scanner stops there.
+// Callers must not pass videos older than source scan cutoff - the scanner stops there.
 func (s *Store) UpsertListed(seriesID int64, li ListedVideo, taskID int64) (UpsertResult, error) {
 	var out UpsertResult
 	if li.RemoteID == "" {

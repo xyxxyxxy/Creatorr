@@ -57,6 +57,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/settings/queue", h.settingsQueue)
 	r.Get("/settings/domains", h.settingsDomains)
 	r.Get("/import", h.importPage)
+	r.Get("/actions/import-full-scan-status", h.importFullScanStatus)
 	r.Get("/actions/probe-source-title", h.actionProbeSourceTitle)
 	r.Get("/actions/add-series-prefetch/{tid}", h.addSeriesPrefetchStatus)
 	r.Post("/actions/fetch-add-series", h.actionFetchAddSeries)

@@ -359,7 +359,7 @@ func (s *Store) buildImportCandidate(path, source string, known map[string]struc
 		top := c.SeriesSuggestions[0]
 		c.SuggestedSeriesID = &top.SeriesID
 		c.MatchType = "series_title"
-		c.MatchLabel = fmt.Sprintf("Matched by series title (%.0f%%) to %s", top.Score*100, top.Title)
+		c.MatchLabel = fmt.Sprintf("Series match (%.0f%%): %s - pick a video", top.Score*100, top.Title)
 	}
 	return &c, nil
 }

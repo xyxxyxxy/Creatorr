@@ -5,9 +5,9 @@
 */}}
 <span id="source-scan-actions-{{.ID}}" class="inline-flex items-center gap-0.5" {{if .OOB}}hx-swap-oob="true"{{end}}>
   {{if and (ne .Kind "single") .FullScanDone}}
-  {{$tipScanDisabled := or .ScanActive (not .SeriesMonitored) (not .DomainActive)}}
+  {{$tipScanDisabled := or .ScanActive (not .DomainActive)}}
   {{$tipScan := "Scan for new videos"}}
-  {{if .ScanActive}}{{$tipScan = "Scan queued"}}{{else if and (not .DomainActive) .DomainDisabledTitle}}{{$tipScan = .DomainDisabledTitle}}{{else if not .SeriesMonitored}}{{$tipScan = "Turn on series monitored for Scan."}}{{end}}
+  {{if .ScanActive}}{{$tipScan = "'Scan' queued"}}{{else if and (not .DomainActive) .DomainDisabledTitle}}{{$tipScan = .DomainDisabledTitle}}{{end}}
   <form method="post" action="/actions/scan-source" class="inline">
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     <input type="hidden" name="source_id" value="{{.ID}}" />
@@ -19,8 +19,8 @@
   </form>
   {{end}}
   {{$tipFullDisabled := or .ScanActive (not .DomainActive)}}
-  {{$tipFull := "Start full scan"}}
-  {{if .ScanActive}}{{$tipFull = "Scan queued"}}{{else if and (not .DomainActive) .DomainDisabledTitle}}{{$tipFull = .DomainDisabledTitle}}{{end}}
+  {{$tipFull := "Start 'Full scan'"}}
+  {{if .ScanActive}}{{$tipFull = "'Full scan' queued"}}{{else if and (not .DomainActive) .DomainDisabledTitle}}{{$tipFull = .DomainDisabledTitle}}{{end}}
   <form method="post" action="/actions/full-rescan-source" class="inline">
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     <input type="hidden" name="source_id" value="{{.ID}}" />

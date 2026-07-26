@@ -23,7 +23,7 @@
         {{template "form_row" (dict "Name" "originaltitle" "Label" "Original title" "Value" .Series.Meta.OriginalTitle "Placeholder" .Series.Title)}}
         {{template "form_row" (dict "Name" "sorttitle" "Label" "Sort title" "Value" .Series.Meta.SortTitle "Placeholder" .Series.Title)}}
       </div>
-      <p class="label whitespace-normal">Regular series title is defined in series, not here.</p>
+      <p class="label whitespace-normal">Regular series title is defined on the series and can be changed with 'Edit series'.</p>
     </fieldset>
     {{template "form_row" (dict "Type" "textarea" "Name" "plot" "Label" "Plot" "Value" .Series.Meta.Plot)}}
     <div class="grid gap-3 sm:grid-cols-2">

@@ -90,6 +90,14 @@
      hx-get="/series/{{.Series.ID}}/videos/{{.Video.ID}}/task-indicator"
      hx-trigger="every 2s"
      hx-swap="none"></div>
+{{if .StreamCacheLive}}
+<div id="video-stream-cache-poll" class="hidden"
+     hx-get="/series/{{.Series.ID}}/videos/{{.Video.ID}}"
+     hx-trigger="every 2s"
+     hx-select="#video-stream-cache-live"
+     hx-target="#video-stream-cache-live"
+     hx-swap="outerHTML"></div>
+{{end}}
 
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Details" "help" "Index metadata and Creatorr-owned download/stream state.")}}
@@ -131,7 +139,7 @@
   {{template "detail_row" (dict "Label" "Source URL" "TdClass" "text-xs break-all")}}
   {{end}}
   {{range .DetailRows}}
-  <tr>
+  <tr{{if eq .Label "Stream cache"}} id="video-stream-cache-live"{{end}}>
     <th class="w-40">{{.Label}}</th>
     <td class="text-sm break-all{{if and (eq .Value "none") (not .ProgressOn)}} opacity-60{{end}}">
       {{if .ProgressOn}}

@@ -43,7 +43,9 @@ func (s *Store) SeriesIDsWithMonitoredSources() ([]int64, error) {
 }
 
 // SeriesIsMonitored reports whether series.monitored is on.
-// When false, new scan/download tasks must not be enqueued; already-queued tasks are left alone.
+// When false, scheduled tip Scan and auto download-wanted stay off; manual tip
+// Scan / full scan / Download now may still enqueue. Already-queued tasks are
+// left alone except CancelPendingTipScansForSeries on unmonitor.
 func (s *Store) SeriesIsMonitored(seriesID int64) (bool, error) {
 	var n int
 	err := s.DB.SQL.QueryRow(`SELECT monitored FROM series WHERE id = ?`, seriesID).Scan(&n)

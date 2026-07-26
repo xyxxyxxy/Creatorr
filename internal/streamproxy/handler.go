@@ -655,9 +655,7 @@ func (h *Handler) serveHLSLocal(w http.ResponseWriter, r *http.Request) {
 				sess.durationSec = dur
 			}
 		}
-		if h.Library != nil && h.Library.PlaybackCacheEnabled() {
-			_ = h.Library.PromoteLiveSegmentsToPlayback(vid, sess.dir, dur)
-		}
+		h.promotePlaybackCache(vid, sess.dir, dur)
 		var body []byte
 		if h.Library != nil {
 			if dir, _, _, ok := h.Library.DurableStreamPrefix(vid); ok {
@@ -700,12 +698,18 @@ func (h *Handler) serveHLSLocal(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if h.Library != nil && h.Library.PlaybackCacheEnabled() {
-			dur := sess.durationSec
-			_ = h.Library.PromoteLiveSegmentsToPlayback(vid, sess.dir, dur)
-		}
+		h.promotePlaybackCache(vid, sess.dir, sess.durationSec)
 	}
 	serveFile(w, r, path, ct)
+}
+
+// promotePlaybackCache copies new live segs into progressive cache and emits stream_play progress.
+func (h *Handler) promotePlaybackCache(videoID int64, liveDir string, durationSec float64) {
+	if h == nil || h.Library == nil || !h.Library.PlaybackCacheEnabled() {
+		return
+	}
+	_ = h.Library.PromoteLiveSegmentsToPlayback(videoID, liveDir, durationSec)
+	h.publishPlaybackCacheProgress(videoID)
 }
 
 // durablePrefixURL returns beginning/ or playback/ base for durable cache segs.

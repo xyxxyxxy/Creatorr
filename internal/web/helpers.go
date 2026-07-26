@@ -199,7 +199,7 @@ func flashFromQuery(r *http.Request) *flash {
 		}
 		return flashOK(msg)
 	case "apply-naming":
-		return flashOK("Apply episode format queued - see Tasks (system lane).")
+		return flashOK("'Apply episode format' queued - see 'Tasks' (system lane).")
 	case "delete-queued":
 		return flashOK("Delete queued - files remove in the background.")
 	case "domain-queue":

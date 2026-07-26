@@ -217,6 +217,13 @@ paths:
           schema:
             type: string
             enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest]
+        - name: level
+          in: query
+          required: false
+          description: Filter by presentation level (info / warning / alert)
+          schema:
+            type: string
+            enum: [info, warning, alert]
         - name: unread_only
           in: query
           required: false
@@ -1269,7 +1276,7 @@ components:
           type: string
         match_type:
           type: string
-          description: id, title, series_title, or sidecar_stem when suggested
+          description: id, title, series_title (series only; no video), or sidecar_stem when suggested
         match_label:
           type: string
         video_suggestions:

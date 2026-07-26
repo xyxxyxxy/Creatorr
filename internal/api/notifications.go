@@ -13,6 +13,9 @@ func (s *Server) ListNotifications(w http.ResponseWriter, r *http.Request, param
 	if params.Event != nil {
 		f.Event = string(*params.Event)
 	}
+	if params.Level != nil {
+		f.Level = string(*params.Level)
+	}
 	if params.UnreadOnly != nil {
 		f.UnreadOnly = *params.UnreadOnly
 	}

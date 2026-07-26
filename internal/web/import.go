@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -26,6 +27,7 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 	profiles, _ := h.Library.ListProfiles()
 	allSourceURLs, _ := h.Library.ListAllSourceURLs()
 	canStream, streamReason := h.streamGate()
+	incompleteFullScan, _ := h.Library.HasIncompleteFullScan()
 
 	rootPath := map[int64]string{}
 	for _, root := range roots {
@@ -58,6 +60,7 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 		AllSourceURLs              []string
 		CanStream                  bool
 		StreamDisabledReason       string
+		IncompleteFullScan         bool
 	}{
 		pageBase:                   newPage("Import", "import", nil),
 		ImportPath:                 h.Library.ImportRoot,
@@ -70,5 +73,16 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 		AllSourceURLs:              allSourceURLs,
 		CanStream:                  canStream,
 		StreamDisabledReason:       streamReason,
+		IncompleteFullScan:         incompleteFullScan,
 	})
+}
+
+func (h *Handler) importFullScanStatus(w http.ResponseWriter, r *http.Request) {
+	incomplete, err := h.Library.HasIncompleteFullScan()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]bool{"incomplete": incomplete})
 }

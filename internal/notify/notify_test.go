@@ -367,6 +367,40 @@ func TestListNotificationsRange(t *testing.T) {
 	}
 }
 
+func TestListNotificationsByLevel(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "nlevel.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	taskID := seedTask(t, d)
+	old := notify.SetSendFnForTest(func([]string, string, string, apprise.NotifyType) error { return nil })
+	defer notify.SetSendFnForTest(old)
+	if err := notify.DownloadDigest(context.Background(), d, []notify.DigestItem{{
+		Domain: "example.com", Series: "S", Title: "V", Kind: "archive",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := notify.POTProvider(context.Background(), d, taskID, "example.com", "none"); err != nil {
+		t.Fatal(err)
+	}
+	if err := notify.YtDlpFailed(context.Background(), d, taskID, "example.com", "boom"); err != nil {
+		t.Fatal(err)
+	}
+	info, err := notify.ListNotifications(d, notify.ListFilter{Level: notify.LevelInfo}, 10, 0)
+	if err != nil || len(info) != 1 || info[0].Event != notify.EventDownloadDigest {
+		t.Fatalf("info=%v err=%v", info, err)
+	}
+	warn, err := notify.ListNotifications(d, notify.ListFilter{Level: notify.LevelWarning}, 10, 0)
+	if err != nil || len(warn) != 1 || warn[0].Event != notify.EventPOTProvider {
+		t.Fatalf("warn=%v err=%v", warn, err)
+	}
+	alert, err := notify.ListNotifications(d, notify.ListFilter{Level: notify.LevelAlert}, 10, 0)
+	if err != nil || len(alert) != 1 || alert[0].Event != notify.EventYtDlpFailed {
+		t.Fatalf("alert=%v err=%v", alert, err)
+	}
+}
+
 func TestPOTProviderWarningUnread(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "pot.db"))
 	if err != nil {

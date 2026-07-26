@@ -1,34 +1,55 @@
 {{define "source_filter_fields"}}
 {{/*
-  Feed-only index filters: cutoff + title include/exclude.
-  Expects optional: Cutoff (YYYY-MM-DD),
+  Feed-only index filters: cutoff + title include/exclude + discovered status.
+  Expects optional: Cutoff (YYYY-MM-DD), CutoffID, IndexAsIgnored,
     TitleRegexpInclude, TitleRegexpIncludeID,
     TitleRegexpExclude, TitleRegexpExcludeID.
 */}}
+{{$cutoffID := .CutoffID}}{{if not $cutoffID}}{{$cutoffID = "scan-cutoff"}}{{end}}
 <div class="space-y-2">
   <h4 class="font-semibold text-base">Filter</h4>
-  {{template "date_past" (dict
-    "Name" "scan_cutoff"
-    "Label" "Cutoff"
-    "Value" .Cutoff
-    "Info" "Videos before this date will not be indexed."
-    "Hint" "Empty = no cutoff - index all from this source."
-  )}}
-  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full min-w-0">
-    {{template "title_regexp_field" (dict
-      "Name" "title_regexp_include"
-      "Label" "Title include"
-      "Value" .TitleRegexpInclude
-      "ID" .TitleRegexpIncludeID
-      "Info" "Go regexp matched against video titles. Only matching titles are indexed."
-    )}}
-    {{template "title_regexp_field" (dict
-      "Name" "title_regexp_exclude"
-      "Label" "Title exclude"
-      "Value" .TitleRegexpExclude
-      "ID" .TitleRegexpExcludeID
-      "Info" "Go regexp matched against video titles. Matching titles are not indexed. Exclude takes priority over include when both match."
-    )}}
+  <p class="text-sm opacity-60">Only matching videos will be indexed.</p>
+  <div class="w-full">
+    <fieldset class="fieldset bg-base-200 border border-base-300 rounded-box p-4">
+      <legend class="fieldset-legend">Cutoff</legend>
+      <input type="date" name="scan_cutoff" id="{{$cutoffID}}"
+             class="input w-full"
+             value="{{.Cutoff}}"
+             max="{{today}}" />
+      <p class="label whitespace-pre-line">Only videos on or after this date will be indexed. Empty = no cutoff.</p>
+    </fieldset>
   </div>
+  <fieldset class="fieldset bg-base-200 border border-base-300 rounded-box p-4">
+    <legend class="fieldset-legend">Video title</legend>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full min-w-0">
+      {{template "title_regexp_field" (dict
+        "Name" "title_regexp_include"
+        "Label" "Include"
+        "Value" .TitleRegexpInclude
+        "ID" .TitleRegexpIncludeID
+      )}}
+      {{template "title_regexp_field" (dict
+        "Name" "title_regexp_exclude"
+        "Label" "Exclude"
+        "Value" .TitleRegexpExclude
+        "ID" .TitleRegexpExcludeID
+      )}}
+    </div>
+    <p class="label whitespace-pre-line">Regular expressions matched against video titles. Include keeps matching titles; exclude drops them. Exclude wins when both match.</p>
+  </fieldset>
+</div>
+<div class="space-y-2">
+  <h4 class="font-semibold text-base">Discovered video status</h4>
+  <div class="join radio-btn-join w-full" role="group" aria-label="Discovered video status" data-index-as-ignored-join>
+    <label class="btn join-item flex-1">
+      <input type="radio" name="index_as_ignored" value="0" class="sr-only" {{if not .IndexAsIgnored}}checked{{end}} />
+      <span>Wanted</span>
+    </label>
+    <label class="btn join-item flex-1">
+      <input type="radio" name="index_as_ignored" value="1" class="sr-only" {{if .IndexAsIgnored}}checked{{end}} />
+      <span>Ignored</span>
+    </label>
+  </div>
+  <p class="text-sm opacity-60">'Wanted' videos are indexed and downloaded on schedule. 'Ignored' videos stay ignored until manually marked as 'wanted'.</p>
 </div>
 {{end}}

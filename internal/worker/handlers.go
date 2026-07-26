@@ -1112,7 +1112,7 @@ func ScanHandler(d Deps) TaskHandler {
 			nEntries := len(entries)
 			for i, e := range entries {
 				upload := library.NormalizeUploadTime(e.UploadDate)
-				if library.BeforeOrOnCutoff(upload, cutoff) {
+				if library.BeforeCutoff(upload, cutoff) {
 					hitCutoff = true
 					break // discard this and older; do not index
 				}
@@ -1135,7 +1135,7 @@ func ScanHandler(d Deps) TaskHandler {
 			nEntries := len(entries)
 			for i, e := range entries {
 				upload := library.NormalizeUploadTime(e.UploadDate)
-				if library.BeforeOrOnCutoff(upload, cutoff) {
+				if library.BeforeCutoff(upload, cutoff) {
 					hitCutoff = true
 					break // past cutoff; nothing newer left in newest-first list
 				}
@@ -1228,14 +1228,6 @@ func ScanHandler(d Deps) TaskHandler {
 		_ = d.Library.Queue.SetDetail(t.ID, string(detailBytes))
 		progress(msg, ptrFloat(1))
 
-		if !fullScan && len(createdIDs) > 0 {
-			if on, err := settings.DownloadNewOnScan(d.Library.DB); err == nil && on {
-				if _, err := d.Library.EnqueueTipScanDownloads(seriesID, createdIDs); err != nil {
-					// Index succeeded; leftover wanted wait for download-wanted cron.
-					_ = err
-				}
-			}
-		}
 		return nil
 	}
 }

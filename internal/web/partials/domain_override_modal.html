@@ -37,7 +37,7 @@
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
             Task cooldown
-            {{template "field_info" (dict "Info" "Pause after a task starts on this domain. Empty = use Domain defaults.")}}
+            {{template "field_info" (dict "Info" "Pause after a task starts on this domain. Empty = use 'Domain defaults'.")}}
           </span>
         </legend>
         <div class="join w-full">
@@ -51,7 +51,7 @@
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
             Max download queue
-            {{template "field_info" (dict "Info" "Maximum number of download tasks to be queued for the given domain. \"Download now\" user action bypasses this limit. Empty = use Domain defaults.")}}
+            {{template "field_info" (dict "Info" "Maximum number of download tasks to be queued for the given domain. 'Download now' user action bypasses this limit. Empty = use 'Domain defaults'.")}}
           </span>
         </legend>
         <div class="join w-full">
@@ -64,7 +64,7 @@
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
             Max parallel tasks
-            {{template "field_info" (dict "Info" "How many tasks may run at once on this hostname. Cannot exceed Max download queue. Empty = use Domain defaults.")}}
+            {{template "field_info" (dict "Info" "How many tasks may run at once on this hostname. Cannot exceed 'Max download queue'. Empty = use 'Domain defaults'.")}}
           </span>
         </legend>
         <div class="join w-full">
@@ -77,7 +77,7 @@
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
             Download rate limit
-            {{template "field_info" (dict "Info" "Maximum download rate within the given domain (yt-dlp --limit-rate). Also applies to beginning cache. Default = use Domain defaults.")}}
+            {{template "field_info" (dict "Info" "Maximum download rate within the given domain (yt-dlp --limit-rate). Also applies to beginning cache. Default = use 'Domain defaults'.")}}
           </span>
         </legend>
         {{template "download_rate_limit_join" (dict "Value" .RateOverride "Override" true "DefaultRate" .DefaultRate "ShowClear" true)}}
@@ -87,7 +87,7 @@
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
             Stream play rate limit
-            {{template "field_info" (dict "Info" "yt-dlp --limit-rate for live stream play only (no sleep). Default = use Domain defaults.")}}
+            {{template "field_info" (dict "Info" "yt-dlp --limit-rate for live stream play only (no sleep). Default = use 'Domain defaults'.")}}
           </span>
         </legend>
         {{template "download_rate_limit_join" (dict "Name" "stream_play_rate_limit" "Value" .StreamPlayRateOverride "Override" true "DefaultRate" .DefaultStreamPlayRate "ShowClear" true)}}
@@ -97,7 +97,7 @@
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
             Sleep between requests
-            {{template "field_info" (dict "Info" "Seconds yt-dlp waits between HTTP requests (metadata, media fragments, and subtitles) to avoid rate limits. Same value for --sleep-requests, --sleep-subtitles, and --sleep-interval. Does not apply to stream play. Empty = use Domain defaults.")}}
+            {{template "field_info" (dict "Info" "Seconds yt-dlp waits between HTTP requests (metadata, media fragments, and subtitles) to avoid rate limits. Same value for --sleep-requests, --sleep-subtitles, and --sleep-interval. Does not apply to stream play. Empty = use 'Domain defaults'.")}}
           </span>
         </legend>
         <div class="join w-full">
@@ -111,7 +111,7 @@
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
             Use FlareSolverr
-            {{template "field_info" (dict "Info" "Pre-solve CloudFlare challenges via CREATORR_FLARESOLVERR_URL before yt-dlp. 'Default' inherits Domain defaults. 'On' requires that env URL.")}}
+            {{template "field_info" (dict "Info" "Pre-solve CloudFlare challenges via CREATORR_FLARESOLVERR_URL before yt-dlp. 'Default' inherits 'Domain defaults'. 'On' requires that env URL.")}}
           </span>
         </legend>
         <select name="use_flaresolverr" class="select w-full{{if eq $flare "default"}} opacity-70{{end}}">
@@ -126,7 +126,7 @@
 
       {{template "cookie_jar_field" (dict
         "Value" .CookieContent
-        "EmptyHelp" "Host jar only. Empty = clear (falls back to Domain defaults cookies when set)."
+        "EmptyHelp" "Host jar only. Empty = clear (falls back to 'Domain defaults' cookies when set)."
       )}}
 
       <div class="modal-action">

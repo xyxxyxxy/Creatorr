@@ -3,6 +3,7 @@ package notify
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	apprise "github.com/unraid/apprise-go"
 )
@@ -95,6 +96,26 @@ func EventLevel(event string) string {
 		return LevelWarning
 	default:
 		return LevelInfo
+	}
+}
+
+// EventsForLevel returns canonical event ids for a level filter (empty level → nil).
+func EventsForLevel(level string) []string {
+	switch strings.TrimSpace(level) {
+	case LevelAlert:
+		return append([]string(nil), AlertEvents...)
+	case LevelWarning:
+		return append([]string(nil), WarningEvents...)
+	case LevelInfo:
+		out := make([]string, 0, len(AllEvents))
+		for _, e := range AllEvents {
+			if EventLevel(e) == LevelInfo {
+				out = append(out, e)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
 }
 

@@ -176,7 +176,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !canScan {
-			blocked = "All source domains are inactive. Activate under Settings → Queue."
+			blocked = "All source domains are inactive. Activate under 'Settings → Queue'."
 		}
 	}
 	type sourceRow struct {
@@ -217,15 +217,15 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		dAct, _ := domains.IsActive(h.Queue.DB, host)
 		disTitle := ""
 		if !dAct {
-			disTitle = "Domain " + host + " is inactive. Activate it under Settings → Queue."
+			disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue'."
 		}
 		best := pickBestTask(bySource[src.ID])
 		retryable, _ := h.Library.SourceHasRetryableVideos(src.ID)
-		summary, lastAt, errMsg, _, taskID, hasScanned, hasError := sourceStatusFields(h.Library, src.ID, now)
+		summary, lastAt, errMsg, errCode, taskID, hasScanned, hasError := sourceStatusFields(h.Library, src.ID, now)
 		tipAt, _ := h.Library.LatestTipScannedAt(src.ID)
 		cronLabel := cronexpr.DescribeScan(src.ScanCron)
 		statusInd := buildSourceStatus(sourceStatusParams{
-			Src: src, Best: best, HasError: hasError, ErrMsg: errMsg, Stalled: stalled,
+			Src: src, Best: best, HasError: hasError, ErrMsg: errMsg, ErrCode: errCode, Stalled: stalled,
 			SeriesMonitored: ser.Monitored, DomainActive: dAct, DomainDisabledTitle: disTitle,
 			ScanCronLabel: cronLabel, Summary: summary, HasScanned: hasScanned, HistoryID: taskID,
 			Now: now, LastTipScannedAt: tipAt,
@@ -296,6 +296,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	metaForm = h.withMetaSuggestions(metaForm)
 	metaFiles := seriesMetaFileViews(h.Library, ser)
+	videoTotal, _ := h.Library.CountVideos(id)
 	render(w, "series_detail", struct {
 		pageBase
 		Series               *library.Series
@@ -303,6 +304,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		SourcesPage          PageInfo
 		SourceURLs           []string
 		VideosLive           seriesVideosLiveData
+		HasVideos            bool
 		MetaFiles            []seriesMetaFileView
 		CanScan              bool
 		ScanBlocked          string
@@ -325,6 +327,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		SourcesPage:              sourcesPage,
 		SourceURLs:               sourceURLs,
 		VideosLive:               videosLive,
+		HasVideos:                videoTotal > 0,
 		MetaFiles:                metaFiles,
 		CanScan:                  canScan && !seriesDeleting,
 		ScanBlocked:              blocked,
@@ -409,13 +412,13 @@ func (h *Handler) seriesTaskIndicators(w http.ResponseWriter, r *http.Request) {
 		dAct, _ := domains.IsActive(h.Queue.DB, host)
 		disTitle := ""
 		if !dAct {
-			disTitle = "Domain " + host + " is inactive. Activate it under Settings → Queue."
+			disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue'."
 		}
-		summary, lastAt, errMsg, _, taskID, hasScanned, hasError := sourceStatusFields(h.Library, src.ID, now)
+		summary, lastAt, errMsg, errCode, taskID, hasScanned, hasError := sourceStatusFields(h.Library, src.ID, now)
 		tipAt, _ := h.Library.LatestTipScannedAt(src.ID)
 		cronLabel := cronexpr.DescribeScan(src.ScanCron)
 		statusInd := buildSourceStatus(sourceStatusParams{
-			Src: src, Best: pickBestTask(bySource[src.ID]), HasError: hasError, ErrMsg: errMsg, Stalled: stalled,
+			Src: src, Best: pickBestTask(bySource[src.ID]), HasError: hasError, ErrMsg: errMsg, ErrCode: errCode, Stalled: stalled,
 			SeriesMonitored: ser.Monitored, DomainActive: dAct, DomainDisabledTitle: disTitle,
 			ScanCronLabel: cronLabel, Summary: summary, HasScanned: hasScanned, HistoryID: taskID,
 			Now: now, LastTipScannedAt: tipAt,
@@ -468,7 +471,7 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 	dAct, _ := domains.IsActive(h.Queue.DB, host)
 	disTitle := ""
 	if !dAct {
-		disTitle = "Domain " + host + " is inactive. Activate it under Settings → Queue."
+		disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue'."
 	}
 	retryable, _ := h.Library.SourceHasRetryableVideos(src.ID)
 	videoTotal, _ := h.Library.CountVideosForSource(src.ID)
@@ -666,6 +669,15 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 	deliveryQueued := deliveryTaskActive(t)
 	deleting := taskIsFileDelete(t)
 	detailRows := videoDetailRows(h.Library, video)
+	streamCacheLive := false
+	if deliveryQueued {
+		for _, row := range detailRows {
+			if row.Label == "Stream cache" && row.ProgressOn && row.ProgressPct < 100 {
+				streamCacheLive = true
+				break
+			}
+		}
+	}
 	sizeLabel := "-"
 	if n, ok, _ := h.Library.VideoSizeBytes(vid); ok {
 		sizeLabel = library.FormatBytes(n)
@@ -703,7 +715,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 			host := queue.DomainFromURL(src.URL)
 			dAct, _ = domains.IsActive(h.Queue.DB, host)
 			if !dAct {
-				disTitle = "Domain " + host + " is inactive. Activate it under Settings → Queue."
+				disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue'."
 			}
 		}
 	}
@@ -714,6 +726,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		SizeLabel           string
 		Files               []videoFileView
 		DetailRows          []videoDetailRow
+		StreamCacheLive     bool
 		History             []videoHistoryView
 		HistoryPage         PageInfo
 		ErrorHistoryID      int64
@@ -733,6 +746,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		SizeLabel:           sizeLabel,
 		Files:               fileRows,
 		DetailRows:          detailRows,
+		StreamCacheLive:     streamCacheLive,
 		History:             histViews,
 		HistoryPage:         histPageInfo,
 		ErrorHistoryID:      errorHistoryID,
@@ -982,12 +996,12 @@ func (h *Handler) addVideoPrefetchStatus(w http.ResponseWriter, r *http.Request)
 
 func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
-	rootID, _ := strconv.ParseInt(r.FormValue("root_id"), 10, 64)
-	qpID, _ := strconv.ParseInt(r.FormValue("quality_profile_id"), 10, 64)
-	sourceURL := strings.TrimSpace(r.FormValue("source_url"))
-	title := strings.TrimSpace(r.FormValue("title"))
-	delivery := r.FormValue("delivery_mode")
-	draftToken := strings.TrimSpace(r.FormValue("draft_token"))
+	rootID, _ := strconv.ParseInt(r.PostFormValue("root_id"), 10, 64)
+	qpID, _ := strconv.ParseInt(r.PostFormValue("quality_profile_id"), 10, 64)
+	sourceURL := strings.TrimSpace(r.PostFormValue("source_url"))
+	title := strings.TrimSpace(r.PostFormValue("title"))
+	delivery := r.PostFormValue("delivery_mode")
+	draftToken := strings.TrimSpace(r.PostFormValue("draft_token"))
 	// Monitored defaults on at create; toggle only from series list.
 	wantJSON := strings.Contains(r.Header.Get("Accept"), "application/json") ||
 		r.FormValue("response") == "json" ||

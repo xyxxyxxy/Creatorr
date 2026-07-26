@@ -9,7 +9,6 @@ import (
 
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 func queueDomain(rawURL string) string {
@@ -52,79 +51,6 @@ func enqueueDownloadNowParams(videoID, seriesID int64, domain string) queue.Enqu
 	p.BypassDownloadCap = true
 	return p
 }
-
-// EnqueueTipScanDownloads enqueues downloads (or pack_stream) for newly created tip-scan
-// videos with status wanted, ordered by download_wanted_order. Stops on domain queue full.
-// Caller should only invoke after tip scan (not full scan) when download_new_on_scan is on.
-func (s *Store) EnqueueTipScanDownloads(seriesID int64, createdIDs []int64) (int, error) {
-	if s.Queue == nil || len(createdIDs) == 0 {
-		return 0, nil
-	}
-	ser, err := s.GetSeries(seriesID, false)
-	if err != nil {
-		return 0, err
-	}
-	if !ser.Monitored {
-		return 0, nil
-	}
-
-	orderSQL := videoDownloadOrderOldest
-	if raw, err := settings.Get(s.DB, settings.KeyDownloadWantedOrder); err == nil {
-		if settings.NormalizeDownloadWantedOrder(raw) == settings.DownloadWantedOrderNewest {
-			orderSQL = videoDownloadOrderNewest
-		}
-	}
-
-	placeholders := make([]string, len(createdIDs))
-	args := make([]any, 0, len(createdIDs)+1)
-	for i, id := range createdIDs {
-		placeholders[i] = "?"
-		args = append(args, id)
-	}
-	args = append(args, "wanted")
-	q := `
-		SELECT v.id FROM videos v
-		WHERE v.id IN (` + strings.Join(placeholders, ",") + `) AND v.status = ?
-		ORDER BY ` + orderSQL
-	rows, err := s.DB.SQL.Query(q, args...)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return 0, err
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-
-	n := 0
-	for _, id := range ids {
-		if ser.IsStream() {
-			_, err = s.EnqueuePackStream(id, false)
-		} else {
-			_, err = s.EnqueueDownload(id)
-		}
-		if err != nil {
-			if errors.Is(err, queue.ErrQueueFull) || errors.Is(err, ErrConflict) {
-				// Cap full or already queued / mapped conflict — stop on queue full.
-				if errors.Is(err, queue.ErrQueueFull) || strings.Contains(err.Error(), "download queue full") {
-					return n, nil
-				}
-				continue
-			}
-			return n, err
-		}
-		n++
-	}
-	return n, nil
-}
-
 
 func (s *Store) sourceDomainActive(src Source) (bool, error) {
 	return domains.IsActive(s.DB, queueDomain(src.URL))
@@ -208,17 +134,14 @@ func (s *Store) EnqueueFullScansForSeries(seriesID int64) (count int, firstTaskI
 }
 
 // EnqueueScansForSeries enqueues tip Scan for feed sources with full scan done.
-// Manual / series kick: allowed even when scan_cron is never.
+// Manual / series kick: allowed even when scan_cron is never and when series is
+// unmonitored (scheduled tip Scan stays gated in EnqueueScansDue).
 func (s *Store) EnqueueScansForSeries(seriesID int64) (count int, firstTaskID int64, err error) {
 	if s.Queue == nil {
 		return 0, 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
 	}
-	ser, err := s.GetSeries(seriesID, false)
-	if err != nil {
+	if _, err := s.GetSeries(seriesID, false); err != nil {
 		return 0, 0, err
-	}
-	if !ser.Monitored {
-		return 0, 0, fmt.Errorf("%w: series unmonitored", ErrInvalid)
 	}
 	sources, err := s.listSources(seriesID)
 	if err != nil {
@@ -262,8 +185,8 @@ func (s *Store) EnqueueScansForSeries(seriesID int64) (count int, firstTaskID in
 }
 
 // EnqueueScanSource queues one scan for a single source (index-only).
-// Full scan runs whenever the domain is active - series.monitored not required.
-// Tip Scan still requires series monitored ∧ domain active.
+// Domain must be active. Series.monitored is not required (manual tip Scan and
+// full scan); scheduled tip Scan is filtered in EnqueueScansDue.
 func (s *Store) EnqueueScanSource(sourceID int64) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
@@ -281,15 +204,6 @@ func (s *Store) EnqueueScanSource(sourceID int64) (int64, error) {
 	}
 	if src.IsSingle() && src.FullScanDone {
 		return 0, fmt.Errorf("%w: single source skips Scan; use Restart full scan", ErrInvalid)
-	}
-	if src.FullScanDone {
-		ok, err := s.SeriesIsMonitored(src.SeriesID)
-		if err != nil {
-			return 0, err
-		}
-		if !ok {
-			return 0, fmt.Errorf("%w: series unmonitored", ErrInvalid)
-		}
 	}
 	busy, err := s.HasActiveScanForSource(sourceID)
 	if err != nil {
@@ -450,6 +364,16 @@ func (s *Store) MarkFullScanDone(sourceID int64) error {
 		UPDATE sources SET full_scan_done = 1 WHERE id = ?
 	`, sourceID)
 	return err
+}
+
+// HasIncompleteFullScan reports whether any source still needs archive indexing
+// (full_scan_done = 0). True while a full scan is pending, running, or stalled.
+func (s *Store) HasIncompleteFullScan() (bool, error) {
+	var n int
+	err := s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM sources WHERE full_scan_done = 0
+	`).Scan(&n)
+	return n > 0, err
 }
 
 // VideoExistsByRemote reports whether series already has this remote id.

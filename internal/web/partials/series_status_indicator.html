@@ -2,19 +2,20 @@
 {{/* Poster top-left health badge (errors/warnings only). Kind:
      wanted_source_error | wanted_download_error | verify_failed | scan_error | incomplete.
      Monitor state is left of title (series_monitor_indicator). Title = tooltip. */}}
-<span class="absolute top-0 left-0 z-10 badge badge-sm badge-neutral shadow p-1 tooltip tooltip-top inline-flex items-center justify-center"
+{{$badge := "badge-error"}}{{if eq .Kind "verify_failed"}}{{$badge = "badge-warning"}}{{end}}
+<span class="absolute top-0 left-0 z-10 badge badge-sm {{$badge}} shadow p-1 tooltip tooltip-top inline-flex items-center justify-center"
       data-tip="{{.Title}}"
       aria-label="{{.Title}}">
   {{if eq .Kind "wanted_source_error"}}
-  <i data-lucide="circle-alert" class="size-3 text-error"></i>
+  <i data-lucide="circle-alert" class="size-3"></i>
   {{else if eq .Kind "wanted_download_error"}}
-  <i data-lucide="circle-x" class="size-3 text-error"></i>
+  <i data-lucide="circle-x" class="size-3"></i>
   {{else if eq .Kind "verify_failed"}}
-  <i data-lucide="badge-alert" class="size-3 text-warning"></i>
+  <i data-lucide="badge-alert" class="size-3"></i>
   {{else if eq .Kind "scan_error"}}
-  <i data-lucide="circle-alert" class="size-3 text-error"></i>
+  <i data-lucide="circle-alert" class="size-3"></i>
   {{else if eq .Kind "incomplete"}}
-  <i data-lucide="calendar-off" class="size-3 text-error"></i>
+  <i data-lucide="calendar-off" class="size-3"></i>
   {{end}}
 </span>
 {{end}}
