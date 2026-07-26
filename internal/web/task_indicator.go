@@ -294,9 +294,8 @@ func videoIndicatorID(videoID int64) string {
 
 // seriesStatusView drives partials/series_status_indicator.html and series_monitor_indicator.html.
 type seriesStatusView struct {
-	Kind     string // wanted_source_error | wanted_download_error | verify_failed | scan_error | incomplete | running | pending | monitored | unmonitored
-	Title    string
-	Progress *float64
+	Kind  string // wanted_source_error | wanted_download_error | verify_failed | scan_error | incomplete | monitored | unmonitored
+	Title string
 }
 
 // buildSeriesMonitorStatus is left of series list title: always monitored | unmonitored.
@@ -307,8 +306,8 @@ func buildSeriesMonitorStatus(monitored bool) seriesStatusView {
 	return seriesStatusView{Kind: "unmonitored", Title: "Unmonitored"}
 }
 
-// buildSeriesHealthStatus is list health+busy (no monitor). ok false = idle healthy.
-func buildSeriesHealthStatus(errs library.SeriesVideoErrorFlags, warn library.SeriesWarnLevel, best *queue.Task) (seriesStatusView, bool) {
+// buildSeriesHealthStatus is poster health badge only (errors/warnings; no task busy). ok false = idle healthy.
+func buildSeriesHealthStatus(errs library.SeriesVideoErrorFlags, warn library.SeriesWarnLevel) (seriesStatusView, bool) {
 	if errs.HasSourceError {
 		return seriesStatusView{Kind: "wanted_source_error", Title: "Source error"}, true
 	}
@@ -323,29 +322,6 @@ func buildSeriesHealthStatus(errs library.SeriesVideoErrorFlags, warn library.Se
 	}
 	if warn == library.SeriesWarnIncomplete {
 		return seriesStatusView{Kind: "incomplete", Title: "Full scan incomplete and no scan schedule"}, true
-	}
-	if best != nil {
-		title := best.Kind + " · " + best.Status
-		if best.Kind == queue.KindDeleteFiles {
-			if best.Status == queue.StatusRunning {
-				title = "Deleting…"
-			} else {
-				title = "Queued for deletion"
-			}
-		} else if best.Message != "" {
-			title = best.Message
-		}
-		if best.Status == queue.StatusRunning {
-			v := seriesStatusView{Kind: "running", Title: title}
-			if best.Progress.Valid {
-				p := best.Progress.Float64
-				v.Progress = &p
-			}
-			return v, true
-		}
-		if best.Status == queue.StatusPending {
-			return seriesStatusView{Kind: "pending", Title: title}, true
-		}
 	}
 	return seriesStatusView{}, false
 }

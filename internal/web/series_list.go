@@ -16,7 +16,7 @@ type seriesListRow struct {
 	HasMonitoredSource bool
 	Busy               bool
 	MonitorInd         seriesStatusView  // left of title: always monitored | unmonitored
-	StatusInd          *seriesStatusView // poster top-left: health/busy only
+	StatusInd          *seriesStatusView // poster top-left: health errors/warnings only
 	PosterURL          string
 	Line2              string
 	KindIcon           string
@@ -135,7 +135,7 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 		}
 		line2Parts = append(line2Parts, srcLabel)
 		var statusInd *seriesStatusView
-		if v, ok := buildSeriesHealthStatus(errFlags[s.ID], warnLevels[s.ID], best); ok {
+		if v, ok := buildSeriesHealthStatus(errFlags[s.ID], warnLevels[s.ID]); ok {
 			statusInd = &v
 		}
 		rows = append(rows, seriesListRow{
