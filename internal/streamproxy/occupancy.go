@@ -33,6 +33,18 @@ func occupancyKey(videoID int64, token string) string {
 	return hlsSessionKey(videoID, token)
 }
 
+// occupancyLastUseFresh reports whether stream_play occupancy for key was touched
+// within ttl (Emby may hit durable cache URIs without touching the HLS session).
+func occupancyLastUseFresh(key string, ttl time.Duration) bool {
+	occMu.Lock()
+	defer occMu.Unlock()
+	o, ok := occByKey[key]
+	if !ok {
+		return false
+	}
+	return time.Since(o.lastUse) < ttl
+}
+
 // touchOccupancy ensures a running stream_play task for this video+token.
 // Soft pause is ignored. Returns task ID (0 if queue unavailable).
 func (h *Handler) touchOccupancy(videoID, seriesID int64, domain, token string) int64 {

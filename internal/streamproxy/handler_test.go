@@ -365,11 +365,11 @@ seg00000.ts
 	if !strings.Contains(got, "http://creatorr.example.com:8787/stream/videos/1/hls/local/s/seg00000.ts?token=t") {
 		t.Fatalf("seg rewrite: %s", got)
 	}
-	if !strings.Contains(got, "#EXT-X-PLAYLIST-TYPE:VOD") || !strings.Contains(got, "#EXT-X-START:TIME-OFFSET=0") {
-		t.Fatalf("missing VOD/START: %s", got)
+	if !strings.Contains(got, "#EXT-X-PLAYLIST-TYPE:EVENT") || !strings.Contains(got, "#EXT-X-START:TIME-OFFSET=0") {
+		t.Fatalf("missing EVENT/START: %s", got)
 	}
 	if strings.Contains(got, "ENDLIST") {
-		t.Fatalf("no pad without duration: %s", got)
+		t.Fatalf("no ENDLIST while mux open: %s", got)
 	}
 	if strings.Contains(got, "&") {
 		t.Fatalf("unexpected ampersand in media URI: %s", got)
@@ -384,19 +384,16 @@ func TestRewriteLocalHLSPlaylistStripsEVENT(t *testing.T) {
 seg00000.ts
 `
 	got := string(rewriteLocalHLSPlaylist([]byte(in), "/stream/videos/1/hls/local/s/", "t", 0))
-	if strings.Contains(got, "EVENT") {
-		t.Fatalf("EVENT leaked: %s", got)
-	}
-	if !strings.Contains(got, "#EXT-X-PLAYLIST-TYPE:VOD") {
-		t.Fatalf("missing VOD type: %s", got)
+	if !strings.Contains(got, "#EXT-X-PLAYLIST-TYPE:EVENT") {
+		t.Fatalf("missing EVENT type: %s", got)
 	}
 	if !strings.Contains(got, "#EXT-X-START:TIME-OFFSET=0") {
 		t.Fatalf("missing START: %s", got)
 	}
-	vodAt := strings.Index(got, "#EXT-X-PLAYLIST-TYPE:VOD")
+	typeAt := strings.Index(got, "#EXT-X-PLAYLIST-TYPE:EVENT")
 	infAt := strings.Index(got, "#EXTINF:")
 	uriAt := strings.Index(got, "seg00000.ts?token=t")
-	if vodAt < 0 || infAt < 0 || uriAt < 0 || !(vodAt < infAt && infAt < uriAt) {
+	if typeAt < 0 || infAt < 0 || uriAt < 0 || !(typeAt < infAt && infAt < uriAt) {
 		t.Fatalf("bad header order: %s", got)
 	}
 	between := got[infAt:uriAt]
@@ -404,14 +401,14 @@ seg00000.ts
 		t.Fatalf("tags between EXTINF and URI: %s", got)
 	}
 	if strings.Contains(got, "seg00001.ts") {
-		t.Fatalf("must not invent future segments without duration: %s", got)
+		t.Fatalf("must not invent future segments: %s", got)
 	}
 	if strings.Contains(got, "ENDLIST") {
-		t.Fatalf("must not force ENDLIST without duration: %s", got)
+		t.Fatalf("must not force ENDLIST while open: %s", got)
 	}
 }
 
-func TestRewriteLocalHLSPlaylistPadsDuration(t *testing.T) {
+func TestRewriteLocalHLSPlaylistNoPadWhileOpen(t *testing.T) {
 	in := `#EXTM3U
 #EXT-X-TARGETDURATION:4
 #EXT-X-PLAYLIST-TYPE:EVENT
@@ -419,14 +416,36 @@ func TestRewriteLocalHLSPlaylistPadsDuration(t *testing.T) {
 seg00000.ts
 `
 	got := string(rewriteLocalHLSPlaylist([]byte(in), "/stream/videos/1/hls/local/s/", "t", 10))
+	if strings.Contains(got, "#EXT-X-ENDLIST") {
+		t.Fatalf("no ENDLIST while mux open: %s", got)
+	}
+	if strings.Contains(got, "seg00001.ts") {
+		t.Fatalf("must not pad while open: %s", got)
+	}
+	if !strings.Contains(got, "#EXT-X-PLAYLIST-TYPE:EVENT") {
+		t.Fatalf("expected EVENT: %s", got)
+	}
+}
+
+func TestRewriteLocalHLSPlaylistNoPadAfterEndlist(t *testing.T) {
+	in := `#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-PLAYLIST-TYPE:EVENT
+#EXTINF:3.0,
+seg00000.ts
+#EXTINF:4.0,
+seg00001.ts
+#EXT-X-ENDLIST
+`
+	got := string(rewriteLocalHLSPlaylist([]byte(in), "/stream/videos/1/hls/local/s/", "t", 20))
 	if !strings.Contains(got, "#EXT-X-ENDLIST") {
 		t.Fatalf("missing ENDLIST: %s", got)
 	}
-	if !strings.Contains(got, "seg00001.ts?token=t") || !strings.Contains(got, "seg00002.ts?token=t") {
-		t.Fatalf("missing padded segs: %s", got)
+	if !strings.Contains(got, "#EXT-X-PLAYLIST-TYPE:VOD") {
+		t.Fatalf("expected VOD after ENDLIST: %s", got)
 	}
-	if strings.Contains(got, "EVENT") {
-		t.Fatalf("EVENT leaked: %s", got)
+	if strings.Contains(got, "seg00002.ts") {
+		t.Fatalf("must not pad after source ENDLIST: %s", got)
 	}
 	sum := 0.0
 	for _, line := range strings.Split(got, "\n") {
@@ -434,8 +453,8 @@ seg00000.ts
 			sum += extinfSeconds(strings.TrimPrefix(line, "#EXTINF:"))
 		}
 	}
-	if sum < 9.9 || sum > 10.1 {
-		t.Fatalf("padded duration sum=%v want ~10", sum)
+	if sum < 6.9 || sum > 7.1 {
+		t.Fatalf("sum=%v want ~7", sum)
 	}
 }
 

@@ -139,7 +139,7 @@ func (h *Handler) tryServeWarmPipeMaster(w http.ResponseWriter, r *http.Request)
 	if _, handoff, _, ok := h.Library.DurableStreamPrefix(vid); ok {
 		wantStart = handoff
 	}
-	if !approxStartSec(sess.startSec, wantStart) {
+	if !hlsStartCompatible(sess.startSec, wantStart) {
 		return false
 	}
 	// Beginning / progressive handoff: media playlist is cache-first; live segs may still be warming.
@@ -163,7 +163,7 @@ func (h *Handler) tryServeWarmPipeMaster(w http.ResponseWriter, r *http.Request)
 func (h *Handler) writePipeMaster(w http.ResponseWriter, videoID int64, sid, token string) {
 	mediaURL := h.localMediaURI(videoID, sid, "index.m3u8", token)
 	var master strings.Builder
-	master.WriteString("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-INDEPENDENT-SEGMENTS\n")
+	master.WriteString("#EXTM3U\n#EXT-X-VERSION:7\n")
 	master.WriteString("#EXT-X-STREAM-INF:BANDWIDTH=8000000\n")
 	master.WriteString(mediaURL)
 	master.WriteByte('\n')
@@ -662,7 +662,13 @@ func (h *Handler) serveHLSLocal(w http.ResponseWriter, r *http.Request) {
 		if h.Library != nil {
 			if dir, _, _, ok := h.Library.DurableStreamPrefix(vid); ok {
 				prefixBase := h.durablePrefixURL(vid, dir)
-				body = buildHandoffPlaylist(dir, sess.dir, prefixBase, liveBase, token, dur)
+				skipLive := 0
+				if strings.Contains(filepath.ToSlash(dir), "/playback-cache/") {
+					if m, mok := h.Library.LoadPlaybackMeta(vid); mok {
+						skipLive = m.LiveSegsCopied
+					}
+				}
+				body = buildHandoffPlaylist(dir, sess.dir, prefixBase, liveBase, token, dur, skipLive)
 			}
 		}
 		if body == nil {
@@ -715,6 +721,9 @@ func (h *Handler) tryServeCompletePlayback(w http.ResponseWriter, r *http.Reques
 	if h.Library == nil {
 		return false
 	}
+	if sec := h.durationSeconds(videoID); sec > 0 {
+		_ = h.Library.FinalizePlaybackCacheIfNearDuration(videoID, float64(sec))
+	}
 	m, ok := h.Library.LoadPlaybackMeta(videoID)
 	if !ok || !m.Complete {
 		return false
@@ -722,7 +731,7 @@ func (h *Handler) tryServeCompletePlayback(w http.ResponseWriter, r *http.Reques
 	h.Library.TouchPlaybackCacheAccess(videoID)
 	mediaURL := h.absoluteURL("/stream/videos/"+strconv.FormatInt(videoID, 10)+"/playback/index.m3u8") + "?token=" + token
 	var master strings.Builder
-	master.WriteString("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-INDEPENDENT-SEGMENTS\n")
+	master.WriteString("#EXTM3U\n#EXT-X-VERSION:7\n")
 	master.WriteString("#EXT-X-STREAM-INF:BANDWIDTH=8000000\n")
 	master.WriteString(mediaURL)
 	master.WriteByte('\n')
@@ -798,6 +807,9 @@ func (h *Handler) servePlaybackFile(w http.ResponseWriter, r *http.Request) {
 		h.touchOccupancyForVideo(vid, token)
 	}
 	if strings.HasSuffix(strings.ToLower(name), ".m3u8") {
+		if sec := h.durationSeconds(vid); sec > 0 {
+			_ = h.Library.FinalizePlaybackCacheIfNearDuration(vid, float64(sec))
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			http.NotFound(w, r)

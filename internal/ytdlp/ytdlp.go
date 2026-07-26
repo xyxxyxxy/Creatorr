@@ -620,7 +620,6 @@ func startMuxToHLS(ctx context.Context, o options, dir, videoURL, audioURL strin
 		"-c", "copy",
 		"-f", "hls",
 		"-hls_time", "4",
-		"-hls_init_time", "1",
 		"-hls_list_size", "0",
 		"-hls_playlist_type", "event",
 		"-hls_flags", "independent_segments",

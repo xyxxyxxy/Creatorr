@@ -58,12 +58,13 @@ func newSessionID() string {
 
 // ensureHLSSession starts or reuses a local fMP4 HLS session for this video+token.
 // cookiesSrc is copied into the session dir so resolvePlay cleanup cannot delete it early.
-// startSec > 0 seeks the live mux (download-beginning handoff); mismatched sessions are replaced.
+// startSec > 0 seeks the live mux (download-beginning / progressive handoff).
+// Growing handoff reuses the existing mux; only an earlier wantStart replaces it.
 func (h *Handler) ensureHLSSession(pc playCtx, urls ytdlp.UrlsResult, cookiesSrc string, startSec float64) (*hlsSession, error) {
 	key := hlsSessionKey(pc.videoID, pc.token)
 	hlsMu.Lock()
 	if s, ok := hlsSessions[key]; ok {
-		if approxStartSec(s.startSec, startSec) {
+		if hlsStartCompatible(s.startSec, startSec) {
 			s.lastUse = time.Now()
 			if urls.DurationSeconds > 0 {
 				s.durationSec = urls.DurationSeconds
@@ -134,7 +135,7 @@ func (h *Handler) ensureHLSSession(pc playCtx, urls ytdlp.UrlsResult, cookiesSrc
 	}
 	hlsMu.Lock()
 	if existing, ok := hlsSessions[key]; ok {
-		if approxStartSec(existing.startSec, startSec) {
+		if hlsStartCompatible(existing.startSec, startSec) {
 			hlsMu.Unlock()
 			cancel()
 			_ = os.RemoveAll(dir)
@@ -151,7 +152,7 @@ func (h *Handler) ensureHLSSession(pc playCtx, urls ytdlp.UrlsResult, cookiesSrc
 	hlsSessions[key] = s
 	hlsMu.Unlock()
 	h.bindHLSCancel(pc.videoID, pc.token, cancel)
-	go reapHLSSession(key, s)
+	go reapHLSSession(h, key, s)
 	slog.Info("stream proxy", "msg", "hls session started", "video_id", pc.videoID, "sid", sid, "start_sec", startSec)
 	return s, nil
 }
@@ -167,7 +168,16 @@ func approxStartSec(a, b float64) bool {
 	return d < 0.05
 }
 
-func reapHLSSession(key string, s *hlsSession) {
+// hlsStartCompatible reports whether an existing mux at sessStart can serve wantStart.
+// Growing progressive handoff (wantStart >= sessStart) reuses; only an earlier wantStart replaces.
+func hlsStartCompatible(sessStart, wantStart float64) bool {
+	if approxStartSec(sessStart, wantStart) {
+		return true
+	}
+	return wantStart+0.05 >= sessStart
+}
+
+func reapHLSSession(h *Handler, key string, s *hlsSession) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -181,8 +191,20 @@ func reapHLSSession(key string, s *hlsSession) {
 			hlsMu.Unlock()
 			continue
 		}
+		// Emby often fetches durable playback/beginning URIs after promote; those
+		// touch occupancy but not session lastUse. Keep mux while play is active.
+		if occupancyLastUseFresh(key, hlsSessionIdleTTL) {
+			cur.lastUse = time.Now()
+			hlsMu.Unlock()
+			continue
+		}
 		delete(hlsSessions, key)
 		hlsMu.Unlock()
+		h.clearHLSCancel(s.videoID, s.token)
+		// Final promote before deleting live dir so ENDLIST can mark cache complete.
+		if h != nil && h.Library != nil && h.Library.PlaybackCacheEnabled() {
+			_ = h.Library.PromoteLiveSegmentsToPlayback(s.videoID, s.dir, s.durationSec)
+		}
 		s.cancel()
 		_ = os.RemoveAll(s.dir)
 		slog.Info("stream proxy", "msg", "hls session expired", "sid", s.id)
@@ -234,23 +256,24 @@ var errHLSPlaylistTimeout = os.ErrDeadlineExceeded
 
 // rewriteLocalHLSPlaylist rewrites relative media URIs to Creatorr local session URLs.
 // dir is .../hls/local/{sid}/ (optionally absolute). Token is the only query param (no '&').
-// Strips EVENT playlist type. Emits VOD + START at 0 before any #EXTINF.
-// When durationSec > 0, pads future seg%05d.ts entries and ENDLIST so Emby reports
-// full length (HLS .m3u8 ignores NFO). Missing padded segs wait via ensureSessionSegment.
+// Strips EVENT/VOD from source and re-emits: EVENT while mux open (no ENDLIST, no phantom
+// pad); VOD + ENDLIST once source has ENDLIST. durationSec is kept for call-site
+// compatibility; pad-to-duration was removed (prefetch of phantoms hangs clients).
 func rewriteLocalHLSPlaylist(body []byte, dir, token string, durationSec float64) []byte {
+	_ = durationSec
 	q := "?token=" + token
+	sourceEnded := playlistHasEndlist(body)
 	var out strings.Builder
-	wroteVOD := false
+	wroteType := false
 	wroteStart := false
-	var sum float64
-	lastSeg := -1
-	targetDur := 4.0
-	pendingINF := false
-	pendingDur := 0.0
 	injectHeaders := func() {
-		if !wroteVOD {
-			out.WriteString("#EXT-X-PLAYLIST-TYPE:VOD\n")
-			wroteVOD = true
+		if !wroteType {
+			if sourceEnded {
+				out.WriteString("#EXT-X-PLAYLIST-TYPE:VOD\n")
+			} else {
+				out.WriteString("#EXT-X-PLAYLIST-TYPE:EVENT\n")
+			}
+			wroteType = true
 		}
 		if !wroteStart {
 			out.WriteString("#EXT-X-START:TIME-OFFSET=0\n")
@@ -278,37 +301,18 @@ func rewriteLocalHLSPlaylist(body []byte, dir, token string, durationSec float64
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			if strings.HasPrefix(trimmed, "#EXT-X-PLAYLIST-TYPE:") ||
 				strings.HasPrefix(trimmed, "#EXT-X-START:") ||
-				trimmed == "#EXT-X-ENDLIST" {
+				trimmed == "#EXT-X-ENDLIST" ||
+				trimmed == "#EXT-X-INDEPENDENT-SEGMENTS" {
 				continue
-			}
-			if strings.HasPrefix(trimmed, "#EXT-X-TARGETDURATION:") {
-				if n, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(trimmed, "#EXT-X-TARGETDURATION:")), 64); err == nil && n > 0 {
-					targetDur = n
-				}
 			}
 			if strings.HasPrefix(trimmed, "#EXTINF:") || strings.HasPrefix(trimmed, "#EXT-X-MAP:") {
 				injectHeaders()
-			}
-			if strings.HasPrefix(trimmed, "#EXTINF:") {
-				pendingINF = true
-				pendingDur = extinfSeconds(strings.TrimPrefix(trimmed, "#EXTINF:"))
 			}
 			out.WriteString(line)
 			out.WriteByte('\n')
 			continue
 		}
 		injectHeaders()
-		if pendingINF {
-			sum += pendingDur
-			pendingINF = false
-		}
-		base := trimmed
-		if i := strings.IndexByte(base, '?'); i >= 0 {
-			base = base[:i]
-		}
-		if n := parseSegIndex(base); n > lastSeg {
-			lastSeg = n
-		}
 		if strings.Contains(trimmed, "://") || strings.HasPrefix(trimmed, "/") {
 			out.WriteString(line)
 			out.WriteByte('\n')
@@ -320,60 +324,10 @@ func rewriteLocalHLSPlaylist(body []byte, dir, token string, durationSec float64
 		out.WriteByte('\n')
 	}
 	injectHeaders()
-	if durationSec > 0 {
-		segDur := targetDur
-		if segDur < 1 {
-			segDur = 4
-		}
-		next := lastSeg + 1
-		if next < 0 {
-			next = 0
-		}
-		for sum+0.05 < durationSec {
-			remain := durationSec - sum
-			d := segDur
-			if remain < d {
-				d = remain
-			}
-			out.WriteString("#EXTINF:")
-			out.WriteString(strconv.FormatFloat(d, 'f', 6, 64))
-			out.WriteString(",\n")
-			out.WriteString(dir)
-			out.WriteString("seg")
-			out.WriteString(padSegIndex(next))
-			out.WriteString(".ts")
-			out.WriteString(q)
-			out.WriteByte('\n')
-			sum += d
-			next++
-		}
+	if sourceEnded {
 		out.WriteString("#EXT-X-ENDLIST\n")
 	}
 	return []byte(out.String())
-}
-
-func parseSegIndex(name string) int {
-	name = filepath.Base(name)
-	if !strings.HasPrefix(name, "seg") {
-		return -1
-	}
-	rest := strings.TrimPrefix(name, "seg")
-	if i := strings.IndexByte(rest, '.'); i >= 0 {
-		rest = rest[:i]
-	}
-	n, err := strconv.Atoi(rest)
-	if err != nil || n < 0 {
-		return -1
-	}
-	return n
-}
-
-func padSegIndex(n int) string {
-	s := strconv.Itoa(n)
-	for len(s) < 5 {
-		s = "0" + s
-	}
-	return s
 }
 
 func waitSessionFileOrDone(path string, timeout time.Duration, done <-chan error) error {
@@ -405,10 +359,22 @@ func waitSessionFileOrDone(path string, timeout time.Duration, done <-chan error
 }
 
 // ensureSessionSegment waits briefly for linear mux to write the segment; no seek-restart.
+// When the live playlist already has ENDLIST and the segment is not listed, fail fast
+// (no 15s wait for phantom pads).
 func (s *hlsSession) ensureSessionSegment(name string) error {
 	path := filepath.Join(s.dir, filepath.Base(name))
 	if st, err := os.Stat(path); err == nil && st.Size() > 0 {
 		return nil
+	}
+	index := filepath.Join(s.dir, "index.m3u8")
+	if playlistHasEndlistFile(index) {
+		base := filepath.Base(name)
+		for _, e := range parseMediaEntries(index) {
+			if e.uri == base {
+				return waitSessionFileOrDone(path, hlsSegWaitTimeout, s.done)
+			}
+		}
+		return os.ErrNotExist
 	}
 	return waitSessionFileOrDone(path, hlsSegWaitTimeout, s.done)
 }

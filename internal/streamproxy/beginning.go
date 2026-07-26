@@ -7,20 +7,40 @@ import (
 	"strings"
 )
 
-// buildHandoffPlaylist prepends all cached beginning segments, then live session
-// segments with #EXT-X-DISCONTINUITY. Framed as VOD + START:0; when durationSec > 0,
-// pads future live seg%05d.ts entries and ENDLIST so Emby reports full length.
+// buildHandoffPlaylist prepends durable prefix segments (beginning or progressive
+// playback cache), then live session segments not already promoted into that prefix.
+// skipLiveEntries is how many live playlist entries are already in the prefix
+// (PlaybackMeta.LiveSegsCopied). Those must not be listed again or Emby plays the
+// same content twice then hits expired live URIs.
+// While the live mux is open (no ENDLIST): EVENT playlist, real segs only (no phantom
+// pad). Emby re-polls EVENT and picks up new live segs.
+// Once live writes ENDLIST: VOD + ENDLIST with real segs only (declared duration longer
+// than mux output must not invent URIs).
 // beginningBase/liveBase are absolute or path-form URI prefixes ending in /.
 // Token is appended as ?token= only (no '&').
-func buildHandoffPlaylist(beginningDir, liveDir, beginningBase, liveBase, token string, durationSec float64) []byte {
+// durationSec is accepted for call-site compatibility; pad-to-duration was removed
+// because VOD phantoms hang HLS clients that prefetch the whole list.
+func buildHandoffPlaylist(beginningDir, liveDir, beginningBase, liveBase, token string, durationSec float64, skipLiveEntries int) []byte {
+	_ = durationSec
 	q := "?token=" + token
+	liveIndex := filepath.Join(liveDir, "index.m3u8")
 	beginEntries := parseMediaEntries(filepath.Join(beginningDir, "index.m3u8"))
-	liveEntries := parseMediaEntries(filepath.Join(liveDir, "index.m3u8"))
+	liveEntries := parseMediaEntries(liveIndex)
+	if skipLiveEntries < 0 {
+		skipLiveEntries = 0
+	}
+	if skipLiveEntries > len(liveEntries) {
+		skipLiveEntries = len(liveEntries)
+	}
+	// New live segs continue the same mux PTS as already-promoted ones: no extra
+	// discontinuity when skipLiveEntries > 0.
+	appendLive := liveEntries[skipLiveEntries:]
+	liveEnded := playlistHasEndlistFile(liveIndex)
 	target := 4.0
 	if t := playlistTargetDuration(filepath.Join(beginningDir, "index.m3u8")); t > 0 {
 		target = float64(t)
 	}
-	if t := playlistTargetDuration(filepath.Join(liveDir, "index.m3u8")); float64(t) > target {
+	if t := playlistTargetDuration(liveIndex); float64(t) > target {
 		target = float64(t)
 	}
 
@@ -29,12 +49,17 @@ func buildHandoffPlaylist(beginningDir, liveDir, beginningBase, liveBase, token 
 	out.WriteString("#EXT-X-VERSION:7\n")
 	out.WriteString("#EXT-X-TARGETDURATION:" + strconv.Itoa(int(target+0.5)) + "\n")
 	out.WriteString("#EXT-X-MEDIA-SEQUENCE:0\n")
-	out.WriteString("#EXT-X-INDEPENDENT-SEGMENTS\n")
-	out.WriteString("#EXT-X-PLAYLIST-TYPE:VOD\n")
+	if liveEnded {
+		out.WriteString("#EXT-X-PLAYLIST-TYPE:VOD\n")
+	} else {
+		out.WriteString("#EXT-X-PLAYLIST-TYPE:EVENT\n")
+	}
 	out.WriteString("#EXT-X-START:TIME-OFFSET=0\n")
 
-	var sum float64
 	for _, e := range beginEntries {
+		if e.discontinuity {
+			out.WriteString("#EXT-X-DISCONTINUITY\n")
+		}
 		out.WriteString("#EXTINF:")
 		out.WriteString(e.extinf)
 		out.WriteByte('\n')
@@ -42,15 +67,15 @@ func buildHandoffPlaylist(beginningDir, liveDir, beginningBase, liveBase, token 
 		out.WriteString(e.uri)
 		out.WriteString(q)
 		out.WriteByte('\n')
-		sum += extinfSeconds(e.extinf)
 	}
 
-	lastSeg := -1
-	needLive := len(liveEntries) > 0 || (durationSec > 0 && sum+0.05 < durationSec)
-	if len(beginEntries) > 0 && needLive {
+	if len(beginEntries) > 0 && len(appendLive) > 0 && skipLiveEntries == 0 {
 		out.WriteString("#EXT-X-DISCONTINUITY\n")
 	}
-	for _, e := range liveEntries {
+	for _, e := range appendLive {
+		if e.discontinuity {
+			out.WriteString("#EXT-X-DISCONTINUITY\n")
+		}
 		out.WriteString("#EXTINF:")
 		out.WriteString(e.extinf)
 		out.WriteByte('\n')
@@ -58,42 +83,30 @@ func buildHandoffPlaylist(beginningDir, liveDir, beginningBase, liveBase, token 
 		out.WriteString(e.uri)
 		out.WriteString(q)
 		out.WriteByte('\n')
-		sum += extinfSeconds(e.extinf)
-		if n := parseSegIndex(e.uri); n > lastSeg {
-			lastSeg = n
-		}
 	}
 
-	if durationSec > 0 {
-		segDur := target
-		if segDur < 1 {
-			segDur = 4
-		}
-		next := lastSeg + 1
-		if next < 0 {
-			next = 0
-		}
-		for sum+0.05 < durationSec {
-			remain := durationSec - sum
-			d := segDur
-			if remain < d {
-				d = remain
-			}
-			out.WriteString("#EXTINF:")
-			out.WriteString(strconv.FormatFloat(d, 'f', 6, 64))
-			out.WriteString(",\n")
-			out.WriteString(liveBase)
-			out.WriteString("seg")
-			out.WriteString(padSegIndex(next))
-			out.WriteString(".ts")
-			out.WriteString(q)
-			out.WriteByte('\n')
-			sum += d
-			next++
-		}
+	if liveEnded {
 		out.WriteString("#EXT-X-ENDLIST\n")
 	}
 	return []byte(out.String())
+}
+
+// playlistHasEndlist reports whether body contains an HLS end marker.
+func playlistHasEndlist(body []byte) bool {
+	for _, line := range strings.Split(string(body), "\n") {
+		if strings.TrimSpace(line) == "#EXT-X-ENDLIST" {
+			return true
+		}
+	}
+	return false
+}
+
+func playlistHasEndlistFile(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return playlistHasEndlist(data)
 }
 
 func extinfSeconds(extinf string) float64 {
@@ -109,8 +122,9 @@ func extinfSeconds(extinf string) float64 {
 }
 
 type mediaEntry struct {
-	extinf string // duration text including optional title after comma, e.g. "4.000," or "4.0,title"
-	uri    string
+	extinf        string // duration text including optional title after comma, e.g. "4.000," or "4.0,title"
+	uri           string
+	discontinuity bool // emit #EXT-X-DISCONTINUITY before this entry
 }
 
 func parseMediaEntries(path string) []mediaEntry {
@@ -119,9 +133,14 @@ func parseMediaEntries(path string) []mediaEntry {
 		return nil
 	}
 	var out []mediaEntry
+	pendingDisc := false
 	lines := strings.Split(string(data), "\n")
 	for i := 0; i < len(lines); i++ {
 		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "#EXT-X-DISCONTINUITY" {
+			pendingDisc = true
+			continue
+		}
 		if !strings.HasPrefix(trimmed, "#EXTINF:") {
 			continue
 		}
@@ -137,7 +156,8 @@ func parseMediaEntries(path string) []mediaEntry {
 			break
 		}
 		if uri != "" && uri != "." && uri != ".." {
-			out = append(out, mediaEntry{extinf: extinf, uri: uri})
+			out = append(out, mediaEntry{extinf: extinf, uri: uri, discontinuity: pendingDisc})
+			pendingDisc = false
 		}
 	}
 	return out
