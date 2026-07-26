@@ -39,7 +39,7 @@ func enqueueDownloadParams(videoID, seriesID int64, domain string) queue.Enqueue
 		Domain:   domain,
 		SeriesID: seriesID,
 		VideoID:  videoID,
-		Message:  "Download",
+		Message:  "",
 		Payload:  map[string]any{"video_id": videoID},
 	}
 }

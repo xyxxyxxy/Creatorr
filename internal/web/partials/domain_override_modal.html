@@ -17,7 +17,7 @@
 <input type="checkbox" id="{{$id}}" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box max-w-lg">
-    <h3 class="font-bold text-lg mb-2">{{if $edit}}Edit {{.Domain}}{{else}}Add domain override{{end}}</h3>
+    <h3 class="font-bold text-lg mb-2">{{if $edit}}Edit {{.Domain}} overrides{{else}}Add domain override{{end}}</h3>
     <form method="post" action="/actions/upsert-domain-override" class="space-y-3">
       <input type="hidden" name="redirect" value="{{.Redirect}}" />
       {{if $edit}}
@@ -111,14 +111,19 @@
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
             Use FlareSolverr
-            {{template "field_info" (dict "Info" "Pre-solve CloudFlare challenges via CREATORR_FLARESOLVERR_URL before yt-dlp. 'Default' inherits 'Domain defaults'. 'On' requires that env URL.")}}
+            {{template "field_info" (dict "Info" "Pre-solve CloudFlare challenges via CREATORR_FLARESOLVERR_URL before yt-dlp. Empty/reset inherits 'Domain defaults'. 'On' requires that env URL.")}}
           </span>
         </legend>
-        <select name="use_flaresolverr" class="select w-full{{if eq $flare "default"}} opacity-70{{end}}">
-          <option value="default" {{if eq $flare "default"}}selected{{end}}>Default ({{$defFlare}})</option>
-          <option value="on" {{if eq $flare "on"}}selected{{end}}{{if not $flareOK}} disabled{{end}}>On{{if not $flareOK}} (set CREATORR_FLARESOLVERR_URL){{end}}</option>
-          <option value="off" {{if eq $flare "off"}}selected{{end}}>Off</option>
-        </select>
+        <div class="join w-full{{if eq $flare "default"}} opacity-70{{end}}">
+          <select name="use_flaresolverr" class="select join-item grow min-w-0"
+                  data-override-clear
+                  data-override-reset="default">
+            <option value="default" {{if eq $flare "default"}}selected{{end}}>default: {{$defFlare}}</option>
+            <option value="on" {{if eq $flare "on"}}selected{{end}}{{if not $flareOK}} disabled{{end}}>On{{if not $flareOK}} (set CREATORR_FLARESOLVERR_URL){{end}}</option>
+            <option value="off" {{if eq $flare "off"}}selected{{end}}>Off</option>
+          </select>
+          {{template "override_clear_btn"}}
+        </div>
         {{if not $flareOK}}
         <p class="label whitespace-normal">Set CREATORR_FLARESOLVERR_URL before enabling On.</p>
         {{end}}

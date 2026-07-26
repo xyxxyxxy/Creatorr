@@ -160,7 +160,7 @@ func DomainAlert(ctx context.Context, database *db.DB, taskID int64, domain, rea
 	if len(detail) > 500 {
 		detail = detail[:500]
 	}
-	title := fmt.Sprintf("Creatorr: domain issue (%s)", domain)
+	title := fmt.Sprintf("Domain issue (%s)", domain)
 	body := fmt.Sprintf("Domain %s reported %s. Videos may be in wanted_download_error / wanted_source_error. Fix cookies or wait, then Retry on the source.\n\n%s", domain, reason, detail)
 	return SendEvent(ctx, database, reason, title, body, taskID)
 }
@@ -170,7 +170,7 @@ func YtDlpFailed(ctx context.Context, database *db.DB, taskID int64, domain, det
 	if len(detail) > 500 {
 		detail = detail[:500]
 	}
-	title := fmt.Sprintf("Creatorr: yt-dlp / site failure (%s)", domain)
+	title := fmt.Sprintf("yt-dlp / site failure (%s)", domain)
 	body := fmt.Sprintf("Domain %s: yt-dlp or related media task failed.\n\n%s", domain, detail)
 	return SendEvent(ctx, database, EventYtDlpFailed, title, body, taskID)
 }
@@ -188,7 +188,7 @@ func VerifyFailed(ctx context.Context, database *db.DB, taskID int64, series, ti
 	if vt == "" {
 		vt = "video"
 	}
-	nTitle := fmt.Sprintf("Creatorr: verify failed (%s)", label)
+	nTitle := fmt.Sprintf("Verify failed (%s)", label)
 	body := fmt.Sprintf("%s: %s failed media verify. File kept; status verify_failed. Re-download to retry.\n\n%s", label, vt, detail)
 	return SendEvent(ctx, database, EventVerifyFailed, nTitle, body, taskID)
 }
@@ -203,7 +203,7 @@ func POTProvider(ctx context.Context, database *db.DB, taskID int64, domain, det
 	if dom == "" {
 		dom = "unknown"
 	}
-	title := fmt.Sprintf("Creatorr: PO token provider (%s)", dom)
+	title := fmt.Sprintf("PO token provider (%s)", dom)
 	body := fmt.Sprintf("Domain %s: PO token provider issue while the task continued. Check creatorr-po-token / plugin dirs / CREATORR_POT_PROVIDER_URL.\n\n%s", dom, detail)
 	return SendEvent(ctx, database, EventPOTProvider, title, body, taskID)
 }
@@ -222,7 +222,7 @@ func DownloadDigest(ctx context.Context, database *db.DB, items []DigestItem) er
 	if len(items) == 0 {
 		return nil
 	}
-	title := fmt.Sprintf("Creatorr: %d download(s) finished", len(items))
+	title := fmt.Sprintf("%d download(s) finished", len(items))
 	return SendEvent(ctx, database, EventDownloadDigest, title, FormatDigestBody(items), 0)
 }
 
@@ -242,7 +242,7 @@ func FileSyncIssues(ctx context.Context, database *db.DB, taskID int64, missing,
 		return nil
 	}
 	n := len(missing) + len(changed)
-	title := fmt.Sprintf("Creatorr: %d library file issue(s)", n)
+	title := fmt.Sprintf("%d library file issue(s)", n)
 	return SendEvent(ctx, database, EventFileSyncIssues, title, FormatFileSyncIssuesBody(missing, changed), taskID)
 }
 

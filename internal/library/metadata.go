@@ -29,27 +29,25 @@ func (s *Store) RefreshListed(seriesID int64, li ListedVideo, taskID int64) (vid
 		return 0, false, err
 	}
 
-	var uploadVal, thumb, src any
+	var uploadVal, src any
 	if upload != "" {
 		uploadVal = upload
-	}
-	if li.ThumbnailURL != "" {
-		thumb = li.ThumbnailURL
 	}
 	if li.SourceID > 0 {
 		src = li.SourceID
 	}
+	// Soft-fill title/description/thumbnail_url only when empty (never clobber first-seen / operator).
 	_, err = s.DB.SQL.Exec(`
 		UPDATE videos SET
-		  title = COALESCE(NULLIF(?, ''), title),
+		  title = COALESCE(NULLIF(title, ''), ?),
 		  source_url = COALESCE(NULLIF(?, ''), source_url),
-		  description = COALESCE(NULLIF(?, ''), description),
-		  thumbnail_url = COALESCE(?, thumbnail_url),
+		  description = COALESCE(NULLIF(description, ''), ?),
+		  thumbnail_url = COALESCE(NULLIF(thumbnail_url, ''), ?),
 		  upload_date = COALESCE(?, upload_date),
 		  media_type = CASE WHEN ? != '' THEN ? ELSE media_type END,
 		  source_id = COALESCE(source_id, ?)
 		WHERE id = ?
-	`, li.Title, li.WebpageURL, li.Description, thumb, uploadVal,
+	`, li.Title, li.WebpageURL, li.Description, li.ThumbnailURL, uploadVal,
 		NormalizeMediaType(li.MediaType), NormalizeMediaType(li.MediaType),
 		src, existingID)
 	if err != nil {

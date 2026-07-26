@@ -190,6 +190,7 @@ func (s *Store) RefreshDiskSidecars(videoID int64, bundle SidecarBundle, taskID 
 	if err != nil {
 		return err
 	}
+	s.softFillGenresOntoVideo(v)
 
 	// Drop previous nfo/thumb/sub only (preserve kind=json / on-disk info.json).
 	oldRows, _ := s.DB.SQL.Query(`SELECT path FROM files WHERE video_id = ? AND kind IN ('nfo','thumb','sub')`, videoID)
@@ -354,6 +355,7 @@ func (s *Store) RewriteVideoNFO(videoID, taskID int64) (changed bool, err error)
 	if err != nil {
 		return false, err
 	}
+	s.softFillGenresOntoVideo(v)
 	meta, nfoPath, err := s.episodeNFOBeside(v, mediaPath)
 	if err != nil {
 		return false, err
@@ -397,6 +399,7 @@ func (s *Store) RewriteVideoNFO(videoID, taskID int64) (changed bool, err error)
 
 // writeEpisodeNFOBeside builds EpisodeNFO from the video row and writes it next to mediaPath.
 func (s *Store) writeEpisodeNFOBeside(v *Video, mediaPath string) (nfoPath string, err error) {
+	s.softFillGenresOntoVideo(v)
 	meta, nfoPath, err := s.episodeNFOBeside(v, mediaPath)
 	if err != nil {
 		return "", err
@@ -446,6 +449,11 @@ func (s *Store) episodeNFOBeside(v *Video, mediaPath string) (EpisodeNFO, string
 		runtime = int(v.DurationSeconds.Int64)
 	}
 	return episodeMetaFromVideo(v, seriesTitle, season, episode, aired, runtime), nfoPath, nil
+}
+
+// EpisodeMetaFromVideo builds EpisodeNFO from a video row (shared by pack / rewrite / stream).
+func EpisodeMetaFromVideo(v *Video, seriesTitle string, season, episode int, aired string, runtime int) EpisodeNFO {
+	return episodeMetaFromVideo(v, seriesTitle, season, episode, aired, runtime)
 }
 
 // episodeMetaFromVideo builds EpisodeNFO from a video row (shared by pack / rewrite / stream).

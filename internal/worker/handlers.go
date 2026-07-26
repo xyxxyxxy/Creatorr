@@ -1459,19 +1459,20 @@ func finishArchivePack(
 	}
 	thumbSrc, cleanupThumb := library.MaterializeThumbSrc(thumbSrc, thumbURL)
 	defer cleanupThumb()
+
+	// Soft-fill empty genres from download-time info.json, then build NFO from full DB row.
+	_, _ = d.Library.SoftFillVideoGenresFromInfoJSON(t.VideoID.Int64, infoSrc)
+	v := &dlctx.Video
+	if fresh, gerr := d.Library.GetVideo(t.VideoID.Int64); gerr == nil {
+		v = fresh
+	}
+	runtime := 0
+	if v.DurationSeconds.Valid && v.DurationSeconds.Int64 > 0 {
+		runtime = int(v.DurationSeconds.Int64)
+	}
+	epMeta := library.EpisodeMetaFromVideo(v, dlctx.SeriesTitle, season, episode, aired, runtime)
 	mediaPath, nfoPath, infoPath, thumbPath, subPaths, err := library.PackMedia(
-		media, dlctx.RootPath,
-		library.EpisodeNFO{
-			SeriesTitle: dlctx.SeriesTitle,
-			Title:       dlctx.Video.Title,
-			Season:      season,
-			Episode:     episode,
-			Plot:        dlctx.Video.Description,
-			Aired:       aired,
-			UniqueID:    dlctx.Video.RemoteID,
-			SourceSite:  "yt-dlp",
-			Domain:      library.NamingDomain(dlctx.URL),
-		},
+		media, dlctx.RootPath, epMeta,
 		library.LoadNamingConfig(d.Library.DB), infoSrc, thumbSrc, subSrcs,
 	)
 	if err != nil {

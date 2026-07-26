@@ -9,6 +9,7 @@ func TestEntriesFromInfoSingleVideo(t *testing.T) {
 	info := map[string]any{
 		"id": "abc123", "title": "My Video", "webpage_url": "https://example.com/watch?v=abc123",
 		"upload_date": "20240102", "description": "hello",
+		"categories": []any{"Education", " Science ", ""},
 		"thumbnails": []any{
 			map[string]any{"url": "https://example.com/small.jpg"},
 			map[string]any{"url": "https://example.com/large.jpg"},
@@ -24,6 +25,9 @@ func TestEntriesFromInfoSingleVideo(t *testing.T) {
 	}
 	if e.ThumbnailURL != "https://example.com/large.jpg" {
 		t.Fatalf("thumbnail = %q, want the last (highest-res) entry", e.ThumbnailURL)
+	}
+	if len(e.Categories) != 2 || e.Categories[0] != "Education" || e.Categories[1] != "Science" {
+		t.Fatalf("categories = %#v", e.Categories)
 	}
 }
 

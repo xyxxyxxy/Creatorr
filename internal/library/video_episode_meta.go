@@ -299,6 +299,7 @@ func BuildVideoPrefetchDraftFromEntry(e ytdlp.Entry) VideoPrefetchDraft {
 		Title:        strings.TrimSpace(e.Title),
 		Plot:         e.Description,
 		ThumbnailURL: strings.TrimSpace(e.ThumbnailURL),
+		Genres:       ParseStringListFields(e.Categories),
 	}
 	if e.ID != "" {
 		draft.UniqueIDType = "yt-dlp"

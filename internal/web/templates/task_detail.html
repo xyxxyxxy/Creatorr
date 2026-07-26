@@ -27,7 +27,9 @@
   {{end}}
   <tr><th class="w-40">Kind</th><td class="text-sm">{{.Item.Kind}}</td></tr>
   <tr><th class="w-40">Status</th><td data-task-status>{{template "status_badge" .Item.Status}}</td></tr>
-  {{if .Item.Message}}
+  {{if eq .Item.Status "pending"}}
+  <tr><th class="w-40">Message</th><td class="text-sm" data-task-message>Queued</td></tr>
+  {{else if .Item.Message}}
   <tr><th class="w-40">Message</th><td class="text-sm" data-task-message>{{.Item.Message}}</td></tr>
   {{else}}
   {{template "detail_row" (dict "Label" "Message" "TdClass" "text-sm")}}

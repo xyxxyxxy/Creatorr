@@ -101,10 +101,11 @@ func applyVideoPrefetchDraft(video *library.Video, d library.VideoPrefetchDraft)
 	if d.MPAA != "" {
 		out.MPAA = d.MPAA
 	}
-	if len(d.Genres) > 0 {
+	// Soft-fill genres/tags only when the current video list is empty.
+	if len(out.Genres) == 0 && len(d.Genres) > 0 {
 		out.Genres = d.Genres
 	}
-	if len(d.Tags) > 0 {
+	if len(out.Tags) == 0 && len(d.Tags) > 0 {
 		out.Tags = d.Tags
 	}
 	return &out

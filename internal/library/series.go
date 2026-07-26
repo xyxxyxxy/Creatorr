@@ -156,17 +156,19 @@ type CreateSeriesParams struct {
 	SourceLabel      string
 }
 
-// SeriesListFilter scopes the series admin list (title, root, quality, monitored).
+// SeriesListFilter scopes the series admin list (title, root, quality, delivery, monitored).
 type SeriesListFilter struct {
 	Title            string // case-insensitive substring; empty = any
 	RootID           int64  // 0 = any
 	QualityProfileID int64  // 0 = any
+	DeliveryMode     string // download|stream; empty = any
 	Monitored        *bool  // nil = any
 }
 
 // Active reports whether any series list filter constraint is set.
 func (f SeriesListFilter) Active() bool {
-	return strings.TrimSpace(f.Title) != "" || f.RootID > 0 || f.QualityProfileID > 0 || f.Monitored != nil
+	return strings.TrimSpace(f.Title) != "" || f.RootID > 0 || f.QualityProfileID > 0 ||
+		f.DeliveryMode == DeliveryDownload || f.DeliveryMode == DeliveryStream || f.Monitored != nil
 }
 
 const seriesListSelectCols = `s.id, s.title, s.root_id, s.quality_profile_id, s.monitored, s.delivery_mode, s.added_at,
@@ -191,6 +193,10 @@ func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilt
 	if f.QualityProfileID > 0 {
 		b.WriteString(` AND s.quality_profile_id = ?`)
 		*args = append(*args, f.QualityProfileID)
+	}
+	if f.DeliveryMode == DeliveryDownload || f.DeliveryMode == DeliveryStream {
+		b.WriteString(` AND s.delivery_mode = ?`)
+		*args = append(*args, f.DeliveryMode)
 	}
 	if f.Monitored != nil {
 		b.WriteString(` AND s.monitored = ?`)

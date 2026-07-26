@@ -210,6 +210,7 @@ func (s *Store) PackStreamForVideo(videoID, taskID int64, runtimeSeconds int, su
 	if err != nil {
 		return err
 	}
+	s.softFillGenresOntoVideo(v)
 	if runtimeSeconds <= 0 && v.DurationSeconds.Valid {
 		runtimeSeconds = int(v.DurationSeconds.Int64)
 	}

@@ -122,7 +122,7 @@
 </section>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Domain overrides" "help" "Optional per-host overrides. Hosts are not created when you add a source - add an override here or via 'Edit' on 'Tasks'. Empty fields inherit 'Domain defaults'. Delete removes the override row." "add_modal" "modal-add-domain-override" "add_label" "Add override")}}
+{{template "list_header" (dict "level" "section" "title" "Domain overrides" "help" "Optional per-host overrides. Hosts are not created when you add a source - add an override here. Empty fields inherit 'Domain defaults'. Delete removes the override row." "add_modal" "modal-add-domain-override" "add_label" "Add override")}}
 {{if not .DomainOverrides}}
 {{template "list_empty" "No domain overrides yet."}}
 {{else}}

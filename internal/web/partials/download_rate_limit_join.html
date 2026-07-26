@@ -4,8 +4,8 @@
   Expects: Value (full stored string, e.g. 10M or off).
   Optional: Name (form prefix; default download_rate_limit → Name_value / Name_unit),
             Required (domain defaults), Override (empty = inherit Domain defaults),
-            DefaultRate (Domain defaults rate; override inherit shows its number placeholder + unit),
-            Placeholder (number placeholder; defaults to DefaultRate number),
+            DefaultRate (Domain defaults rate; override inherit shows default: N or default: Unlimited),
+            Placeholder (number placeholder; override default = "default: …" from DefaultRate),
             ShowClear (join override_clear_btn after unit).
 */}}
 {{$name := .Name}}{{if not $name}}{{$name = "download_rate_limit"}}{{end}}
@@ -13,7 +13,13 @@
 {{$def := rateLimitParts .DefaultRate}}
 {{$inherit := and .Override (eq .Value "")}}
 {{$unit := $stored.Unit}}{{if $inherit}}{{$unit = $def.Unit}}{{end}}
-{{$ph := .Placeholder}}{{if not $ph}}{{$ph = $def.Value}}{{end}}
+{{$ph := .Placeholder}}
+{{if not $ph}}
+  {{if .Override}}
+    {{if eq $def.Unit "off"}}{{$ph = "default: Unlimited"}}
+    {{else if $def.Value}}{{$ph = printf "default: %s" $def.Value}}{{end}}
+  {{else}}{{$ph = $def.Value}}{{end}}
+{{end}}
 {{$off := eq $unit "off"}}
 <div class="join w-full{{if $inherit}} opacity-70{{end}}"
      data-rate-limit-join{{if .Required}} data-rate-required{{end}}
@@ -25,7 +31,7 @@
          {{if .Override}}data-override-clear{{end}}
          {{if $ph}}placeholder="{{$ph}}"{{end}}
          {{if and .Required (not $off)}}required{{end}}
-         {{if $off}}readonly{{end}} />
+         {{if $off}}disabled{{end}} />
   <select name="{{$name}}_unit" class="select join-item w-auto shrink-0"
           data-rate-unit
           {{if .Override}}data-override-clear{{end}}

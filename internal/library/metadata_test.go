@@ -50,8 +50,25 @@ func TestRefreshListedDoesNotCreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Title != "New Title" || v.Description != "fresh" {
+	// Soft-fill: keep existing title; fill empty description.
+	if v.Title != "Old Title" || v.Description != "fresh" {
 		t.Fatalf("got title=%q desc=%q", v.Title, v.Description)
+	}
+	// Soft-fill again: non-empty description must not clobber.
+	_, ok, err = s.RefreshListed(ser.ID, library.ListedVideo{
+		RemoteID: "vid1", Title: "Other", Description: "newer",
+		WebpageURL: "https://www.example.com/watch?v=vid1",
+		SourceID: srcID,
+	}, seedTaskID(t, s))
+	if err != nil || !ok {
+		t.Fatalf("refresh2: ok=%v err=%v", ok, err)
+	}
+	v, err = s.GetVideo(created.VideoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Title != "Old Title" || v.Description != "fresh" {
+		t.Fatalf("after second refresh title=%q desc=%q", v.Title, v.Description)
 	}
 	hist, err := s.ListVideoHistory(v.ID)
 	if err != nil {

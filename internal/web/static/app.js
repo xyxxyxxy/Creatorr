@@ -287,38 +287,96 @@
     }
   }
 
-  function setCountdownValue(el, n) {
-    if (!el) return;
-    const v = Math.max(0, Math.min(999, Math.floor(n)));
-    el.style.setProperty("--value", String(v));
-    el.textContent = el.hasAttribute("data-cd-sec")
-      ? String(v).padStart(2, "0")
-      : String(v);
-    el.setAttribute("aria-label", String(v));
+  function clearCooldownBusyTip(wrap) {
+    wrap.classList.remove("tooltip", "tooltip-top");
+    wrap.removeAttribute("data-tip");
+  }
+
+  function showCooldownPaused(wrap) {
+    wrap.removeAttribute("data-ends-at");
+    wrap.removeAttribute("data-total-sec");
+    clearCooldownBusyTip(wrap);
+    wrap.setAttribute("aria-label", "Paused");
+    wrap.innerHTML =
+      '<span data-cd-label class="shrink-0 leading-none text-warning">Paused</span>' +
+      '<progress data-cd-bar class="progress progress-warning w-24 sm:w-32 h-2 shrink-0" value="100" max="100" aria-hidden="true"></progress>';
+  }
+
+  function showCooldownBusy(wrap) {
+    wrap.removeAttribute("data-ends-at");
+    wrap.removeAttribute("data-total-sec");
+    wrap.classList.add("tooltip", "tooltip-top");
+    wrap.setAttribute("data-tip", "Maximum of parallel tasks reached");
+    wrap.setAttribute("aria-label", "Maximum of parallel tasks reached");
+    wrap.innerHTML =
+      '<span data-cd-label class="shrink-0 leading-none">Busy</span>' +
+      '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" aria-hidden="true"></progress>';
+  }
+
+  function showCooldownReady(wrap) {
+    if (wrap.hasAttribute("data-paused")) {
+      showCooldownPaused(wrap);
+      return;
+    }
+    if (wrap.hasAttribute("data-slots-full")) {
+      showCooldownBusy(wrap);
+      return;
+    }
+    wrap.removeAttribute("data-ends-at");
+    wrap.removeAttribute("data-total-sec");
+    clearCooldownBusyTip(wrap);
+    wrap.setAttribute("aria-label", "Ready for tasks");
+    wrap.innerHTML =
+      '<span data-cd-label class="shrink-0 leading-none text-base-content/50">Ready for tasks</span>' +
+      '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="0" max="100" aria-hidden="true"></progress>';
   }
 
   function tickDomainCooldowns() {
     document.querySelectorAll("[data-domain-cooldown]").forEach((wrap) => {
-      const ends = Date.parse(wrap.getAttribute("data-ends-at") || "");
+      if (wrap.hasAttribute("data-paused")) return;
+      const endsAttr = wrap.getAttribute("data-ends-at");
+      if (!endsAttr) return;
+      const ends = Date.parse(endsAttr);
       if (!Number.isFinite(ends)) {
-        wrap.remove();
+        showCooldownReady(wrap);
         return;
       }
       let rem = Math.ceil((ends - Date.now()) / 1000);
       if (rem <= 0) {
-        wrap.remove();
+        showCooldownReady(wrap);
         return;
       }
-      if (rem > 999 * 60 + 59) rem = 999 * 60 + 59;
-      const min = Math.floor(rem / 60);
-      setCountdownValue(wrap.querySelector("[data-cd-min]"), min);
-      setCountdownValue(wrap.querySelector("[data-cd-sec]"), rem % 60);
-      const minWrap = wrap.querySelector("[data-cd-min-wrap]");
-      if (minWrap) minWrap.classList.toggle("hidden", min === 0);
+      let total = parseInt(wrap.getAttribute("data-total-sec") || "0", 10);
+      if (!Number.isFinite(total) || total < 1) total = rem;
+      if (rem > total) total = rem;
+      clearCooldownBusyTip(wrap);
+      let bar = wrap.querySelector("[data-cd-bar]");
+      let label = wrap.querySelector("[data-cd-label]");
+      if (!bar || !label) {
+        wrap.innerHTML =
+          '<span data-cd-label class="shrink-0 leading-none">Cooldown</span>' +
+          '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="' +
+          rem +
+          '" max="' +
+          total +
+          '" aria-hidden="true"></progress>';
+        bar = wrap.querySelector("[data-cd-bar]");
+        label = wrap.querySelector("[data-cd-label]");
+      }
+      if (label) {
+        label.textContent = "Cooldown";
+        label.classList.remove("text-base-content/50", "text-warning");
+      }
+      if (bar) {
+        bar.className = "progress progress-primary w-24 sm:w-32 h-2 shrink-0";
+        bar.max = total;
+        bar.value = rem;
+      }
+      wrap.setAttribute("aria-label", "Cooldown " + rem + "s remaining");
     });
   }
 
-  setInterval(tickDomainCooldowns, 1000);
+  setInterval(tickDomainCooldowns, 250);
 
   function refreshHistoryPanel() {
     if (!location.pathname.startsWith("/history")) return;
@@ -387,10 +445,45 @@
 
   function patchStatusCell(root, status) {
     if (!root || typeof status !== "string" || !status) return;
+    if (root.hasAttribute("data-task-row-status")) {
+      root.setAttribute("data-task-row-status", status);
+    }
     const cell = root.querySelector("[data-task-status]");
     if (!cell) return;
     cell.replaceChildren(statusBadgeEl(status));
     createLucideIcons(cell);
+  }
+
+  /** Sync Tasks list progress: pending label, running determinate, or indeterminate. */
+  function syncTaskRowProgress(row, status, progress) {
+    const wrap = row.querySelector("[data-task-progress-wrap]");
+    if (!wrap) return;
+    const st = status === "pending" ? "pending" : "running";
+    const hasPct =
+      progress != null && Number.isFinite(Number(progress)) && Number(progress) > 0 && Number(progress) < 1;
+    wrap.replaceChildren();
+    const bar = document.createElement("progress");
+    bar.setAttribute("data-task-progress", "");
+    if (st === "pending") {
+      const paused = row.hasAttribute("data-lane-paused");
+      bar.className = "progress " + (paused ? "progress-warning" : "progress-secondary") + " w-full";
+      bar.value = 0;
+      bar.max = 100;
+      bar.setAttribute("aria-label", "pending");
+      wrap.appendChild(bar);
+      return;
+    }
+    bar.className = "progress progress-secondary w-full";
+    if (hasPct) {
+      const pct = Math.max(0, Math.min(100, Math.round(Number(progress) * 100)));
+      bar.value = pct;
+      bar.max = 100;
+      bar.setAttribute("aria-label", pct + "%");
+    } else {
+      bar.removeAttribute("value");
+      bar.setAttribute("aria-label", "In progress");
+    }
+    wrap.appendChild(bar);
   }
 
   /** Patch message/progress on an existing task row. Avoids full panel swap (button flicker). */
@@ -405,36 +498,36 @@
     if (!id) return false;
     const row = document.getElementById("task-row-" + id);
     if (!row) return false;
-    if (typeof data.status === "string" && data.status) {
+    const statusChanged = typeof data.status === "string" && data.status;
+    if (statusChanged) {
       patchStatusCell(row, data.status);
     }
     const msgEl = row.querySelector("[data-task-message]");
-    if (msgEl && typeof data.message === "string") {
-      msgEl.textContent = data.message || "-";
-    }
-    if (data.progress != null && Number.isFinite(Number(data.progress))) {
-      const raw = Number(data.progress);
-      const pct = Math.max(0, Math.min(100, Math.round(raw * 100)));
-      let bar = row.querySelector("progress[data-task-progress]");
-      const showBar = raw > 0 && raw < 1;
-      if (!showBar) {
-        if (bar) bar.remove();
-      } else {
-        if (!bar) {
-          const cell = row.querySelector("[data-task-status-cell]");
-          if (cell) {
-            bar = document.createElement("progress");
-            bar.setAttribute("data-task-progress", "");
-            bar.className = "progress progress-primary w-full max-w-xs mt-1";
-            bar.max = 100;
-            cell.appendChild(bar);
-          }
-        }
-        if (bar) bar.value = pct;
+    if (msgEl) {
+      const st = statusChanged
+        ? data.status
+        : row.getAttribute("data-task-row-status") || "";
+      if (st === "pending") {
+        msgEl.textContent = "Queued";
+      } else if (typeof data.message === "string") {
+        msgEl.textContent = data.message || "-";
       }
-    } else if (data.progress === null) {
-      const bar = row.querySelector("progress[data-task-progress]");
-      if (bar) bar.remove();
+    }
+    const progressChanged = Object.prototype.hasOwnProperty.call(data, "progress");
+    if (statusChanged || progressChanged) {
+      const st = statusChanged
+        ? data.status
+        : row.getAttribute("data-task-row-status") || "running";
+      let progress = null;
+      if (progressChanged) {
+        progress = data.progress;
+      } else {
+        const bar = row.querySelector("progress[data-task-progress]");
+        if (bar && bar.hasAttribute("value") && Number(bar.max) > 0) {
+          progress = Number(bar.value) / Number(bar.max);
+        }
+      }
+      syncTaskRowProgress(row, st, progress);
     }
     return true;
   }
@@ -456,8 +549,16 @@
       patchStatusCell(page, data.status);
     }
     const msgEl = page.querySelector("[data-task-message]");
-    if (msgEl && typeof data.message === "string") {
-      msgEl.textContent = data.message || "-";
+    if (msgEl) {
+      const st =
+        typeof data.status === "string" && data.status
+          ? data.status
+          : page.querySelector("[data-task-status]")?.getAttribute("aria-label") || "";
+      if (st === "pending") {
+        msgEl.textContent = "Queued";
+      } else if (typeof data.message === "string") {
+        msgEl.textContent = data.message || "-";
+      }
     }
     if (data.progress != null && Number.isFinite(Number(data.progress))) {
       const raw = Number(data.progress);
@@ -2060,7 +2161,8 @@
     if (!unit || !num) return;
     const off = unit.value === "off";
     const inherit = unit.value === "";
-    num.readOnly = off;
+    num.disabled = off;
+    num.readOnly = false;
     if (off) {
       num.value = "";
       num.removeAttribute("required");
@@ -2097,6 +2199,8 @@
         inputs.forEach((input) => {
           if (input.hasAttribute("data-rate-unit") && join) {
             input.value = join.getAttribute("data-default-unit") || "M";
+          } else if (input.hasAttribute("data-override-reset")) {
+            input.value = input.getAttribute("data-override-reset") || "";
           } else {
             input.value = "";
           }
@@ -2109,6 +2213,8 @@
         join.classList.add("opacity-70");
         syncRateLimitJoin(join);
       }
+      const flareJoin = wrap && wrap.querySelector("select[name='use_flaresolverr']")?.closest(".join");
+      if (flareJoin) flareJoin.classList.add("opacity-70");
       return;
     }
     const chip = ev.target.closest("button.preset-chip");
@@ -2165,7 +2271,16 @@
       if (join) syncScanCronJoin(join);
       return;
     }
-    if (!(el instanceof HTMLSelectElement) || !el.hasAttribute("data-rate-unit")) return;
+    if (!(el instanceof HTMLSelectElement) || !el.hasAttribute("data-rate-unit")) {
+      if (el instanceof HTMLSelectElement && el.name === "use_flaresolverr") {
+        const flareJoin = el.closest(".join");
+        if (flareJoin) {
+          flareJoin.classList.toggle("opacity-70", el.value === "default");
+        }
+        el.classList.remove("opacity-70");
+      }
+      return;
+    }
     const join = el.closest("[data-rate-limit-join]");
     if (!join) return;
     if (el.value !== "") join.classList.remove("opacity-70");

@@ -25,45 +25,51 @@ type taskView struct {
 	VideoTitle  string
 	Message     string
 	Progress    *float64
+	LanePaused  bool // domain soft-pause: pending bars use warning
 }
 
 type laneView struct {
-	Domain              string
-	Paused              bool
-	CanPause            bool // false for system / reserved lanes
-	Tasks               []taskView
-	Page                PageInfo
-	PendingCount        int
-	DownloadCount       int
-	ShowCancelPending   bool
-	ShowCooldown        bool
-	CooldownEndsAt      string // RFC3339Nano for JS tick
-	CooldownMin         int
-	CooldownSec         int
+	Domain                 string
+	Paused                 bool
+	CanPause               bool // false for system / reserved lanes
+	Page                   PageInfo
+	PendingCount           int
+	DownloadCount          int
+	ShowCancelPending      bool
+	ShowCooldown           bool
+	ShowBusy               bool // running >= max parallel (not paused / cooling)
+	RunningCount           int
+	CooldownEndsAt         string  // RFC3339Nano for JS tick
+	CooldownTotalSec       int     // configured task_cooldown_seconds (progress max)
+	CooldownRemSec         int     // remaining seconds at render
+	TaskCooldownSeconds    int     // effective cooldown setting (host lanes)
 	RateLimit              string  // effective yt-dlp --limit-rate display (download)
 	StreamPlayRateLimit    string  // effective stream_play --limit-rate display
 	SleepRequests          float64 // effective yt-dlp --sleep-requests
+	MaxParallelTasks       int     // effective max parallel (system = 1)
+	UseFlareSolverr        bool    // effective Use FlareSolverr
 	HasCookies             bool
+	CookiesFromHost        bool // host jar (not Domain defaults fallback)
 	CookiesTip             string
-	ShowFlare              bool
 	FlareWarm              bool
 	FlareTip               string
 	HasOverrideRow         bool
-	CooldownOverride        string
+	CooldownOverride       string
 	QueueOverride          string
 	ParallelOverride       string
 	RateOverride           string
 	StreamPlayRateOverride string
 	SleepOverride          string
-	FlareOverride          string
+	FlareOverride          string // default|on|off (empty = no row / inherit)
 	CookieContent          string
-	DefaultCooldown         int
+	DefaultCooldown        int
 	DefaultQueue           int
 	DefaultParallel        int
 	DefaultRate            string
 	DefaultStreamPlayRate  string
 	DefaultSleep           float64
 	DefaultFlare           bool
+	Tasks                  []taskView // pending + running (ListActive order)
 }
 
 func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +111,7 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 			Domain:                domain,
 			Paused:                paused,
 			CanPause:              canPause,
-			DefaultCooldown:         defLim.TaskCooldownSeconds,
+			DefaultCooldown:       defLim.TaskCooldownSeconds,
 			DefaultQueue:          defLim.MaxDownloadQueue,
 			DefaultParallel:       defLim.MaxParallelTasks,
 			DefaultRate:           defLim.DownloadRateLimit,
@@ -113,24 +119,44 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 			DefaultSleep:          defLim.SleepRequests,
 			DefaultFlare:          defLim.UseFlareSolverr,
 		}
-		if domain != queue.SystemDomain {
+		if domain == queue.SystemDomain {
+			lv.MaxParallelTasks = 1
+		} else {
+			// Effective Domain defaults ∪ host overrides (LimitsForDomain).
+			lv.RateLimit = defLim.DownloadRateLimit
+			lv.StreamPlayRateLimit = defLim.StreamPlayRateLimit
+			lv.SleepRequests = defLim.SleepRequests
+			lv.MaxParallelTasks = defLim.MaxParallelTasks
+			lv.TaskCooldownSeconds = defLim.TaskCooldownSeconds
+			lv.UseFlareSolverr = defLim.UseFlareSolverr
 			if lim, err := settings.LimitsForDomain(h.Queue.DB, domain); err == nil {
 				lv.RateLimit = lim.DownloadRateLimit
 				lv.StreamPlayRateLimit = lim.StreamPlayRateLimit
 				lv.SleepRequests = lim.SleepRequests
+				lv.MaxParallelTasks = lim.MaxParallelTasks
+				lv.TaskCooldownSeconds = lim.TaskCooldownSeconds
+				lv.UseFlareSolverr = lim.UseFlareSolverr
+			}
+			if lv.UseFlareSolverr {
+				lv.FlareTip = "FlareSolverr on (Domain defaults or host override)"
+				if ytdlp.HasFlareSession(domain) {
+					lv.FlareWarm = true
+					lv.FlareTip = "FlareSolverr session warm"
+				}
+			} else {
+				lv.FlareTip = "FlareSolverr off (Domain defaults or host override)"
 			}
 			if ok, tip, err := cookies.Applies(h.Queue.DB, domain); err == nil && ok {
 				lv.HasCookies = true
-				lv.CookiesTip = tip
-			}
-			if flareURL, err := domains.FlareSolverrURL(h.Queue.DB, domain); err == nil && strings.TrimSpace(flareURL) != "" {
-				lv.ShowFlare = true
-				lv.FlareWarm = ytdlp.HasFlareSession(domain)
-				if lv.FlareWarm {
-					lv.FlareTip = "FlareSolverr session warm"
-				} else {
-					lv.FlareTip = "FlareSolverr enabled"
+				switch tip {
+				case "Default cookies":
+					lv.CookiesTip = "Default cookies (Domain defaults jar)"
+				default:
+					lv.CookiesFromHost = true
+					lv.CookiesTip = "Cookies set (host jar)"
 				}
+			} else {
+				lv.CookiesTip = "No cookies (Domain defaults or host jar)"
 			}
 			if meta, ok := knownMeta[domain]; ok {
 				lv.HasOverrideRow = true
@@ -189,6 +215,7 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 		lv := ensureLane(t.Domain)
 		tv := taskView{
 			ID: t.ID, Position: t.QueuePos, Status: t.Status, Kind: t.Kind, Message: t.Message,
+			LanePaused: lv.Paused,
 		}
 		if t.SeriesID.Valid {
 			tv.SeriesID = t.SeriesID.Int64
@@ -219,6 +246,9 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 		if t.Status == queue.StatusPending {
 			lv.PendingCount++
 		}
+		if t.Status == queue.StatusRunning {
+			lv.RunningCount++
+		}
 		if t.Kind == queue.KindDownload || t.Kind == queue.KindCacheBeginning {
 			lv.DownloadCount++
 		}
@@ -247,13 +277,20 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 				if rem < 1 {
 					rem = 1
 				}
+				total := lv.TaskCooldownSeconds
+				if total < 1 {
+					total = rem
+				}
+				if rem > total {
+					total = rem
+				}
 				lv.ShowCooldown = true
 				lv.CooldownEndsAt = until.UTC().Format(time.RFC3339Nano)
-				lv.CooldownMin = rem / 60
-				if lv.CooldownMin > 999 {
-					lv.CooldownMin = 999
-				}
-				lv.CooldownSec = rem % 60
+				lv.CooldownTotalSec = total
+				lv.CooldownRemSec = rem
+			}
+			if !lv.Paused && !lv.ShowCooldown && lv.MaxParallelTasks > 0 && lv.RunningCount >= lv.MaxParallelTasks {
+				lv.ShowBusy = true
 			}
 		}
 		pageTasks, pageInfo := SlicePage(r, "page", lv.Tasks)

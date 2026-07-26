@@ -1,33 +1,41 @@
 {{define "task_row"}}
-<tr id="task-row-{{.ID}}">
-  <td class="font-mono tabular-nums">{{.Position}}</td>
-  <td data-task-status>{{template "status_badge" .Status}}</td>
-  <td><a class="link link-hover" href="/task/{{.ID}}">{{.Kind}}</a></td>
-  <td>
-    {{if .SeriesID}}
-    <a class="link link-hover" href="/series/{{.SeriesID}}">{{if .SeriesTitle}}{{.SeriesTitle}}{{else}}#{{.SeriesID}}{{end}}</a>
-    {{else}}{{template "empty_value"}}{{end}}
-    {{if .VideoTitle}}
-    <div class="text-sm mt-0.5">
-      {{if and .SeriesID .VideoID}}
-      <a class="link link-hover" href="/series/{{.SeriesID}}/videos/{{.VideoID}}">{{.VideoTitle}}</a>
-      {{else}}{{.VideoTitle}}{{end}}
+<li id="task-row-{{.ID}}" class="list-row" data-task-row-status="{{.Status}}"{{if .LanePaused}} data-lane-paused{{end}}>
+  <span class="shrink-0 self-center font-mono text-lg tabular-nums opacity-60" data-task-pos>#{{.Position}}</span>
+  <div class="list-col-grow min-w-0">
+    <div class="flex items-center gap-2 min-w-0">
+      <a class="link link-hover font-medium truncate" href="/task/{{.ID}}">{{.Kind}}</a>
     </div>
-    {{end}}
-  </td>
-  <td class="text-sm min-w-0" data-task-status-cell>
-    <div><a class="link link-hover" href="/task/{{.ID}}" data-task-message>{{if .Message}}{{.Message}}{{else}}{{template "empty_value"}}{{end}}</a></div>
-    {{if and (eq .Status "running") (progressActive .Progress)}}
-    <progress data-task-progress class="progress progress-primary w-full max-w-xs mt-1" value="{{pct .Progress}}" max="100"></progress>
-    {{end}}
-  </td>
-  <td class="whitespace-nowrap">
-    <form method="post" action="/actions/cancel-task" class="inline">
+    <div class="text-xs opacity-60 flex flex-wrap gap-x-2 min-w-0">
+      {{if .SeriesID}}
+      <a class="link link-hover truncate" href="/series/{{.SeriesID}}">{{if .SeriesTitle}}{{.SeriesTitle}}{{else}}#{{.SeriesID}}{{end}}</a>
+      {{end}}
+      {{if .VideoTitle}}
+      {{if and .SeriesID .VideoID}}
+      <a class="link link-hover truncate" href="/series/{{.SeriesID}}/videos/{{.VideoID}}">{{.VideoTitle}}</a>
+      {{else}}
+      <span class="truncate">{{.VideoTitle}}</span>
+      {{end}}
+      {{else if not .SeriesID}}{{template "empty_value"}}{{end}}
+    </div>
+  </div>
+  <div class="justify-self-end self-center flex items-center gap-2 min-w-0 max-w-full">
+    <span class="text-xs opacity-60 truncate min-w-0 max-w-[12rem] sm:max-w-xs text-right" data-task-message>{{if eq .Status "pending"}}Queued{{else if .Message}}{{.Message}}{{else}}{{template "empty_value"}}{{end}}</span>
+    <div class="w-24 sm:w-32 shrink-0" data-task-progress-wrap>
+      {{if eq .Status "pending"}}
+      <progress data-task-progress class="progress {{if .LanePaused}}progress-warning{{else}}progress-secondary{{end}} w-full" value="0" max="100" aria-label="pending"></progress>
+      {{else if and (eq .Status "running") (progressActive .Progress)}}
+      <progress data-task-progress class="progress progress-secondary w-full" value="{{pct .Progress}}" max="100" aria-label="{{pct .Progress}}%"></progress>
+      {{else}}
+      {{/* running without mid progress: daisyUI indeterminate (no value) */}}
+      <progress data-task-progress class="progress progress-secondary w-full" aria-label="In progress"></progress>
+      {{end}}
+    </div>
+    <form method="post" action="/actions/cancel-task" class="inline shrink-0">
       <input type="hidden" name="id" value="{{.ID}}" />
-      <button type="submit" class="btn btn-ghost btn-xs btn-square text-error tooltip tooltip-top" data-tip="Cancel" aria-label="Cancel">
+      <button type="submit" class="btn btn-soft btn-error btn-xs btn-square tooltip tooltip-top" data-tip="Cancel" aria-label="Cancel">
         <i data-lucide="x" class="size-3.5"></i>
       </button>
     </form>
-  </td>
-</tr>
+  </div>
+</li>
 {{end}}

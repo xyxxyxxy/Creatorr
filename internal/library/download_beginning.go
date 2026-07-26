@@ -19,9 +19,9 @@ const beginningMetaFile = "meta.json"
 
 // BeginningMeta describes a persisted download-beginning cache for one video.
 type BeginningMeta struct {
-	DurationSeconds       float64 `json:"duration_seconds"`
-	HandoffSourceSeconds  float64 `json:"handoff_source_seconds,omitempty"` // source seek for live handoff; 0 = use DurationSeconds
-	WrittenAt             string  `json:"written_at"`
+	DurationSeconds      float64 `json:"duration_seconds"`
+	HandoffSourceSeconds float64 `json:"handoff_source_seconds,omitempty"` // source seek for live handoff; 0 = use DurationSeconds
+	WrittenAt            string  `json:"written_at"`
 }
 
 // BeginningDir returns {CacheDir}/download-beginnings/{videoID}/.
@@ -147,7 +147,7 @@ func (s *Store) EnqueueCacheBeginning(videoID int64) (int64, error) {
 		Domain:   domain,
 		SeriesID: cur.SeriesID,
 		VideoID:  videoID,
-		Message:  "Download beginning",
+		Message:  "",
 		Payload:  map[string]any{"video_id": videoID},
 	})
 	if err != nil {

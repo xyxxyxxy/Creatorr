@@ -452,6 +452,28 @@ func TestListSeriesFiltered(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("quality count=%d", n)
 	}
+	s.PublicBaseURL = "http://example.com:8787"
+	_, err = s.CreateSeries(library.CreateSeriesParams{
+		Title: "Stream Show", RootID: rootA, QualityProfileID: profileA, Monitored: true,
+		DeliveryMode: library.DeliveryStream,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err = s.CountSeriesFiltered(library.SeriesListFilter{DeliveryMode: library.DeliveryStream})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("delivery stream count=%d", n)
+	}
+	n, err = s.CountSeriesFiltered(library.SeriesListFilter{DeliveryMode: library.DeliveryDownload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("delivery download count=%d", n)
+	}
 }
 
 func TestIgnoreVideoCancelsDownloads(t *testing.T) {

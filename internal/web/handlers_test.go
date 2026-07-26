@@ -263,7 +263,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		}
 		if path == "/tasks" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "Interactive") || !strings.Contains(body, "Pause") {
+			if !strings.Contains(body, "interactive") || !strings.Contains(body, "Pausing a domain") {
 				t.Fatalf("/tasks missing interactive/pause note")
 			}
 		}

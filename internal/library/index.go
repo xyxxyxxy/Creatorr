@@ -213,11 +213,13 @@ func (s *Store) UpsertListed(seriesID int64, li ListedVideo, taskID int64) (Upse
 
 	out.VideoID = existingID
 	out.Status = existingStatus
+	// Soft-fill title/description/thumbnail_url only when empty (never clobber first-seen / operator).
 	_, err = s.DB.SQL.Exec(`
-		UPDATE videos SET title = ?,
+		UPDATE videos SET
+		  title = COALESCE(NULLIF(title, ''), ?),
 		  source_url = COALESCE(NULLIF(?, ''), source_url),
-		  description = COALESCE(NULLIF(?, ''), description),
-		  thumbnail_url = COALESCE(NULLIF(?, ''), thumbnail_url),
+		  description = COALESCE(NULLIF(description, ''), ?),
+		  thumbnail_url = COALESCE(NULLIF(thumbnail_url, ''), ?),
 		  media_type = CASE WHEN ? != '' THEN ? ELSE media_type END,
 		  source_id = COALESCE(source_id, ?)
 		WHERE id = ?

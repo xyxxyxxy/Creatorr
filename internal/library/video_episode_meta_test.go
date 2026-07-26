@@ -128,12 +128,16 @@ func TestSaveVideoMetadataRewritesNFO(t *testing.T) {
 func TestBuildVideoPrefetchDraftFromEntry(t *testing.T) {
 	d := library.BuildVideoPrefetchDraftFromEntry(ytdlp.Entry{
 		ID: "abc", Title: "T", Description: "P", ThumbnailURL: "https://example.com/t.jpg",
+		Categories: []string{"Education", " Tech "},
 	})
 	if d.Title != "T" || d.Plot != "P" || d.UniqueIDValue != "abc" || d.UniqueIDType != "yt-dlp" {
 		t.Fatalf("%+v", d)
 	}
 	if d.SortTitle != "" || d.OriginalTitle != "" {
 		t.Fatalf("prefetch must not copy title into sort/original: %+v", d)
+	}
+	if len(d.Genres) != 2 || d.Genres[0] != "Education" || d.Genres[1] != "Tech" {
+		t.Fatalf("genres=%v", d.Genres)
 	}
 }
 

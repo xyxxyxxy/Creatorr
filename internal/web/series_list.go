@@ -56,6 +56,12 @@ func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
 			f.QualityProfileID = id
 		}
 	}
+	switch strings.ToLower(strings.TrimSpace(q.Get("delivery"))) {
+	case library.DeliveryDownload:
+		f.DeliveryMode = library.DeliveryDownload
+	case library.DeliveryStream:
+		f.DeliveryMode = library.DeliveryStream
+	}
 	switch strings.TrimSpace(q.Get("monitored")) {
 	case "1":
 		on := true
@@ -196,6 +202,13 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 			Name: "quality", AriaLabel: "Quality profile", EmptyLabel: "All quality", Options: opts,
 		})
 	}
+	seriesFilter.Selects = append(seriesFilter.Selects, listFilterSelect{
+		Name: "delivery", AriaLabel: "Delivery mode", EmptyLabel: "All delivery",
+		Options: []listFilterOpt{
+			{Value: library.DeliveryDownload, Label: "Download", Selected: filter.DeliveryMode == library.DeliveryDownload},
+			{Value: library.DeliveryStream, Label: "Stream", Selected: filter.DeliveryMode == library.DeliveryStream},
+		},
+	})
 	monSel := ""
 	if filter.Monitored != nil {
 		if *filter.Monitored {

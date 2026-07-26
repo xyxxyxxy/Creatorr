@@ -10,14 +10,15 @@ import (
 
 // Entry is one listed/resolved video from yt-dlp.
 type Entry struct {
-	ID           string  `json:"id"`
-	Title        string  `json:"title"`
-	WebpageURL   string  `json:"webpage_url"`
-	UploadDate   string  `json:"upload_date"`
-	Description  string  `json:"description"`
-	ThumbnailURL string  `json:"thumbnail_url"`
-	MediaType    string  `json:"media_type,omitempty"`
-	Duration     float64 `json:"duration,omitempty"` // seconds; omit when unknown
+	ID           string   `json:"id"`
+	Title        string   `json:"title"`
+	WebpageURL   string   `json:"webpage_url"`
+	UploadDate   string   `json:"upload_date"`
+	Description  string   `json:"description"`
+	ThumbnailURL string   `json:"thumbnail_url"`
+	MediaType    string   `json:"media_type,omitempty"`
+	Duration     float64  `json:"duration,omitempty"` // seconds; omit when unknown
+	Categories   []string `json:"categories,omitempty"`
 }
 
 // entriesFromInfo maps a yt-dlp -J dump (flat playlist or single video) to entries.
@@ -109,7 +110,37 @@ func entryFromMap(m map[string]any) Entry {
 		ThumbnailURL: thumbURL(m),
 		MediaType:    strings.TrimSpace(strField(m, "media_type")),
 		Duration:     durationSeconds(m),
+		Categories:   stringListField(m, "categories"),
 	}
+}
+
+func stringListField(m map[string]any, key string) []string {
+	raw, ok := m[key]
+	if !ok || raw == nil {
+		return nil
+	}
+	var out []string
+	switch v := raw.(type) {
+	case []any:
+		for _, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				continue
+			}
+			s = strings.TrimSpace(s)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+	case []string:
+		for _, s := range v {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
 }
 
 func durationSeconds(m map[string]any) float64 {
