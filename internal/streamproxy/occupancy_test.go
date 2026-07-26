@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
@@ -13,6 +14,36 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
+
+func TestOccupancyLastUseFresh(t *testing.T) {
+	key := occupancyKey(42, "tok-fresh")
+	occMu.Lock()
+	delete(occByKey, key)
+	occMu.Unlock()
+	t.Cleanup(func() {
+		occMu.Lock()
+		delete(occByKey, key)
+		occMu.Unlock()
+	})
+
+	if occupancyLastUseFresh(key, time.Minute) {
+		t.Fatal("expected false with no occupancy")
+	}
+
+	occMu.Lock()
+	occByKey[key] = &streamOccupancy{lastUse: time.Now()}
+	occMu.Unlock()
+	if !occupancyLastUseFresh(key, time.Minute) {
+		t.Fatal("expected fresh occupancy to keep HLS session alive")
+	}
+
+	occMu.Lock()
+	occByKey[key].lastUse = time.Now().Add(-2 * time.Minute)
+	occMu.Unlock()
+	if occupancyLastUseFresh(key, time.Minute) {
+		t.Fatal("expected stale occupancy")
+	}
+}
 
 func TestTouchOccupancyCreatesStreamPlay(t *testing.T) {
 	lib, h := openOccupancyHandler(t)

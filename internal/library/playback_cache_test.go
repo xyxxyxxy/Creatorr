@@ -298,6 +298,76 @@ seg00001.ts
 	}
 }
 
+func TestFinalizePlaybackCacheIfNearDuration(t *testing.T) {
+	s := openLib(t)
+	s.CacheDir = t.TempDir()
+	_ = settings.Set(s.DB, settings.KeyStreamPlaybackCache, "true")
+	vid := seedStreamVideo(t, s, "pc-near-dur")
+
+	dir := s.PlaybackCacheDir(vid)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Fake TS bytes: rematerialize may fail; complete flag must still stick.
+	if err := os.WriteFile(filepath.Join(dir, "seg00000.ts"), []byte("ts"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "index.m3u8"), []byte(`#EXTM3U
+#EXT-X-PLAYLIST-TYPE:EVENT
+#EXTINF:90.500000,
+seg00000.ts
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writePlaybackMeta(t, s, vid, library.PlaybackMeta{
+		CachedSeconds: 90.5, HandoffSourceSeconds: 90.5, Complete: false,
+		WrittenAt: "t", LastAccess: "t", NextSeg: 1,
+	})
+
+	if err := s.FinalizePlaybackCacheIfNearDuration(vid, 92); err != nil {
+		t.Fatal(err)
+	}
+	m, ok := s.LoadPlaybackMeta(vid)
+	if !ok || !m.Complete {
+		t.Fatalf("expected complete within 2s slack: ok=%v meta=%+v", ok, m)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "#EXT-X-ENDLIST") {
+		t.Fatalf("missing ENDLIST: %s", body)
+	}
+}
+
+func TestFinalizePlaybackCacheIfNearDurationTooShort(t *testing.T) {
+	s := openLib(t)
+	s.CacheDir = t.TempDir()
+	_ = settings.Set(s.DB, settings.KeyStreamPlaybackCache, "true")
+	vid := seedStreamVideo(t, s, "pc-far-dur")
+
+	dir := s.PlaybackCacheDir(vid)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "seg00000.ts"), []byte("ts"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "index.m3u8"), []byte("#EXTM3U\n#EXTINF:80.0,\nseg00000.ts\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writePlaybackMeta(t, s, vid, library.PlaybackMeta{
+		CachedSeconds: 80, Complete: false, WrittenAt: "t", LastAccess: "t", NextSeg: 1,
+	})
+	if err := s.FinalizePlaybackCacheIfNearDuration(vid, 92); err != nil {
+		t.Fatal(err)
+	}
+	m, ok := s.LoadPlaybackMeta(vid)
+	if !ok || m.Complete {
+		t.Fatalf("must not complete when short: ok=%v meta=%+v", ok, m)
+	}
+}
+
 func TestPromoteMarksCompleteOnLiveEndlist(t *testing.T) {
 	s := openLib(t)
 	s.CacheDir = t.TempDir()
