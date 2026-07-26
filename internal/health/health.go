@@ -150,6 +150,13 @@ func (c *Checker) checkDisk() Check {
 	return Check{Name: "disk", Status: StatusOK}
 }
 
+// ExternalServices probes FlareSolverr and the PO token provider and returns raw
+// statuses (including skipped when the URL is unset). Unlike Run, skipped is not
+// mapped to ok.
+func (c *Checker) ExternalServices(ctx context.Context) (flare, pot Check) {
+	return c.checkFlareSolverr(ctx), c.checkPotProvider(ctx)
+}
+
 func (c *Checker) checkFlareSolverr(ctx context.Context) Check {
 	url := c.Cfg.FlareSolverrURL
 	if url == "" {

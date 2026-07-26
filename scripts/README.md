@@ -35,4 +35,4 @@ Smoke: after boot, `yt-dlp --plugin-dirs … --list-extractors` should list the 
 
 **PO Token plugin (local Go):** `make pot-plugin` installs the bgutil provider zip under `var/yt-dlp-plugins/bgutil`. Compose already runs `creatorr-po-token`; set `CREATORR_POT_PROVIDER_URL` (default `http://creatorr-po-token:4416`).
 
-**FlareSolverr:** Compose runs `creatorr-flaresolverr` (Chrome; notable RAM). `CREATORR_FLARESOLVERR_URL` (default `http://creatorr-flaresolverr:8191`) one-shot seeds Settings when empty; enable **Use FlareSolverr** per host under Settings → Queue.
+**FlareSolverr:** Compose runs `creatorr-flaresolverr` (Chrome; notable RAM). Set `CREATORR_FLARESOLVERR_URL` (default `http://creatorr-flaresolverr:8191`); enable **Use FlareSolverr** per host under Settings → Queue.

@@ -13,7 +13,7 @@ type Config struct {
 	Host            string
 	Port            int
 	DBPath          string
-	FlareSolverrURL string // filled from Settings after seed (optional CREATORR_FLARESOLVERR_URL one-shot)
+	FlareSolverrURL string // CREATORR_FLARESOLVERR_URL; empty skips FlareSolverr health + pre-solve
 	LibraryRoot     string // seed path for empty root_folders
 	ImportRoot      string
 	// YtDlpBin is the yt-dlp executable. Empty after Load; main sets via ytdlp.ResolveBin
@@ -44,6 +44,7 @@ func Load() Config {
 		YtDlpBin:              "", // main: ytdlp.ResolveBin
 		YtDlpPluginsDir:       paths.plugins,
 		YtDlpSystemPluginsDir: paths.systemPlugins,
+		FlareSolverrURL:       strings.TrimRight(strings.TrimSpace(os.Getenv("CREATORR_FLARESOLVERR_URL")), "/"),
 		PotProviderURL:        strings.TrimSpace(os.Getenv("CREATORR_POT_PROVIDER_URL")),
 		CacheDir:              paths.cache,
 		PublicBaseURL:         strings.TrimRight(strings.TrimSpace(getenv("CREATORR_PUBLIC_BASE_URL", "")), "/"),

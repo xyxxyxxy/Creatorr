@@ -31,13 +31,13 @@ Compose service **`creatorr-flaresolverr`** (`ghcr.io/flaresolverr/flaresolverr`
 
 | Piece | Detail |
 | --- | --- |
-| Env | `CREATORR_FLARESOLVERR_URL` one-shot seeds Settings `flare_solverr_url` when empty (Compose default `http://creatorr-flaresolverr:8191`). |
-| Settings | `flare_solverr_url` + Domain defaults / per-host **Use FlareSolverr**. UI/API refuse On without a URL; clearing the URL turns those flags off. |
+| Env | `CREATORR_FLARESOLVERR_URL` (Compose default `http://creatorr-flaresolverr:8191`). Empty = skip health probe and FlareSolverr pre-solve; boot clears Use FlareSolverr flags. |
+| Opt-in | Domain defaults / per-host **Use FlareSolverr** (Settings → Queue). UI/API refuse On without the env URL. |
 | Pre-solve | Creatorr calls FlareSolverr `request.get` (not yt-dlp `--flaresolverr`), merges cookies into a Netscape jar, passes `--cookies` / `--user-agent` to yt-dlp. |
 | Session | One browser session per hostname (`sessions.create`) while that domain lane has pending/running work; destroyed when the lane drains. `session_ttl_minutes` safety net on each get. |
 | Cookie cache | Successful clearance cookies are cached in-process (2–30 min) so warm lanes often skip Flare HTTP; cache miss still hits the warm session when open. |
 | Tasks UI | Lane header shield icon when Flare is effective: muted = enabled, `text-info` = session warm. |
-| Health | `/api/health` check `flaresolverr` probes the Settings URL (skipped if unset). |
+| Health | `/api/health` check `flaresolverr` probes the env URL (skipped if unset). Settings → General shows the same probe once on page load (Healthy join). |
 
 ## PO Token provider
 
@@ -49,17 +49,17 @@ Compose service **`creatorr-po-token`** (`brainicism/bgutil-ytdlp-pot-provider:*
 | Settings | `pot_fetch`: `auto` (default) / `always` / `never` → `youtube:fetch_pot=…` when URL is set. |
 | Trace | When URL is set and fetch is not `never`, Creatorr also passes `youtube:pot_trace=true` so mint/provider lines appear in task logs. |
 | Detect | yt-dlp output is scanned for provider failures (`Providers: none`, HTTP ping/mint errors) and successful mints (`Retrieved a … PO Token`). The task still succeeds on provider problems; Creatorr emits warning notification `pot_provider` (unread like alerts). Outcome is stored on the task as detail JSON `po-token` (`issued` / `failed` / `skipped` / `off`) and shown on the task Details row **PO token**. |
-| Health | `/api/health` check `pot_provider` probes `GET {URL}/ping` (skipped if URL unset). |
+| Health | `/api/health` check `pot_provider` probes `GET {URL}/ping` (skipped if URL unset). Settings → General shows the same probe once on page load (Healthy join). |
 | Local Go | `make pot-plugin` installs the zip under `var/yt-dlp-plugins/bgutil`; run a provider yourself and set `CREATORR_POT_PROVIDER_URL`. |
 
 Creatorr passes `--extractor-args youtubepot-bgutilhttp:base_url=…` when the env URL is set and fetch is not `never`.
 
 ## What Creatorr owns
 
-- FlareSolverr pre-solve when effective **Use FlareSolverr** is on for the host (Domain defaults or host On override) and Settings `flare_solverr_url` is set (see **FlareSolverr** above).
+- FlareSolverr pre-solve when effective **Use FlareSolverr** is on for the host (Domain defaults or host On override) and `CREATORR_FLARESOLVERR_URL` is set (see **FlareSolverr** above).
 - PO Token provider URL (env) + Settings **PO token fetch** mode (see above).
 - Netscape cookie jars (Settings → Queue; host jar, else `default`).
-- Pace flags from domain limits: `--limit-rate`; when `sleep_requests` > 0 also `--sleep-requests`, `--sleep-subtitles`, and `--sleep-interval` (same seconds; no `--max-sleep-interval`).
+- Pace flags from domain limits: `--limit-rate` from `download_rate_limit` (archive/scan/`cache_beginning`) or `stream_play_rate_limit` (stream_play mux/pipe only); when `sleep_requests` > 0 also `--sleep-requests`, `--sleep-subtitles`, and `--sleep-interval` (same seconds; no `--max-sleep-interval`). **`stream_play` never gets sleep** (client waits on bytes). Resolve (`urls`) for play has no pace flags.
 - Subtitle sidecars from Library settings (`subtitle_langs` / `subtitle_auto`): `--write-subs` + `--convert-subs srt` (never `--embed-subs`). Used on archive download, stream `pack_stream`, and Replace sidecars. Empty langs = off. Auto-only tracks are renamed to `.lang.auto.srt` after download.
 - Series `auto_ignore_media_types` → download `--match-filters` (`media_type!=…`); reject → `MediaTypeExcluded` (ignored, not download error). Stream `pack_stream` uses the same list against `media_type` from the `urls` extract (ignore before `.strm` / `cache_beginning`).
 - Remux (ffmpeg → MKV) and pack after download.

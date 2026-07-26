@@ -55,8 +55,8 @@ func main() {
 		log.Error("migrate external base URL", "err", err)
 		os.Exit(1)
 	}
-	if err := settings.MigrateFlareSolverrURLFromEnv(database); err != nil {
-		log.Error("migrate FlareSolverr URL", "err", err)
+	if err := settings.DropFlareSolverrURLSetting(database); err != nil {
+		log.Error("drop legacy FlareSolverr URL setting", "err", err)
 		os.Exit(1)
 	}
 	if err := library.SeedDefaults(database, cfg); err != nil {
@@ -135,12 +135,9 @@ func main() {
 	go (&scheduler.Scheduler{Library: lib, Log: log}).Run(ctx)
 	go (&stats.Sampler{DB: database, Log: log}).Run(ctx)
 
-	if flare, err := settings.Get(database, settings.KeyFlareSolverrURL); err == nil {
-		cfg.FlareSolverrURL = flare
-	}
-
+	healthChecker := &health.Checker{DB: database, Cfg: cfg}
 	srvImpl := &api.Server{
-		Health:  &health.Checker{DB: database, Cfg: cfg},
+		Health:  healthChecker,
 		Queue:   q,
 		Library: lib,
 		Events:  hub,
@@ -174,7 +171,9 @@ func main() {
 		r.Handle("/static/*", web.StaticHandler())
 		ui := &web.Handler{
 			Library: lib, Queue: q, YtDlp: ytClient,
-			PotProviderURL: cfg.PotProviderURL,
+			FlareSolverrURL: cfg.FlareSolverrURL,
+			PotProviderURL:  cfg.PotProviderURL,
+			Health:          healthChecker,
 		}
 		ui.Mount(r)
 	})

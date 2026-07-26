@@ -73,7 +73,7 @@
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
             Download rate limit
-            {{template "field_info" (dict "Info" "Maximum download rate within the given domain (yt-dlp --limit-rate). Unlimited skips the flag.")}}
+            {{template "field_info" (dict "Info" "Maximum download rate within the given domain (yt-dlp --limit-rate). Unlimited skips the flag. Also applies to beginning cache.")}}
           </span>
         </legend>
         {{template "download_rate_limit_join" (dict "Value" .DefaultLimits.DownloadRateLimit "Required" true)}}
@@ -81,8 +81,17 @@
       <fieldset class="fieldset">
         <legend class="fieldset-legend">
           <span class="inline-flex items-center gap-1">
+            Stream play rate limit
+            {{template "field_info" (dict "Info" "yt-dlp --limit-rate for live stream play mux/pipe only. Does not affect archive download, beginning cache, or sleep between requests. Unlimited skips the flag.")}}
+          </span>
+        </legend>
+        {{template "download_rate_limit_join" (dict "Name" "stream_play_rate_limit" "Value" .DefaultLimits.StreamPlayRateLimit "Required" true)}}
+      </fieldset>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">
+          <span class="inline-flex items-center gap-1">
             Sleep between requests
-            {{template "field_info" (dict "Info" "Seconds yt-dlp waits between HTTP requests (metadata, media fragments, and subtitles) to avoid rate limits. Same value for --sleep-requests, --sleep-subtitles, and --sleep-interval.")}}
+            {{template "field_info" (dict "Info" "Seconds yt-dlp waits between HTTP requests (metadata, media fragments, and subtitles) to avoid rate limits. Same value for --sleep-requests, --sleep-subtitles, and --sleep-interval. Does not apply to stream play.")}}
           </span>
         </legend>
         <div class="join w-full">
@@ -98,8 +107,8 @@
           "Label" "Use FlareSolverr"
           "Checked" (and .DefaultLimits.UseFlareSolverr .FlareConfigured)
           "Disabled" (not .FlareConfigured)
-          "DisabledTitle" "Set FlareSolverr URL in Settings → General first."
-          "Info" "Pre-solve CloudFlare challenges via Settings → General FlareSolverr URL for hosts that inherit this default."
+          "DisabledTitle" "Set CREATORR_FLARESOLVERR_URL first."
+          "Info" "Pre-solve CloudFlare challenges via CREATORR_FLARESOLVERR_URL for hosts that inherit this default."
         )}}
         {{template "cookie_jar_field" (dict
           "Value" .DefaultCookies
@@ -160,6 +169,7 @@
   "QueueOverride" .QueueOverride
   "ParallelOverride" .ParallelOverride
   "RateOverride" .RateOverride
+  "StreamPlayRateOverride" .StreamPlayRateOverride
   "SleepOverride" .SleepOverride
   "FlareOverride" .FlareOverride
   "CookieContent" .CookieContent
@@ -168,6 +178,7 @@
   "DefaultQueue" $defs.MaxDownloadQueue
   "DefaultParallel" $defs.MaxParallelTasks
   "DefaultRate" $defs.DownloadRateLimit
+  "DefaultStreamPlayRate" $defs.StreamPlayRateLimit
   "DefaultSleep" $defs.SleepRequests
   "DefaultFlare" $defs.UseFlareSolverr
   "FlareConfigured" $flareOK
@@ -200,6 +211,7 @@
   "DefaultQueue" .DefaultLimits.MaxDownloadQueue
   "DefaultParallel" .DefaultLimits.MaxParallelTasks
   "DefaultRate" .DefaultLimits.DownloadRateLimit
+  "DefaultStreamPlayRate" .DefaultLimits.StreamPlayRateLimit
   "DefaultSleep" .DefaultLimits.SleepRequests
   "DefaultFlare" .DefaultLimits.UseFlareSolverr
   "FlareConfigured" .FlareConfigured
