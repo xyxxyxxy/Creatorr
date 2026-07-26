@@ -82,14 +82,17 @@ type VideoListFilter struct {
 	Statuses  []string // empty = all statuses
 	SourceID  int64    // 0 = all sources
 	MediaType string   // non-empty exact match; empty query = all
-	Year      int      // UTC calendar year of upload_date; 0 = any year
+	Year      int      // UTC calendar year of upload_date; 0 = any; VideoYearUnknown = undated
 	FromDay   string   // YYYY-MM-DD inclusive; empty = no lower bound
 	ToDay     string   // YYYY-MM-DD inclusive; empty = no upper bound
 }
 
+// VideoYearUnknown selects videos with missing/empty upload_date (?year=unknown).
+const VideoYearUnknown = -1
+
 // Active reports whether any filter constraint is set.
 func (f VideoListFilter) Active() bool {
-	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID > 0 || strings.TrimSpace(f.MediaType) != "" || f.Year > 0 || f.FromDay != "" || f.ToDay != ""
+	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID > 0 || strings.TrimSpace(f.MediaType) != "" || f.Year != 0 || f.FromDay != "" || f.ToDay != ""
 }
 
 func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter) {
@@ -111,7 +114,10 @@ func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter
 		b.WriteString(` AND media_type = ? AND media_type != ''`)
 		*args = append(*args, mt)
 	}
-	if f.Year > 0 {
+	switch {
+	case f.Year == VideoYearUnknown:
+		b.WriteString(` AND (upload_date IS NULL OR trim(upload_date) = '')`)
+	case f.Year > 0:
 		// UTC calendar year of upload_date (same as year-season / {year}).
 		b.WriteString(` AND upload_date IS NOT NULL AND trim(upload_date) != ''`)
 		b.WriteString(` AND CAST(strftime('%Y', upload_date) AS INTEGER) = ?`)
@@ -350,8 +356,19 @@ func (s *Store) DistinctVideoStatuses(seriesID int64) ([]string, error) {
 	return out, rows.Err()
 }
 
-// DistinctVideoYears returns UTC calendar years present on a series upload_date (newest first).
-func (s *Store) DistinctVideoYears(seriesID int64) ([]int, error) {
+// DistinctVideoYears returns UTC calendar years present on a series upload_date
+// (newest first) and whether any video has a missing/empty upload_date.
+func (s *Store) DistinctVideoYears(seriesID int64) (years []int, unknown bool, err error) {
+	var nUnknown int
+	err = s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM videos
+		WHERE series_id = ?
+		  AND (upload_date IS NULL OR trim(upload_date) = '')
+	`, seriesID).Scan(&nUnknown)
+	if err != nil {
+		return nil, false, err
+	}
+	unknown = nUnknown > 0
 	rows, err := s.DB.SQL.Query(`
 		SELECT DISTINCT CAST(strftime('%Y', upload_date) AS INTEGER) AS y
 		FROM videos
@@ -360,20 +377,19 @@ func (s *Store) DistinctVideoYears(seriesID int64) ([]int, error) {
 		ORDER BY y DESC
 	`, seriesID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer rows.Close()
-	var out []int
 	for rows.Next() {
 		var y int
 		if err := rows.Scan(&y); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if y > 0 {
-			out = append(out, y)
+			years = append(years, y)
 		}
 	}
-	return out, rows.Err()
+	return years, unknown, rows.Err()
 }
 
 // CountVideosBySource returns video counts keyed by source_id for a series.

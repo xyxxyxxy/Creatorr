@@ -149,6 +149,8 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Series metadata saved (tvshow.nfo + art).")
 	case "video-metadata":
 		return flashOK("Episode metadata saved.")
+	case "video-metadata-busy":
+		return flashOK("Episode metadata saved. Rename skipped while a download or pack task is busy - run Apply episode format later.")
 	case "download":
 		return flashOK("Download now enqueued.")
 	case "prepare-stream":

@@ -1,15 +1,11 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes: all;
+  themes: emerald --default, dark --prefersdark, cupcake, dim, synthwave, forest, black, dracula, coffee, sunset, abyss, corporate, garden, fantasy, autumn, cyberpunk, valentine, halloween, aqua;
 }
-/* Dim/night ship --radius-selector: 1rem → checkboxes look circular (~1.5rem box).
+/* Dim ships --radius-selector: 1rem → checkboxes look circular (~1.5rem box).
    Squarer selectors match daisyUI checkbox docs (light uses ~0.25–0.5rem). */
 @plugin "daisyui/theme" {
   name: "dim";
-  --radius-selector: 0.25rem;
-}
-@plugin "daisyui/theme" {
-  name: "night";
   --radius-selector: 0.25rem;
 }
 

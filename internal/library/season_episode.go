@@ -163,8 +163,13 @@ func (s *Store) repackOneEpisodeNumbers(videoID int64, cfg NamingConfig, taskID 
 	if v.Status != "downloaded" && v.Status != "streamable" && v.Status != "verify_failed" {
 		return nil
 	}
-	if !v.Season.Valid || !v.Episode.Valid {
-		return nil
+	// Undated / cleared index rows leave season/episode NULL → year-season 0 (S0000).
+	season, episode := 0, 0
+	if v.Season.Valid {
+		season = int(v.Season.Int64)
+	}
+	if v.Episode.Valid {
+		episode = int(v.Episode.Int64)
 	}
 	ser, err := s.GetSeries(v.SeriesID, false)
 	if err != nil {
@@ -183,7 +188,7 @@ func (s *Store) repackOneEpisodeNumbers(videoID int64, cfg NamingConfig, taskID 
 		domain = namingDomain(v.SourceURL.String)
 	}
 	ok, _, fail := s.renameVideoEpisodeSet(taskID, videoID, ser.Title, v.Title, v.RemoteID,
-		int(v.Season.Int64), int(v.Episode.Int64), aired, domain, root.Path, cfg)
+		season, episode, aired, domain, root.Path, cfg)
 	if fail {
 		return fmt.Errorf("repack rename failed for video %d", videoID)
 	}

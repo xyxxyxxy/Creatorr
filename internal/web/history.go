@@ -318,27 +318,24 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 		{Value: queue.StatusFailed, Label: "Failure", Selected: statusSel == queue.StatusFailed},
 		{Value: queue.StatusCancelled, Label: "Cancelled", Selected: statusSel == queue.StatusCancelled},
 	}
-	selects := []listFilterSelect{{
-		Name: "status", AriaLabel: "Status", EmptyLabel: "All statuses", Options: statusOpts,
-	}}
 
 	domains, _ := h.Queue.DistinctHistoryDomains()
 	domainOpts := make([]listFilterOpt, 0, len(domains))
 	for _, d := range domains {
 		domainOpts = append(domainOpts, listFilterOpt{Value: d, Label: d, Selected: filter.Domain == d})
 	}
-	selects = append(selects, listFilterSelect{
-		Name: "domain", AriaLabel: "Domain", EmptyLabel: "All domains", Options: domainOpts,
-	})
 
 	kinds, _ := h.Queue.DistinctHistoryKinds()
 	kindOpts := make([]listFilterOpt, 0, len(kinds))
 	for _, k := range kinds {
 		kindOpts = append(kindOpts, listFilterOpt{Value: k, Label: k, Selected: filter.Kind == k})
 	}
-	selects = append(selects, listFilterSelect{
-		Name: "kind", AriaLabel: "Kind", EmptyLabel: "All kinds", Options: kindOpts,
-	})
+
+	selects := []listFilterSelect{
+		{Name: "domain", AriaLabel: "Domain", EmptyLabel: "All domains", Options: domainOpts},
+		{Name: "kind", AriaLabel: "Kind", EmptyLabel: "All kinds", Options: kindOpts},
+		{Name: "status", AriaLabel: "Status", EmptyLabel: "All statuses", Options: statusOpts},
+	}
 
 	levelOpts := []listFilterOpt{
 		{Value: notify.LevelInfo, Label: "Info", Selected: nFilter.Level == notify.LevelInfo},

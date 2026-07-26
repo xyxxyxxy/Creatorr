@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 func TestRefreshListedDoesNotCreate(t *testing.T) {
@@ -160,5 +161,87 @@ func TestEnqueueRefreshSidecarsVideo(t *testing.T) {
 	}
 	if _, err := s.EnqueueRefreshSidecarsVideo(res.VideoID); err == nil {
 		t.Fatal("want conflict on second enqueue")
+	}
+}
+
+func TestSoftFillVideoFromEntry(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "SoftFill", SourceURL: "https://www.example.com/@softfill",
+		RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "sf1", Title: "Keep Title", WebpageURL: "",
+		SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET description = '', thumbnail_url = NULL WHERE id = ?`, res.VideoID); err != nil {
+		t.Fatal(err)
+	}
+
+	err = s.SoftFillVideoFromEntry(res.VideoID, ytdlp.Entry{
+		ID: "sf1", Title: "Resolved Title", WebpageURL: "https://www.example.com/watch?v=sf1",
+		Description: "Filled plot", ThumbnailURL: "https://cdn.example.com/t.jpg",
+		UploadDate: "2024-07-04T00:00:00Z", MediaType: "video", Duration: 90,
+		Categories: []string{"Education"},
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.GetVideo(res.VideoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Title != "Keep Title" {
+		t.Fatalf("title clobbered: %q", v.Title)
+	}
+	if v.Description != "Filled plot" {
+		t.Fatalf("description=%q", v.Description)
+	}
+	if !v.SourceURL.Valid || v.SourceURL.String != "https://www.example.com/watch?v=sf1" {
+		t.Fatalf("source_url=%v", v.SourceURL)
+	}
+	if !v.ThumbnailURL.Valid || v.ThumbnailURL.String != "https://cdn.example.com/t.jpg" {
+		t.Fatalf("thumb=%v", v.ThumbnailURL)
+	}
+	if !v.UploadDate.Valid || library.UploadCalendarDate(v.UploadDate.String) != "2024-07-04" {
+		t.Fatalf("upload_date=%v", v.UploadDate)
+	}
+	if !v.Season.Valid || int(v.Season.Int64) != 2024 || !v.Episode.Valid || int(v.Episode.Int64) != 70400 {
+		t.Fatalf("season/episode=%v/%v", v.Season, v.Episode)
+	}
+	if !v.DurationSeconds.Valid || v.DurationSeconds.Int64 != 90 {
+		t.Fatalf("duration=%v", v.DurationSeconds)
+	}
+	if len(v.Genres) != 1 || v.Genres[0] != "Education" {
+		t.Fatalf("genres=%v", v.Genres)
+	}
+
+	// Second soft-fill must not clobber operator / first-seen values.
+	err = s.SoftFillVideoFromEntry(res.VideoID, ytdlp.Entry{
+		Title: "Other", Description: "Other plot", UploadDate: "2025-01-01T00:00:00Z",
+		Categories: []string{"News"},
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v2, err := s.GetVideo(res.VideoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v2.Title != "Keep Title" || v2.Description != "Filled plot" {
+		t.Fatalf("clobbered after second fill title=%q plot=%q", v2.Title, v2.Description)
+	}
+	if library.UploadCalendarDate(v2.UploadDate.String) != "2024-07-04" {
+		t.Fatalf("upload_date clobbered: %v", v2.UploadDate)
+	}
+	if len(v2.Genres) != 1 || v2.Genres[0] != "Education" {
+		t.Fatalf("genres clobbered: %v", v2.Genres)
 	}
 }

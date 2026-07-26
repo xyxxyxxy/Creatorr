@@ -20,7 +20,8 @@
   <label for="modal-add-series" class="btn btn-primary w-full sm:w-auto">Add series</label>
 </div>
 {{else}}
-<label class="form-control w-full max-w-xl">
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full items-start">
+<label class="form-control w-full min-w-0">
   <div class="label py-1"><span class="label-text text-sm opacity-70">Scan folder</span></div>
   <div class="join w-full">
     <select id="import-scan-scope" class="select select-bordered join-item font-mono text-sm grow min-w-0" aria-label="Scan folder">
@@ -32,7 +33,7 @@
     <button type="button" class="btn join-item shrink-0" id="btn-import-rescan" title="Scan again for new files without changing current matches">Rescan</button>
   </div>
 </label>
-<details class="collapse collapse-arrow bg-base-100 border border-base-300 max-w-3xl">
+<details class="collapse collapse-arrow bg-base-100 border border-base-300 w-full min-w-0">
   <summary class="collapse-title font-medium text-sm min-h-0 py-3">File matching</summary>
   <div class="collapse-content text-sm">
     <ol class="list-decimal pl-5 space-y-1">
@@ -48,6 +49,7 @@
     </ol>
   </div>
 </details>
+</div>
 <div class="list-actions flex flex-wrap items-center justify-between gap-3" id="import-bulk">
   <div class="flex flex-wrap items-center gap-3 min-w-0">
     <div class="join">
@@ -1177,12 +1179,12 @@ function roleLabel(role) {
   }
 }
 
-/** Icon-only role mark (no tooltip). */
+/** Icon role mark; tooltip = filename. */
 function roleIconMark(c) {
   const role = c.role || 'video';
   const name = fileNameTip(c);
   const label = escapeHtml(roleLabel(role)) + (name ? ': ' + name : '');
-  return `<span class="inline-flex shrink-0" aria-label="${label}">
+  return `<span class="tooltip tooltip-top inline-flex shrink-0" data-tip="${name}" aria-label="${label}">
     <i data-lucide="${roleIcon(role)}" class="size-4 opacity-70" aria-hidden="true"></i>
   </span>`;
 }

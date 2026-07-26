@@ -250,6 +250,12 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "Not configured") && !strings.Contains(body, "Healthy") && !strings.Contains(body, "Unreachable") {
 				t.Fatalf("%s missing health status label", path)
 			}
+			if !strings.Contains(body, "Appearance") || !strings.Contains(body, `name="theme-picker"`) || !strings.Contains(body, `value="cyberpunk"`) {
+				t.Fatalf("%s missing theme picker", path)
+			}
+			if strings.Contains(body, `id="theme-menu"`) || strings.Contains(body, `data-theme-toggle`) {
+				t.Fatalf("%s still has navbar theme controls", path)
+			}
 			if strings.Contains(body, `name="flare_solverr_url"`) {
 				t.Fatalf("%s still posts flare_solverr_url", path)
 			}

@@ -20,4 +20,10 @@ func TestVideoListFilterActive(t *testing.T) {
 	if !(VideoListFilter{Statuses: []string{"wanted"}}).Active() {
 		t.Fatal("status should be active")
 	}
+	if !(VideoListFilter{Year: 2024}).Active() {
+		t.Fatal("year should be active")
+	}
+	if !(VideoListFilter{Year: VideoYearUnknown}).Active() {
+		t.Fatal("unknown year should be active")
+	}
 }

@@ -28,7 +28,8 @@ type videoMetadataView struct {
 	ThumbMtime        int64
 	Open              bool
 	SeasonEpisodeHint string
-	AiredHint         string
+	UploadDateDay     string // YYYY-MM-DD for type=date
+	UploadDateTime    string // HH:MM for type=time; empty = optional unset
 }
 
 func (h *Handler) buildVideoMetadataView(ser *library.Series, video *library.Video) videoMetadataView {
@@ -54,11 +55,7 @@ func (h *Handler) buildVideoMetadataView(ser *library.Series, video *library.Vid
 		v.SeasonEpisodeHint = fmt.Sprintf("S%dE%d", video.Season.Int64, video.Episode.Int64)
 	}
 	if video.UploadDate.Valid {
-		day := library.UploadCalendarDate(video.UploadDate.String)
-		if day == "" {
-			day = video.UploadDate.String
-		}
-		v.AiredHint = day
+		v.UploadDateDay, v.UploadDateTime = library.UploadFormParts(video.UploadDate.String)
 	}
 	return v
 }
@@ -194,7 +191,7 @@ func (h *Handler) actionSaveVideoMetadata(w http.ResponseWriter, r *http.Request
 			uidVal = d.UniqueIDValue
 		}
 	}
-	err = h.Library.SaveVideoMetadata(vid, library.SaveVideoMetadataParams{
+	outcome, err := h.Library.SaveVideoMetadata(vid, library.SaveVideoMetadataParams{
 		Title:         r.FormValue("title"),
 		Plot:          r.FormValue("plot"),
 		SortTitle:     r.FormValue("sorttitle"),
@@ -208,6 +205,7 @@ func (h *Handler) actionSaveVideoMetadata(w http.ResponseWriter, r *http.Request
 		Tagline:       r.FormValue("tagline"),
 		Country:       r.FormValue("country"),
 		MPAA:          r.FormValue("mpaa"),
+		UploadDate: library.CombineUploadFormDateTime(r.FormValue("upload_date"), r.FormValue("upload_time")),
 		ThumbSrc:      thumbSrc,
 		ThumbClear:    thumbClear,
 	})
@@ -218,7 +216,11 @@ func (h *Handler) actionSaveVideoMetadata(w http.ResponseWriter, r *http.Request
 	if draftTID > 0 {
 		_ = h.Library.ClearVideoPrefetchDraft(vid, draftTID)
 	}
-	http.Redirect(w, r, redir+"?ok=video-metadata", http.StatusSeeOther)
+	ok := "video-metadata"
+	if outcome.RenameSkippedBusy {
+		ok = "video-metadata-busy"
+	}
+	http.Redirect(w, r, redir+"?ok="+ok, http.StatusSeeOther)
 }
 
 func (h *Handler) actionVideoMetadataPrefetch(w http.ResponseWriter, r *http.Request) {

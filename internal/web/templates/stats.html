@@ -10,7 +10,6 @@
   Total media bytes (<span class="font-mono">kind=video</span>).{{if gt .RootCount 1}} Split by root folder and by series.{{else}} Split by series.{{end}}
   Click a series slice to open that series.
 </p>
-<p id="library-size-total" class="text-xl font-semibold mb-4">-</p>
 <div class="grid gap-4{{if gt .RootCount 1}} lg:grid-cols-2{{end}}">
   {{if gt .RootCount 1}}
   <div>
@@ -56,7 +55,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const storageEl = document.getElementById("chart-storage");
   const sizeRootEl = document.getElementById("chart-library-size-root");
   const sizeSeriesEl = document.getElementById("chart-library-size-series");
-  const sizeTotalEl = document.getElementById("library-size-total");
   const emptyEl = document.getElementById("stats-empty");
   if (typeof echarts === "undefined") {
     emptyEl.classList.remove("hidden");
@@ -230,7 +228,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const results = await Promise.all(jobs);
     const seriesData = sizeRootChart ? results[1] : results[0];
     const rootData = sizeRootChart ? results[0] : null;
-    sizeTotalEl.textContent = formatBytes(seriesData.total_bytes || 0);
     if (sizeRootChart && rootData) {
       sizeRootChart.setOption(pieOption(rootData.slices || [], "default"), true);
     }

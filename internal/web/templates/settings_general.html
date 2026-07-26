@@ -106,6 +106,16 @@
 {{end}}
 {{template "list_panel_end"}}
 
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <div class="card-body gap-3">
+    <fieldset class="fieldset gap-3">
+      <legend class="fieldset-legend text-lg font-semibold">Appearance</legend>
+      <p class="text-sm opacity-60">Theme for this browser only (not saved with Settings). Default follows the OS until you pick one.</p>
+      {{template "theme_picker"}}
+    </fieldset>
+  </div>
+</section>
+
 {{$redir := "/settings/general"}}
 {{$evOpts := .EventOptions}}
 {{template "notify_channel_modal" (dict

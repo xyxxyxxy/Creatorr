@@ -1,15 +1,31 @@
 (() => {
   const THEME_KEY = "creatorr-theme";
-  const THEME_LIGHT = "light";
-  const THEME_DARK = "dim"; // OS dark + sun/moon dark side
-  // daisyUI themeOrder - keep in sync with node_modules/daisyui/functions/themeOrder.js
-  const THEMES = [
-    "light", "dark", "cupcake", "bumblebee", "emerald", "corporate", "synthwave", "retro",
-    "cyberpunk", "valentine", "halloween", "garden", "forest", "aqua", "lofi", "pastel",
-    "fantasy", "wireframe", "black", "luxury", "dracula", "cmyk", "autumn", "business",
-    "acid", "lemonade", "night", "coffee", "winter", "dim", "nord", "sunset",
-    "caramellatte", "abyss", "silk",
-  ];
+  const THEME_LIGHT = "emerald"; // OS light fallback
+  const THEME_DARK = "dark"; // OS dark fallback
+  const THEME_GROUPS = {
+    dark: ["dark", "synthwave", "forest", "black", "dracula", "coffee", "dim", "sunset", "abyss"],
+    light: ["cupcake", "emerald", "corporate", "garden", "fantasy", "autumn"],
+    special: ["cyberpunk", "valentine", "halloween", "aqua"],
+  };
+  const THEMES = [].concat(THEME_GROUPS.dark, THEME_GROUPS.light, THEME_GROUPS.special);
+  const LEGACY_THEMES = {
+    light: "emerald",
+    night: "dark",
+    bumblebee: "cupcake",
+    retro: "cupcake",
+    lofi: "cupcake",
+    pastel: "cupcake",
+    wireframe: "cupcake",
+    luxury: "dracula",
+    cmyk: "cupcake",
+    business: "corporate",
+    acid: "cupcake",
+    lemonade: "cupcake",
+    winter: "cupcake",
+    nord: "dark",
+    caramellatte: "cupcake",
+    silk: "cupcake",
+  };
 
   function osTheme() {
     try {
@@ -19,14 +35,20 @@
     }
   }
 
+  function normalizeTheme(t) {
+    if (typeof t !== "string") return null;
+    if (THEMES.includes(t)) return t;
+    if (LEGACY_THEMES[t]) return LEGACY_THEMES[t];
+    return null;
+  }
+
   function isTheme(t) {
-    return typeof t === "string" && THEMES.includes(t);
+    return normalizeTheme(t) != null;
   }
 
   function storedTheme() {
     try {
-      const t = localStorage.getItem(THEME_KEY);
-      if (isTheme(t)) return t;
+      return normalizeTheme(localStorage.getItem(THEME_KEY));
     } catch (_) {}
     return null;
   }
@@ -35,25 +57,14 @@
     return storedTheme() || osTheme();
   }
 
-  function isDarkScheme() {
-    try {
-      return getComputedStyle(document.documentElement).getPropertyValue("color-scheme").includes("dark");
-    } catch (_) {
-      return false;
-    }
-  }
-
   function syncThemeControls(theme) {
-    document.querySelectorAll("[data-theme-toggle]").forEach((el) => {
-      el.checked = isDarkScheme();
-    });
-    document.querySelectorAll('input[name="theme-dropdown"]').forEach((el) => {
+    document.querySelectorAll('input[name="theme-picker"]').forEach((el) => {
       el.checked = el.value === theme;
     });
   }
 
   function applyTheme(theme, opts) {
-    const t = isTheme(theme) ? theme : osTheme();
+    const t = normalizeTheme(theme) || osTheme();
     document.documentElement.setAttribute("data-theme", t);
     syncThemeControls(t);
     if (opts && opts.persist) {
@@ -64,35 +75,11 @@
     window.dispatchEvent(new CustomEvent("creatorr:theme", { detail: { theme: t } }));
   }
 
-  function buildThemeMenu() {
-    const ul = document.getElementById("theme-menu");
-    if (!ul || ul.dataset.ready === "1") return;
-    ul.dataset.ready = "1";
-    const cur = resolveTheme();
-    THEMES.forEach((name) => {
-      const li = document.createElement("li");
-      const input = document.createElement("input");
-      input.type = "radio";
-      input.name = "theme-dropdown";
-      input.value = name;
-      input.className = "theme-controller btn btn-sm btn-block btn-ghost justify-start w-full";
-      input.setAttribute("aria-label", name);
-      input.autocomplete = "off";
-      if (name === cur) input.checked = true;
-      input.addEventListener("change", () => {
-        if (input.checked) applyTheme(name, { persist: true });
-      });
-      li.appendChild(input);
-      ul.appendChild(li);
-    });
-  }
-
   function initTheme() {
-    buildThemeMenu();
     applyTheme(resolveTheme(), { persist: false });
-    document.querySelectorAll("[data-theme-toggle]").forEach((el) => {
+    document.querySelectorAll('input[name="theme-picker"]').forEach((el) => {
       el.addEventListener("change", () => {
-        applyTheme(el.checked ? THEME_DARK : THEME_LIGHT, { persist: true });
+        if (el.checked) applyTheme(el.value, { persist: true });
       });
     });
     try {

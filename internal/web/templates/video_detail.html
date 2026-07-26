@@ -134,7 +134,7 @@
   <tr><th class="w-40">Size</th><td>{{.SizeLabel}}</td></tr>
   {{end}}
   {{if .Video.SourceURL.Valid}}
-  <tr><th class="w-40">Source URL</th><td class="text-xs break-all"><a class="link" href="{{.Video.SourceURL.String}}" target="_blank" rel="noopener">{{displayURL .Video.SourceURL.String}}</a></td></tr>
+  <tr><th class="w-40">Source URL</th><td class="text-xs break-all"><a class="link" href="{{.Video.SourceURL.String}}" target="_blank" rel="noopener">{{.Video.SourceURL.String}}</a></td></tr>
   {{else}}
   {{template "detail_row" (dict "Label" "Source URL" "TdClass" "text-xs break-all")}}
   {{end}}
@@ -162,7 +162,7 @@
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Video and sidecar files beside the packed media (NFO, info.json, thumbnail, subtitles, SponsorBlock plan, and other stem-matched companions). Registered subtitles, thumbnails, and other companions can be deleted individually (confirm). NFO, info.json, stream links, SponsorBlock plans, and media cannot.")}}
+{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Video and sidecar files beside the packed media.")}}
 {{if not .Files}}
 {{template "list_empty" "No files yet."}}
 {{else}}

@@ -618,6 +618,17 @@ func sidecarUploadTime(s string) string {
 	if t, ok := ParseUploadTime(s); ok {
 		return t.UTC().Format(time.RFC3339)
 	}
+	// Form / datetime-local style (UTC, no zone suffix).
+	for _, layout := range []string{
+		"2006-01-02T15:04:05",
+		"2006-01-02T15:04",
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",
+	} {
+		if t, err := time.ParseInLocation(layout, s, time.UTC); err == nil {
+			return t.Format(time.RFC3339)
+		}
+	}
 	compact := strings.ReplaceAll(s, "-", "")
 	if len(compact) >= 8 {
 		if t, err := time.ParseInLocation("20060102", compact[:8], time.UTC); err == nil {
@@ -625,6 +636,59 @@ func sidecarUploadTime(s string) string {
 		}
 	}
 	return ""
+}
+
+// uploadFormHasTime reports whether a Metadata upload_date form value includes a clock time.
+// Date-only YYYY-MM-DD / YYYYMMDD → false; datetime-local / RFC3339 → true.
+func uploadFormHasTime(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	if len(raw) == 10 && raw[4] == '-' && raw[7] == '-' {
+		return false
+	}
+	compact := strings.ReplaceAll(raw, "-", "")
+	if len(compact) == 8 && !strings.ContainsAny(raw, "T :") {
+		return false
+	}
+	return true
+}
+
+// UploadFormParts splits a stored upload_date for the Metadata date+time join (UTC).
+// Midnight → day only with empty clock (time optional). Non-midnight → HH:MM.
+func UploadFormParts(raw string) (day, clock string) {
+	t, ok := ParseUploadTime(raw)
+	if !ok {
+		return "", ""
+	}
+	t = t.UTC()
+	day = t.Format("2006-01-02")
+	if t.Hour() == 0 && t.Minute() == 0 && t.Second() == 0 && t.Nanosecond() == 0 {
+		return day, ""
+	}
+	return day, t.Format("15:04")
+}
+
+// CombineUploadFormDateTime joins Metadata date + optional time fields into a value
+// for SaveVideoMetadata (YYYY-MM-DD or YYYY-MM-DDTHH:MM). Empty day clears.
+func CombineUploadFormDateTime(day, clock string) string {
+	day = strings.TrimSpace(day)
+	clock = strings.TrimSpace(clock)
+	if day == "" {
+		return ""
+	}
+	if clock == "" {
+		return day
+	}
+	return day + "T" + clock
+}
+
+// UploadFormValue formats a stored upload_date for display/tests (UTC).
+// Midnight → YYYY-MM-DD; otherwise YYYY-MM-DDTHH:MM.
+func UploadFormValue(raw string) string {
+	day, clock := UploadFormParts(raw)
+	return CombineUploadFormDateTime(day, clock)
 }
 
 func deriveImportRemoteID(path string) string {

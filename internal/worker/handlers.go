@@ -224,7 +224,7 @@ func PackStreamHandler(d Deps) TaskHandler {
 		}
 		videoID := t.VideoID.Int64
 		progress("Resolving stream…", nil)
-		resolved, err := resolveStreamForPack(ctx, d, videoID)
+		resolved, err := resolveStreamForPack(ctx, d, videoID, t.ID)
 		runtimeSec := 0
 		if err == nil {
 			runtimeSec = resolved.RuntimeSec
@@ -707,7 +707,7 @@ type packStreamResolve struct {
 	IsLive     bool
 }
 
-func resolveStreamForPack(ctx context.Context, d Deps, videoID int64) (packStreamResolve, error) {
+func resolveStreamForPack(ctx context.Context, d Deps, videoID, taskID int64) (packStreamResolve, error) {
 	var out packStreamResolve
 	dlctx, err := d.Library.PrepareDownload(videoID)
 	if err != nil {
@@ -755,22 +755,32 @@ func resolveStreamForPack(ctx context.Context, d Deps, videoID int64) (packStrea
 	out.Kind = kind
 	if urls.DurationSeconds > 0 {
 		out.RuntimeSec = int(urls.DurationSeconds + 0.5)
-		return out, nil
 	}
-	// Fallback: resolve metadata for duration (and media_type / is_live if still unknown).
-	e, err := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
+
+	// Always Resolve for empty-column soft-fill (title/date/thumb/…). Soft-ok on resolve failure.
+	e, rerr := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
 		URL: dlctx.URL, CookiesPath: jar, FlareSolverrURL: flare,
 	})
-	if err != nil || e.Duration <= 0 {
-		return out, err
+	if rerr == nil {
+		// urls wins for duration / media_type / live when present.
+		if out.RuntimeSec == 0 && e.Duration > 0 {
+			out.RuntimeSec = int(e.Duration + 0.5)
+		}
+		if out.MediaType == "" {
+			out.MediaType = library.NormalizeMediaType(e.MediaType)
+		}
+		if e.IsLive {
+			out.IsLive = true
+		}
+		fill := e
+		if urls.DurationSeconds > 0 {
+			fill.Duration = urls.DurationSeconds
+		}
+		if mt := library.NormalizeMediaType(urls.MediaType); mt != "" {
+			fill.MediaType = mt
+		}
+		_ = d.Library.SoftFillVideoFromEntry(videoID, fill, taskID)
 	}
-	if out.MediaType == "" {
-		out.MediaType = library.NormalizeMediaType(e.MediaType)
-	}
-	if e.IsLive {
-		out.IsLive = true
-	}
-	out.RuntimeSec = int(e.Duration + 0.5)
 	return out, nil
 }
 

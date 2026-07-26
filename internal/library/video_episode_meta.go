@@ -32,19 +32,31 @@ type SaveVideoMetadataParams struct {
 	Tagline       string
 	Country       string
 	MPAA          string
+	// UploadDate is empty to clear, YYYY-MM-DD (midnight UTC), or date+time
+	// (YYYY-MM-DDTHH:MM / RFC3339). Time is optional in the Metadata form.
+	UploadDate string
 	// ThumbSrc is a local path to copy as the episode thumb (upload or prefetch cache). Empty = leave.
 	ThumbSrc string
 	// ThumbClear deletes the registered thumb sidecar on disk.
 	ThumbClear bool
 }
 
+// SaveVideoMetadataOutcome reports side effects of SaveVideoMetadata.
+type SaveVideoMetadataOutcome struct {
+	// RenameSkippedBusy is true when upload_date day change needed a rename but this video
+	// had a pending/running download/pack task (peers may still have renamed).
+	RenameSkippedBusy bool
+}
+
 // SaveVideoMetadata writes DB fields, applies optional thumb ops, and rewrites episode NFO.
-// Does not rename media paths or change remote_id / source_url.
+// Upload date changes reindex season/episode and rename packed file sets when the path changes.
+// Title-only saves do not rename. Does not change remote_id / source_url.
 // Sidecar refresh (yt-dlp re-fetch) remains a separate task (EnqueueRefreshSidecarsVideo).
-func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) error {
+func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (SaveVideoMetadataOutcome, error) {
+	var out SaveVideoMetadataOutcome
 	v, err := s.GetVideo(videoID)
 	if err != nil {
-		return err
+		return out, err
 	}
 	title := strings.TrimSpace(p.Title)
 	if title == "" {
@@ -53,27 +65,108 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) erro
 	sortTitle := omitWhenEqualTitle(p.SortTitle, title)
 	origTitle := omitWhenEqualTitle(p.OriginalTitle, title)
 	uidType, uidVal := coalesceUniqueID(p.UniqueIDType, p.UniqueIDValue, v.UniqueIDType, v.UniqueIDValue)
+
+	oldDay := ""
+	if v.UploadDate.Valid {
+		oldDay = UploadCalendarDate(v.UploadDate.String)
+	}
+	uploadRaw := strings.TrimSpace(p.UploadDate)
+	var uploadVal any
+	newDay := ""
+	hasTime := false
+	normalized := ""
+	if uploadRaw != "" {
+		normalized = sidecarUploadTime(uploadRaw)
+		if normalized == "" {
+			return out, fmt.Errorf("%w: upload_date must be YYYY-MM-DD or YYYY-MM-DDTHH:MM (UTC)", ErrInvalid)
+		}
+		newDay = UploadCalendarDate(normalized)
+		hasTime = uploadFormHasTime(uploadRaw)
+		// Date-only on same calendar day: keep existing timestamp (ordering / maturity).
+		if !hasTime && newDay == oldDay && v.UploadDate.Valid {
+			uploadVal = v.UploadDate.String
+		} else {
+			uploadVal = normalized
+		}
+	}
+
 	_, err = s.DB.SQL.Exec(`
 		UPDATE videos SET
 		  title = ?, description = ?,
 		  sorttitle = ?, originaltitle = ?, studio = ?,
 		  genres = ?, tags = ?, uniqueid_type = ?, uniqueid_value = ?,
-		  actors = ?, tagline = ?, country = ?, mpaa = ?
+		  actors = ?, tagline = ?, country = ?, mpaa = ?,
+		  upload_date = ?
 		WHERE id = ?
 	`, title, strings.TrimSpace(p.Plot),
 		sortTitle, origTitle, strings.TrimSpace(p.Studio),
 		encodeStringSlice(p.Genres), encodeStringSlice(p.Tags),
 		uidType, uidVal,
 		encodeActors(p.Actors), strings.TrimSpace(p.Tagline), strings.TrimSpace(p.Country),
-		strings.TrimSpace(p.MPAA), videoID)
+		strings.TrimSpace(p.MPAA), uploadVal, videoID)
 	if err != nil {
-		return err
+		return out, err
 	}
+
+	dayChanged := newDay != oldDay
+	timeChangedSameDay := false
+	if !dayChanged && newDay != "" && hasTime {
+		prevNorm := ""
+		if v.UploadDate.Valid {
+			prevNorm = NormalizeUploadTime(v.UploadDate.String)
+		}
+		if prevNorm != normalized {
+			timeChangedSameDay = true
+		}
+	}
+	if dayChanged || timeChangedSameDay {
+		var changed []int64
+		if newDay == "" {
+			if _, err := s.DB.SQL.Exec(`UPDATE videos SET season = NULL, episode = NULL WHERE id = ?`, videoID); err != nil {
+				return out, err
+			}
+			changed = append(changed, videoID)
+		} else {
+			c, rerr := s.ReindexSeriesUTCDay(v.SeriesID, newDay)
+			if rerr != nil {
+				return out, rerr
+			}
+			changed = append(changed, c...)
+		}
+		if dayChanged && oldDay != "" && oldDay != newDay {
+			c, rerr := s.ReindexSeriesUTCDay(v.SeriesID, oldDay)
+			if rerr != nil {
+				return out, rerr
+			}
+			changed = append(changed, c...)
+		}
+		if busy, berr := s.videoBusyForRename(videoID); berr == nil && busy {
+			out.RenameSkippedBusy = true
+		}
+		_ = s.repackEpisodeNumberChanges(uniqInt64(changed), 0)
+	}
+
 	if err := s.applyVideoThumbEdit(videoID, p.ThumbSrc, p.ThumbClear); err != nil {
-		return err
+		return out, err
 	}
 	_, err = s.RewriteVideoNFO(videoID, 0)
-	return err
+	return out, err
+}
+
+func uniqInt64(ids []int64) []int64 {
+	if len(ids) < 2 {
+		return ids
+	}
+	seen := make(map[int64]struct{}, len(ids))
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 // applyVideoThumbEdit installs or clears the episode thumb beside the pack anchor.
