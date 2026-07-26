@@ -3,12 +3,12 @@
 {{template "breadcrumbs" (list
   (dict "Href" "/series" "Label" "Series" "Icon" "tv")
   (dict "Href" (printf "/series/%d" .Series.ID) "Label" .Series.Title "Icon" "clapperboard")
-  (dict "Label" .Video.Title "Icon" "film")
+	(dict "Label" .Video.Title "Icon" "square-play")
 )}}
 <div class="navbar bg-base-100 border border-base-300 rounded-box px-3 mb-4 min-h-14 gap-2 flex-wrap">
   <div class="flex-1 min-w-0">
     <h1 class="text-xl font-semibold truncate inline-flex items-center gap-2 max-w-full">
-      <i data-lucide="film" class="size-5 shrink-0"></i>
+      <i data-lucide="square-play" class="size-5 shrink-0"></i>
       <span class="truncate">{{.Video.Title}}</span>
     </h1>
   </div>
@@ -59,7 +59,7 @@
       "IsStream" .IsStream
       "Redirect" (printf "/series/%d/videos/%d" .Series.ID .Video.ID)
       "Class" "btn btn-neutral"
-      "DeleteClass" "btn btn-error"
+      "DeleteClass" "btn btn-soft btn-error"
     }}
     {{template "video_delivery_actions" $delivery}}
     {{template "want_ignore_button" $wantIgnore}}
@@ -154,24 +154,32 @@
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Video and sidecar files beside the packed media (NFO, info.json, thumbnail, subtitles, SponsorBlock plan, and other stem-matched companions).")}}
+{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Video and sidecar files beside the packed media (NFO, info.json, thumbnail, subtitles, SponsorBlock plan, and other stem-matched companions). Registered subtitles, thumbnails, and other companions can be deleted individually (confirm). NFO, info.json, stream links, SponsorBlock plans, and media cannot.")}}
 {{if not .Files}}
 {{template "list_empty" "No files yet."}}
 {{else}}
 {{template "list_table"}}
-<thead><tr><th>Type</th><th>File</th><th>Size</th><th></th></tr></thead>
+<thead><tr><th>Type</th><th>File</th><th>Size</th><th class="w-14"></th></tr></thead>
 <tbody>
   {{range .Files}}
   <tr>
     <td class="whitespace-nowrap">
       <span class="inline-flex items-center gap-1.5">
+        {{if .Missing}}
+        <span class="tooltip tooltip-top inline-flex shrink-0" data-tip="file missing" aria-label="file missing">
+          <i data-lucide="file-exclamation-point" class="size-4 text-warning"></i>
+        </span>
+        {{else}}
         <i data-lucide="{{.Icon}}" class="size-4 shrink-0 opacity-70"></i>
+        {{end}}
         <span>{{.KindLabel}}</span>
       </span>
     </td>
     <td class="text-sm break-all">
       {{if .Missing}}
-      <code class="text-xs opacity-60 tooltip tooltip-top" data-tip="{{.Path}}">{{.Name}}</code>
+      <span class="tooltip tooltip-top inline-flex max-w-full" data-tip="{{.Path}}">
+        <code class="text-xs opacity-60">{{.Name}}</code>
+      </span>
       {{else if .ViewHref}}
       <a class="link link-hover" href="{{.ViewHref}}">
         <code class="text-xs">{{.Name}}</code>
@@ -181,13 +189,22 @@
       {{end}}
     </td>
     <td class="text-xs whitespace-nowrap tabular-nums">{{if eq .SizeLabel "-"}}{{template "empty_value"}}{{else}}{{.SizeLabel}}{{end}}</td>
-    <td class="whitespace-nowrap text-right">
-      {{if .Missing}}<span class="badge badge-warning badge-sm tooltip tooltip-top" data-tip="Path recorded but file not on disk">missing</span>{{end}}
+    <td class="text-right">
+      {{if .CanDelete}}
+      <label for="modal-delete-sidecar-{{.ID}}" class="btn btn-soft btn-error btn-square btn-sm tooltip tooltip-top" data-tip="Delete" aria-label="Delete {{.Name}}">
+        <i data-lucide="trash-2" class="size-4" aria-hidden="true"></i>
+      </label>
+      {{end}}
     </td>
   </tr>
   {{end}}
 </tbody>
 {{template "list_table_end"}}
+{{range .Files}}
+{{if .CanDelete}}
+{{template "delete_sidecar_modal" (dict "FileID" .ID "SeriesID" $.Series.ID "VideoID" $.Video.ID "Name" .Name "KindLabel" .KindLabel)}}
+{{end}}
+{{end}}
 {{end}}
 {{template "list_panel_end"}}
 

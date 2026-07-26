@@ -13,6 +13,9 @@
     {{if not .Missing}}
     <a class="btn btn-outline" href="{{.RawHref}}?download=1">Download</a>
     {{end}}
+    {{if .CanDelete}}
+    <label for="modal-delete-sidecar-{{.FileID}}" class="btn btn-soft btn-error">Delete</label>
+    {{end}}
   </div>
 </div>
 
@@ -72,6 +75,10 @@
 </tbody>
 {{template "list_table_end"}}
 {{template "list_panel_end"}}
+
+{{if .CanDelete}}
+{{template "delete_sidecar_modal" (dict "FileID" .FileID "SeriesID" .Series.ID "VideoID" .Video.ID "Name" .Name "KindLabel" .KindLabel "Redirect" (printf "/series/%d/videos/%d" .Series.ID .Video.ID))}}
+{{end}}
 
 {{template "foot" .}}
 {{end}}

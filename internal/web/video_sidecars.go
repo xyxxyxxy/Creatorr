@@ -28,6 +28,7 @@ type videoFileView struct {
 	SizeLabel string
 	Missing   bool
 	ViewHref  string // file detail page
+	CanDelete bool   // registered sub/thumb/other
 }
 
 func videoFileViews(lib *library.Store, seriesID, videoID int64, files []library.VideoFile) []videoFileView {
@@ -47,8 +48,9 @@ func videoFileViews(lib *library.Store, seriesID, videoID int64, files []library
 		}
 		if f.ID > 0 {
 			v.ViewHref = fmt.Sprintf("/series/%d/videos/%d/files/%d", seriesID, videoID, f.ID)
+			v.CanDelete = library.DeletableSidecarKind(f.Kind)
 		}
-		if f.SizeBytes.Valid {
+		if f.SizeBytes.Valid && f.SizeBytes.Int64 >= 0 {
 			v.SizeLabel = library.FormatBytes(f.SizeBytes.Int64)
 		} else if st, err := os.Stat(f.Path); err == nil && !st.IsDir() {
 			v.SizeLabel = library.FormatBytes(st.Size())
@@ -123,6 +125,7 @@ func sidecarKindLabel(kind string) string {
 func sidecarKindIcon(kind string) string {
 	switch kind {
 	case "video":
+		// Packed media file (not the episode itself - episodes use EpisodeLucideIcon).
 		return "film"
 	case "nfo":
 		return "file-text"
@@ -193,6 +196,7 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		Path       string
 		SizeLabel  string
 		Missing    bool
+		CanDelete  bool
 		IsImage    bool
 		IsVideo    bool
 		IsText     bool
@@ -203,7 +207,7 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		Truncated  bool
 		RawHref    string
 	}{
-		pageBase:  newPage(name, "series", nil),
+		pageBase:  newPage(name, "series", flashFromQuery(r)),
 		Series:    ser,
 		Video:     v,
 		FileID:    fid,
@@ -214,6 +218,7 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		Path:      f.Path,
 		SizeLabel: sizeLabel,
 		Missing:   missing,
+		CanDelete: library.DeletableSidecarKind(f.Kind),
 		IsImage:   sidecarIsImage(f.Kind, f.Path),
 		IsVideo:   sidecarIsVideo(f.Kind, f.Path),
 		IsText:    sidecarIsText(f.Kind, f.Path),
@@ -222,7 +227,7 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		Crumbs: []breadcrumb{
 			crumb("/series", "Series", "tv"),
 			crumb(fmt.Sprintf("/series/%d", ser.ID), ser.Title, "clapperboard"),
-			crumb(fmt.Sprintf("/series/%d/videos/%d", ser.ID, v.ID), v.Title, "film"),
+			crumb(fmt.Sprintf("/series/%d/videos/%d", ser.ID, v.ID), v.Title, EpisodeLucideIcon),
 			crumb("", name, sidecarKindIcon(f.Kind)),
 		},
 	}

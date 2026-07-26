@@ -1,0 +1,22 @@
+{{define "delete_sidecar_modal"}}
+{{/* Expects FileID, SeriesID, VideoID, Name, KindLabel. Optional Redirect (default: video detail). */}}
+{{$redir := .Redirect}}{{if not $redir}}{{$redir = printf "/series/%d/videos/%d" .SeriesID .VideoID}}{{end}}
+<input type="checkbox" id="modal-delete-sidecar-{{.FileID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Delete {{.KindLabel}}</h3>
+    <p class="text-sm mb-4">Remove <code class="text-xs">{{.Name}}</code> from disk and the library index. Media and other sidecars stay.</p>
+    <form method="post" action="/actions/delete-video-sidecar">
+      <input type="hidden" name="series_id" value="{{.SeriesID}}" />
+      <input type="hidden" name="video_id" value="{{.VideoID}}" />
+      <input type="hidden" name="file_id" value="{{.FileID}}" />
+      <input type="hidden" name="redirect" value="{{$redir}}" />
+      <div class="modal-action">
+        <label for="modal-delete-sidecar-{{.FileID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-error">Delete</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}

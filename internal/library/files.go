@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 // VideoSizeBytes returns size_bytes for the video media file, or ok=false when unset/missing.
@@ -386,6 +388,71 @@ func (s *Store) GetVideoFile(videoID, fileID int64) (*VideoFile, error) {
 		return nil, err
 	}
 	return &f, nil
+}
+
+// DeletableSidecarKind reports whether an operator may delete this files.kind
+// individually (sub, thumb, other). Generated/provenance kinds are excluded.
+func DeletableSidecarKind(kind string) bool {
+	switch strings.TrimSpace(kind) {
+	case "sub", "thumb", "other":
+		return true
+	default:
+		return false
+	}
+}
+
+// DeleteVideoSidecar unlinks one registered sidecar and drops its files row.
+// Sync (like series art clear): not delete_files. History links a finished
+// system delete_sidecar bookkeeping task.
+func (s *Store) DeleteVideoSidecar(videoID, fileID int64) error {
+	v, err := s.GetVideo(videoID)
+	if err != nil {
+		return err
+	}
+	f, err := s.GetVideoFile(videoID, fileID)
+	if err != nil {
+		return err
+	}
+	if !DeletableSidecarKind(f.Kind) {
+		return fmt.Errorf("%w: cannot delete %s files individually", ErrInvalid, f.Kind)
+	}
+	path := strings.TrimSpace(f.Path)
+	name := filepath.Base(path)
+	if path != "" {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove sidecar: %w", err)
+		}
+	}
+	res, err := s.DB.SQL.Exec(`DELETE FROM files WHERE id = ? AND video_id = ?`, fileID, videoID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+
+	var taskID int64
+	if s.Queue != nil {
+		tid, qerr := s.Queue.InsertRunning(queue.EnqueueParams{
+			Kind:     queue.KindDeleteSidecar,
+			Domain:   queue.SystemDomain,
+			SeriesID: v.SeriesID,
+			VideoID:  videoID,
+			Message:  fmt.Sprintf("Delete sidecar %s", name),
+			Payload:  map[string]any{"file_id": fileID, "kind": f.Kind, "path": path},
+		})
+		if qerr != nil {
+			return qerr
+		}
+		taskID = tid
+		_ = s.Queue.Finish(tid, queue.StatusDone, fmt.Sprintf("Deleted %s", name), "", "")
+	}
+	if taskID > 0 {
+		_ = s.AddVideoHistory(videoID, "sidecar_deleted", fmt.Sprintf("Deleted sidecar %s", name), map[string]any{
+			"kind": f.Kind, "path": path, "name": name, "file_id": fileID,
+		}, taskID)
+	}
+	return nil
 }
 
 // FormatBytes formats n as an IEC byte string (KiB/MiB/GiB/TiB).
