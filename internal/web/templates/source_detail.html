@@ -36,7 +36,7 @@
       <button type="submit" class="btn btn-outline tooltip tooltip-top" {{if or .ScanActive (not .DomainActive)}}disabled{{end}} data-tip="{{if .ScanActive}}Scan already queued or running{{else if and (not .DomainActive) .DomainDisabledTitle}}{{.DomainDisabledTitle}}{{else if .Source.FullScanDone}}Start full scan. Keeps videos; adds new findings.{{else}}Start full scan{{end}}">Full scan</button>
     </form>
     <label for="modal-edit-source" class="btn btn-outline">Edit</label>
-    <label for="modal-delete-source" class="btn btn-ghost text-error">Delete</label>
+    <label for="modal-delete-source" class="btn btn-soft btn-error">Delete</label>
   </div>
 </div>
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}

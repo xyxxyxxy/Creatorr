@@ -51,7 +51,7 @@ func Format(bin string, args ...string) string {
 	return strings.Join(parts, " ")
 }
 
-// FormatPretty is Format with a newline and two-space indent before each -- flag.
+// FormatPretty is Format with a newline and two-space indent before each - / -- flag.
 func FormatPretty(bin string, args ...string) string {
 	bin = strings.TrimSpace(bin)
 	if bin == "" {
@@ -60,7 +60,7 @@ func FormatPretty(bin string, args ...string) string {
 	var b strings.Builder
 	b.WriteString(quoteArg(bin))
 	for _, a := range args {
-		if strings.HasPrefix(a, "--") {
+		if strings.HasPrefix(a, "-") {
 			b.WriteString("\n  ")
 			b.WriteString(quoteArg(a))
 		} else {
@@ -71,7 +71,7 @@ func FormatPretty(bin string, args ...string) string {
 	return b.String()
 }
 
-// Pretty inserts a newline and two-space indent before each " --" in a stored line.
+// Pretty inserts a newline and two-space indent before each " -" / " --" flag in a stored line.
 // Quote-aware enough for typical yt-dlp/ffmpeg argv (does not split inside "..." ).
 func Pretty(line string) string {
 	line = strings.TrimSpace(line)
@@ -93,7 +93,7 @@ func Pretty(line string) string {
 			b.WriteByte(c)
 			continue
 		}
-		if !inDouble && !inSingle && c == ' ' && i+2 < len(line) && line[i+1] == '-' && line[i+2] == '-' {
+		if !inDouble && !inSingle && c == ' ' && i+1 < len(line) && line[i+1] == '-' {
 			b.WriteString("\n  ")
 			continue
 		}

@@ -29,7 +29,7 @@ func openLib(t *testing.T) *library.Store {
 		t.Fatal(err)
 	}
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "off", "0", false)
 	q := queue.NewStore(d)
 	return library.NewStore(d, q)
 }
@@ -1403,7 +1403,7 @@ func TestEnqueueDownloadNowRejectsInactiveDomain(t *testing.T) {
 func TestEnqueueDownloadNowBypassesCap(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
-	_ = settings.SetDomainDefault(s.DB, 0, 1, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(s.DB, 0, 1, 1, "10M", "off", "0", false)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
 		Title: "Cap", SourceURL: "https://www.example.com/@cap", RootID: rootID,
 		QualityProfileID: profileID, Monitored: true,
@@ -1438,7 +1438,7 @@ func TestEnqueueDownloadNowBypassesCap(t *testing.T) {
 func TestEnqueueDownloadWantedOrderByUploadDate(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
-	_ = settings.SetDomainDefault(s.DB, 0, 10, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(s.DB, 0, 10, 1, "10M", "off", "0", false)
 	_ = settings.Set(s.DB, settings.KeyDownloadWantedOrder, settings.DownloadWantedOrderOldest)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
 		Title: "Ord", SourceURL: "https://www.example.com/@ord", RootID: rootID,
@@ -1493,7 +1493,7 @@ func TestEnqueueDownloadWantedOrderByUploadDate(t *testing.T) {
 func TestEnqueueDownloadWantedRoundRobinFair(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
-	_ = settings.SetDomainDefault(s.DB, 0, 4, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(s.DB, 0, 4, 1, "10M", "off", "0", false)
 	_ = settings.Set(s.DB, settings.KeyDownloadWantedOrder, settings.DownloadWantedOrderOldest)
 
 	makeSer := func(title, host string) (seriesID, srcID int64) {

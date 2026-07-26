@@ -333,10 +333,6 @@
     if (!row) return false;
     if (typeof data.status === "string" && data.status) {
       patchStatusCell(row, data.status);
-      if (data.status !== "pending") {
-        const bump = row.querySelector('form[action="/actions/bump-task"]');
-        if (bump) bump.remove();
-      }
     }
     const msgEl = row.querySelector("[data-task-message]");
     if (msgEl && typeof data.message === "string") {
@@ -511,7 +507,8 @@
     if (
       kind === "prefetch_video_meta" ||
       kind === "prefetch_series_meta" ||
-      kind === "prefetch_add_series"
+      kind === "prefetch_add_series" ||
+      kind === "prefetch_add_video"
     ) {
       return;
     }
@@ -666,7 +663,7 @@
       return;
     }
     if (ev.type === "task.updated") {
-      // In-place patch on Tasks page - full swap recreates Cancel/To top buttons every tick.
+      // In-place patch on Tasks page - full swap recreates Cancel buttons every tick.
       if (!patchTaskRow(ev)) refreshTasksPanel();
       patchTaskDetail(ev);
       refreshTaskIndicators();
@@ -955,6 +952,26 @@
       }, 3500);
     });
   }
+
+  /** Client-side flash toast (same markup as partials/flash_toast). opts: { error, warning }. */
+  window.showFlashToast = function (message, opts) {
+    opts = opts || {};
+    const toast = document.createElement("div");
+    toast.className = "toast toast-top toast-end z-[60]";
+    toast.setAttribute("data-flash-toast", "");
+    const alert = document.createElement("div");
+    alert.setAttribute("role", "status");
+    let kind = "alert-success";
+    if (opts.error) kind = "alert-error";
+    else if (opts.warning) kind = "alert-warning";
+    alert.className = "alert " + kind + " shadow-lg";
+    const span = document.createElement("span");
+    span.textContent = String(message || "");
+    alert.appendChild(span);
+    toast.appendChild(alert);
+    document.body.appendChild(toast);
+    scheduleFlashToasts();
+  };
 
   function initFlashToasts() {
     const el = document.querySelector("[data-flash-toast]");
@@ -1499,6 +1516,7 @@
       resetArtSlots(form);
       delete form.dataset.addSeriesMode;
       delete form.dataset.addSeriesStep;
+      delete form.dataset.importMatchLock;
       if (form.classList.contains("js-add-series-form")) setAddSeriesFetchErr(form, "");
       form.querySelectorAll("[data-user-edited]").forEach((el) => {
         el.dataset.userEdited = "";

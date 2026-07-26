@@ -106,23 +106,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/tasks/{id}/bump:
-    post:
-      tags: [tasks]
-      operationId: bumpTask
-      summary: Raise priority of a pending task
-      parameters:
-        - $ref: "#/components/parameters/TaskId"
-      responses:
-        "204":
-          description: Bumped
-        "404":
-          description: Not pending
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /api/domains/paused:
     get:
       tags: [queue]
@@ -233,7 +216,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, pot_provider, download_digest]
+            enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest]
         - name: unread_only
           in: query
           required: false
@@ -688,6 +671,49 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/series/{id}/videos:
+    post:
+      tags: [library]
+      operationId: createSeriesVideo
+      summary: Create an indexed ignored video under a series
+      description: >
+        Creates a video row with status ignored (no media, no source).
+        Prefer draft_token from Add video URL prefetch (remote ID and source URL from the draft).
+        Manual path requires title and upload_date; optional remote_id (empty generates one).
+      parameters:
+        - $ref: "#/components/parameters/SeriesId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVideoRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Video"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Series not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Remote ID already exists in series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/series/{id}/sources:
     post:
       tags: [library]
@@ -848,13 +874,24 @@ paths:
     post:
       tags: [library]
       operationId: scanImport
-      summary: Scan import inbox and library orphans; return match suggestions (never auto-binds)
+      summary: Scan import inbox or one library root for untracked files
       description: >
-        Lists every untracked file under the import folder and online root folders (not already
-        in the files table): media, sidecars (nfo/json/thumb/sub), and other files. Media match
-        existing videos by id/title; orphan sidecars match by filename stem beside a tracked
-        video. Library hits bind in place (no move); inbox media move into the series folder.
-        Nothing binds until POST /api/import/manual.
+        Lists every untracked file under the chosen path (not already in the files table):
+        media, sidecars (nfo/json/thumb/sub), and other files. With no root_id, scans the
+        import inbox only. With root_id, scans that online library root for unmanaged
+        (orphan) files. Media match existing videos by id/title; orphan sidecars match by
+        filename stem beside a tracked video. Library hits bind in place (no move); inbox
+        media move into the series folder. Nothing binds until POST /api/import/manual.
+      parameters:
+        - name: root_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: >
+            When set, scan only this library root for untracked files. When omitted, scan
+            the import inbox only.
       responses:
         "200":
           description: Candidates with suggestions
@@ -863,7 +900,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportScanResponse"
         "400":
-          description: Import root missing or invalid
+          description: Import root missing, invalid, or library root offline/unknown
           content:
             application/json:
               schema:
@@ -879,6 +916,8 @@ paths:
         or attaches sidecar file(s) when the path is a sidecar / paths lists sidecars (video must
         already have media). With series_id (and no video_id), creates a new video from
         supplied/sidecar metadata then enqueues install (inbox) or in-place bind (library orphan).
+        Media bind to a video that already has packed media requires replace=true (deletes
+        existing library media then imports).
       requestBody:
         required: true
         content:
@@ -1122,7 +1161,10 @@ components:
           description: Video page URL (watch/clip); never the feed channel/playlist URL
         upload_date:
           type: string
-          description: RFC3339 UTC preferred; date-only (YYYY-MM-DD / YYYYMMDD) accepted for unmatched import and stored as midnight UTC.
+          description: >
+            Required for unmatched create when not available from path metadata.
+            RFC3339 UTC preferred; date-only (YYYY-MM-DD / YYYYMMDD) accepted and stored as midnight UTC.
+            Server falls back to file mtime when omitted and sidecars lack a date.
         description:
           type: string
         verify:
@@ -1130,6 +1172,13 @@ components:
           description: >
             When true, after successful import bind/pack enqueue system media_verify
             (null-decode). Explicit opt-in; ignores profile mature-only gate. Default false.
+        replace:
+          type: boolean
+          description: >
+            When true and video_id already has packed media, import deletes the existing
+            library media (and companion sidecars) then packs or binds the new file.
+            Default false (409 Conflict if media already exists). Ignored for create
+            (series_id) and sidecar attach (paths).
 
     ImportIDHint:
       type: object
@@ -1206,6 +1255,16 @@ components:
           description: Prefill title for unmatched create
         suggested_remote_id:
           type: string
+          description: Prefill remote id for unmatched create (from filename/sidecars, or derived)
+        suggested_remote_id_generated:
+          type: boolean
+          description: True when suggested_remote_id was derived (no id found in filename or sidecars)
+        suggested_upload_date:
+          type: string
+          description: Prefill upload/release date for unmatched create (RFC3339 UTC from sidecar or file mtime)
+        suggested_upload_date_from_mtime:
+          type: boolean
+          description: True when suggested_upload_date came from file mtime (not info.json / NFO)
         suggested_handler_id:
           type: string
         match_type:
@@ -1228,6 +1287,7 @@ components:
       properties:
         import_path:
           type: string
+          description: Absolute path that was scanned (import inbox or the chosen library root)
         candidates:
           type: array
           items:
@@ -1282,7 +1342,7 @@ components:
           format: date-time
         event:
           type: string
-          enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, pot_provider, download_digest]
+          enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest]
         level:
           type: string
           enum: [info, warning, alert]
@@ -1792,3 +1852,22 @@ components:
           items:
             type: string
           description: Series-level media types to auto-ignore; empty = none
+
+    CreateVideoRequest:
+      type: object
+      properties:
+        draft_token:
+          type: string
+          description: >
+            Token from Add video URL prefetch. When set, remote ID and source URL come from the draft;
+            title and upload_date may override draft values (empty uses draft).
+        title:
+          type: string
+          description: Required on manual path; optional override when using draft_token
+        upload_date:
+          type: string
+          description: >
+            Required on manual path (RFC3339 UTC or YYYY-MM-DD). Optional override when using draft_token.
+        remote_id:
+          type: string
+          description: Manual path only; empty generates a unique id. Ignored when draft_token is set.

@@ -107,14 +107,6 @@ func (s *Server) CancelTask(w http.ResponseWriter, r *http.Request, id gen.TaskI
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) BumpTask(w http.ResponseWriter, r *http.Request, id gen.TaskId) {
-	if err := s.Queue.Bump(int64(id)); err != nil {
-		writeErr(w, http.StatusNotFound, apperrors.CodeNotFound, "task not pending", err.Error())
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (s *Server) SetDomainActive(w http.ResponseWriter, r *http.Request, domain gen.Domain) {
 	var body gen.SetActiveRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

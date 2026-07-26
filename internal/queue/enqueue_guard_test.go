@@ -48,7 +48,7 @@ func TestEnqueueDownloadQueueCap(t *testing.T) {
 	}
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 2, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 2, 1, "10M", "off", "0", false)
 	s := queue.NewStore(d)
 	v1 := seedVideo(t, s, "c1")
 	v2 := seedVideo(t, s, "c2")
@@ -81,7 +81,7 @@ func TestEnqueueCacheBeginningSharesCap(t *testing.T) {
 	}
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 2, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 2, 1, "10M", "off", "0", false)
 	s := queue.NewStore(d)
 	v1 := seedVideo(t, s, "b1")
 	v2 := seedVideo(t, s, "b2")

@@ -27,7 +27,7 @@ func TestRunnerCompletesStub(t *testing.T) {
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "off", "0", false)
 	store := queue.NewStore(d)
 	id, err := store.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com"})
 	if err != nil {
@@ -68,7 +68,7 @@ func TestRunnerCancelDoesNotMarkDownloadFailed(t *testing.T) {
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "off", "0", false)
 
 	lib := &library.Store{DB: d, Queue: queue.NewStore(d)}
 	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
@@ -163,7 +163,7 @@ func testRunnerDomainIssueNotify(t *testing.T, returnCode, returnMsg string, wan
 	}
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "off", "0", false)
 
 	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
 		if title != "" {
@@ -269,7 +269,7 @@ func TestRunnerDownloadsDoneDigest(t *testing.T) {
 	}
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 8, 2, "10M", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 2, "10M", "off", "0", false)
 	if _, err := notify.Upsert(d, 0, "d", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventDownloadDigest}); err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +358,7 @@ func TestRunnerMediaTypeExcludedMarksIgnored(t *testing.T) {
 	}
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "off", "0", false)
 	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{
 		notify.EventYtDlpFailed,
 	}); err != nil {

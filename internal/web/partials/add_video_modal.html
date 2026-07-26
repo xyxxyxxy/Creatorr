@@ -1,0 +1,71 @@
+{{define "add_video_modal"}}
+{{/*
+  Reusable Add video modal. Wired on Import Match for now (series Videos later).
+  URL fetch is primary; manual Title + Upload date fallback. Remote ID is read-only.
+*/}}
+<input type="checkbox" id="modal-add-video" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box max-w-lg">
+    <h3 class="font-bold text-lg mb-2">Add video</h3>
+    <p class="text-sm opacity-70 mb-3">Creates an ignored indexed video.</p>
+    <form class="space-y-3 js-add-video-form" data-add-video-series-id="">
+      <input type="hidden" name="draft_token" id="add-video-draft-token" value="" />
+      <input type="hidden" name="remote_id" id="add-video-remote-id" value="" />
+
+      <div role="alert" class="alert alert-error mb-2 hidden js-add-video-fetch-err">
+        <span class="break-words whitespace-pre-wrap"></span>
+      </div>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">
+          <span class="inline-flex items-center gap-1">
+            Fetch from URL
+            {{template "field_info" (dict "Info" "Primary path. Resolve fills title, upload date, and remote ID. No other fields required after a successful fetch.")}}
+          </span>
+        </legend>
+        <div class="join w-full">
+          <input type="url" name="fetch_url" id="add-video-url" class="input join-item grow min-w-0"
+                 placeholder="https://…" autocomplete="url" />
+          <button type="button" class="btn btn-outline join-item shrink-0 js-add-video-fetch">Fetch</button>
+        </div>
+      </fieldset>
+
+      <div class="hidden js-add-video-fetching">
+        <div class="flex flex-col items-center justify-center gap-3 py-8">
+          <span class="loading loading-spinner loading-lg text-primary" aria-hidden="true"></span>
+          <p class="text-sm opacity-70">Fetching video metadata…</p>
+        </div>
+      </div>
+
+      <div class="space-y-3 js-add-video-fields">
+        {{template "field_input" (dict
+          "Name" "title"
+          "ID" "add-video-title"
+          "Label" "Title"
+          "Placeholder" "Video title"
+        )}}
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">
+            Remote ID
+            <span id="add-video-remote-note" class="font-normal opacity-60"></span>
+          </legend>
+          <div class="input input-bordered bg-base-200 flex items-center min-h-12 w-full font-mono" id="add-video-remote-display" aria-live="polite"><span class="opacity-60">-</span></div>
+        </fieldset>
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">
+            Upload date
+            <span id="add-video-upload-note" class="font-normal opacity-60"></span>
+          </legend>
+          <input type="date" class="input w-full" name="upload_date" id="add-video-upload" />
+        </fieldset>
+      </div>
+
+      <div class="modal-action">
+        <label for="modal-add-video" class="btn btn-ghost modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary js-add-video-submit">Add video index</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}

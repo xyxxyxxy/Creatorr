@@ -312,6 +312,7 @@ func StubHandlers() map[string]TaskHandler {
 		queue.KindPrefetchSeriesMeta:  stub(queue.KindPrefetchSeriesMeta),
 		queue.KindPrefetchVideoMeta:   stub(queue.KindPrefetchVideoMeta),
 		queue.KindPrefetchAddSeries:   stub(queue.KindPrefetchAddSeries),
+		queue.KindPrefetchAddVideo:    stub(queue.KindPrefetchAddVideo),
 		queue.KindSyncFiles:           stub(queue.KindSyncFiles),
 		queue.KindRetentionDelete:     stub(queue.KindRetentionDelete),
 		queue.KindRenameEpisodes:      stub(queue.KindRenameEpisodes),

@@ -15,7 +15,7 @@
   <div class="flex-none flex flex-wrap gap-2">
     <label for="modal-edit-series" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Edit series</label>
     <label for="modal-edit-series-metadata" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Edit metadata</label>
-    <label for="modal-delete-series" class="btn btn-ghost text-error{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Delete</label>
+    <label for="modal-delete-series" class="btn btn-soft btn-error{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Delete</label>
   </div>
 </div>
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
@@ -47,7 +47,7 @@
 <thead><tr><th>URL / Name</th><th>Status</th><th class="w-0"></th></tr></thead>
 <tbody>
   {{range .Sources}}
-  <tr class="hover cursor-pointer" onclick="location.href='/series/{{$.Series.ID}}/sources/{{.ID}}'">
+  <tr class="hover">
     <td>
       <div class="flex items-center gap-2 min-w-0">
         {{if eq .Kind "single"}}
@@ -58,15 +58,15 @@
         <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="channel/playlist"><i data-lucide="list-video" class="size-4 opacity-70"></i></span>
         {{end}}
         {{if and .Label.Valid .Label.String}}
-        <div class="font-medium min-w-0 truncate"><span class="tooltip tooltip-top" data-tip="{{.URL}}">{{.Label.String}}</span></div>
+        <a class="link link-hover font-medium min-w-0 truncate tooltip tooltip-top" href="/series/{{$.Series.ID}}/sources/{{.ID}}" data-tip="{{.URL}}">{{.Label.String}}</a>
         {{else}}
-        <div class="font-medium break-all min-w-0">{{displayURL .URL}}</div>
+        <a class="link link-hover font-medium break-all min-w-0" href="/series/{{$.Series.ID}}/sources/{{.ID}}">{{displayURL .URL}}</a>
         {{end}}
       </div>
       {{template "source_stalled" .}}
     </td>
     {{template "source_status_cell" .StatusInd}}
-    <td class="whitespace-nowrap text-end" onclick="event.stopPropagation()">
+    <td class="whitespace-nowrap text-end">
       <div class="flex items-center justify-end gap-0.5">
       {{template "source_scan_actions" .}}
       {{if .HasRetryable}}
@@ -75,7 +75,7 @@
       <label for="modal-edit-source-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
         <i data-lucide="pencil" class="size-3.5"></i>
       </label>
-      <label for="modal-delete-source-{{.ID}}" class="btn btn-ghost btn-xs btn-square text-error tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+      <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
         <i data-lucide="trash-2" class="size-3.5"></i>
       </label>
       </div>

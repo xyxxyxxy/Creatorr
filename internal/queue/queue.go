@@ -39,6 +39,7 @@ const (
 	KindPrefetchSeriesMeta  = "prefetch_series_meta"
 	KindPrefetchVideoMeta   = "prefetch_video_meta"
 	KindPrefetchAddSeries   = "prefetch_add_series"
+	KindPrefetchAddVideo    = "prefetch_add_video"
 	KindSyncFiles           = "sync_files"
 	KindRetentionDelete     = "retention_delete"
 	KindRenameEpisodes      = "rename_episodes"
@@ -47,6 +48,7 @@ const (
 	KindClearBeginningCache = "clear_beginning_cache"
 	KindClearPlaybackCache  = "clear_playback_cache"
 	KindDeleteFiles         = "delete_files"
+	KindDeleteSidecar       = "delete_sidecar"
 	KindSponsorblockCut     = "sponsorblock_cut"
 	KindMediaVerify         = "media_verify"
 	KindStreamPlay          = "stream_play"
@@ -58,7 +60,8 @@ const (
 // IsPrefetchKind is true for ClaimInteractive metadata prefetch tasks.
 // These do not occupy max_parallel_tasks slots.
 func IsPrefetchKind(kind string) bool {
-	return kind == KindPrefetchSeriesMeta || kind == KindPrefetchVideoMeta || kind == KindPrefetchAddSeries
+	return kind == KindPrefetchSeriesMeta || kind == KindPrefetchVideoMeta ||
+		kind == KindPrefetchAddSeries || kind == KindPrefetchAddVideo
 }
 
 // IsInteractiveKind is true for tasks that must not wait behind other work
@@ -384,14 +387,14 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 				SELECT 1 FROM tasks WHERE kind = ? AND video_id = ? AND status IN (?, ?) LIMIT 1
 			`, KindStreamPlay, p.VideoID, StatusPending, StatusRunning)
 		}
-	case KindPrefetchAddSeries:
+	case KindPrefetchAddSeries, KindPrefetchAddVideo:
 		tok := DraftTokenFromPayload(payloadJSON)
 		if tok != "" {
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE kind = ? AND status IN (?, ?)
 				  AND json_extract(payload, '$.draft_token') = ?
 				LIMIT 1
-			`, KindPrefetchAddSeries, StatusPending, StatusRunning, tok)
+			`, p.Kind, StatusPending, StatusRunning, tok)
 		}
 	}
 	return nil
@@ -445,7 +448,7 @@ func (s *Store) ClaimNext() (*Task, error) {
 		       COALESCE(t.detail,''), t.progress, t.domain, t.priority, t.created_at, t.started_at, t.finished_at
 		FROM tasks t
 		WHERE t.status = ?
-		  AND t.kind NOT IN (?, ?, ?)
+		  AND t.kind NOT IN (?, ?, ?, ?)
 		  AND NOT EXISTS (
 		    SELECT 1 FROM domains d WHERE d.domain = t.domain AND d.active = 0
 		  )
@@ -453,7 +456,7 @@ func (s *Store) ClaimNext() (*Task, error) {
 		    SELECT 1 FROM domain_runtime r WHERE r.domain = t.domain AND r.paused != 0
 		  )
 		ORDER BY t.priority DESC, t.id ASC
-	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries)
+	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo)
 	if err != nil {
 		return nil, err
 	}
@@ -473,12 +476,12 @@ func (s *Store) ClaimInteractive() (*Task, error) {
 		       COALESCE(t.detail,''), t.progress, t.domain, t.priority, t.created_at, t.started_at, t.finished_at
 		FROM tasks t
 		WHERE t.status = ?
-		  AND t.kind IN (?, ?, ?)
+		  AND t.kind IN (?, ?, ?, ?)
 		  AND NOT EXISTS (
 		    SELECT 1 FROM domains d WHERE d.domain = t.domain AND d.active = 0
 		  )
 		ORDER BY t.priority DESC, t.id ASC
-	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries)
+	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo)
 	if err != nil {
 		return nil, err
 	}
@@ -558,8 +561,8 @@ func (s *Store) domainHasParallelSlot(domain string) bool {
 	_ = s.DB.SQL.QueryRow(`
 		SELECT COUNT(*) FROM tasks
 		WHERE domain = ? AND status = ?
-		  AND kind NOT IN (?, ?, ?)
-	`, domain, StatusRunning, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries).Scan(&n)
+		  AND kind NOT IN (?, ?, ?, ?)
+	`, domain, StatusRunning, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo).Scan(&n)
 	// Prefetch kinds are excluded from the count; stream_play (interactive occupancy) counts.
 	return n < max
 }
@@ -878,21 +881,6 @@ func (s *Store) TaskStatus(id int64) (string, error) {
 		return "", nil
 	}
 	return st, err
-}
-
-// Bump raises priority so the task moves forward in its domain lane.
-func (s *Store) Bump(id int64) error {
-	res, err := s.DB.SQL.Exec(`
-		UPDATE tasks SET priority = priority + 10 WHERE id = ? AND status = ?
-	`, id, StatusPending)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("task %d not pending", id)
-	}
-	return nil
 }
 
 // CancelAll cancels all pending tasks and returns snapshots for Activity.
@@ -1271,7 +1259,7 @@ func URLFromPayload(payload string) string {
 	return strings.TrimSpace(p.URL)
 }
 
-// DraftTokenFromPayload reads draft_token from prefetch_add_series payload JSON.
+// DraftTokenFromPayload reads draft_token from prefetch_add_series / prefetch_add_video payload JSON.
 func DraftTokenFromPayload(payload string) string {
 	var p struct {
 		DraftToken string `json:"draft_token"`

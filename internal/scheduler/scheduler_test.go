@@ -26,7 +26,7 @@ func TestTickEnqueuesCatchupScanAndDownloadWanted(t *testing.T) {
 	_ = settings.Set(d, settings.KeySyncFilesCron, "")
 	_ = settings.Set(d, settings.KeyRetentionDeleteCron, "")
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "off", "0", false)
 
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
@@ -102,7 +102,7 @@ func TestRunSkipsMissedSchedulesAtBoot(t *testing.T) {
 	_ = settings.Set(d, settings.KeyDownloadWantedCron, "0 * * * *")
 	_ = settings.Set(d, settings.KeySyncFilesCron, "0 * * * *")
 	_ = settings.Set(d, settings.KeyRetentionDeleteCron, "")
-	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "off", "0", false)
 
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
@@ -291,9 +291,9 @@ func TestFileSyncMarksMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err := lib.FileSyncPass(tid)
-	if err != nil || n != 1 {
-		t.Fatalf("file sync: n=%d err=%v", n, err)
+	syncRes, err := lib.FileSyncPass(tid)
+	if err != nil || syncRes.Total() != 1 {
+		t.Fatalf("file sync: n=%d err=%v", syncRes.Total(), err)
 	}
 	var status string
 	_ = d.SQL.QueryRow(`SELECT status FROM videos WHERE id = ?`, vid).Scan(&status)
@@ -354,9 +354,9 @@ func TestFileSyncRestoresMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err := lib.FileSyncPass(tid)
-	if err != nil || n != 1 {
-		t.Fatalf("file sync: n=%d err=%v", n, err)
+	syncRes, err := lib.FileSyncPass(tid)
+	if err != nil || syncRes.Total() != 1 {
+		t.Fatalf("file sync: n=%d err=%v", syncRes.Total(), err)
 	}
 	var status string
 	_ = d.SQL.QueryRow(`SELECT status FROM videos WHERE id = ?`, vid).Scan(&status)
@@ -414,9 +414,9 @@ func TestFileSyncSkipsOfflineRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err := lib.FileSyncPass(tid)
-	if err != nil || n != 0 {
-		t.Fatalf("file sync: n=%d err=%v want 0 (offline root)", n, err)
+	syncRes, err := lib.FileSyncPass(tid)
+	if err != nil || syncRes.Total() != 0 {
+		t.Fatalf("file sync: n=%d err=%v want 0 (offline root)", syncRes.Total(), err)
 	}
 	var status string
 	_ = d.SQL.QueryRow(`SELECT status FROM videos WHERE id = ?`, vid).Scan(&status)

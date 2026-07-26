@@ -816,15 +816,8 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 	return s.GetSource(seriesID, id)
 }
 
-// insertSource writes a sources row. Legacy DBs still require handler_id NOT NULL;
-// fresh schema omits that column - fill yt-dlp only when the column exists.
+// insertSource writes a sources row.
 func (s *Store) insertSource(seriesID int64, url string, label any, kind, scanCron string, indexAsIgnored int, titleInclude, titleExclude, cutoff any) (sql.Result, error) {
-	if s.sourceHasHandlerID() {
-		return s.DB.SQL.Exec(`
-			INSERT INTO sources (series_id, url, handler_id, label, kind, scan_cron, index_as_ignored, title_regexp_include, title_regexp_exclude, scan_cutoff)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, seriesID, url, "yt-dlp", label, kind, scanCron, indexAsIgnored, titleInclude, titleExclude, cutoff)
-	}
 	return s.DB.SQL.Exec(`
 		INSERT INTO sources (series_id, url, label, kind, scan_cron, index_as_ignored, title_regexp_include, title_regexp_exclude, scan_cutoff)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

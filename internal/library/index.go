@@ -232,19 +232,9 @@ func (s *Store) UpsertListed(seriesID int64, li ListedVideo, taskID int64) (Upse
 	return out, nil
 }
 
-// insertListedVideo writes a new videos row. Legacy DBs still require handler_id NOT NULL;
-// fresh schema omits that column - fill yt-dlp only when the column exists.
+// insertListedVideo writes a new videos row.
 func (s *Store) insertListedVideo(seriesID int64, src any, li ListedVideo, uploadVal any, status string, season, episode, thumb any) (sql.Result, error) {
 	mt := NormalizeMediaType(li.MediaType)
-	if s.videoHasHandlerID() {
-		return s.DB.SQL.Exec(`
-			INSERT INTO videos (
-			  series_id, source_id, handler_id, remote_id, title, upload_date,
-			  source_url, status, season, episode, description, thumbnail_url, media_type
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, seriesID, src, "yt-dlp", li.RemoteID, li.Title, uploadVal, nullEmpty(li.WebpageURL),
-			status, season, episode, li.Description, thumb, mt)
-	}
 	return s.DB.SQL.Exec(`
 		INSERT INTO videos (
 		  series_id, source_id, remote_id, title, upload_date,
