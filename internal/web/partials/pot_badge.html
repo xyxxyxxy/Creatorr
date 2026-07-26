@@ -18,16 +18,16 @@
 </span>
 {{else if eq .State "skipped"}}
 <span class="inline-flex items-center gap-2">
-  <span class="inline-flex tooltip tooltip-top opacity-70" data-tip="{{if .Detail}}{{.Detail}}{{else}}skipped{{end}}" aria-label="PO token skipped">
-    <i data-lucide="shield-off" class="size-4"></i>
+  <span class="inline-flex tooltip tooltip-top" data-tip="{{if .Detail}}{{.Detail}}{{else}}skipped{{end}}" aria-label="PO token skipped">
+    <i data-lucide="shield-off" class="size-4 opacity-70"></i>
   </span>
   <span>Skipped</span>
   {{if .Fetch}}<span class="opacity-60 font-mono text-xs">({{.Fetch}})</span>{{end}}
 </span>
 {{else if eq .State "off"}}
 <span class="inline-flex items-center gap-2">
-  <span class="inline-flex tooltip tooltip-top opacity-60" data-tip="{{if .Detail}}{{.Detail}}{{else}}off{{end}}" aria-label="PO token off">
-    <i data-lucide="shield-off" class="size-4"></i>
+  <span class="inline-flex tooltip tooltip-top" data-tip="{{if .Detail}}{{.Detail}}{{else}}off{{end}}" aria-label="PO token off">
+    <i data-lucide="shield-off" class="size-4 opacity-60"></i>
   </span>
   <span class="opacity-60">Off</span>
 </span>

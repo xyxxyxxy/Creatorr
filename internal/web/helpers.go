@@ -19,6 +19,10 @@ type pageBase struct {
 	Flash       *flash
 }
 
+// EpisodeLucideIcon is the Lucide name for indexed episodes (library videos).
+// Packed media files (kind=video) use "film" via sidecarKindIcon instead.
+const EpisodeLucideIcon = "square-play"
+
 // newPage builds pageBase with a nav-matched lucide icon.
 func newPage(title, nav string, flash *flash) pageBase {
 	return pageBase{Title: title, Nav: nav, Icon: pageIcon(nav), Flash: flash}
@@ -60,6 +64,8 @@ func settingsTabIcon(tab string) string {
 		return "sliders-horizontal"
 	case "library":
 		return "folder"
+	case "maintenance":
+		return "wrench"
 	case "scheduler":
 		return "calendar-clock"
 	case "queue":
@@ -149,6 +155,8 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Prepare stream enqueued.")
 	case "video-deleted":
 		return flashOK("Video delete queued - files remove in the background.")
+	case "sidecar-deleted":
+		return flashOK("Sidecar deleted.")
 	case "retry":
 		return flashOK("Source errors cleared; videos set to wanted.")
 	case "deleted":
@@ -175,6 +183,10 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Clear beginning cache queued - see Tasks (system lane).")
 	case "playback-clear-queued":
 		return flashOK("Clear progressive stream cache queued - see Tasks (system lane).")
+	case "sync-files-queued":
+		return flashOK("File sync queued - see Tasks (system lane).")
+	case "sync-files-empty":
+		return flashWarn("No videos to sync.")
 	case "stream-token-rotated":
 		return flashOK("Stream URL token rotated.")
 	case "nfo-regen":

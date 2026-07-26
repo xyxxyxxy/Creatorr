@@ -58,6 +58,17 @@
 }
 
 /*
+  Import list/summary file icons: daisyUI tip ::before uses z-index:2 inside the
+  tooltip's stacking context, so the bubble paints under the next filename/code
+  and Match controls (looks like no tip). Raise the host on hover/focus so the
+  whole tip stack wins. Prefer tooltip-top in markup for clear air above the row.
+*/
+#import-list .tooltip:is(:hover, :focus-within),
+#import-summary-tree .tooltip:is(:hover, :focus-within) {
+  z-index: 40;
+}
+
+/*
   Delivery mode join: label.btn wrapping a radio - highlight when checked.
   Stock daisyUI join radios are input.btn (aria-label only); we need Lucide icons inside.
 */

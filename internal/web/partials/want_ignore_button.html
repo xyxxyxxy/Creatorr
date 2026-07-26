@@ -15,7 +15,7 @@
   </button>
 </form>
 {{else if or (eq .Status "streamable") (eq .Status "downloaded")}}
-{{$delClass := .DeleteClass}}{{if not $delClass}}{{$delClass = "btn btn-error"}}{{end}}
+{{$delClass := .DeleteClass}}{{if not $delClass}}{{$delClass = "btn btn-soft btn-error"}}{{end}}
 <label for="modal-delete-video-{{.VideoID}}" class="{{$delClass}}{{if .Icons}} tooltip tooltip-top{{end}}" aria-label="Delete"{{if .Icons}} data-tip="Delete"{{end}}>
   {{if .Icons}}<i data-lucide="trash-2" class="{{$icon}}"></i>{{else}}Delete{{end}}
 </label>

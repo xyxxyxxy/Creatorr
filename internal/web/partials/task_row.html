@@ -22,14 +22,6 @@
     {{end}}
   </td>
   <td class="whitespace-nowrap">
-    {{if eq .Status "pending"}}
-    <form method="post" action="/actions/bump-task" class="inline">
-      <input type="hidden" name="id" value="{{.ID}}" />
-      <button type="submit" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="To top" aria-label="To top">
-        <i data-lucide="arrow-up-to-line" class="size-3.5"></i>
-      </button>
-    </form>
-    {{end}}
     <form method="post" action="/actions/cancel-task" class="inline">
       <input type="hidden" name="id" value="{{.ID}}" />
       <button type="submit" class="btn btn-ghost btn-xs btn-square text-error tooltip tooltip-top" data-tip="Cancel" aria-label="Cancel">

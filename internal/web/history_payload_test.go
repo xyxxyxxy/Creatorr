@@ -33,6 +33,9 @@ func TestHistoryEventError(t *testing.T) {
 		{"sponsorblock_cut", false},
 		{"scanned", false},
 		{"file_missing", false},
+		{"sidecar_missing", false},
+		{"sidecar_externally_changed", true},
+		{"file_externally_changed", true},
 	}
 	for _, tc := range cases {
 		if got := historyEventError(tc.event); got != tc.want {

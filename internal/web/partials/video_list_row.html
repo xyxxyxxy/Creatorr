@@ -8,7 +8,7 @@
     <img class="size-full rounded object-cover" src="{{.ThumbURL}}" alt="" width="112" height="63" loading="lazy" />
     {{else}}
     <div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true">
-      <i data-lucide="film" class="size-6 opacity-40"></i>
+      <i data-lucide="square-play" class="size-6 opacity-40"></i>
     </div>
     {{end}}
     {{if .DurationLabel}}
@@ -67,7 +67,7 @@
         "Icons" true
         "DeferModal" true
         "Class" "btn btn-neutral btn-square join-item"
-        "DeleteClass" "btn btn-error btn-square join-item"
+        "DeleteClass" "btn btn-soft btn-error btn-square join-item"
       }}
       {{template "video_delivery_actions" $delivery}}
       {{template "want_ignore_button" $wantIgnore}}

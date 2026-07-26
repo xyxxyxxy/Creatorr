@@ -3,6 +3,7 @@ package web
 import (
 	"github.com/go-chi/chi/v5"
 
+	"github.com/xyxxyxxy/Creatorr/internal/health"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
@@ -10,10 +11,12 @@ import (
 
 // Handler serves HTML admin pages and form actions.
 type Handler struct {
-	Library        *library.Store
-	Queue          *queue.Store
-	YtDlp          *ytdlp.Client
-	PotProviderURL string // CREATORR_POT_PROVIDER_URL; empty disables pot_fetch UI
+	Library         *library.Store
+	Queue           *queue.Store
+	YtDlp           *ytdlp.Client
+	FlareSolverrURL string // CREATORR_FLARESOLVERR_URL; display-only on Settings → General
+	PotProviderURL  string // CREATORR_POT_PROVIDER_URL; empty disables pot_fetch UI
+	Health          *health.Checker
 }
 
 // Mount registers UI routes on r.
@@ -34,6 +37,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/series/{id}/videos/{vid}", h.videoDetail)
 	r.Get("/series/{id}/videos/{vid}/thumb", h.videoThumb)
 	r.Get("/series/{id}/videos/{vid}/metadata/prefetch/{tid}", h.videoMetadataPrefetchStatus)
+	r.Get("/series/{id}/videos/{vid}/metadata/prefetch/{tid}/art/{role}", h.videoPrefetchArtFile)
 	r.Get("/series/{id}/videos/{vid}/files/{fid}", h.videoSidecarViewPage)
 	r.Get("/series/{id}/videos/{vid}/files/{fid}/raw", h.videoSidecarFile)
 	r.Get("/series/{id}/videos/{vid}/task-indicator", h.videoTaskIndicator)
@@ -48,6 +52,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/settings", h.settingsRedirect)
 	r.Get("/settings/general", h.settingsGeneral)
 	r.Get("/settings/library", h.settingsLibrary)
+	r.Get("/settings/maintenance", h.settingsMaintenance)
 	r.Get("/settings/scheduler", h.settingsScheduler)
 	r.Get("/settings/queue", h.settingsQueue)
 	r.Get("/settings/domains", h.settingsDomains)
@@ -55,6 +60,8 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/actions/probe-source-title", h.actionProbeSourceTitle)
 	r.Get("/actions/add-series-prefetch/{tid}", h.addSeriesPrefetchStatus)
 	r.Post("/actions/fetch-add-series", h.actionFetchAddSeries)
+	r.Get("/actions/add-video-prefetch/{tid}", h.addVideoPrefetchStatus)
+	r.Post("/actions/fetch-add-video", h.actionFetchAddVideo)
 
 	r.Post("/actions/add-series", h.actionAddSeries)
 	r.Post("/actions/update-series", h.actionUpdateSeries)
@@ -81,8 +88,8 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/retry-source-errors", h.actionRetrySourceErrors)
 	r.Post("/actions/ignore-video", h.actionIgnoreVideo)
 	r.Post("/actions/delete-video", h.actionDeleteVideo)
+	r.Post("/actions/delete-video-sidecar", h.actionDeleteVideoSidecar)
 	r.Post("/actions/cancel-task", h.actionCancelTask)
-	r.Post("/actions/bump-task", h.actionBumpTask)
 	r.Post("/actions/cancel-domain-tasks", h.actionCancelDomainTasks)
 	r.Post("/actions/save-settings", h.actionSaveSettings)
 	r.Post("/actions/upsert-notify-channel", h.actionUpsertNotifyChannel)
@@ -107,4 +114,5 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/clear-beginning-cache", h.actionClearBeginningCache)
 	r.Post("/actions/clear-playback-cache", h.actionClearPlaybackCache)
 	r.Post("/actions/apply-episode-naming", h.actionApplyEpisodeNaming)
+	r.Post("/actions/sync-files", h.actionSyncFiles)
 }

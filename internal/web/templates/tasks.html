@@ -30,6 +30,9 @@
         {{if .RateLimit}}
         <span class="badge badge-ghost badge-sm font-mono tooltip" data-tip="Download rate limit">{{.RateLimit}}</span>
         {{end}}
+        {{if and .StreamPlayRateLimit (ne .StreamPlayRateLimit "off")}}
+        <span class="badge badge-ghost badge-sm font-mono tooltip" data-tip="Stream play rate limit">play {{.StreamPlayRateLimit}}</span>
+        {{end}}
         {{if ne .Domain "system"}}
         <span class="badge badge-ghost badge-sm tabular-nums tooltip" data-tip="Sleep between requests">sleep {{.SleepRequests}}s</span>
         {{else}}
@@ -124,6 +127,7 @@
   "QueueOverride" .QueueOverride
   "ParallelOverride" .ParallelOverride
   "RateOverride" .RateOverride
+  "StreamPlayRateOverride" .StreamPlayRateOverride
   "SleepOverride" .SleepOverride
   "FlareOverride" .FlareOverride
   "CookieContent" .CookieContent
@@ -132,6 +136,7 @@
   "DefaultQueue" .DefaultQueue
   "DefaultParallel" .DefaultParallel
   "DefaultRate" .DefaultRate
+  "DefaultStreamPlayRate" .DefaultStreamPlayRate
   "DefaultSleep" .DefaultSleep
   "DefaultFlare" .DefaultFlare
   "FlareConfigured" $.FlareConfigured

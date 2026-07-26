@@ -1,7 +1,7 @@
 {{define "series_videos_live"}}
 <div id="series-videos-live" {{if .OOB}}hx-swap-oob="true"{{end}}>
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Videos" "help" "Indexed from scans. Open a video for details.")}}
+{{template "list_header" (dict "level" "section" "title" "Videos" "icon" "square-play" "help" "Indexed from scans. Open a video for details.")}}
 {{template "list_filters" (dict
   "Query" .VideoFilter.Query
   "QueryPlaceholder" .VideoFilter.QueryPlaceholder
