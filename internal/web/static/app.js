@@ -115,19 +115,26 @@
         fetch("/api/tasks"),
         fetch("/api/domains/paused"),
       ]);
-      if (tasksRes.ok) {
-        const tasks = await tasksRes.json();
-        const n = Array.isArray(tasks) ? tasks.length : 0;
-        const b = badge();
-        if (b) {
-          b.textContent = String(n);
-          b.classList.toggle("hidden", n === 0);
-        }
-      }
+      let pausedSet = null;
       if (pausedRes.ok) {
         const paused = await pausedRes.json();
-        const n = Array.isArray(paused) ? paused.length : 0;
+        const list = Array.isArray(paused) ? paused : [];
+        pausedSet = new Set(list);
         const b = pausedBadge();
+        if (b) {
+          b.textContent = String(list.length);
+          b.classList.toggle("hidden", list.length === 0);
+        }
+      }
+      if (tasksRes.ok) {
+        const tasks = await tasksRes.json();
+        let list = Array.isArray(tasks) ? tasks : [];
+        // Soft-paused lanes still hold pending/running rows; omit them from the nav count.
+        if (pausedSet) {
+          list = list.filter((t) => t && !pausedSet.has(t.domain));
+        }
+        const n = list.length;
+        const b = badge();
         if (b) {
           b.textContent = String(n);
           b.classList.toggle("hidden", n === 0);
