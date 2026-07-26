@@ -40,27 +40,30 @@ type laneView struct {
 	CooldownEndsAt      string // RFC3339Nano for JS tick
 	CooldownMin         int
 	CooldownSec         int
-	RateLimit           string  // effective yt-dlp --limit-rate display
-	SleepRequests       float64 // effective yt-dlp --sleep-requests
-	HasCookies          bool
-	CookiesTip          string
-	ShowFlare           bool
-	FlareWarm           bool
-	FlareTip            string
-	HasOverrideRow      bool
-	CooldownOverride     string
-	QueueOverride       string
-	ParallelOverride    string
-	RateOverride        string
-	SleepOverride       string
-	FlareOverride       string
-	CookieContent       string
-	DefaultCooldown      int
-	DefaultQueue        int
-	DefaultParallel     int
-	DefaultRate         string
-	DefaultSleep        float64
-	DefaultFlare        bool
+	RateLimit              string  // effective yt-dlp --limit-rate display (download)
+	StreamPlayRateLimit    string  // effective stream_play --limit-rate display
+	SleepRequests          float64 // effective yt-dlp --sleep-requests
+	HasCookies             bool
+	CookiesTip             string
+	ShowFlare              bool
+	FlareWarm              bool
+	FlareTip               string
+	HasOverrideRow         bool
+	CooldownOverride        string
+	QueueOverride          string
+	ParallelOverride       string
+	RateOverride           string
+	StreamPlayRateOverride string
+	SleepOverride          string
+	FlareOverride          string
+	CookieContent          string
+	DefaultCooldown         int
+	DefaultQueue           int
+	DefaultParallel        int
+	DefaultRate            string
+	DefaultStreamPlayRate  string
+	DefaultSleep           float64
+	DefaultFlare           bool
 }
 
 func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
@@ -99,19 +102,21 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		lv = &laneView{
-			Domain:           domain,
-			Paused:           paused,
-			CanPause:         canPause,
-			DefaultCooldown:  defLim.TaskCooldownSeconds,
-			DefaultQueue:     defLim.MaxDownloadQueue,
-			DefaultParallel:  defLim.MaxParallelTasks,
-			DefaultRate:      defLim.DownloadRateLimit,
-			DefaultSleep:     defLim.SleepRequests,
-			DefaultFlare:     defLim.UseFlareSolverr,
+			Domain:                domain,
+			Paused:                paused,
+			CanPause:              canPause,
+			DefaultCooldown:         defLim.TaskCooldownSeconds,
+			DefaultQueue:          defLim.MaxDownloadQueue,
+			DefaultParallel:       defLim.MaxParallelTasks,
+			DefaultRate:           defLim.DownloadRateLimit,
+			DefaultStreamPlayRate: defLim.StreamPlayRateLimit,
+			DefaultSleep:          defLim.SleepRequests,
+			DefaultFlare:          defLim.UseFlareSolverr,
 		}
 		if domain != queue.SystemDomain {
 			if lim, err := settings.LimitsForDomain(h.Queue.DB, domain); err == nil {
 				lv.RateLimit = lim.DownloadRateLimit
+				lv.StreamPlayRateLimit = lim.StreamPlayRateLimit
 				lv.SleepRequests = lim.SleepRequests
 			}
 			if ok, tip, err := cookies.Applies(h.Queue.DB, domain); err == nil && ok {
@@ -145,6 +150,13 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 						s = "off"
 					}
 					lv.RateOverride = s
+				}
+				if meta.StreamPlayRateLimit.Valid {
+					s := strings.TrimSpace(meta.StreamPlayRateLimit.String)
+					if s == "" {
+						s = "off"
+					}
+					lv.StreamPlayRateOverride = s
 				}
 				if meta.SleepRequests.Valid {
 					lv.SleepOverride = strconv.FormatFloat(meta.SleepRequests.Float64, 'f', -1, 64)
@@ -249,7 +261,7 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 		lv.Page = pageInfo
 		lanes = append(lanes, *lv)
 	}
-	flareOK, _ := settings.FlareSolverrConfigured(h.Queue.DB)
+	flareOK := settings.FlareSolverrConfigured()
 
 	render(w, "tasks", struct {
 		pageBase
@@ -271,13 +283,6 @@ func (h *Handler) actionCancelTask(w http.ResponseWriter, r *http.Request) {
 		redir = "/tasks"
 	}
 	http.Redirect(w, r, redir, http.StatusSeeOther)
-}
-
-func (h *Handler) actionBumpTask(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	_ = h.Queue.Bump(id)
-	http.Redirect(w, r, "/tasks", http.StatusSeeOther)
 }
 
 func (h *Handler) actionCancelDomainTasks(w http.ResponseWriter, r *http.Request) {

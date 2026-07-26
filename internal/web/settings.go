@@ -11,6 +11,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/cookies"
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
+	"github.com/xyxxyxxy/Creatorr/internal/health"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
@@ -136,6 +137,7 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, row)
 	}
+	flareJoin, potJoin := externalServiceJoinViews(h)
 	channels, err := notify.List(h.Queue.DB)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -167,17 +169,79 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 	}
 	render(w, "settings_general", struct {
 		pageBase
+		FlareService   externalServiceURLView
+		PotService     externalServiceURLView
 		Settings       []settingsRowView
 		NotifyChannels []notifyChannelView
 		EventOptions   []notifyEventOption
 		DefaultEvents  []string
 	}{
 		pageBase:       newSettingsPage("Settings · General", "general", flashFromQuery(r)),
+		FlareService:   flareJoin,
+		PotService:     potJoin,
 		Settings:       rows,
 		NotifyChannels: chViews,
 		EventOptions:   evOpts,
 		DefaultEvents:  append([]string(nil), notify.AllEvents...),
 	})
+}
+
+type externalServiceURLView struct {
+	Label       string
+	Value       string
+	Hint        string
+	Status      string
+	StatusLabel string
+	StatusTip   string
+}
+
+func externalServiceJoinViews(h *Handler) (flare, pot externalServiceURLView) {
+	flare = externalServiceURLView{
+		Label: "FlareSolverr URL",
+		Value: strings.TrimSpace(h.FlareSolverrURL),
+		Hint: "Set CREATORR_FLARESOLVERR_URL and restart. Compose default http://creatorr-flaresolverr:8191.\nEnable 'Use FlareSolverr' on Domain defaults or a host 'On' override (Settings → Queue).",
+	}
+	pot = externalServiceURLView{
+		Label: "PO token provider URL",
+		Value: strings.TrimSpace(h.PotProviderURL),
+		Hint:  "Set CREATORR_POT_PROVIDER_URL and restart. Compose default http://creatorr-po-token:4416.",
+	}
+	if h.Health == nil {
+		flare.Status, flare.StatusLabel, flare.StatusTip = externalServiceStatusFromCheck(health.Check{Status: health.StatusSkipped, Message: "URL unset"})
+		pot.Status, pot.StatusLabel, pot.StatusTip = externalServiceStatusFromCheck(health.Check{Status: health.StatusSkipped, Message: "URL unset"})
+		if flare.Value != "" {
+			flare.Status, flare.StatusLabel, flare.StatusTip = string(health.StatusDegraded), "Unreachable", "Health checker unavailable"
+		}
+		if pot.Value != "" {
+			pot.Status, pot.StatusLabel, pot.StatusTip = string(health.StatusDegraded), "Unreachable", "Health checker unavailable"
+		}
+		return flare, pot
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	flareCheck, potCheck := h.Health.ExternalServices(ctx)
+	flare.Status, flare.StatusLabel, flare.StatusTip = externalServiceStatusFromCheck(flareCheck)
+	pot.Status, pot.StatusLabel, pot.StatusTip = externalServiceStatusFromCheck(potCheck)
+	return flare, pot
+}
+
+func externalServiceStatusFromCheck(ch health.Check) (status, label, tip string) {
+	switch ch.Status {
+	case health.StatusOK:
+		return string(health.StatusOK), "Healthy", "Ready to use"
+	case health.StatusDegraded, health.StatusDown:
+		tip = strings.TrimSpace(ch.Message)
+		if tip == "" {
+			tip = "Probe failed"
+		}
+		return string(health.StatusDegraded), "Unreachable", tip
+	default:
+		tip = "Set the environment variable and restart"
+		if m := strings.TrimSpace(ch.Message); m != "" && m != "URL unset" {
+			tip = m
+		}
+		return string(health.StatusSkipped), "Not configured", tip
+	}
 }
 
 func (h *Handler) settingsScheduler(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +299,7 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 	dqRows, _ := settings.DomainOverrideRows(h.Queue.DB)
 	pageRows, pageInfo := SlicePage(r, "page", dqRows)
 	sourceDomains, _ := h.Library.ListSourceDomains()
-	flareOK, _ := settings.FlareSolverrConfigured(h.Queue.DB)
+	flareOK := settings.FlareSolverrConfigured()
 	render(w, "settings_queue", struct {
 		pageBase
 		Settings        []settingsRowView
@@ -260,10 +324,6 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 	episodeFormat, _ := settings.GetEpisodeFormat(h.Queue.DB)
 	applyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain)
-	nfoBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateNFO, queue.SystemDomain)
-	strmBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateStrm, queue.SystemDomain)
-	beginClearBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindClearBeginningCache, queue.SystemDomain)
-	playbackClearBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindClearPlaybackCache, queue.SystemDomain)
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
 	pageRoots, rootsPage := SlicePage(r, "page", roots)
@@ -333,11 +393,6 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		StreamURLToken       string
 		EpisodeFormat        string
 		NamingLocked         bool
-		ApplyNamingBusy      bool
-		NFORegenBusy         bool
-		StrmRegenBusy        bool
-		BeginClearBusy       bool
-		PlaybackClearBusy    bool
 		Roots                []library.RootFolder
 		RootsPage            PageInfo
 		Profiles             []library.QualityProfile
@@ -354,11 +409,6 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		StreamURLToken:       streamTok,
 		EpisodeFormat:        episodeFormat,
 		NamingLocked:         applyBusy,
-		ApplyNamingBusy:      applyBusy,
-		NFORegenBusy:         nfoBusy,
-		StrmRegenBusy:        strmBusy,
-		BeginClearBusy:       beginClearBusy,
-		PlaybackClearBusy:    playbackClearBusy,
 		Roots:                pageRoots,
 		RootsPage:            rootsPage,
 		Profiles:             pageProfiles,
@@ -366,6 +416,37 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		SubtitleLangs:        subtitleLangs,
 		SubtitleLangOptions:  settings.SubtitleLangSeed,
 		SubtitleAuto:         subtitleAuto,
+	})
+}
+
+func (h *Handler) settingsMaintenance(w http.ResponseWriter, r *http.Request) {
+	applyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain)
+	nfoBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateNFO, queue.SystemDomain)
+	strmBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateStrm, queue.SystemDomain)
+	beginClearBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindClearBeginningCache, queue.SystemDomain)
+	playbackClearBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindClearPlaybackCache, queue.SystemDomain)
+	syncBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain)
+	streamOK, streamReason := h.streamGate()
+	render(w, "settings_maintenance", struct {
+		pageBase
+		StreamEnabled        bool
+		StreamDisabledReason string
+		ApplyNamingBusy      bool
+		NFORegenBusy         bool
+		StrmRegenBusy        bool
+		BeginClearBusy       bool
+		PlaybackClearBusy    bool
+		SyncFilesBusy        bool
+	}{
+		pageBase:             newSettingsPage("Settings · Maintenance", "maintenance", flashFromQuery(r)),
+		StreamEnabled:        streamOK,
+		StreamDisabledReason: streamReason,
+		ApplyNamingBusy:      applyBusy,
+		NFORegenBusy:         nfoBusy,
+		StrmRegenBusy:        strmBusy,
+		BeginClearBusy:       beginClearBusy,
+		PlaybackClearBusy:    playbackClearBusy,
+		SyncFilesBusy:        syncBusy,
 	})
 }
 
@@ -395,7 +476,6 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	vals := map[string]string{}
 	for _, e := range []string{
-		settings.KeyFlareSolverrURL,
 		settings.KeyPotFetch,
 		settings.KeyDownloadWantedCron,
 		settings.KeyDownloadWantedOrder,
@@ -478,12 +558,6 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	if err := settings.SetMany(h.Queue.DB, vals); err != nil {
 		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
 		return
-	}
-	if u, ok := vals[settings.KeyFlareSolverrURL]; ok && strings.TrimSpace(u) == "" {
-		if err := settings.ClearUseFlareSolverr(h.Queue.DB); err != nil {
-			redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
-			return
-		}
 	}
 	if u, ok := vals[settings.KeyExternalBaseURL]; ok && h.Library != nil {
 		h.Library.PublicBaseURL = settings.NormalizeExternalBaseURL(u)
@@ -641,7 +715,12 @@ func (h *Handler) actionSaveDomainDefault(w http.ResponseWriter, r *http.Request
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
-	if err := settings.SetDomainDefault(h.Queue.DB, delay, maxQueue, maxParallel, rate, r.FormValue("sleep_requests"), r.FormValue("use_flaresolverr") == "1"); err != nil {
+	streamRate, err := settings.CombineDownloadRateLimit(r.FormValue("stream_play_rate_limit_value"), r.FormValue("stream_play_rate_limit_unit"))
+	if err != nil {
+		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
+		return
+	}
+	if err := settings.SetDomainDefault(h.Queue.DB, delay, maxQueue, maxParallel, rate, streamRate, r.FormValue("sleep_requests"), r.FormValue("use_flaresolverr") == "1"); err != nil {
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
@@ -674,11 +753,21 @@ func (h *Handler) actionUpsertDomainOverride(w http.ResponseWriter, r *http.Requ
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
+	streamRate, err := settings.CombineDownloadRateLimitOverride(
+		r.FormValue("stream_play_rate_limit_value"),
+		r.FormValue("stream_play_rate_limit_unit"),
+		defLim.StreamPlayRateLimit,
+	)
+	if err != nil {
+		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
+		return
+	}
 	if err := domains.UpdateHostOverrides(h.Queue.DB, domain,
 		r.FormValue("task_cooldown_seconds"),
 		r.FormValue("max_download_queue"),
 		r.FormValue("max_parallel_tasks"),
 		rate,
+		streamRate,
 		r.FormValue("sleep_requests"),
 		r.FormValue("use_flaresolverr"),
 	); err != nil {
@@ -889,18 +978,18 @@ func (h *Handler) actionUpdateProfile(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) actionRegenerateNFOs(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if h.Library == nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery("library unavailable"))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
 		return
 	}
 	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateNFO, queue.SystemDomain); busy {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery("NFO regenerate already queued"))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("NFO regenerate already queued"))
 		return
 	}
 	if _, err := h.Library.EnqueueRegenerateNFO(); err != nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
 		return
 	}
-	redirectSettings(w, r, "/settings/library", "ok=nfo-regen-queued")
+	redirectSettings(w, r, "/settings/maintenance", "ok=nfo-regen-queued")
 }
 
 func (h *Handler) actionRegenerateStreamToken(w http.ResponseWriter, r *http.Request) {
@@ -919,68 +1008,91 @@ func (h *Handler) actionRegenerateStreamToken(w http.ResponseWriter, r *http.Req
 func (h *Handler) actionRegenerateStrms(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if h.Library == nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery("library unavailable"))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
 		return
 	}
 	if ok, reason := h.streamGate(); !ok {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery(reason))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(reason))
 		return
 	}
 	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateStrm, queue.SystemDomain); busy {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery("strm regenerate already queued"))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("strm regenerate already queued"))
 		return
 	}
 	if _, err := h.Library.EnqueueRegenerateStrm(); err != nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
 		return
 	}
-	redirectSettings(w, r, "/settings/library", "ok=strm-regen-queued")
+	redirectSettings(w, r, "/settings/maintenance", "ok=strm-regen-queued")
 }
 
 func (h *Handler) actionClearBeginningCache(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if h.Library == nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery("library unavailable"))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
 		return
 	}
 	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindClearBeginningCache, queue.SystemDomain); busy {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery("clear beginning cache already queued"))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("clear beginning cache already queued"))
 		return
 	}
 	if _, err := h.Library.EnqueueClearBeginningCache(); err != nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
 		return
 	}
-	redirectSettings(w, r, "/settings/library", "ok=begin-clear-queued")
+	redirectSettings(w, r, "/settings/maintenance", "ok=begin-clear-queued")
 }
 
 func (h *Handler) actionClearPlaybackCache(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if h.Library == nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery("library unavailable"))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
 		return
 	}
 	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindClearPlaybackCache, queue.SystemDomain); busy {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery("clear progressive stream cache already queued"))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("clear progressive stream cache already queued"))
 		return
 	}
 	if _, err := h.Library.EnqueueClearPlaybackCache(); err != nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
 		return
 	}
-	redirectSettings(w, r, "/settings/library", "ok=playback-clear-queued")
+	redirectSettings(w, r, "/settings/maintenance", "ok=playback-clear-queued")
 }
 
 func (h *Handler) actionApplyEpisodeNaming(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if h.Library == nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery("library unavailable"))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
 		return
 	}
 	_, err := h.Library.EnqueueRenameEpisodes()
 	if err != nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
 		return
 	}
-	redirectSettings(w, r, "/settings/library", "ok=apply-naming")
+	redirectSettings(w, r, "/settings/maintenance", "ok=apply-naming")
 }
+
+func (h *Handler) actionSyncFiles(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	if h.Library == nil {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
+		return
+	}
+	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain); busy {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("File sync already queued"))
+		return
+	}
+	id, err := h.Library.EnqueueSyncFiles(queue.PrioritySyncFilesDue)
+	if err != nil {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
+		return
+	}
+	if id == 0 {
+		redirectSettings(w, r, "/settings/maintenance", "ok=sync-files-empty")
+		return
+	}
+	redirectSettings(w, r, "/settings/maintenance", "ok=sync-files-queued")
+}
+

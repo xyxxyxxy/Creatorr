@@ -2,6 +2,7 @@ package web_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -88,6 +89,77 @@ func TestSeriesListRenders(t *testing.T) {
 	}
 }
 
+func TestImportPageRequiresSeries(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/import", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Create a series first") {
+		t.Fatalf("missing empty-series message: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, `for="modal-add-series"`) || !strings.Contains(body, "modal-add-series") {
+		t.Fatalf("missing Add series CTA/modal: %s", truncate(body, 400))
+	}
+	if strings.Contains(body, `id="btn-scan"`) || strings.Contains(body, "Import process details") {
+		t.Fatalf("import UI should be disabled with no series: %s", truncate(body, 400))
+	}
+
+	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := lib.CreateProfile("default", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Show", SourceURL: "https://example.com/show", RootID: root.ID, QualityProfileID: profile.ID, Monitored: false,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec2 := httptest.NewRecorder()
+	r.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/import", nil))
+	if rec2.Code != 200 {
+		t.Fatalf("with series status %d", rec2.Code)
+	}
+	body2 := rec2.Body.String()
+	if !strings.Contains(body2, `id="btn-import"`) || !strings.Contains(body2, "Import process details") {
+		t.Fatalf("expected import UI with series: %s", truncate(body2, 400))
+	}
+	if strings.Contains(body2, `id="btn-scan"`) {
+		t.Fatalf("scan button should be removed: %s", truncate(body2, 400))
+	}
+	if strings.Contains(body2, "Create a series first") {
+		t.Fatalf("empty-series gate should be gone: %s", truncate(body2, 400))
+	}
+	if !strings.Contains(body2, "modal-add-series") || !strings.Contains(body2, "Create new series") {
+		t.Fatalf("expected add-series modal + Match create row when series exist: %s", truncate(body2, 400))
+	}
+	if !strings.Contains(body2, "modal-add-video") || !strings.Contains(body2, "js-add-video-form") {
+		t.Fatalf("expected add-video modal when series exist: %s", truncate(body2, 400))
+	}
+	if strings.Contains(body2, `id="import-match-create"`) {
+		t.Fatalf("inline create panel should be removed: %s", truncate(body2, 400))
+	}
+}
+
 func TestOverviewRenders(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
@@ -145,7 +217,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	for _, path := range []string{"/settings/library", "/settings/scheduler", "/settings/queue", "/settings/domains", "/tasks", "/history", "/stats"} {
+	for _, path := range []string{"/settings/general", "/settings/library", "/settings/maintenance", "/settings/scheduler", "/settings/queue", "/settings/domains", "/tasks", "/history", "/stats"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
@@ -161,6 +233,22 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		if rec.Code != 200 {
 			t.Fatalf("%s status %d: %s", path, rec.Code, rec.Body.String())
 		}
+		if path == "/settings/general" {
+			body := rec.Body.String()
+			if !strings.Contains(body, "External services") || !strings.Contains(body, "FlareSolverr URL") || !strings.Contains(body, "PO token provider URL") {
+				t.Fatalf("%s missing external service URL joins", path)
+			}
+			if !strings.Contains(body, "CREATORR_FLARESOLVERR_URL") || !strings.Contains(body, "CREATORR_POT_PROVIDER_URL") {
+				t.Fatalf("%s missing env hints", path)
+			}
+			if !strings.Contains(body, "Not configured") && !strings.Contains(body, "Healthy") && !strings.Contains(body, "Unreachable") {
+				t.Fatalf("%s missing health status label", path)
+			}
+			if strings.Contains(body, `name="flare_solverr_url"`) {
+				t.Fatalf("%s still posts flare_solverr_url", path)
+			}
+			continue
+		}
 		if path == "/history" {
 			body := rec.Body.String()
 			if !strings.Contains(body, `id="notifications"`) || !strings.Contains(body, "Finished tasks") {
@@ -173,9 +261,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 				t.Fatalf("/tasks missing interactive/pause note")
 			}
 		}
-		if path == "/settings/library" || path == "/settings/queue" {
+		if path == "/settings/library" || path == "/settings/queue" || path == "/settings/maintenance" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "/settings/general") || !strings.Contains(body, "/settings/queue") || !strings.Contains(body, "/settings/scheduler") {
+			if !strings.Contains(body, "/settings/general") || !strings.Contains(body, "/settings/queue") || !strings.Contains(body, "/settings/scheduler") || !strings.Contains(body, "/settings/maintenance") {
 				t.Fatalf("%s missing settings sub-nav in drawer", path)
 			}
 			if strings.Contains(body, `href="/settings/domains"`) {
@@ -206,7 +294,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "Domain defaults") || !strings.Contains(body, "Domain overrides") || !strings.Contains(body, "modal-add-domain-override") {
 				t.Fatalf("%s missing domain defaults/overrides", path)
 			}
-			if !strings.Contains(body, "Set FlareSolverr URL in Settings → General first.") {
+			if !strings.Contains(body, "Set CREATORR_FLARESOLVERR_URL first.") {
 				t.Fatalf("%s missing FlareSolverr URL gate hint", path)
 			}
 			if !strings.Contains(body, "list-panel") {
@@ -225,8 +313,24 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "External Creatorr URL") {
 				t.Fatalf("%s missing External Creatorr URL label", path)
 			}
-			if !strings.Contains(body, "Regenerate all .strm files") {
-				t.Fatalf("%s missing strm regenerate", path)
+			if strings.Contains(body, "Scan for missing files") {
+				t.Fatalf("%s still has Maintenance actions", path)
+			}
+			if !strings.Contains(body, "list-panel") {
+				t.Fatalf("%s missing list-panel", path)
+			}
+			continue
+		}
+		if path == "/settings/maintenance" {
+			body := rec.Body.String()
+			if !strings.Contains(body, "Scan for missing files") || !strings.Contains(body, "Regenerate all .strm files") {
+				t.Fatalf("%s missing maintenance actions", path)
+			}
+			if !strings.Contains(body, "Apply episode format") {
+				t.Fatalf("%s missing apply episode format", path)
+			}
+			if !strings.Contains(body, "Caches") || !strings.Contains(body, "Clear beginning of stream cache") {
+				t.Fatalf("%s missing caches section", path)
 			}
 			if !strings.Contains(body, "list-panel") {
 				t.Fatalf("%s missing list-panel", path)
@@ -577,6 +681,40 @@ func TestActionAddSeriesManual(t *testing.T) {
 	}
 	if list[0].SourceCount != 0 {
 		t.Fatalf("want no sources, got %d", list[0].SourceCount)
+	}
+}
+
+func TestActionAddSeriesManualJSON(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	body := strings.NewReader("title=JSON+Show&root_id=1&quality_profile_id=1&delivery_mode=download&response=json")
+	req := httptest.NewRequest(http.MethodPost, "/actions/add-series", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		ID    int64  `json:"id"`
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out.ID < 1 || out.Title != "JSON Show" {
+		t.Fatalf("out=%+v", out)
 	}
 }
 
