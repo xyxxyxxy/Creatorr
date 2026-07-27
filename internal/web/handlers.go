@@ -86,7 +86,6 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/set-source-monitored", h.actionSetSourceMonitored)
 	r.Post("/actions/set-series-monitored", h.actionSetSeriesMonitored)
 	r.Post("/actions/download-video", h.actionDownloadVideo)
-	r.Post("/actions/prepare-stream", h.actionPrepareStream)
 	r.Post("/actions/retry-source-errors", h.actionRetrySourceErrors)
 	r.Post("/actions/ignore-video", h.actionIgnoreVideo)
 	r.Post("/actions/delete-video", h.actionDeleteVideo)
@@ -111,10 +110,6 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/add-profile", h.actionAddProfile)
 	r.Post("/actions/update-profile", h.actionUpdateProfile)
 	r.Post("/actions/regenerate-nfos", h.actionRegenerateNFOs)
-	r.Post("/actions/regenerate-stream-token", h.actionRegenerateStreamToken)
-	r.Post("/actions/regenerate-strms", h.actionRegenerateStrms)
-	r.Post("/actions/clear-beginning-cache", h.actionClearBeginningCache)
-	r.Post("/actions/clear-playback-cache", h.actionClearPlaybackCache)
 	r.Post("/actions/apply-episode-naming", h.actionApplyEpisodeNaming)
 	r.Post("/actions/sync-files", h.actionSyncFiles)
 }

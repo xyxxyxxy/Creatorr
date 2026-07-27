@@ -199,7 +199,7 @@ func externalServiceJoinViews(h *Handler) (flare, pot externalServiceURLView) {
 	flare = externalServiceURLView{
 		Label: "FlareSolverr URL",
 		Value: strings.TrimSpace(h.FlareSolverrURL),
-		Hint: "Set CREATORR_FLARESOLVERR_URL and restart. Compose default http://creatorr-flaresolverr:8191.\nEnable 'Use FlareSolverr' on 'Domain defaults' or a host 'On' override ('Settings → Queue / Domains').",
+		Hint:  "Set CREATORR_FLARESOLVERR_URL and restart. Compose default http://creatorr-flaresolverr:8191.\nEnable 'Use FlareSolverr' On a host 'Domain override' ('Settings → Queue / Domains').",
 	}
 	pot = externalServiceURLView{
 		Label: "PO token provider URL",
@@ -290,17 +290,16 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 	defLim, _ := settings.DefaultLimits(h.Queue.DB)
-	defCookies, _ := cookies.Get(h.Queue.DB, settings.DomainDefault)
-	defUsername, _, _ := settings.DefaultCredentials(h.Queue.DB)
 	dqRows, _ := settings.DomainOverrideRows(h.Queue.DB)
 	pageRows, pageInfo := SlicePage(r, "page", dqRows)
 	sourceDomains, _ := h.Library.ListSourceDomains()
 	flareOK := settings.FlareSolverrConfigured()
+	// Access is override-only; Domain defaults Flare is always off for inherit display.
+	defLim.UseFlareSolverr = false
 	render(w, "settings_queue", struct {
 		pageBase
 		Settings        []settingsRowView
 		DefaultLimits   settings.DomainLimits
-		DefaultCookies  string
 		DefaultUsername string
 		DomainOverrides []settings.DomainQueueRow
 		Page            PageInfo
@@ -310,8 +309,7 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 		pageBase:        newSettingsPage("Settings · Queue / Domains", "queue", flashFromQuery(r)),
 		Settings:        rows,
 		DefaultLimits:   defLim,
-		DefaultCookies:  defCookies,
-		DefaultUsername: defUsername,
+		DefaultUsername: "",
 		DomainOverrides: pageRows,
 		Page:            pageInfo,
 		DomainDatalist:  sourceDomains,
@@ -326,7 +324,6 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 	profiles, _ := h.Library.ListProfiles()
 	pageRoots, rootsPage := SlicePage(r, "page", roots)
 	pageProfiles, profilesPage := SlicePage(r, "profiles_page", profiles)
-	streamOK, streamReason := h.streamGate()
 	entries, err := settings.LibrarySettings(h.Queue.DB)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -334,17 +331,9 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 	metadataDomainTag, _ := settings.MetadataDomainTagEnabled(h.Queue.DB)
 	metadataGenresFromCategories, _ := settings.MetadataGenresFromCategoriesEnabled(h.Queue.DB)
-	var extRow *settingsRowView
 	settingRows := make([]settingsRowView, 0, len(entries))
 	subtitleLangs := settings.ParseSubtitleLangsJSON(settings.DefaultSubtitleLangs)
 	subtitleAuto := false
-	playbackCacheOn := false
-	for _, e := range entries {
-		if e.Key == settings.KeyStreamPlaybackCache && strings.TrimSpace(e.Value) == "1" {
-			playbackCacheOn = true
-			break
-		}
-	}
 	for _, e := range entries {
 		switch e.Key {
 		case settings.KeySubtitleLangs:
@@ -360,64 +349,34 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		row := settingsRowView{
 			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
 		}
-		if e.Key == settings.KeyCacheBeginningSeconds {
-			row.Value = settings.NormalizeCacheBeginningSeconds(e.Value)
-		}
-		if e.Key == settings.KeyStreamPlaybackCacheMaxHours {
-			row.Value = settings.NormalizeStreamPlaybackCacheMaxHours(e.Value)
-			row.Disabled = !playbackCacheOn
-		}
-		if e.Key == settings.KeyStreamPlaybackCache {
-			if e.Value != "1" {
-				row.Value = "0"
-			}
-		}
-		if e.Key == settings.KeyExternalBaseURL {
-			row.Value = settings.NormalizeExternalBaseURL(e.Value)
-			cp := row
-			extRow = &cp
-			continue
-		}
 		settingRows = append(settingRows, row)
-	}
-	streamTok := ""
-	if streamOK {
-		streamTok, _ = library.EnsureStreamToken(h.Queue.DB)
 	}
 	render(w, "settings_library", struct {
 		pageBase
-		ExternalURLSetting   *settingsRowView
-		Settings             []settingsRowView
-		StreamEnabled        bool
-		StreamDisabledReason string
-		StreamURLToken       string
-		EpisodeFormat        string
-		NamingLocked         bool
-		Roots                []library.RootFolder
-		RootsPage            PageInfo
-		Profiles             []library.QualityProfile
-		ProfilesPage         PageInfo
-		SubtitleLangs        []string
-		SubtitleLangOptions  []string
-		SubtitleAuto         bool
+		Settings                     []settingsRowView
+		EpisodeFormat                string
+		NamingLocked                 bool
+		Roots                        []library.RootFolder
+		RootsPage                    PageInfo
+		Profiles                     []library.QualityProfile
+		ProfilesPage                 PageInfo
+		SubtitleLangs                []string
+		SubtitleLangOptions          []string
+		SubtitleAuto                 bool
 		MetadataDomainTag            bool
 		MetadataGenresFromCategories bool
 	}{
-		pageBase:             newSettingsPage("Settings · Library", "library", flashFromQuery(r)),
-		ExternalURLSetting:   extRow,
-		Settings:             settingRows,
-		StreamEnabled:        streamOK,
-		StreamDisabledReason: streamReason,
-		StreamURLToken:       streamTok,
-		EpisodeFormat:        episodeFormat,
-		NamingLocked:         applyBusy,
-		Roots:                pageRoots,
-		RootsPage:            rootsPage,
-		Profiles:             pageProfiles,
-		ProfilesPage:         profilesPage,
-		SubtitleLangs:        subtitleLangs,
-		SubtitleLangOptions:  settings.SubtitleLangSeed,
-		SubtitleAuto:         subtitleAuto,
+		pageBase:                     newSettingsPage("Settings · Library", "library", flashFromQuery(r)),
+		Settings:                     settingRows,
+		EpisodeFormat:                episodeFormat,
+		NamingLocked:                 applyBusy,
+		Roots:                        pageRoots,
+		RootsPage:                    rootsPage,
+		Profiles:                     pageProfiles,
+		ProfilesPage:                 profilesPage,
+		SubtitleLangs:                subtitleLangs,
+		SubtitleLangOptions:          settings.SubtitleLangSeed,
+		SubtitleAuto:                 subtitleAuto,
 		MetadataDomainTag:            metadataDomainTag,
 		MetadataGenresFromCategories: metadataGenresFromCategories,
 	})
@@ -435,35 +394,21 @@ func (h *Handler) settingsMaintenance(w http.ResponseWriter, r *http.Request) {
 
 type maintenancePageData struct {
 	pageBase
-	OOB                  bool
-	StreamEnabled        bool
-	StreamDisabledReason string
-	ApplyNamingBusy      bool
-	NFORegenBusy         bool
-	StrmRegenBusy        bool
-	BeginClearBusy       bool
-	PlaybackClearBusy    bool
-	SyncFilesBusy        bool
+	OOB             bool
+	ApplyNamingBusy bool
+	NFORegenBusy    bool
+	SyncFilesBusy   bool
 }
 
 func (h *Handler) maintenancePageData(r *http.Request) maintenancePageData {
 	applyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain)
 	nfoBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateNFO, queue.SystemDomain)
-	strmBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateStrm, queue.SystemDomain)
-	beginClearBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindClearBeginningCache, queue.SystemDomain)
-	playbackClearBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindClearPlaybackCache, queue.SystemDomain)
 	syncBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain)
-	streamOK, streamReason := h.streamGate()
 	return maintenancePageData{
-		pageBase:             newSettingsPage("Settings · Maintenance", "maintenance", flashFromQuery(r)),
-		StreamEnabled:        streamOK,
-		StreamDisabledReason: streamReason,
-		ApplyNamingBusy:      applyBusy,
-		NFORegenBusy:         nfoBusy,
-		StrmRegenBusy:        strmBusy,
-		BeginClearBusy:       beginClearBusy,
-		PlaybackClearBusy:    playbackClearBusy,
-		SyncFilesBusy:        syncBusy,
+		pageBase:        newSettingsPage("Settings · Maintenance", "maintenance", flashFromQuery(r)),
+		ApplyNamingBusy: applyBusy,
+		NFORegenBusy:    nfoBusy,
+		SyncFilesBusy:   syncBusy,
 	}
 }
 
@@ -501,43 +446,11 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 		settings.KeyStatsRetentionDays,
 		settings.KeySourceDownloadErrorThreshold,
 		settings.KeyEpisodeFormat,
-		settings.KeyExternalBaseURL,
-		settings.KeyCacheBeginningSeconds,
-		settings.KeyStreamPlaybackCacheMaxHours,
 	} {
 		if _, ok := r.Form[e]; !ok {
 			continue
 		}
-		// Stream beginning / progressive cache only when stream delivery is supported (same gate as series Stream mode).
-		if e == settings.KeyCacheBeginningSeconds || e == settings.KeyStreamPlaybackCacheMaxHours {
-			if ok, _ := h.streamGate(); !ok {
-				// Same POST may be enabling streaming via external_base_url.
-				if settings.NormalizeExternalBaseURL(r.FormValue(settings.KeyExternalBaseURL)) == "" {
-					continue
-				}
-			}
-		}
 		vals[e] = r.FormValue(e)
-	}
-	// Streaming checkbox: when beginning or max-hours fields are posted, record on/off.
-	if r.FormValue("redirect") == "/settings/library" {
-		_, beginningPosted := r.Form[settings.KeyCacheBeginningSeconds]
-		_, maxPosted := r.Form[settings.KeyStreamPlaybackCacheMaxHours]
-		if beginningPosted || maxPosted {
-			if ok, _ := h.streamGate(); ok || settings.NormalizeExternalBaseURL(r.FormValue(settings.KeyExternalBaseURL)) != "" {
-				if r.FormValue(settings.KeyStreamPlaybackCache) == "1" {
-					vals[settings.KeyStreamPlaybackCache] = "1"
-				} else {
-					vals[settings.KeyStreamPlaybackCache] = "0"
-				}
-			}
-		}
-	}
-	if raw, ok := vals[settings.KeyStreamPlaybackCacheMaxHours]; ok {
-		vals[settings.KeyStreamPlaybackCacheMaxHours] = settings.NormalizeStreamPlaybackCacheMaxHours(raw)
-	}
-	if raw, ok := vals[settings.KeyCacheBeginningSeconds]; ok {
-		vals[settings.KeyCacheBeginningSeconds] = settings.NormalizeCacheBeginningSeconds(raw)
 	}
 	if raw, ok := vals[settings.KeyPotFetch]; ok {
 		vals[settings.KeyPotFetch] = settings.NormalizePotFetch(raw)
@@ -579,12 +492,6 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	if err := settings.SetMany(h.Queue.DB, vals); err != nil {
 		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
 		return
-	}
-	if u, ok := vals[settings.KeyExternalBaseURL]; ok && h.Library != nil {
-		h.Library.PublicBaseURL = settings.NormalizeExternalBaseURL(u)
-	}
-	if _, ok := vals[settings.KeyStreamPlaybackCacheMaxHours]; ok && h.Library != nil {
-		_ = h.Library.EnforcePlaybackCacheBudget(0)
 	}
 	// Shorter/disabled retention must drop old samples immediately (not wait for next sample tick).
 	if _, ok := vals[settings.KeyStatsRetentionDays]; ok {
@@ -736,22 +643,13 @@ func (h *Handler) actionSaveDomainDefault(w http.ResponseWriter, r *http.Request
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
-	streamRate, err := settings.CombineDownloadRateLimit(r.FormValue("stream_play_rate_limit_value"), r.FormValue("stream_play_rate_limit_unit"))
-	if err != nil {
+	if err := settings.SetDomainDefault(h.Queue.DB, delay, maxQueue, maxParallel, rate, r.FormValue("sleep_requests"), false); err != nil {
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
-	if err := settings.SetDomainDefault(h.Queue.DB, delay, maxQueue, maxParallel, rate, streamRate, r.FormValue("sleep_requests"), r.FormValue("use_flaresolverr") == "1"); err != nil {
-		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
-		return
-	}
-	if err := h.saveDomainCookies(settings.DomainDefault, r.FormValue("cookies")); err != nil {
-		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
-		return
-	}
-	defUser, _, _ := settings.DefaultCredentials(h.Queue.DB)
-	keepPassword := strings.TrimSpace(r.FormValue("username")) != "" && r.FormValue("password") == "" && defUser != ""
-	if err := settings.SaveDefaultCredentials(h.Queue.DB, r.FormValue("username"), r.FormValue("password"), keepPassword); err != nil {
+	// Access (Flare / cookies / credentials) is override-only; clear any legacy defaults jar/creds.
+	_ = cookies.Delete(h.Queue.DB, settings.DomainDefault)
+	if err := settings.SaveDefaultCredentials(h.Queue.DB, "", "", false); err != nil {
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
@@ -780,23 +678,17 @@ func (h *Handler) actionUpsertDomainOverride(w http.ResponseWriter, r *http.Requ
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
-	streamRate, err := settings.CombineDownloadRateLimitOverride(
-		r.FormValue("stream_play_rate_limit_value"),
-		r.FormValue("stream_play_rate_limit_unit"),
-		defLim.StreamPlayRateLimit,
-	)
-	if err != nil {
-		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
-		return
+	flareStr := "default"
+	if v := strings.TrimSpace(r.FormValue("use_flaresolverr")); v == "1" || strings.EqualFold(v, "on") || strings.EqualFold(v, "true") {
+		flareStr = "on"
 	}
 	if err := domains.UpdateHostOverrides(h.Queue.DB, domain,
 		r.FormValue("task_cooldown_seconds"),
 		r.FormValue("max_download_queue"),
 		r.FormValue("max_parallel_tasks"),
 		rate,
-		streamRate,
 		r.FormValue("sleep_requests"),
-		r.FormValue("use_flaresolverr"),
+		flareStr,
 	); err != nil {
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
@@ -818,7 +710,7 @@ func (h *Handler) actionUpsertDomainOverride(w http.ResponseWriter, r *http.Requ
 		keepPassword := false
 		if !inheritCreds && credUser != "" {
 			hasStored, _ := settings.HostHasStoredPassword(h.Queue.DB, domain)
-			keepPassword = hasStored && credPass == ""
+			keepPassword = hasStored && credPass == "" && r.FormValue("password_keep") == "1"
 		}
 		if err := settings.SaveHostCredentials(h.Queue.DB, domain, credUser, credPass, inheritCreds, keepPassword); err != nil {
 			redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
@@ -1039,74 +931,6 @@ func (h *Handler) actionRegenerateNFOs(w http.ResponseWriter, r *http.Request) {
 	redirectSettings(w, r, "/settings/maintenance", "ok=nfo-regen-queued")
 }
 
-func (h *Handler) actionRegenerateStreamToken(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	if ok, reason := h.streamGate(); !ok {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery(reason))
-		return
-	}
-	if _, err := library.RegenerateStreamToken(h.Queue.DB); err != nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
-		return
-	}
-	redirectSettings(w, r, "/settings/library", "ok=stream-token-rotated")
-}
-
-func (h *Handler) actionRegenerateStrms(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	if h.Library == nil {
-		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
-		return
-	}
-	if ok, reason := h.streamGate(); !ok {
-		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(reason))
-		return
-	}
-	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateStrm, queue.SystemDomain); busy {
-		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("strm regenerate already queued"))
-		return
-	}
-	if _, err := h.Library.EnqueueRegenerateStrm(); err != nil {
-		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
-		return
-	}
-	redirectSettings(w, r, "/settings/maintenance", "ok=strm-regen-queued")
-}
-
-func (h *Handler) actionClearBeginningCache(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	if h.Library == nil {
-		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
-		return
-	}
-	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindClearBeginningCache, queue.SystemDomain); busy {
-		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("clear beginning cache already queued"))
-		return
-	}
-	if _, err := h.Library.EnqueueClearBeginningCache(); err != nil {
-		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
-		return
-	}
-	redirectSettings(w, r, "/settings/maintenance", "ok=begin-clear-queued")
-}
-
-func (h *Handler) actionClearPlaybackCache(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	if h.Library == nil {
-		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
-		return
-	}
-	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindClearPlaybackCache, queue.SystemDomain); busy {
-		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("clear progressive stream cache already queued"))
-		return
-	}
-	if _, err := h.Library.EnqueueClearPlaybackCache(); err != nil {
-		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
-		return
-	}
-	redirectSettings(w, r, "/settings/maintenance", "ok=playback-clear-queued")
-}
-
 func (h *Handler) actionApplyEpisodeNaming(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if h.Library == nil {
@@ -1142,4 +966,3 @@ func (h *Handler) actionSyncFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	redirectSettings(w, r, "/settings/maintenance", "ok=sync-files-queued")
 }
-

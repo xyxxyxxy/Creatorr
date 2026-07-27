@@ -98,7 +98,7 @@ func WritePlan(mediaPath string, p AppliedCutPlan) (string, error) {
 	return path, nil
 }
 
-// PlanPath returns the sidecar path for a media/strm basename.
+// PlanPath returns the sidecar path for a media basename.
 func PlanPath(mediaPath string) string {
 	ext := filepath.Ext(mediaPath)
 	base := stringsTrimSuffix(mediaPath, ext)

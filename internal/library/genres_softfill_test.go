@@ -50,7 +50,7 @@ func TestSoftFillVideoGenresFromCategories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(v.Genres) != 3 || v.Genres[0] != "Education" || v.Genres[1] != "Science" || v.Genres[2] != "News" {
+	if len(v.Genres) != 3 || v.Genres[0] != "News" || v.Genres[1] != "Education" || v.Genres[2] != "Science" {
 		t.Fatalf("genres merged: %v", v.Genres)
 	}
 }

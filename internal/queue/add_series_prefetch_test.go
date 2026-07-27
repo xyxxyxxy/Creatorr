@@ -43,7 +43,7 @@ func TestAddSeriesPrefetchIsInteractiveAndIgnoresPause(t *testing.T) {
 func TestInteractiveFinishSkipsCooldown(t *testing.T) {
 	s := openStore(t)
 	_ = settings.SeedDefaults(s.DB)
-	_ = settings.SetDomainDefault(s.DB, 30, 8, 1, "10M", "off", "1", false)
+	_ = settings.SetDomainDefault(s.DB, 30, 8, 1, "10M", "1", false)
 	_ = domains.EnsureHost(s.DB, "example.com")
 	id, err := s.Enqueue(queue.EnqueueParams{
 		Kind:    queue.KindPrefetchAddSeries,

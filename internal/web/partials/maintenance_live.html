@@ -1,5 +1,5 @@
 {{define "maintenance_live"}}
-{{/* Busy flags for Scan / Apply / NFO / strm / cache clear buttons. */}}
+{{/* Busy flags for Scan / Apply / NFO regenerate buttons. */}}
 <div id="maintenance-live"{{if .OOB}} hx-swap-oob="true"{{end}}>
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Library maintenance" "help" "Library-wide one-shot actions. Large libraries may take a while.")}}
@@ -7,12 +7,12 @@
     {{if .SyncFilesBusy}}
     <div class="join w-full">
       <button type="button" class="btn btn-warning join-item grow" disabled>Scan for missing files (queued)</button>
-      {{template "field_info" (dict "Join" true "Info" "Find missing or restored media and beginning caches. Same pass as 'File sync schedule'.")}}
+      {{template "field_info" (dict "Join" true "Info" "Find missing or restored media. Same pass as 'File sync schedule'.")}}
     </div>
     {{else}}
     <form method="post" action="/actions/sync-files" class="join w-full">
       <button type="submit" class="btn btn-warning join-item grow">Scan for missing files</button>
-      {{template "field_info" (dict "Join" true "Info" "Find missing or restored media and beginning caches. Same pass as 'File sync schedule'.")}}
+      {{template "field_info" (dict "Join" true "Info" "Find missing or restored media. Same pass as 'File sync schedule'.")}}
     </form>
     {{end}}
 
@@ -37,52 +37,6 @@
     <form method="post" action="/actions/regenerate-nfos" class="join w-full">
       <button type="submit" class="btn btn-warning join-item grow">Regenerate all NFO files</button>
       {{template "field_info" (dict "Join" true "Info" "Rewrite episode and series NFO from the library. Skips unchanged files.")}}
-    </form>
-    {{end}}
-
-    {{if not .StreamEnabled}}
-    <div class="join w-full">
-      <button type="button" class="btn btn-warning join-item grow tooltip tooltip-top" data-tip="{{.StreamDisabledReason}}" disabled>Regenerate all .strm files</button>
-      {{template "field_info" (dict "Join" true "Info" "Rewrite .strm files to the current 'External Creatorr URL' and stream token.")}}
-    </div>
-    {{else if .StrmRegenBusy}}
-    <div class="join w-full">
-      <button type="button" class="btn btn-warning join-item grow" disabled>Regenerate all .strm files (queued)</button>
-      {{template "field_info" (dict "Join" true "Info" "Rewrite .strm files to the current 'External Creatorr URL' and stream token.")}}
-    </div>
-    {{else}}
-    <form method="post" action="/actions/regenerate-strms" class="join w-full">
-      <button type="submit" class="btn btn-warning join-item grow">Regenerate all .strm files</button>
-      {{template "field_info" (dict "Join" true "Info" "Rewrite .strm files to the current 'External Creatorr URL' and stream token.")}}
-    </form>
-    {{end}}
-  </div>
-{{template "list_panel_end"}}
-
-{{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Caches" "help" "Clear stream caches under the cache directory. Does not delete packed library media.")}}
-  <div class="flex flex-col items-stretch gap-3 w-full max-w-md">
-    {{if .BeginClearBusy}}
-    <div class="join w-full">
-      <button type="button" class="btn btn-warning join-item grow" disabled>Clear beginning of stream cache (queued)</button>
-      {{template "field_info" (dict "Join" true "Info" "Delete beginning caches and clear flags. May refill on pack or file sync when enabled.")}}
-    </div>
-    {{else}}
-    <form method="post" action="/actions/clear-beginning-cache" class="join w-full">
-      <button type="submit" class="btn btn-warning join-item grow">Clear beginning of stream cache</button>
-      {{template "field_info" (dict "Join" true "Info" "Delete beginning caches and clear flags. May refill on pack or file sync when enabled.")}}
-    </form>
-    {{end}}
-
-    {{if .PlaybackClearBusy}}
-    <div class="join w-full">
-      <button type="button" class="btn btn-warning join-item grow" disabled>Clear progressive stream cache (queued)</button>
-      {{template "field_info" (dict "Join" true "Info" "Delete progressive on-play caches. Leaves beginning caches alone.")}}
-    </div>
-    {{else}}
-    <form method="post" action="/actions/clear-playback-cache" class="join w-full">
-      <button type="submit" class="btn btn-warning join-item grow">Clear progressive stream cache</button>
-      {{template "field_info" (dict "Join" true "Info" "Delete progressive on-play caches. Leaves beginning caches alone.")}}
     </form>
     {{end}}
   </div>

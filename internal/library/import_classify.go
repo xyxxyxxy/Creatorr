@@ -13,7 +13,6 @@ const (
 	ImportRoleJSON  = "json"
 	ImportRoleThumb = "thumb"
 	ImportRoleSub   = "sub"
-	ImportRoleStrm  = "strm"
 	ImportRoleOther = "other"
 )
 
@@ -86,10 +85,6 @@ func ClassifyImportFile(filename string) (role, stemBase string) {
 
 	if mediaExts[ext] {
 		return ImportRoleVideo, strings.TrimSuffix(name, filepath.Ext(name))
-	}
-	if ext == ".strm" {
-		// Stream links must be regenerated with the current External Creatorr URL + token.
-		return ImportRoleStrm, strings.TrimSuffix(name, filepath.Ext(name))
 	}
 	if strings.HasSuffix(lower, ".info.json") {
 		base := name[:len(name)-len(".info.json")]

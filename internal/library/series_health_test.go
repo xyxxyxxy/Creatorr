@@ -116,7 +116,7 @@ func TestSeriesWarnLevels(t *testing.T) {
 		t.Fatal(err)
 	}
 	f = flags[ser.ID]
-	if !f.HasSourceError || f.HasDownloadError {
+	if !f.HasSourceError || !f.HasDownloadError || f.SourceErrorCount != 1 || f.DownloadErrorCount != 1 {
 		t.Fatalf("after source error flags=%+v", f)
 	}
 	n, err := s.CountSeriesWithError()

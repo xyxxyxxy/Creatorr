@@ -187,7 +187,7 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 		FROM videos v
 		JOIN series ser ON ser.id = v.series_id
 		JOIN sources src ON src.id = v.source_id
-		WHERE ser.monitored = 1 AND ser.delivery_mode = 'download' AND v.status = 'wanted'
+		WHERE ser.monitored = 1 AND v.status = 'wanted'
 		ORDER BY v.series_id, ` + orderSQL + `
 	`)
 	if err != nil {
@@ -333,8 +333,6 @@ func (s *Store) hasPendingDownload(videoID int64) (bool, error) {
 // MarkDeleted clears file rows, sets status deleted, writes history.
 // Used for intentional removals (retention, user delete) - not for transient missing paths.
 func (s *Store) MarkDeleted(videoID int64, reason string, taskID int64) error {
-	_ = s.ClearBeginning(videoID)
-	_ = s.ClearPlaybackCache(videoID)
 	tx, err := s.DB.SQL.Begin()
 	if err != nil {
 		return err
@@ -489,8 +487,6 @@ func (s *Store) reportTaskProgress(taskID int64, progress ProgressFn, msg string
 type FileSyncResult struct {
 	MissingIDs           []int64
 	RestoredIDs          []int64
-	BeginningMissingIDs  []int64
-	BeginningRestoredIDs []int64
 	ExternallyChangedIDs []int64
 	SidecarMissing       []FileSyncSidecarIssue
 	SidecarRestored      []FileSyncSidecarIssue
@@ -499,8 +495,7 @@ type FileSyncResult struct {
 
 // Total returns count of videos/files that changed in any tracked way.
 func (r FileSyncResult) Total() int {
-	return len(r.MissingIDs) + len(r.RestoredIDs) + len(r.BeginningMissingIDs) +
-		len(r.BeginningRestoredIDs) + len(r.ExternallyChangedIDs) +
+	return len(r.MissingIDs) + len(r.RestoredIDs) + len(r.ExternallyChangedIDs) +
 		len(r.SidecarMissing) + len(r.SidecarRestored) + len(r.SidecarChanged)
 }
 
@@ -530,17 +525,6 @@ func (s *Store) FileSyncPass(taskID int64, progress ...ProgressFn) (FileSyncResu
 	out.SidecarRestored = sidecarRest
 	out.SidecarChanged = sidecarChg
 
-	s.reportTaskProgress(taskID, prog, "Checking beginning caches…", 0.58)
-	beginLostIDs, beginRestoredIDs, err := s.fileSyncBeginnings(taskID, prog)
-	if err != nil {
-		return out, err
-	}
-	out.BeginningMissingIDs = beginLostIDs
-	out.BeginningRestoredIDs = beginRestoredIDs
-
-	s.reportTaskProgress(taskID, prog, "Enforcing progressive cache budget…", 0.85)
-	_ = s.EnforcePlaybackCacheBudget(0)
-
 	total := out.Total()
 	msg := "No changes"
 	if total > 0 {
@@ -563,16 +547,9 @@ func (s *Store) FileSyncPass(taskID int64, progress ...ProgressFn) (FileSyncResu
 		if n := len(out.SidecarChanged); n > 0 {
 			parts = append(parts, fmt.Sprintf("%d sidecar size changed", n))
 		}
-		if n := len(out.BeginningMissingIDs); n > 0 {
-			parts = append(parts, fmt.Sprintf("%d beginning cache missing", n))
-		}
-		if n := len(out.BeginningRestoredIDs); n > 0 {
-			parts = append(parts, fmt.Sprintf("%d beginning cache restored", n))
-		}
 		msg = "File sync: " + strings.Join(parts, ", ")
 		allIDs := append(append([]int64{}, out.MissingIDs...), out.RestoredIDs...)
 		allIDs = append(allIDs, out.ExternallyChangedIDs...)
-		allIDs = append(append(allIDs, out.BeginningMissingIDs...), out.BeginningRestoredIDs...)
 		for _, it := range out.SidecarMissing {
 			allIDs = append(allIDs, it.VideoID)
 		}
@@ -586,8 +563,6 @@ func (s *Store) FileSyncPass(taskID int64, progress ...ProgressFn) (FileSyncResu
 			"missing_ids":            out.MissingIDs,
 			"restored_ids":           out.RestoredIDs,
 			"externally_changed_ids": out.ExternallyChangedIDs,
-			"beginning_missing_ids":  out.BeginningMissingIDs,
-			"beginning_restored_ids": out.BeginningRestoredIDs,
 			"sidecar_missing":        out.SidecarMissing,
 			"sidecar_restored":       out.SidecarRestored,
 			"sidecar_changed":        out.SidecarChanged,
@@ -728,7 +703,7 @@ func (s *Store) fileSyncMissingAndRestore(taskID int64, progress ProgressFn) (mi
 	return missingIDs, restoredIDs, changedIDs, nil
 }
 
-// fileSyncSidecars reconciles registered non-video files (nfo/json/thumb/sub/strm/…).
+// fileSyncSidecars reconciles registered non-video files (nfo/json/thumb/sub/…).
 // Missing / size drift alerts without flipping video status. size_bytes = -1 means
 // already known missing (idempotent until path returns).
 func (s *Store) fileSyncSidecars(taskID int64, progress ProgressFn) (missing, restored, changed []FileSyncSidecarIssue, err error) {
@@ -739,7 +714,7 @@ func (s *Store) fileSyncSidecars(taskID int64, progress ProgressFn) (missing, re
 		JOIN series s ON s.id = v.series_id
 		JOIN root_folders r ON r.id = s.root_id
 		WHERE f.kind != 'video'
-		  AND v.status IN ('downloaded', 'verify_failed', 'missing', 'streamable')
+		  AND v.status IN ('downloaded', 'verify_failed', 'missing')
 	`)
 	if err != nil {
 		return nil, nil, nil, err
@@ -821,86 +796,6 @@ func (s *Store) fileSyncSidecars(taskID int64, progress ProgressFn) (missing, re
 		}
 	}
 	return missing, restored, changed, nil
-}
-
-// fileSyncBeginnings reconciles download-beginning cache vs stream_beginning_cached.
-// Video status stays streamable; beginning loss/restore is recorded on video activity.
-// Lost beginning: best-effort requeue cache_beginning (setting > 0, domain active, pipe-only -
-// same gates as EnqueueCacheBeginning). Skips entirely when CacheDir is offline.
-func (s *Store) fileSyncBeginnings(taskID int64, progress ProgressFn) (lostIDs, restoredIDs []int64, err error) {
-	cacheRoot := strings.TrimSpace(s.CacheDir)
-	if cacheRoot == "" {
-		cacheRoot = filepath.Join("var", "cache")
-	}
-	if !rootOnline(cacheRoot) {
-		return nil, nil, nil
-	}
-
-	rows, err := s.DB.SQL.Query(`
-		SELECT id, COALESCE(stream_urls_kind,''), stream_beginning_cached
-		FROM videos
-		WHERE status = 'streamable'
-	`)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer rows.Close()
-
-	type hit struct {
-		id      int64
-		kind    string
-		flagged bool
-	}
-	var list []hit
-	for rows.Next() {
-		var h hit
-		var flag int
-		if err := rows.Scan(&h.id, &h.kind, &flag); err != nil {
-			return nil, nil, err
-		}
-		h.flagged = flag != 0
-		list = append(list, h)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
-	}
-	if err := rows.Close(); err != nil {
-		return nil, nil, err
-	}
-
-	n := len(list)
-	for i, h := range list {
-		if n > 0 && (i%25 == 0 || i == n-1) {
-			s.reportTaskProgress(taskID, progress,
-				fmt.Sprintf("Checking beginning caches… %d/%d", i+1, n),
-				0.58+0.25*float64(i+1)/float64(n))
-		}
-		if StreamCDNDirect(h.kind) {
-			continue
-		}
-		onDisk := s.HasBeginning(h.id)
-		switch {
-		case h.flagged && !onDisk:
-			if err := s.SetStreamBeginningCached(h.id, false); err != nil {
-				return lostIDs, restoredIDs, err
-			}
-			detail := map[string]any{"reason": "sync_files"}
-			if tid, enqErr := s.EnqueueCacheBeginning(h.id); enqErr == nil && tid > 0 {
-				detail["task_id"] = tid
-			}
-			_ = s.AddVideoHistory(h.id, "beginning_missing", "Download beginning cache missing on disk", detail, taskID)
-			lostIDs = append(lostIDs, h.id)
-		case !h.flagged && onDisk:
-			if err := s.SetStreamBeginningCached(h.id, true); err != nil {
-				return lostIDs, restoredIDs, err
-			}
-			_ = s.AddVideoHistory(h.id, "beginning_restored", "Download beginning cache found again", map[string]any{
-				"reason": "sync_files",
-			}, taskID)
-			restoredIDs = append(restoredIDs, h.id)
-		}
-	}
-	return lostIDs, restoredIDs, nil
 }
 
 func (s *Store) retentionPurge(now time.Time, taskID int64, progress ProgressFn) ([]int64, error) {

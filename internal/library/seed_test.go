@@ -30,7 +30,7 @@ func TestSeedDefaults(t *testing.T) {
 	var roots, profiles int
 	_ = d.SQL.QueryRow(`SELECT COUNT(*) FROM root_folders`).Scan(&roots)
 	_ = d.SQL.QueryRow(`SELECT COUNT(*) FROM quality_profiles`).Scan(&profiles)
-	if roots != 1 || profiles != 3 {
+	if roots != 1 || profiles != 4 {
 		t.Fatalf("roots=%d profiles=%d", roots, profiles)
 	}
 	var name, path string
@@ -54,6 +54,7 @@ func TestSeedDefaults(t *testing.T) {
 		{library.DefaultProfileName, library.DefaultFormat},
 		{library.Profile1080Name, library.Profile1080Format},
 		{library.Profile720Name, library.Profile720Format},
+		{library.Profile480Name, library.Profile480Format},
 	}
 	i := 0
 	for rows.Next() {

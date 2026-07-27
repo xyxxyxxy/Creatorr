@@ -160,7 +160,7 @@ func (s *Store) repackOneEpisodeNumbers(videoID int64, cfg NamingConfig, taskID 
 	if err != nil {
 		return err
 	}
-	if v.Status != "downloaded" && v.Status != "streamable" && v.Status != "verify_failed" {
+	if v.Status != "downloaded" && v.Status != "verify_failed" {
 		return nil
 	}
 	// Undated / cleared index rows leave season/episode NULL → year-season 0 (S0000).
@@ -197,7 +197,7 @@ func (s *Store) repackOneEpisodeNumbers(videoID int64, cfg NamingConfig, taskID 
 	}
 	var mediaPath string
 	_ = s.DB.SQL.QueryRow(`
-		SELECT path FROM files WHERE video_id = ? AND kind IN ('video', 'strm') ORDER BY id LIMIT 1
+		SELECT path FROM files WHERE video_id = ? AND kind = 'video' ORDER BY id LIMIT 1
 	`, videoID).Scan(&mediaPath)
 	if mediaPath == "" || !fileExists(mediaPath) {
 		return nil

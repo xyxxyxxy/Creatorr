@@ -9,7 +9,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
-func TestCredentialsDefaultAndHostOverride(t *testing.T) {
+func TestCredentialsHostOverrideOnly(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -19,6 +19,7 @@ func TestCredentialsDefaultAndHostOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Legacy default credentials must not apply to hosts.
 	if err := settings.SaveDefaultCredentials(d, "def@example.com", "def-pass", false); err != nil {
 		t.Fatal(err)
 	}
@@ -26,8 +27,8 @@ func TestCredentialsDefaultAndHostOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if creds.Username != "def@example.com" || creds.Password != "def-pass" || creds.FromHost {
-		t.Fatalf("inherit default: %+v", creds)
+	if creds.Username != "" || creds.FromHost {
+		t.Fatalf("no host row: %+v", creds)
 	}
 
 	if err := domains.EnsureHost(d, "example.com"); err != nil {
@@ -51,8 +52,8 @@ func TestCredentialsDefaultAndHostOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if creds.Username != "def@example.com" || creds.FromHost {
-		t.Fatalf("after inherit clear: %+v", creds)
+	if creds.Username != "" || creds.FromHost {
+		t.Fatalf("after clear inherit: %+v", creds)
 	}
 
 	if err := settings.SaveHostCredentials(d, "example.com", "", "", false, false); err != nil {
@@ -100,7 +101,10 @@ func TestCredentialsForURL(t *testing.T) {
 	if err := settings.SeedDefaults(d); err != nil {
 		t.Fatal(err)
 	}
-	if err := settings.SaveDefaultCredentials(d, "u@example.com", "p", false); err != nil {
+	if err := domains.EnsureHost(d, "example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.SaveHostCredentials(d, "example.com", "u@example.com", "p", false, false); err != nil {
 		t.Fatal(err)
 	}
 	creds, err := settings.CredentialsForURL(d, "https://example.com/watch/1")

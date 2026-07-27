@@ -58,8 +58,6 @@ const (
 	CodeImportFailed   = "ImportFailed"
 	CodeFlareSolverrRequired = "FlareSolverrRequired"
 	CodeHandlerCapabilityMissing = "HandlerCapabilityMissing"
-	CodePublicBaseURLRequired = "PublicBaseURLRequired"
-	CodeStreamFailed = "StreamFailed"
 	CodeMediaTypeExcluded = "MediaTypeExcluded"
 	CodeLiveBroadcastSkipped = "LiveBroadcastSkipped"
 	CodeMediaVerifyFailed = "MediaVerifyFailed"

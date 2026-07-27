@@ -15,51 +15,48 @@ import (
 
 // Domain is one known hostname (queue lane + optional limit overrides).
 type Domain struct {
-	Domain               string
-	Active               bool
-	TaskCooldownSeconds  sql.NullInt64   // Valid=false → use default
-	MaxDownloadQueue     sql.NullInt64   // Valid=false → use default
-	MaxParallelTasks     sql.NullInt64   // Valid=false → use default
-	DownloadRateLimit    sql.NullString  // Valid=false → use default
-	StreamPlayRateLimit  sql.NullString  // Valid=false → use default
-	SleepRequests        sql.NullFloat64 // Valid=false → use default
-	UseFlareSolverr      sql.NullBool    // Valid=false → inherit default; Bool = on/off override
-	Username             sql.NullString
-	Password             sql.NullString
-	UpdatedAt            string
+	Domain              string
+	Active              bool
+	TaskCooldownSeconds sql.NullInt64   // Valid=false → use default
+	MaxDownloadQueue    sql.NullInt64   // Valid=false → use default
+	MaxParallelTasks    sql.NullInt64   // Valid=false → use default
+	DownloadRateLimit   sql.NullString  // Valid=false → use default
+	SleepRequests       sql.NullFloat64 // Valid=false → use default
+	UseFlareSolverr     sql.NullBool    // Valid=false → inherit default; Bool = on/off override
+	Username            sql.NullString
+	Password            sql.NullString
+	UpdatedAt           string
 }
 
-// FlareOverrideValue is the form/storage tri-state for use_flaresolverr on host rows.
-// Empty / "default" → SQL NULL (inherit); "on" → 1; "off" → 0.
+// FlareOverrideValue is the form/storage state for use_flaresolverr on host rows.
+// Empty / "default" / "off" → SQL NULL (inherit Domain defaults, always off for Access).
+// "on" → 1. Host rows do not store 0 (explicit off); Off is indistinguishable from inherit.
 const (
 	FlareDefault = "default"
 	FlareOn      = "on"
-	FlareOff     = "off"
+	FlareOff     = "off" // accepted on write; stored as NULL
 )
 
-// ParseFlareOverride maps form value to SQL bind: nil=NULL inherit, 0, or 1.
+// ParseFlareOverride maps form value to SQL bind: nil=NULL inherit, or 1 for On.
+// "off" / 0 / false map to NULL (hosts do not store explicit Off).
 func ParseFlareOverride(s string) (any, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "", FlareDefault:
+	case "", FlareDefault, "0", FlareOff, "false":
 		return nil, nil
 	case "1", FlareOn, "true":
 		return 1, nil
-	case "0", FlareOff, "false":
-		return 0, nil
 	default:
 		return nil, fmt.Errorf("invalid use_flaresolverr")
 	}
 }
 
-// FlareOverrideLabel returns default|on|off for UI from a scanned NullBool.
+// FlareOverrideLabel returns on|default for UI from a scanned NullBool.
+// Valid false (legacy 0) is treated as default/NULL for display.
 func FlareOverrideLabel(v sql.NullBool) string {
-	if !v.Valid {
-		return FlareDefault
-	}
-	if v.Bool {
+	if v.Valid && v.Bool {
 		return FlareOn
 	}
-	return FlareOff
+	return FlareDefault
 }
 
 // EnsureFromURL extracts the hostname from a source URL and inserts an active
@@ -79,9 +76,9 @@ func EnsureHost(database *db.DB, host string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := database.SQL.Exec(`
 		INSERT INTO domains (domain, active, task_cooldown_seconds, max_download_queue,
-			max_parallel_tasks, download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr,
+			max_parallel_tasks, download_rate_limit, sleep_requests, use_flaresolverr,
 			username, password, updated_at)
-		VALUES (?, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?)
+		VALUES (?, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?)
 		ON CONFLICT(domain) DO NOTHING
 	`, host, now)
 	return err
@@ -95,7 +92,7 @@ func Get(database *db.DB, domain string) (Domain, bool, error) {
 	}
 	row := database.SQL.QueryRow(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-			download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr,
+			download_rate_limit, sleep_requests, use_flaresolverr,
 			username, password, updated_at
 		FROM domains WHERE domain = ?
 	`, domain)
@@ -113,7 +110,7 @@ func Get(database *db.DB, domain string) (Domain, bool, error) {
 func List(database *db.DB) ([]Domain, error) {
 	rows, err := database.SQL.Query(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-			download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr,
+			download_rate_limit, sleep_requests, use_flaresolverr,
 			username, password, updated_at
 		FROM domains ORDER BY domain
 	`)
@@ -136,7 +133,7 @@ func List(database *db.DB) ([]Domain, error) {
 func ListInactive(database *db.DB) ([]Domain, error) {
 	rows, err := database.SQL.Query(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-			download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr,
+			download_rate_limit, sleep_requests, use_flaresolverr,
 			username, password, updated_at
 		FROM domains WHERE active = 0 ORDER BY domain
 	`)
@@ -271,11 +268,11 @@ func UpdateSiteLimits(database *db.DB, domain string, rateStr, sleepStr, flareSt
 	return err
 }
 
-// UpdateHostOverrides sets cooldown/queue/parallel/rate/stream-play-rate/sleep/Flare on a host row (empty = NULL inherit).
+// UpdateHostOverrides sets cooldown/queue/parallel/rate/sleep/Flare on a host row (empty = NULL inherit).
 // Creates the row if missing. Rejects reserved domain=default.
 // flareStr: default|on|off (empty = default / inherit).
 // When queue or parallel is set, effective pair must satisfy parallel ≤ queue (resolved vs defaults).
-func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelStr, rateStr, streamPlayRateStr, sleepStr, flareStr string) error {
+func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelStr, rateStr, sleepStr, flareStr string) error {
 	if err := settings.ValidateOverrideDomain(domain); err != nil {
 		return err
 	}
@@ -289,7 +286,7 @@ func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelSt
 	}
 	effQueue := def.MaxDownloadQueue
 	effParallel := def.MaxParallelTasks
-	var delay, maxQ, maxP, rate, streamRate, sleep any
+	var delay, maxQ, maxP, rate, sleep any
 	if s := strings.TrimSpace(delayStr); s != "" {
 		n, err := strconv.Atoi(s)
 		if err != nil || n < 0 {
@@ -316,18 +313,8 @@ func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelSt
 	if err := settings.ValidateConcurrencyLimits(effQueue, effParallel); err != nil {
 		return err
 	}
-	effDownload := def.DownloadRateLimit
-	effStream := def.StreamPlayRateLimit
 	if s := strings.TrimSpace(rateStr); s != "" {
 		rate = s
-		effDownload = s
-	}
-	if s := strings.TrimSpace(streamPlayRateStr); s != "" {
-		streamRate = s
-		effStream = s
-	}
-	if err := settings.ValidateStreamPlayRateAgainstDownload(effDownload, effStream); err != nil {
-		return err
 	}
 	if s := strings.TrimSpace(sleepStr); s != "" {
 		f, err := strconv.ParseFloat(s, 64)
@@ -348,9 +335,9 @@ func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelSt
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = database.SQL.Exec(`
 		UPDATE domains SET task_cooldown_seconds = ?, max_download_queue = ?, max_parallel_tasks = ?,
-			download_rate_limit = ?, stream_play_rate_limit = ?, sleep_requests = ?, use_flaresolverr = ?, updated_at = ?
+			download_rate_limit = ?, sleep_requests = ?, use_flaresolverr = ?, updated_at = ?
 		WHERE domain = ?
-	`, delay, maxQ, maxP, rate, streamRate, sleep, flare, now, domain)
+	`, delay, maxQ, maxP, rate, sleep, flare, now, domain)
 	return err
 }
 
@@ -376,8 +363,8 @@ func ListHosts(database *db.DB) ([]Domain, error) {
 }
 
 // FlareSolverrURL returns CREATORR_FLARESOLVERR_URL when this hostname has
-// Use FlareSolverr enabled (host override or Domain defaults). Empty string means
-// skip FlareSolverr pre-solve. Opt-in without env URL → FlareSolverrRequired.
+// Use FlareSolverr enabled on a host override (Domain defaults Flare is always off).
+// Empty string means skip FlareSolverr pre-solve. Opt-in without env URL → FlareSolverrRequired.
 func FlareSolverrURL(database *db.DB, host string) (string, error) {
 	host = settings.NormalizeDomain(host)
 	if host == "" || host == "unknown" || host == "system" || host == settings.DomainDefault {
@@ -394,7 +381,7 @@ func FlareSolverrURL(database *db.DB, host string) (string, error) {
 	if url == "" {
 		return "", apperrors.WithDetail(
 			apperrors.New(apperrors.CodeFlareSolverrRequired, "FlareSolverr required for this domain"),
-			"enable Use FlareSolverr (Domain defaults or host override) and set CREATORR_FLARESOLVERR_URL",
+			"enable Use FlareSolverr On a host Domain override and set CREATORR_FLARESOLVERR_URL",
 		)
 	}
 	return url, nil
@@ -410,7 +397,7 @@ func scanDomain(row interface{ Scan(dest ...any) error }) (Domain, error) {
 	var active int
 	var flare sql.NullInt64
 	err := row.Scan(&d.Domain, &active, &d.TaskCooldownSeconds, &d.MaxDownloadQueue, &d.MaxParallelTasks,
-		&d.DownloadRateLimit, &d.StreamPlayRateLimit, &d.SleepRequests, &flare, &d.Username, &d.Password, &d.UpdatedAt)
+		&d.DownloadRateLimit, &d.SleepRequests, &flare, &d.Username, &d.Password, &d.UpdatedAt)
 	d.Active = active != 0
 	if flare.Valid {
 		d.UseFlareSolverr = sql.NullBool{Bool: flare.Int64 != 0, Valid: true}

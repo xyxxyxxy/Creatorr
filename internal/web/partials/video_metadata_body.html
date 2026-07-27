@@ -99,12 +99,12 @@
         )}}
       </div>
       {{else}}
-      <p class="text-sm opacity-70">Pack media or stream first to edit the episode thumbnail.</p>
+      <p class="text-sm opacity-70">Download the video first to edit the episode thumbnail.</p>
       {{end}}
     </fieldset>
 
     <p class="text-sm opacity-70">
-      Save rewrites the episode <code class="text-xs">.nfo</code> beside packed media or <code class="text-xs">.strm</code>
+      Save rewrites the episode <code class="text-xs">.nfo</code> beside packed media
       and applies thumbnail changes.
       Changing Upload date reindexes season/episode and renames packed files when the path changes.
       Title alone does not rename - run 'Apply episode format' under 'Settings → Maintenance' for that.
@@ -113,7 +113,7 @@
     </fieldset>
 
     <div class="modal-action">
-      <label for="modal-edit-video-metadata" class="btn btn-ghost modal-cancel">Cancel</label>
+      <label for="modal-edit-video-metadata" class="btn modal-cancel">Cancel</label>
       <button type="submit" class="btn btn-primary" {{if .PrefetchPending}}disabled{{end}}>Save</button>
     </div>
   </form>

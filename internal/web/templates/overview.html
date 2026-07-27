@@ -31,9 +31,9 @@
 </div>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Recent additions" "icon" "square-play" "help" "Latest downloaded or stream-packed videos across all series.")}}
+{{template "list_header" (dict "level" "section" "title" "Recent additions" "icon" "square-play" "help" "Latest downloaded videos across all series.")}}
 {{if not .RecentVideos}}
-{{template "list_empty" "No packed videos yet. Download or pack a stream first."}}
+{{template "list_empty" "No downloaded videos yet."}}
 {{else}}
 <ul class="list bg-base-100 rounded-box border border-base-300">
   {{range .RecentVideos}}
@@ -44,13 +44,11 @@
     "UploadDate" .UploadDate
     "SizeLabel" .SizeLabel
     "ResolutionLabel" .ResolutionLabel
-    "StreamTypeLabel" .StreamTypeLabel
     "DurationLabel" .DurationLabel
     "MediaTypeLabel" .MediaTypeLabel
     "ThumbURL" .ThumbURL
     "SeriesID" .SeriesID
     "SeriesTitle" (index $.SeriesTitles .SeriesID)
-    "IsStream" (eq .Status "streamable")
     "NoActions" true
   )}}
   {{end}}

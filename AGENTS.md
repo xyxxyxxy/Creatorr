@@ -50,7 +50,7 @@ Image sidecars / yt-dlp binary / plugins: [`docs/ytdlp.md`](docs/ytdlp.md). **St
 
 **Naming:** prefer **task** for queued work. **Job** = implicit recurring schedule (no `jobs` table). **History** = finished tasks (`done`/`failed`/`cancelled`). Do not use **poll**; use **scan**. Do not use **Activity** as a product term.
 
-**Glossary:** [`docs/domain-model.md`](docs/domain-model.md). Stream: [`docs/stream-proxy.md`](docs/stream-proxy.md). yt-dlp: [`docs/ytdlp.md`](docs/ytdlp.md). Scan/queue: [`docs/scan-and-queue.md`](docs/scan-and-queue.md). Download/library: [`docs/download-and-library.md`](docs/download-and-library.md). UI: [`docs/ui.md`](docs/ui.md).
+**Glossary:** [`docs/domain-model.md`](docs/domain-model.md). yt-dlp: [`docs/ytdlp.md`](docs/ytdlp.md). Scan/queue: [`docs/scan-and-queue.md`](docs/scan-and-queue.md). Download/library: [`docs/download-and-library.md`](docs/download-and-library.md). UI: [`docs/ui.md`](docs/ui.md).
 
 New domain term → matching docs file (domain-model by default).
 

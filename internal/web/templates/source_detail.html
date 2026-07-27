@@ -155,7 +155,7 @@
       )}}
       {{end}}
       <div class="modal-action">
-        <label for="modal-edit-source" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-edit-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary js-source-url-submit">Save</button>
       </div>
     </form>
@@ -174,7 +174,7 @@
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       {{template "checkbox_field" (dict "Name" "confirm_delete" "Label" "Yes, I want to delete this source, including all related video files" "InputClass" "js-confirm-submit-check")}}
       <div class="modal-action">
-        <label for="modal-delete-source" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-delete-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-error" disabled>Delete source and videos</button>
       </div>
     </form>
@@ -193,7 +193,7 @@
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
       <div class="modal-action">
-        <label for="modal-retry-source" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-retry-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary">Retry</button>
       </div>
     </form>

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
-	"github.com/go-chi/chi/v5"
 )
 
 // detailVideoRef is one video id from task detail JSON.
@@ -299,7 +299,7 @@ type taskDetailHistRow struct {
 
 // mergeVideoHistoryDetailFields appends per-event video lists from video_history
 // (same shape as discover created_ids). Skips event keys already present in fields.
-// Cancelled rows use detail.kind as the list key when set (pack_stream, download, …).
+// Cancelled rows use detail.kind as the list key when set (e.g. download).
 func mergeVideoHistoryDetailFields(fields []detailField, rows []taskDetailHistRow) []detailField {
 	if len(rows) == 0 {
 		return fields

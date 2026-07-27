@@ -36,7 +36,7 @@ func List(database *db.DB) ([]Cookie, error) {
 
 // Get returns cookie content for domain, or empty if missing.
 // Looks up the normalized host, then a legacy www. key if present.
-// Pass settings.DomainDefault for the global fallback jar.
+// Pass settings.DomainDefault only for legacy cleanup; access jars are host overrides.
 func Get(database *db.DB, domain string) (string, error) {
 	domain = settings.NormalizeDomain(domain)
 	if domain == "" {

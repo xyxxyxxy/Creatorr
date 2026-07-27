@@ -658,8 +658,7 @@ func (s *Store) RecomputeSeriesPremiered(seriesID int64) (changed bool, err erro
 	return true, nil
 }
 
-// SeriesHasBusyMediaTasks reports pending/running download, pack_stream, cache_beginning,
-// sponsorblock_cut, media_verify, or stream_play.
+// SeriesHasBusyMediaTasks reports pending/running download, sponsorblock_cut, or media_verify.
 func (s *Store) SeriesHasBusyMediaTasks(seriesID int64) (bool, error) {
 	if s.Queue == nil {
 		return false, nil
@@ -669,7 +668,7 @@ func (s *Store) SeriesHasBusyMediaTasks(seriesID int64) (bool, error) {
 		SELECT COUNT(*) FROM tasks t
 		LEFT JOIN videos v ON v.id = t.video_id
 		WHERE t.status IN ('pending', 'running')
-		  AND t.kind IN ('download', 'pack_stream', 'cache_beginning', 'sponsorblock_cut', 'media_verify', 'stream_play')
+		  AND t.kind IN ('download', 'sponsorblock_cut', 'media_verify')
 		  AND (t.series_id = ? OR v.series_id = ?)
 	`, seriesID, seriesID).Scan(&n)
 	return n > 0, err

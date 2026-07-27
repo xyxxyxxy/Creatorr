@@ -75,7 +75,7 @@ func TestListRecentVideos(t *testing.T) {
 		acquired any
 	}{
 		{a.ID, "old", "Old", "downloaded", "2024-01-01T00:00:00Z"},
-		{b.ID, "mid", "Mid", "streamable", "2024-06-01T00:00:00Z"},
+		{b.ID, "mid", "Mid", "downloaded", "2024-06-01T00:00:00Z"},
 		{a.ID, "wanted", "WantedOnly", "wanted", nil},
 		{a.ID, "new", "New", "downloaded", "2025-01-01T00:00:00Z"},
 	} {

@@ -10,7 +10,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
-func TestTempJarFallsBackToDefault(t *testing.T) {
+func TestTempJarHostOnlyNoDefaultFallback(t *testing.T) {
 	database, err := db.Open(filepath.Join(t.TempDir(), "c.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -30,15 +30,8 @@ func TestTempJarFallsBackToDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if path == "" {
-		t.Fatal("expected default jar path")
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(b) != "# Netscape\ndefault=1\n" {
-		t.Fatalf("content=%q", b)
+	if path != "" {
+		t.Fatalf("default jar must not apply without host override, got %q", path)
 	}
 
 	if err := cookies.Upsert(database, "example.com", "# Netscape\nhost=1\n"); err != nil {
@@ -48,7 +41,10 @@ func TestTempJarFallsBackToDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err = os.ReadFile(path)
+	if path == "" {
+		t.Fatal("expected host jar path")
+	}
+	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +58,7 @@ func TestTempJarFallsBackToDefault(t *testing.T) {
 	}
 	_ = cookies.Delete(database, "example.com")
 	ok, tip, err = cookies.Applies(database, "example.com")
-	if err != nil || !ok || tip != "Default cookies" {
-		t.Fatalf("Applies default: ok=%v tip=%q err=%v", ok, tip, err)
+	if err != nil || ok || tip != "" {
+		t.Fatalf("Applies after delete: ok=%v tip=%q err=%v", ok, tip, err)
 	}
 }

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/go-chi/chi/v5"
+	"github.com/xyxxyxxy/Creatorr/internal/library"
 )
 
 const sidecarViewMaxBytes = 2 << 20 // 2 MiB text preview
@@ -85,7 +85,7 @@ func videoSidecarViews(lib *library.Store, seriesID, videoID int64) []videoFileV
 	return videoFileViews(lib, seriesID, videoID, files)
 }
 
-// videoAllFileViews returns media rows first (video, then strm), then sidecars.
+// videoAllFileViews returns media rows first, then sidecars.
 func videoAllFileViews(lib *library.Store, seriesID, videoID int64) []videoFileView {
 	media := videoMediaViews(lib, seriesID, videoID)
 	sides := videoSidecarViews(lib, seriesID, videoID)
@@ -113,8 +113,6 @@ func sidecarKindLabel(kind string) string {
 		return "Thumbnail"
 	case "sub":
 		return "Subtitle"
-	case "strm":
-		return "Stream link"
 	case "sponsorblock":
 		return "SponsorBlock"
 	default:
@@ -135,8 +133,6 @@ func sidecarKindIcon(kind string) string {
 		return "image"
 	case "sub":
 		return "captions"
-	case "strm":
-		return "radio"
 	case "sponsorblock":
 		return "scissors"
 	default:
@@ -314,11 +310,11 @@ func sidecarIsText(kind, path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch {
 	case strings.HasSuffix(base, ".info.json"), strings.HasSuffix(base, ".sponsorblock.json"), ext == ".json",
-		ext == ".nfo", ext == ".strm",
+		ext == ".nfo",
 		ext == ".srt", ext == ".vtt", ext == ".ass", ext == ".ssa", ext == ".sub",
 		ext == ".txt", ext == ".xml":
 		return true
-	case kind == "nfo", kind == "json", kind == "sub", kind == "strm", kind == "sponsorblock":
+	case kind == "nfo", kind == "json", kind == "sub", kind == "sponsorblock":
 		return true
 	default:
 		return false
@@ -349,7 +345,7 @@ func sidecarViewContentType(path string) string {
 	switch {
 	case strings.HasSuffix(base, ".info.json"), ext == ".json":
 		return "application/json; charset=utf-8"
-	case ext == ".nfo", ext == ".strm", ext == ".srt", ext == ".vtt", ext == ".ass", ext == ".ssa", ext == ".sub":
+	case ext == ".nfo", ext == ".srt", ext == ".vtt", ext == ".ass", ext == ".ssa", ext == ".sub":
 		return "text/plain; charset=utf-8"
 	case ext == ".mp4", ext == ".m4v":
 		return "video/mp4"

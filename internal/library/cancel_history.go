@@ -45,7 +45,7 @@ func (s *Store) RecordTaskCancelled(t *queue.Task) error {
 		return nil
 	}
 	switch t.Kind {
-	case queue.KindDownload, queue.KindCacheBeginning, queue.KindPackStream, queue.KindRescanMetadata, queue.KindRefreshSidecars, queue.KindSponsorblockCut, queue.KindMediaVerify:
+	case queue.KindDownload, queue.KindRescanMetadata, queue.KindRefreshSidecars, queue.KindSponsorblockCut, queue.KindMediaVerify:
 		// ok
 	default:
 		return nil

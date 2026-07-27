@@ -12,14 +12,12 @@ import (
 
 // taskIndicatorView is data for partials/task_indicator.html.
 type taskIndicatorView struct {
-	ID             string
-	Status         string // pending | running | ""
-	Progress       *float64
-	Title          string
-	OOB            bool
-	VideoStatus    string // when set (video list), idle shows status icon; busy replaces it
-	BeginningReady bool   // streamable + pipe beginning on disk
-	CDNDirect      bool   // streamable + CDN HLS/progressive (no beginning needed)
+	ID          string
+	Status      string // pending | running | ""
+	Progress    *float64
+	Title       string
+	OOB         bool
+	VideoStatus string // when set (video list), idle shows status icon; busy replaces it
 }
 
 func indicatorFromTask(id string, t *queue.Task, title string) taskIndicatorView {
@@ -42,19 +40,8 @@ func indicatorFromTask(id string, t *queue.Task, title string) taskIndicatorView
 }
 
 // videoStatusIndicator builds a list-cell indicator: status icon, or list-ordered/spinner/radial when busy.
-func videoStatusIndicator(videoID int64, t *queue.Task, videoStatus string, beginningReady, cdnDirect bool) taskIndicatorView {
+func videoStatusIndicator(videoID int64, t *queue.Task, videoStatus string) taskIndicatorView {
 	label := videoStatusLabel(videoStatus)
-	if videoStatus == "streamable" {
-		switch {
-		case beginningReady:
-			label = "streamable - beginning cached for instant play"
-			cdnDirect = false
-		case cdnDirect:
-			label = "streamable - CDN direct stream, no cache needed"
-		default:
-			label = "streamable - play via proxy; first play may be slow"
-		}
-	}
 	title := ""
 	if t != nil && t.Kind == queue.KindDeleteFiles {
 		if t.Status == queue.StatusRunning {
@@ -65,8 +52,6 @@ func videoStatusIndicator(videoID int64, t *queue.Task, videoStatus string, begi
 	}
 	v := indicatorFromTask(videoIndicatorID(videoID), t, title)
 	v.VideoStatus = videoStatus
-	v.BeginningReady = beginningReady && videoStatus == "streamable"
-	v.CDNDirect = cdnDirect && videoStatus == "streamable" && !v.BeginningReady
 	if v.Status == "" {
 		v.Title = label
 	} else if title != "" {
@@ -99,8 +84,6 @@ func videoStatusLabel(status string) string {
 		return "deleted"
 	case "ignored":
 		return "ignored"
-	case "streamable":
-		return "streamable"
 	default:
 		return status
 	}
@@ -638,12 +621,6 @@ func formatNextScanIn(now, next time.Time) string {
 	return "Next scan in " + span
 }
 
-func (h *Handler) beginningReady(videoID int64, status string) bool {
-	return status == "streamable" && h.Library != nil && h.Library.HasBeginning(videoID)
-}
-
-func (h *Handler) streamIndicator(videoID int64, t *queue.Task, status, streamKind string) taskIndicatorView {
-	begin := h.beginningReady(videoID, status)
-	cdn := status == "streamable" && library.StreamCDNDirect(streamKind)
-	return videoStatusIndicator(videoID, t, status, begin, cdn)
+func (h *Handler) videoIndicator(videoID int64, t *queue.Task, status string) taskIndicatorView {
+	return videoStatusIndicator(videoID, t, status)
 }

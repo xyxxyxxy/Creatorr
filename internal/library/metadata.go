@@ -242,7 +242,7 @@ func (s *Store) EnqueueRefreshSidecarsVideo(videoID int64) (int64, error) {
 	if _, ok, err := s.HasPackAnchor(videoID); err != nil {
 		return 0, err
 	} else if !ok {
-		return 0, fmt.Errorf("%w: no packed video or .strm on disk", ErrInvalid)
+		return 0, fmt.Errorf("%w: no packed media on disk", ErrInvalid)
 	}
 	domain := "unknown"
 	if v.SourceURL.Valid {

@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/go-chi/chi/v5"
+	"github.com/xyxxyxxy/Creatorr/internal/library"
 )
 
 // seriesMetaFileView is one Files-table row for series folder metadata (art / tvshow.nfo).

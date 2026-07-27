@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/cookies"
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
@@ -20,43 +21,21 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
-	"github.com/go-chi/chi/v5"
 )
-
-func (h *Handler) canStream() bool {
-	ok, _ := h.streamGate()
-	return ok
-}
-
-// streamGate reports whether Stream delivery may be chosen, plus a UI tooltip reason when not.
-// yt-dlp is boot-enforced; gate is External Creatorr URL only.
-func (h *Handler) streamGate() (ok bool, reason string) {
-	base := ""
-	if h.Queue != nil && h.Queue.DB != nil {
-		base, _ = settings.ExternalBaseURL(h.Queue.DB)
-	}
-	if base == "" && h.Library != nil {
-		base = h.Library.EffectivePublicBaseURL()
-	}
-	if strings.TrimSpace(base) == "" {
-		return false, "Set External Creatorr URL to enable streaming capabilities of Creatorr."
-	}
-	return true, ""
-}
 
 func videoTaskRunning(tasks []queue.Task) bool {
 	for _, t := range tasks {
-		if (t.Kind == queue.KindDownload || t.Kind == queue.KindCacheBeginning || t.Kind == queue.KindPackStream || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify || t.Kind == queue.KindStreamPlay) && t.Status == queue.StatusRunning {
+		if (t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify) && t.Status == queue.StatusRunning {
 			return true
 		}
 	}
 	return false
 }
 
-// videoDeliveryQueued is true when a download, cache_beginning, pack_stream, sponsorblock_cut, media_verify, or stream_play task is pending or running.
+// videoDeliveryQueued is true when a download, sponsorblock_cut, or media_verify task is pending or running.
 func videoDeliveryQueued(tasks []queue.Task) bool {
 	for _, t := range tasks {
-		if t.Kind == queue.KindDownload || t.Kind == queue.KindCacheBeginning || t.Kind == queue.KindPackStream || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify || t.Kind == queue.KindStreamPlay {
+		if t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify {
 			return true
 		}
 	}
@@ -64,7 +43,7 @@ func videoDeliveryQueued(tasks []queue.Task) bool {
 }
 
 func deliveryTaskActive(t *queue.Task) bool {
-	return t != nil && (t.Kind == queue.KindDownload || t.Kind == queue.KindCacheBeginning || t.Kind == queue.KindPackStream || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify || t.Kind == queue.KindStreamPlay)
+	return t != nil && (t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify)
 }
 
 func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
@@ -76,27 +55,22 @@ func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
 	allSourceURLs, _ := h.Library.ListAllSourceURLs()
-	canStream, streamReason := h.streamGate()
 	render(w, "series_list", struct {
 		pageBase
-		Live                 seriesListLiveData
-		Roots                []library.RootFolder
-		Profiles             []library.QualityProfile
-		ScanCronDescriptors      []string
-		AutoIgnoreMediaTypeOptions  []string
-		AllSourceURLs            []string
-		CanStream                bool
-		StreamDisabledReason     string
+		Live                       seriesListLiveData
+		Roots                      []library.RootFolder
+		Profiles                   []library.QualityProfile
+		ScanCronDescriptors        []string
+		AutoIgnoreMediaTypeOptions []string
+		AllSourceURLs              []string
 	}{
-		pageBase:                 newPage("Series", "series", flashFromQuery(r)),
-		Live:                     live,
-		Roots:                    roots,
-		Profiles:                 profiles,
-		ScanCronDescriptors:      scanCronDescriptors(),
-		AutoIgnoreMediaTypeOptions:  autoIgnoreMediaTypeOptions(h),
-		AllSourceURLs:            allSourceURLs,
-		CanStream:                canStream,
-		StreamDisabledReason:     streamReason,
+		pageBase:                   newPage("Series", "series", flashFromQuery(r)),
+		Live:                       live,
+		Roots:                      roots,
+		Profiles:                   profiles,
+		ScanCronDescriptors:        scanCronDescriptors(),
+		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
+		AllSourceURLs:              allSourceURLs,
 	})
 }
 
@@ -267,7 +241,6 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
-	canStream, streamReason := h.streamGate()
 	folderRenameBusy, _ := h.Library.SeriesHasBusyMediaTasks(id)
 	metaForm := seriesMetadataView{
 		Series:      ser,
@@ -304,50 +277,46 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 	videoTotal, _ := h.Library.CountVideos(id)
 	render(w, "series_detail", struct {
 		pageBase
-		Series               *library.Series
-		Sources              []sourceRow
-		SourcesPage          PageInfo
-		SourceURLs           []string
-		VideosLive           seriesVideosLiveData
-		HasVideos            bool
-		MetaFiles            []seriesMetaFileView
-		CanScan              bool
-		ScanBlocked          string
-		SeriesInd            taskIndicatorView
-		HasMonitoredSource   bool
-		TaskIndicatorsPath   string
-		ScanCronDescriptors      []string
-		AutoIgnoreMediaTypeOptions  []string
-		Roots                    []library.RootFolder
-		Profiles                 []library.QualityProfile
-		CanStream                bool
-		StreamDisabledReason     string
-		FolderRenameBusy         bool
-		MetaForm                 seriesMetadataView
-		Deleting                 bool
+		Series                     *library.Series
+		Sources                    []sourceRow
+		SourcesPage                PageInfo
+		SourceURLs                 []string
+		VideosLive                 seriesVideosLiveData
+		HasVideos                  bool
+		MetaFiles                  []seriesMetaFileView
+		CanScan                    bool
+		ScanBlocked                string
+		SeriesInd                  taskIndicatorView
+		HasMonitoredSource         bool
+		TaskIndicatorsPath         string
+		ScanCronDescriptors        []string
+		AutoIgnoreMediaTypeOptions []string
+		Roots                      []library.RootFolder
+		Profiles                   []library.QualityProfile
+		FolderRenameBusy           bool
+		MetaForm                   seriesMetadataView
+		Deleting                   bool
 	}{
-		pageBase:                 newPage(ser.Title, "series", flashFromQuery(r)),
-		Series:                   ser,
-		Sources:                  pageSrc,
-		SourcesPage:              sourcesPage,
-		SourceURLs:               sourceURLs,
-		VideosLive:               videosLive,
-		HasVideos:                videoTotal > 0,
-		MetaFiles:                metaFiles,
-		CanScan:                  canScan && !seriesDeleting,
-		ScanBlocked:              blocked,
-		SeriesInd:                seriesInd,
-		HasMonitoredSource:       ser.Monitored,
-		TaskIndicatorsPath:       indicatorsQ,
-		ScanCronDescriptors:      scanCronDescriptors(),
-		AutoIgnoreMediaTypeOptions:  autoIgnoreMediaTypeOptions(h),
-		Roots:                    roots,
-		Profiles:                 profiles,
-		CanStream:                canStream,
-		StreamDisabledReason:     streamReason,
-		FolderRenameBusy:         folderRenameBusy,
-		MetaForm:                 metaForm,
-		Deleting:             seriesDeleting,
+		pageBase:                   newPage(ser.Title, "series", flashFromQuery(r)),
+		Series:                     ser,
+		Sources:                    pageSrc,
+		SourcesPage:                sourcesPage,
+		SourceURLs:                 sourceURLs,
+		VideosLive:                 videosLive,
+		HasVideos:                  videoTotal > 0,
+		MetaFiles:                  metaFiles,
+		CanScan:                    canScan && !seriesDeleting,
+		ScanBlocked:                blocked,
+		SeriesInd:                  seriesInd,
+		HasMonitoredSource:         ser.Monitored,
+		TaskIndicatorsPath:         indicatorsQ,
+		ScanCronDescriptors:        scanCronDescriptors(),
+		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
+		Roots:                      roots,
+		Profiles:                   profiles,
+		FolderRenameBusy:           folderRenameBusy,
+		MetaForm:                   metaForm,
+		Deleting:                   seriesDeleting,
 	})
 }
 
@@ -381,12 +350,10 @@ func (h *Handler) seriesTaskIndicators(w http.ResponseWriter, r *http.Request) {
 	inds = append(inds, si)
 	for vid := range vidIDs {
 		st := ""
-		kind := ""
 		if v, err := h.Library.GetVideo(vid); err == nil && v != nil {
 			st = v.Status
-			kind = v.StreamKind()
 		}
-		v := h.streamIndicator(vid, pickBestTask(byVideo[vid]), st, kind)
+		v := h.videoIndicator(vid, pickBestTask(byVideo[vid]), st)
 		v.OOB = true
 		inds = append(inds, v)
 	}
@@ -448,12 +415,10 @@ func (h *Handler) videoTaskIndicator(w http.ResponseWriter, r *http.Request) {
 	vid, _ := strconv.ParseInt(chi.URLParam(r, "vid"), 10, 64)
 	t, _ := h.Queue.ActiveTaskForVideo(vid)
 	st := ""
-	kind := ""
 	if v, err := h.Library.GetVideo(vid); err == nil && v != nil {
 		st = v.Status
-		kind = v.StreamKind()
 	}
-	v := h.streamIndicator(vid, t, st, kind)
+	v := h.videoIndicator(vid, t, st)
 	v.OOB = true
 	render(w, "task_indicator", v)
 }
@@ -674,15 +639,6 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 	deliveryQueued := deliveryTaskActive(t)
 	deleting := taskIsFileDelete(t)
 	detailRows := videoDetailRows(h.Library, video)
-	streamCacheLive := false
-	if deliveryQueued {
-		for _, row := range detailRows {
-			if row.Label == "Stream cache" && row.ProgressOn && row.ProgressPct < 100 {
-				streamCacheLive = true
-				break
-			}
-		}
-	}
 	sizeLabel := "-"
 	if n, ok, _ := h.Library.VideoSizeBytes(vid); ok {
 		sizeLabel = library.FormatBytes(n)
@@ -732,7 +688,6 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		SizeLabel           string
 		Files               []videoFileView
 		DetailRows          []videoDetailRow
-		StreamCacheLive     bool
 		History             []videoHistoryView
 		HistoryPage         PageInfo
 		ErrorHistoryID      int64
@@ -741,7 +696,6 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		DeliveryQueued      bool
 		DomainActive        bool
 		DomainDisabledTitle string
-		IsStream            bool
 		Deleting            bool
 		HasPackAnchor       bool
 		MetaForm            videoMetadataView
@@ -752,16 +706,14 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		SizeLabel:           sizeLabel,
 		Files:               fileRows,
 		DetailRows:          detailRows,
-		StreamCacheLive:     streamCacheLive,
 		History:             histViews,
 		HistoryPage:         histPageInfo,
 		ErrorHistoryID:      errorHistoryID,
-		TaskInd:             h.streamIndicator(vid, t, video.Status, video.StreamKind()),
+		TaskInd:             h.videoIndicator(vid, t, video.Status),
 		DownloadRunning:     dlRunning,
 		DeliveryQueued:      deliveryQueued,
 		DomainActive:        dAct,
 		DomainDisabledTitle: disTitle,
-		IsStream:            ser.IsStream(),
 		Deleting:            deleting,
 		HasPackAnchor:       metaForm.HasPackAnchor,
 		MetaForm:            metaForm,
@@ -1064,19 +1016,19 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 		scanCron := sched
 
 		ser, err := h.Library.CreateSeries(library.CreateSeriesParams{
-			Title:            title,
-			SourceURL:        sourceURL,
-			RootID:           rootID,
-			QualityProfileID: qpID,
-			Monitored:        true,
-			DeliveryMode:     delivery,
-			ScanCutoff:       clampPastDate(strings.TrimSpace(r.FormValue("scan_cutoff"))),
-			ScanCron:         scanCron,
-			IndexAsIgnored:   r.FormValue("index_as_ignored") == "1",
-			TitleRegexpInclude: strings.TrimSpace(r.FormValue("title_regexp_include")),
-			TitleRegexpExclude: strings.TrimSpace(r.FormValue("title_regexp_exclude")),
+			Title:                title,
+			SourceURL:            sourceURL,
+			RootID:               rootID,
+			QualityProfileID:     qpID,
+			Monitored:            true,
+			DeliveryMode:         delivery,
+			ScanCutoff:           clampPastDate(strings.TrimSpace(r.FormValue("scan_cutoff"))),
+			ScanCron:             scanCron,
+			IndexAsIgnored:       r.FormValue("index_as_ignored") == "1",
+			TitleRegexpInclude:   strings.TrimSpace(r.FormValue("title_regexp_include")),
+			TitleRegexpExclude:   strings.TrimSpace(r.FormValue("title_regexp_exclude")),
 			AutoIgnoreMediaTypes: library.NormalizeAutoIgnoreMediaTypes(r.Form["auto_ignore_media_types"]),
-			SourceLabel:      strings.TrimSpace(r.FormValue("source_label")),
+			SourceLabel:          strings.TrimSpace(r.FormValue("source_label")),
 		})
 		if err != nil {
 			redirErr(err.Error())
@@ -1111,11 +1063,11 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ser, err := h.Library.CreateSeries(library.CreateSeriesParams{
-		Title:            title,
-		RootID:           rootID,
-		QualityProfileID: qpID,
-		Monitored:        true,
-		DeliveryMode:     delivery,
+		Title:                title,
+		RootID:               rootID,
+		QualityProfileID:     qpID,
+		Monitored:            true,
+		DeliveryMode:         delivery,
 		AutoIgnoreMediaTypes: library.NormalizeAutoIgnoreMediaTypes(r.Form["auto_ignore_media_types"]),
 	})
 	if err != nil {
@@ -1142,10 +1094,10 @@ func (h *Handler) actionUpdateSeries(w http.ResponseWriter, r *http.Request) {
 	dm := library.NormalizeDeliveryMode(r.FormValue("delivery_mode"))
 	ex := library.NormalizeAutoIgnoreMediaTypes(r.Form["auto_ignore_media_types"])
 	_, err := h.Library.UpdateSeries(sid, library.UpdateSeriesParams{
-		Title:            &title,
-		RootID:           &rootID,
-		QualityProfileID: &qpID,
-		DeliveryMode:     &dm,
+		Title:                &title,
+		RootID:               &rootID,
+		QualityProfileID:     &qpID,
+		DeliveryMode:         &dm,
 		AutoIgnoreMediaTypes: &ex,
 	})
 	if err != nil {
@@ -1206,9 +1158,9 @@ func (h *Handler) actionUpdateSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := library.UpdateSourceParams{
-		Label:         &label,
-		ScanCutoff: &cutoff,
-		ClearCutoff:   cutoff == "",
+		Label:       &label,
+		ScanCutoff:  &cutoff,
+		ClearCutoff: cutoff == "",
 	}
 	if !cur.IsSingle() {
 		if _, ok := r.Form["scan_cron"]; ok {
@@ -1478,25 +1430,6 @@ func (h *Handler) actionDownloadVideo(w http.ResponseWriter, r *http.Request) {
 	_, err := h.Library.EnqueueDownloadNow(vid)
 	if err == nil {
 		redir = appendQuery(redir, "ok=download")
-	}
-	h.finishVideoAction(w, r, sid, redir, err)
-}
-
-func (h *Handler) actionPrepareStream(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	redir := r.FormValue("redirect")
-	if redir == "" {
-		redir = fmt.Sprintf("/series/%d", sid)
-	}
-	if err := h.errIfVideoDeleting(vid); err != nil {
-		h.finishVideoAction(w, r, sid, redir, err)
-		return
-	}
-	_, err := h.Library.EnqueuePackStream(vid, true)
-	if err == nil {
-		redir = appendQuery(redir, "ok=prepare-stream")
 	}
 	h.finishVideoAction(w, r, sid, redir, err)
 }

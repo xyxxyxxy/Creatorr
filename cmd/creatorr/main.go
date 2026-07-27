@@ -26,7 +26,6 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/scheduler"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/stats"
-	"github.com/xyxxyxxy/Creatorr/internal/streamproxy"
 	"github.com/xyxxyxxy/Creatorr/internal/web"
 	"github.com/xyxxyxxy/Creatorr/internal/worker"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
@@ -49,10 +48,6 @@ func main() {
 
 	if err := settings.SeedDefaults(database); err != nil {
 		log.Error("seed settings", "err", err)
-		os.Exit(1)
-	}
-	if err := settings.MigrateExternalBaseURLFromEnv(database); err != nil {
-		log.Error("migrate external base URL", "err", err)
 		os.Exit(1)
 	}
 	if err := settings.DropFlareSolverrURLSetting(database); err != nil {
@@ -104,16 +99,8 @@ func main() {
 	lib := library.NewStore(database, q)
 	lib.ImportRoot = cfg.ImportRoot
 	lib.CacheDir = cfg.CacheDir
-	if ext, err := settings.ExternalBaseURL(database); err == nil {
-		lib.PublicBaseURL = ext
-	}
 	if err := os.MkdirAll(cfg.CacheDir, 0o755); err != nil {
 		log.Warn("mkdir cache dir", "path", cfg.CacheDir, "err", err)
-	}
-	if n, err := q.CancelStaleStreamPlay(); err != nil {
-		log.Error("cancel stale stream_play", "err", err)
-	} else if n > 0 {
-		log.Info("cancelled orphaned stream_play tasks", "count", n)
 	}
 	if n, err := q.RequeueStaleRunning(); err != nil {
 		log.Error("requeue stale tasks", "err", err)
@@ -148,10 +135,8 @@ func main() {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 
-	// SSE and stream proxy must not use the global request timeout.
+	// SSE must not use the global request timeout.
 	r.Get("/api/events", srvImpl.EventsSSE)
-	streamH := &streamproxy.Handler{Library: lib, YtDlp: ytClient, Queue: q, Events: hub}
-	streamH.Mount(r)
 
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Timeout(60 * time.Second))

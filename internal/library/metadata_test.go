@@ -241,7 +241,7 @@ func TestSoftFillVideoFromEntry(t *testing.T) {
 	if library.UploadCalendarDate(v2.UploadDate.String) != "2024-07-04" {
 		t.Fatalf("upload_date clobbered: %v", v2.UploadDate)
 	}
-	if len(v2.Genres) != 1 || v2.Genres[0] != "Education" {
-		t.Fatalf("genres clobbered: %v", v2.Genres)
+	if len(v2.Genres) != 2 || v2.Genres[0] != "News" || v2.Genres[1] != "Education" {
+		t.Fatalf("genres after category merge: %v", v2.Genres)
 	}
 }

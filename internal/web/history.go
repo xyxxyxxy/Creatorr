@@ -126,7 +126,7 @@ func historyEventError(event string) bool {
 }
 
 // historyEventLabel is the Event column text. Cancelled video rows store
-// event=cancelled with detail.kind (download, pack_stream, …); show that kind.
+// event=cancelled with detail.kind (e.g. download); show that kind.
 // Source cancel rows use detail.mode and show "scan".
 func historyEventLabel(event, detail string) string {
 	event = strings.TrimSpace(event)

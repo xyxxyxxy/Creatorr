@@ -314,6 +314,7 @@ type DownloadContext struct {
 	FormatSelector string
 	URL            string
 	Profile        QualityProfile
+	DeliveryMode   string
 }
 
 // PrepareDownload loads series/root/profile for a video id.
@@ -322,14 +323,14 @@ func (s *Store) PrepareDownload(videoID int64) (*DownloadContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	var title, rootPath string
+	var title, rootPath, deliveryMode string
 	var profileID int64
 	err = s.DB.SQL.QueryRow(`
-		SELECT s.title, r.path, s.quality_profile_id
+		SELECT s.title, r.path, s.quality_profile_id, s.delivery_mode
 		FROM series s
 		JOIN root_folders r ON r.id = s.root_id
 		WHERE s.id = ?
-	`, v.SeriesID).Scan(&title, &rootPath, &profileID)
+	`, v.SeriesID).Scan(&title, &rootPath, &profileID, &deliveryMode)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -351,6 +352,7 @@ func (s *Store) PrepareDownload(videoID int64) (*DownloadContext, error) {
 		FormatSelector: prof.FormatSelector,
 		URL:            url,
 		Profile:        *prof,
+		DeliveryMode:   NormalizeDeliveryMode(deliveryMode),
 	}, nil
 }
 
@@ -373,26 +375,9 @@ func (s *Store) HasVideoFile(videoID int64) (string, bool, error) {
 	return "", false, rows.Err()
 }
 
-// HasPackAnchor returns the on-disk path of packed media (kind=video preferred, else strm).
+// HasPackAnchor returns the on-disk path of packed media (kind=video).
 func (s *Store) HasPackAnchor(videoID int64) (string, bool, error) {
-	if p, ok, err := s.HasVideoFile(videoID); err != nil || ok {
-		return p, ok, err
-	}
-	rows, err := s.DB.SQL.Query(`SELECT path FROM files WHERE video_id = ? AND kind = 'strm' ORDER BY id`, videoID)
-	if err != nil {
-		return "", false, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var p string
-		if err := rows.Scan(&p); err != nil {
-			return "", false, err
-		}
-		if fileExists(p) {
-			return p, true, nil
-		}
-	}
-	return "", false, rows.Err()
+	return s.HasVideoFile(videoID)
 }
 
 // CompleteDownload records installed files and marks video downloaded.
@@ -435,7 +420,7 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Remove prior strm (and other) artifacts from disk before replacing rows.
+	// Remove prior pack artifacts from disk before replacing rows.
 	oldRows, _ := tx.Query(`SELECT path FROM files WHERE video_id = ?`, videoID)
 	if oldRows != nil {
 		var oldPaths []string
@@ -451,7 +436,7 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		}
 	}
 
-	if _, err := tx.Exec(`DELETE FROM files WHERE video_id = ? AND kind IN ('video','nfo','json','thumb','strm','sub','sponsorblock')`, videoID); err != nil {
+	if _, err := tx.Exec(`DELETE FROM files WHERE video_id = ? AND kind IN ('video','nfo','json','thumb','sub','sponsorblock')`, videoID); err != nil {
 		return err
 	}
 	for kind, path := range map[string]string{"video": mediaPath, "nfo": nfoPath, "json": infoPath, "thumb": thumbPath} {

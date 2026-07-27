@@ -25,11 +25,8 @@ type Config struct {
 	YtDlpSystemPluginsDir string
 	// PotProviderURL is CREATORR_POT_PROVIDER_URL (bgutil HTTP base URL). Empty disables POT.
 	PotProviderURL string
-	// CacheDir holds Creatorr-managed accelerating artifacts (e.g. download beginnings).
+	// CacheDir holds Creatorr-managed working artifacts.
 	CacheDir string
-	// PublicBaseURL is deprecated bootstrap only; runtime uses Settings external_base_url
-	// (one-shot migrate from CREATORR_PUBLIC_BASE_URL when Settings empty).
-	PublicBaseURL string
 }
 
 // Load reads bootstrap env (port, public URL, POT provider) and selects path layout.
@@ -47,7 +44,6 @@ func Load() Config {
 		FlareSolverrURL:       strings.TrimRight(strings.TrimSpace(os.Getenv("CREATORR_FLARESOLVERR_URL")), "/"),
 		PotProviderURL:        strings.TrimSpace(os.Getenv("CREATORR_POT_PROVIDER_URL")),
 		CacheDir:              paths.cache,
-		PublicBaseURL:         strings.TrimRight(strings.TrimSpace(getenv("CREATORR_PUBLIC_BASE_URL", "")), "/"),
 	}
 }
 
@@ -81,13 +77,6 @@ func pathLayout() layout {
 func isDir(path string) bool {
 	fi, err := os.Stat(path)
 	return err == nil && fi.IsDir()
-}
-
-func getenv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }
 
 func getenvInt(key string, def int) int {

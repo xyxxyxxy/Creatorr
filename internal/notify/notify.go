@@ -227,7 +227,7 @@ func DownloadDigest(ctx context.Context, database *db.DB, items []DigestItem) er
 	return SendEvent(ctx, database, EventDownloadDigest, title, FormatDigestBody(items), 0)
 }
 
-// LiveSkipped records an info notification when download/pack_stream soft-skips a
+// LiveSkipped records an info notification when download soft-skips a
 // currently live broadcast. taskID links notification detail → task (video history
 // live_skipped uses the same task_id). Status stays wanted for later retry.
 func LiveSkipped(ctx context.Context, database *db.DB, taskID int64, series, title string) error {

@@ -30,7 +30,7 @@ func openLib(t *testing.T) *library.Store {
 		t.Fatal(err)
 	}
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "off", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
 	q := queue.NewStore(d)
 	return library.NewStore(d, q)
 }
@@ -345,69 +345,6 @@ func TestEnqueueDownloadRequiresSeriesMonitored(t *testing.T) {
 	}
 }
 
-func TestListSeriesStreamProgressCounts(t *testing.T) {
-	s := openLib(t)
-	rootID, profileID := seedRootProfile(t, s)
-	ser, err := s.CreateSeries(library.CreateSeriesParams{
-		Title: "Prog", RootID: rootID, QualityProfileID: profileID, Monitored: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	src, err := s.AddSource(ser.ID, library.AddSourceParams{
-		URL: "https://www.example.com/@prog",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	mk := func(remote, status string, beginningCached bool, streamKind string) {
-		t.Helper()
-		res, err := s.UpsertListed(ser.ID, library.ListedVideo{
-			RemoteID: remote, Title: remote, WebpageURL: "https://www.example.com/watch?v=" + remote,
-			SourceID: src.ID,
-		}, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		beginning := 0
-		if beginningCached {
-			beginning = 1
-		}
-		var kind any
-		if streamKind != "" {
-			kind = streamKind
-		}
-		if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = ?, stream_beginning_cached = ?, stream_urls_kind = ? WHERE id = ?`, status, beginning, kind, res.VideoID); err != nil {
-			t.Fatal(err)
-		}
-	}
-	mk("opt-beginning", "streamable", true, "pipe")
-	mk("opt-cdn", "streamable", false, "hls")
-	mk("cold", "streamable", false, "pipe")
-	mk("want", "wanted", false, "")
-
-	list, err := s.ListSeries()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var found *library.Series
-	for i := range list {
-		if list[i].ID == ser.ID {
-			found = &list[i]
-			break
-		}
-	}
-	if found == nil {
-		t.Fatal("series missing")
-	}
-	if found.StreamOptimizedCount != 2 || found.StreamColdCount != 1 {
-		t.Fatalf("opt=%d cold=%d want 2/1", found.StreamOptimizedCount, found.StreamColdCount)
-	}
-	if found.DownloadedCount != 3 || found.WantedCount != 1 {
-		t.Fatalf("ready=%d wanted=%d", found.DownloadedCount, found.WantedCount)
-	}
-}
-
 func TestListSeriesFiltered(t *testing.T) {
 	s := openLib(t)
 	rootA, profileA := seedRootProfile(t, s)
@@ -453,27 +390,26 @@ func TestListSeriesFiltered(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("quality count=%d", n)
 	}
-	s.PublicBaseURL = "http://example.com:8787"
 	_, err = s.CreateSeries(library.CreateSeriesParams{
-		Title: "Stream Show", RootID: rootA, QualityProfileID: profileA, Monitored: true,
-		DeliveryMode: library.DeliveryStream,
+		Title: "Audio Show", RootID: rootA, QualityProfileID: profileA, Monitored: true,
+		DeliveryMode: library.DeliveryAudio,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err = s.CountSeriesFiltered(library.SeriesListFilter{DeliveryMode: library.DeliveryStream})
+	n, err = s.CountSeriesFiltered(library.SeriesListFilter{DeliveryMode: library.DeliveryAudio})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n != 1 {
-		t.Fatalf("delivery stream count=%d", n)
+		t.Fatalf("delivery audio count=%d", n)
 	}
-	n, err = s.CountSeriesFiltered(library.SeriesListFilter{DeliveryMode: library.DeliveryDownload})
+	n, err = s.CountSeriesFiltered(library.SeriesListFilter{DeliveryMode: library.DeliveryVideo})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n != 2 {
-		t.Fatalf("delivery download count=%d", n)
+		t.Fatalf("delivery video count=%d", n)
 	}
 }
 
@@ -520,37 +456,7 @@ func TestIgnoreVideoCancelsDownloads(t *testing.T) {
 	}
 }
 
-func TestIgnoreVideoRejectsStreamable(t *testing.T) {
-	s := openLib(t)
-	rootID, profileID := seedRootProfile(t, s)
-	ser, err := s.CreateSeries(library.CreateSeriesParams{
-		Title: "Stream", RootID: rootID, QualityProfileID: profileID, Monitored: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	src, err := s.AddSource(ser.ID, library.AddSourceParams{
-		URL: "https://www.example.com/@st",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
-		RemoteID: "st1", Title: "Ep", WebpageURL: "https://www.example.com/watch?v=st1",
-		SourceID: src.ID,
-	}, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'streamable' WHERE id = ?`, res.VideoID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.IgnoreVideo(res.VideoID); err == nil {
-		t.Fatal("expected ignore to fail for streamable")
-	}
-}
-
-func TestDeleteVideoStreamable(t *testing.T) {
+func TestDeleteVideoWithMediaFile(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
@@ -576,14 +482,14 @@ func TestDeleteVideoStreamable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	strm := filepath.Join(root.Path, "ep.strm")
-	if err := os.WriteFile(strm, []byte("https://example.com/x\n"), 0o644); err != nil {
+	media := filepath.Join(root.Path, "ep.mkv")
+	if err := os.WriteFile(media, []byte("fake"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'streamable' WHERE id = ?`, res.VideoID); err != nil {
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'downloaded' WHERE id = ?`, res.VideoID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DB.SQL.Exec(`INSERT INTO files (video_id, kind, path, acquired_at) VALUES (?, 'strm', ?, datetime('now'))`, res.VideoID, strm); err != nil {
+	if _, err := s.DB.SQL.Exec(`INSERT INTO files (video_id, kind, path, acquired_at) VALUES (?, 'video', ?, datetime('now'))`, res.VideoID, media); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.DeleteVideo(res.VideoID); err != nil {
@@ -600,8 +506,8 @@ func TestDeleteVideoStreamable(t *testing.T) {
 	if err != nil || v.Status != "deleted" {
 		t.Fatalf("video %+v err=%v", v, err)
 	}
-	if _, err := os.Stat(strm); !os.IsNotExist(err) {
-		t.Fatalf("strm still on disk: %v", err)
+	if _, err := os.Stat(media); !os.IsNotExist(err) {
+		t.Fatalf("media still on disk: %v", err)
 	}
 	var n int
 	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM files WHERE video_id = ?`, res.VideoID).Scan(&n)
@@ -1426,7 +1332,7 @@ func TestEnqueueDownloadNowRejectsInactiveDomain(t *testing.T) {
 func TestEnqueueDownloadNowBypassesCap(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
-	_ = settings.SetDomainDefault(s.DB, 0, 1, 1, "10M", "off", "0", false)
+	_ = settings.SetDomainDefault(s.DB, 0, 1, 1, "10M", "0", false)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
 		Title: "Cap", SourceURL: "https://www.example.com/@cap", RootID: rootID,
 		QualityProfileID: profileID, Monitored: true,
@@ -1461,7 +1367,7 @@ func TestEnqueueDownloadNowBypassesCap(t *testing.T) {
 func TestEnqueueDownloadWantedOrderByUploadDate(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
-	_ = settings.SetDomainDefault(s.DB, 0, 10, 1, "10M", "off", "0", false)
+	_ = settings.SetDomainDefault(s.DB, 0, 10, 1, "10M", "0", false)
 	_ = settings.Set(s.DB, settings.KeyDownloadWantedOrder, settings.DownloadWantedOrderOldest)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
 		Title: "Ord", SourceURL: "https://www.example.com/@ord", RootID: rootID,
@@ -1516,7 +1422,7 @@ func TestEnqueueDownloadWantedOrderByUploadDate(t *testing.T) {
 func TestEnqueueDownloadWantedRoundRobinFair(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
-	_ = settings.SetDomainDefault(s.DB, 0, 4, 1, "10M", "off", "0", false)
+	_ = settings.SetDomainDefault(s.DB, 0, 4, 1, "10M", "0", false)
 	_ = settings.Set(s.DB, settings.KeyDownloadWantedOrder, settings.DownloadWantedOrderOldest)
 
 	makeSer := func(title, host string) (seriesID, srcID int64) {

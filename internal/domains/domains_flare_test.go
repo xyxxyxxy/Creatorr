@@ -33,7 +33,7 @@ func TestFlareSolverrURLPerDomain(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "CREATORR_FLARESOLVERR_URL") {
 		t.Fatalf("opt-in without URL: want env required, got %v", err)
 	}
-	err = settings.SetDomainDefault(d, 30, 8, 1, "10M", "off", "1", true)
+	err = settings.SetDomainDefault(d, 30, 8, 1, "10M", "1", true)
 	if err == nil || !strings.Contains(err.Error(), "CREATORR_FLARESOLVERR_URL") {
 		t.Fatalf("default on without URL: want env required, got %v", err)
 	}
@@ -47,40 +47,38 @@ func TestFlareSolverrURLPerDomain(t *testing.T) {
 		t.Fatalf("opt-in with URL: got %q, %v", url, err)
 	}
 
+	// Off stores NULL (same as inherit); with defaults Flare always off that clears pre-solve.
 	if err := domains.UpdateLimits(d, "example.com", "", "", "", "off"); err != nil {
 		t.Fatal(err)
 	}
 	url, err = domains.FlareSolverrURL(d, "example.com")
 	if err != nil || url != "" {
-		t.Fatalf("explicit off: got %q, %v", url, err)
+		t.Fatalf("off→NULL: got %q, %v", url, err)
+	}
+	meta, ok, err := domains.Get(d, "example.com")
+	if err != nil || !ok {
+		t.Fatalf("get host: ok=%v err=%v", ok, err)
+	}
+	if meta.UseFlareSolverr.Valid {
+		t.Fatalf("off should store NULL, got Valid=%v Bool=%v", meta.UseFlareSolverr.Valid, meta.UseFlareSolverr.Bool)
 	}
 
-	// Default on + host inherit (NULL) → on
-	if err := settings.SetDomainDefault(d, 30, 8, 1, "10M", "off", "1", true); err != nil {
+	if err := domains.UpdateLimits(d, "example.com", "", "", "", "on"); err != nil {
 		t.Fatal(err)
 	}
 	if err := domains.UpdateLimits(d, "example.com", "", "", "", "default"); err != nil {
 		t.Fatal(err)
 	}
 	url, err = domains.FlareSolverrURL(d, "example.com")
-	if err != nil || url != "http://flaresolverr.example.com" {
-		t.Fatalf("inherit default on: got %q, %v", url, err)
-	}
-
-	// Explicit off still wins over default on
-	if err := domains.UpdateLimits(d, "example.com", "", "", "", "off"); err != nil {
-		t.Fatal(err)
-	}
-	url, err = domains.FlareSolverrURL(d, "example.com")
 	if err != nil || url != "" {
-		t.Fatalf("override off vs default on: got %q, %v", url, err)
+		t.Fatalf("inherit default off: got %q, %v", url, err)
 	}
 
-	// Missing host row uses default
+	// Missing host row uses default (off)
 	_ = domains.Delete(d, "example.com")
 	url, err = domains.FlareSolverrURL(d, "example.com")
-	if err != nil || url != "http://flaresolverr.example.com" {
-		t.Fatalf("missing row inherits default on: got %q, %v", url, err)
+	if err != nil || url != "" {
+		t.Fatalf("missing row inherits default off: got %q, %v", url, err)
 	}
 }
 
@@ -94,10 +92,10 @@ func TestClearUseFlareSolverr(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(settings.EnvFlareSolverrURL, "http://flaresolverr.example.com")
-	if err := settings.SetDomainDefault(d, 30, 8, 1, "10M", "off", "1", true); err != nil {
+	if err := settings.SetDomainDefault(d, 30, 8, 1, "10M", "1", true); err != nil {
 		t.Fatal(err)
 	}
-	if err := domains.UpdateHostOverrides(d, "example.com", "", "", "", "", "", "", "on"); err != nil {
+	if err := domains.UpdateHostOverrides(d, "example.com", "", "", "", "", "", "on"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,7 +114,7 @@ func TestClearUseFlareSolverr(t *testing.T) {
 	if err != nil || url != "" {
 		t.Fatalf("host after clear: got %q, %v", url, err)
 	}
-	err = domains.UpdateHostOverrides(d, "example.com", "", "", "", "", "", "", "on")
+	err = domains.UpdateHostOverrides(d, "example.com", "", "", "", "", "", "on")
 	if err == nil || !strings.Contains(err.Error(), "CREATORR_FLARESOLVERR_URL") {
 		t.Fatalf("re-enable without URL: got %v", err)
 	}

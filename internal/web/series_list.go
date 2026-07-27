@@ -58,10 +58,10 @@ func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
 		}
 	}
 	switch strings.ToLower(strings.TrimSpace(q.Get("delivery"))) {
-	case library.DeliveryDownload:
-		f.DeliveryMode = library.DeliveryDownload
-	case library.DeliveryStream:
-		f.DeliveryMode = library.DeliveryStream
+	case library.DeliveryVideo:
+		f.DeliveryMode = library.DeliveryVideo
+	case library.DeliveryAudio:
+		f.DeliveryMode = library.DeliveryAudio
 	}
 	switch strings.TrimSpace(q.Get("monitored")) {
 	case "1":
@@ -126,11 +126,10 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 				posterURL = fmt.Sprintf("/series/%d/art/poster", s.ID)
 			}
 		}
-		kindIcon, kindTip := "download", "Download series"
+		kindIcon, kindTip := "", ""
 		monitorTitle := "Include this series in scans and download-wanted (does not change source flags)"
-		if s.IsStream() {
-			kindIcon, kindTip = "radio", "Stream series (.strm + proxy)"
-			monitorTitle = "Include in scans; wanted videos pack .strm (download-wanted cron skips stream series)"
+		if s.IsAudio() {
+			kindIcon, kindTip = "headphones", "Audio series"
 		}
 		srcLabel := fmt.Sprintf("%d sources", s.SourceCount)
 		if s.SourceCount == 1 {
@@ -216,8 +215,8 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 	seriesFilter.Selects = append(seriesFilter.Selects, listFilterSelect{
 		Name: "delivery", AriaLabel: "Delivery mode", EmptyLabel: "All delivery",
 		Options: []listFilterOpt{
-			{Value: library.DeliveryDownload, Label: "Download", Selected: filter.DeliveryMode == library.DeliveryDownload},
-			{Value: library.DeliveryStream, Label: "Stream", Selected: filter.DeliveryMode == library.DeliveryStream},
+			{Value: library.DeliveryVideo, Label: "Video", Selected: filter.DeliveryMode == library.DeliveryVideo},
+			{Value: library.DeliveryAudio, Label: "Audio", Selected: filter.DeliveryMode == library.DeliveryAudio},
 		},
 	})
 	monSel := ""

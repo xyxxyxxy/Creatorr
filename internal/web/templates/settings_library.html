@@ -110,7 +110,7 @@
 <tbody>
   {{range .Profiles}}
   <tr>
-    <td>{{.Name}}</td>
+    <td><span class="tooltip tooltip-top tooltip-nowrap inline-flex" data-tip="{{.FormatSelector}}" aria-label="{{.Name}}: {{.FormatSelector}}">{{.Name}}</span></td>
     <td>{{if eq .MaturityMediaPreset 0}}{{template "empty_value"}}{{else}}{{.MaturityMediaLabel}}{{end}}</td>
     <td>{{if eq .MaturitySidecarPreset 0}}{{template "empty_value"}}{{else}}{{.MaturitySidecarLabel}}{{end}}</td>
     <td>
@@ -137,7 +137,7 @@
     <input type="hidden" name="redirect" value="/settings/library" />
     <input type="hidden" name="subtitle_settings" value="1" />
     <h2 class="text-lg font-semibold">Subtitles</h2>
-    <p class="text-sm opacity-60">Sidecars are always SRT (yt-dlp --convert-subs). Added on download, stream pack, and Replace sidecars.</p>
+    <p class="text-sm opacity-60">Sidecars are always SRT (yt-dlp --convert-subs). Added on download and Replace sidecars.</p>
     <div class="space-y-3 w-full min-w-0">
       {{template "subtitle_langs_field" (dict
         "Items" .SubtitleLangs
@@ -185,50 +185,6 @@
   </form>
 </section>
 
-<section class="card bg-base-100 border border-base-300 mb-4">
-  <form method="post" action="/actions/save-settings" class="card-body gap-3">
-    <input type="hidden" name="redirect" value="/settings/library" />
-    <h2 class="text-lg font-semibold">Streaming</h2>
-    <p class="text-sm opacity-60">External origin for .strm playback through Creatorr, beginning cache, playback cache, and stream URL token.</p>
-    {{if .ExternalURLSetting}}
-    <div class="grid gap-3 md:grid-cols-2">
-      {{template "settings_row" .ExternalURLSetting}}
-    </div>
-    {{end}}
-    {{if not .StreamEnabled}}
-    <div class="alert alert-warning text-sm"><span>{{.StreamDisabledReason}}</span></div>
-    {{end}}
-    <fieldset class="border-0 p-0 m-0 min-w-0 space-y-3" {{if not .StreamEnabled}}disabled{{end}}>
-      {{if .StreamURLToken}}
-      <div class="w-full">
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend">Stream URL token</legend>
-          <div class="join w-full">
-            <input type="text" name="stream_url_token_display" id="setting-stream-url-token"
-                   class="input join-item grow min-w-0 font-mono"
-                   value="{{.StreamURLToken}}" disabled />
-            <span class="tooltip tooltip-top join-item" data-tip="Generate new token">
-              <label for="modal-regen-stream-token" class="btn btn-square btn-warning join-item" aria-label="Generate new token">
-                <i data-lucide="refresh-cw" class="size-4"></i>
-              </label>
-            </span>
-          </div>
-          <p class="label whitespace-normal">Embedded in every .strm proxy URL. Generate a new token to invalidate existing .strm links. All .strm files can be regenerated in the maintenance section below.</p>
-        </fieldset>
-      </div>
-      {{end}}
-      <div class="grid gap-3 md:grid-cols-2">
-        {{range .Settings}}
-        {{template "settings_row" .}}
-        {{end}}
-      </div>
-    </fieldset>
-    <div class="card-actions items-center gap-2">
-      <button type="submit" class="btn btn-primary">Save</button>
-    </div>
-  </form>
-</section>
-
 <input type="checkbox" id="modal-add-root" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box">
@@ -264,7 +220,7 @@
         "Info" "Days after pack before retention delete may remove artifacts."
       )}}
       <div class="modal-action">
-        <label for="modal-add-root" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-add-root" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary">Add root</button>
       </div>
     </form>
@@ -305,7 +261,7 @@
         "Info" "Days after pack before retention delete may remove artifacts."
       )}}
       <div class="modal-action">
-        <label for="modal-edit-root-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-edit-root-{{.ID}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
@@ -342,7 +298,7 @@
       )}}
       {{template "profile_sponsorblock_fields" (dict "InfoCards" false "ReencodeCut" false)}}
       <div class="modal-action">
-        <label for="modal-add-profile" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-add-profile" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary">Add profile</button>
       </div>
     </form>
@@ -385,7 +341,7 @@
         "InfoCards" .SponsorBlockInfoCards
       )}}
       <div class="modal-action">
-        <label for="modal-edit-profile-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-edit-profile-{{.ID}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
@@ -393,22 +349,6 @@
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
 {{end}}
-
-<input type="checkbox" id="modal-regen-stream-token" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Generate new stream URL token?</h3>
-    <p class="text-sm opacity-80 mb-4">A new token invalidates every existing <code class="text-xs">.strm</code> file immediately.</p>
-    <p class="text-sm opacity-80 mb-4">After confirming, run 'Regenerate all .strm files' under 'Settings → Maintenance' so library <code class="text-xs">.strm</code> files pick up the new token.</p>
-    <form method="post" action="/actions/regenerate-stream-token">
-      <div class="modal-action">
-        <label for="modal-regen-stream-token" class="btn btn-ghost modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-warning">Generate new token</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
 
 {{template "foot" .}}
 {{end}}

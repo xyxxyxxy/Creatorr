@@ -270,8 +270,6 @@ func (s *Store) deleteVideoDiskArtifacts(videoID int64) error {
 		seen[key] = struct{}{}
 		deleteVideoArtifacts(p)
 	}
-	_ = s.ClearBeginning(videoID)
-	_ = s.ClearPlaybackCache(videoID)
 	return rows.Err()
 }
 

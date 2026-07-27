@@ -16,7 +16,7 @@ import (
 func TestFullRescanResetsBackfill(t *testing.T) {
 	s := openLib(t)
 	_ = settings.SeedDefaults(s.DB)
-	_ = settings.SetDomainDefault(s.DB, 0, 8, 1, "10M", "off", "0", false)
+	_ = settings.SetDomainDefault(s.DB, 0, 8, 1, "10M", "0", false)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
 		Title: "BF", SourceURL: "https://www.example.com/@bf", RootID: rootID,

@@ -46,16 +46,3 @@ func TestBoolFieldIsLive(t *testing.T) {
 		t.Fatal("missing")
 	}
 }
-
-func TestUrlsResultFromMapIsLive(t *testing.T) {
-	got := urlsResultFromMap(map[string]any{
-		"kind": "pipe", "is_live": true, "media_type": "livestream",
-	})
-	if !got.IsLive || got.MediaType != "livestream" {
-		t.Fatalf("%+v", got)
-	}
-	got = urlsResultFromMap(map[string]any{"kind": "pipe"})
-	if got.IsLive {
-		t.Fatal("missing is_live must be false")
-	}
-}

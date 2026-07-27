@@ -148,7 +148,7 @@
       )}}
       {{template "source_filter_fields" (dict "CutoffID" "add-source-scan-cutoff")}}
       <div class="modal-action">
-        <label for="modal-add-source" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-add-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
       </div>
     </form>
@@ -177,7 +177,7 @@
       </div>
       {{template "field_input" (dict "Name" "label" "Label" "Name (optional)" "Placeholder" "Source name")}}
       <div class="modal-action">
-        <label for="modal-add-single" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-add-single" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
       </div>
     </form>
@@ -232,7 +232,7 @@
       )}}
       {{end}}
       <div class="modal-action">
-        <label for="modal-edit-source-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-edit-source-{{.ID}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary js-source-url-submit">Save</button>
       </div>
     </form>
@@ -251,7 +251,7 @@
       <input type="hidden" name="source_id" value="{{.ID}}" />
       {{template "checkbox_field" (dict "Name" "confirm_delete" "Label" "Yes, I want to delete this source, including all related video files" "InputClass" "js-confirm-submit-check")}}
       <div class="modal-action">
-        <label for="modal-delete-source-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-delete-source-{{.ID}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-error" disabled>Delete source and videos</button>
       </div>
     </form>
@@ -269,7 +269,7 @@
       <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.ID}}" />
       <div class="modal-action">
-        <label for="modal-retry-source-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-retry-source-{{.ID}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary">Retry</button>
       </div>
     </form>
@@ -295,8 +295,6 @@
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       {{template "series_settings_fields" (dict
         "DeliveryMode" .Series.DeliveryMode
-        "CanStream" .CanStream
-        "StreamDisabledReason" .StreamDisabledReason
         "Title" .Series.Title
         "TitleInfo" "Changing the title updates Creatorr and renames the on-disk series folder immediately. Episode filenames that include the series name are not rewritten until you run 'Apply episode format' under 'Settings → Library'."
         "TitleDisabled" .FolderRenameBusy
@@ -308,13 +306,13 @@
         "RootDisabledTitle" "'Title' and 'Root folder' are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
         "Profiles" .Profiles
         "ProfileID" .Series.QualityProfileID
-        "ProfileInfo" "yt-dlp format selector for new downloads; stream mode uses the same --format on resolved URLs."
+        "ProfileInfo" "yt-dlp format selector for new video downloads."
         "AutoIgnoreItems" .Series.AutoIgnoreMediaTypes
         "AutoIgnoreOptions" .AutoIgnoreMediaTypeOptions
         "AutoIgnoreListID" "edit-series-auto-ignore-media-types"
       )}}
       <div class="modal-action">
-        <label for="modal-edit-series" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-edit-series" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary" {{if or (not .Roots) (not .Profiles)}}disabled{{end}}>Save</button>
       </div>
     </form>
@@ -331,7 +329,7 @@
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       {{template "checkbox_field" (dict "Name" "delete_files" "Label" "Yes, I want to delete this series, including all library files on disk" "InputClass" "js-confirm-submit-check")}}
       <div class="modal-action">
-        <label for="modal-delete-series" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-delete-series" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-error" disabled>Delete series</button>
       </div>
     </form>

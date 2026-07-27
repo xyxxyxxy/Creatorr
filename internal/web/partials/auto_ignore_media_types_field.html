@@ -1,7 +1,7 @@
 {{define "auto_ignore_media_types_field"}}
 {{/*
   Series auto-ignore media types: indexed first; marked ignored when type is known
-  (download / stream pack). Expects optional: Items ([]string), Options ([]string),
+  on download. Expects optional: Items ([]string), Options ([]string),
   ListID (default auto-ignore-media-types-suggestions).
 */}}
 {{$listID := .ListID}}{{if not $listID}}{{$listID = "auto-ignore-media-types-suggestions"}}{{end}}

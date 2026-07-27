@@ -29,50 +29,48 @@ type taskView struct {
 }
 
 type laneView struct {
-	Domain                 string
-	Paused                 bool
-	CanPause               bool // false for system / reserved lanes
-	Page                   PageInfo
-	PendingCount           int
-	DownloadCount          int
-	ShowCancelPending      bool
-	ShowCooldown           bool
-	ShowBusy               bool // running >= max parallel (not paused / cooling)
-	RunningCount           int
-	CooldownEndsAt         string  // RFC3339Nano for JS tick
-	CooldownTotalSec       int     // configured task_cooldown_seconds (progress max)
-	CooldownRemSec         int     // remaining seconds at render
-	TaskCooldownSeconds    int     // effective cooldown setting (host lanes)
-	RateLimit              string  // effective yt-dlp --limit-rate display (download)
-	StreamPlayRateLimit    string  // effective stream_play --limit-rate display
-	SleepRequests          float64 // effective yt-dlp --sleep-requests
-	MaxParallelTasks       int     // effective max parallel (system = 1)
-	UseFlareSolverr        bool    // effective Use FlareSolverr
-	HasCookies             bool
-	CookiesFromHost        bool // host jar (not Domain defaults fallback)
-	CookiesTip             string
-	HasCredentials         bool
-	CredentialsFromHost    bool
-	CredentialsTip         string
-	FlareWarm              bool
-	FlareTip               string
-	HasOverrideRow         bool
-	CooldownOverride       string
-	QueueOverride          string
-	ParallelOverride       string
-	RateOverride           string
-	StreamPlayRateOverride string
-	SleepOverride          string
-	FlareOverride          string // default|on|off (empty = no row / inherit)
-	CookieContent          string
-	DefaultCooldown        int
-	DefaultQueue           int
-	DefaultParallel        int
-	DefaultRate            string
-	DefaultStreamPlayRate  string
-	DefaultSleep           float64
-	DefaultFlare           bool
-	Tasks                  []taskView // pending + running (ListActive order)
+	Domain              string
+	Paused              bool
+	CanPause            bool // false for system / reserved lanes
+	Page                PageInfo
+	PendingCount        int
+	DownloadCount       int
+	ShowCancelPending   bool
+	ShowCooldown        bool
+	ShowBusy            bool // running >= max parallel (not paused / cooling)
+	RunningCount        int
+	CooldownEndsAt      string  // RFC3339Nano for JS tick
+	CooldownTotalSec    int     // configured task_cooldown_seconds (progress max)
+	CooldownRemSec      int     // remaining seconds at render
+	TaskCooldownSeconds int     // effective cooldown setting (host lanes)
+	MaxDownloadQueue    int     // effective max download queue (host lanes)
+	RateLimit           string  // effective yt-dlp --limit-rate display (download)
+	SleepRequests       float64 // effective yt-dlp --sleep-requests
+	MaxParallelTasks    int     // effective max parallel (system = 1)
+	UseFlareSolverr     bool    // effective Use FlareSolverr
+	HasCookies          bool
+	CookiesFromHost     bool // host jar (not Domain defaults fallback)
+	CookiesTip          string
+	HasCredentials      bool
+	CredentialsFromHost bool
+	CredentialsTip      string
+	FlareWarm           bool
+	FlareTip            string
+	HasOverrideRow      bool
+	CooldownOverride    string
+	QueueOverride       string
+	ParallelOverride    string
+	RateOverride        string
+	SleepOverride       string
+	FlareOverride       string // default|on|off (empty = no row / inherit)
+	CookieContent       string
+	DefaultCooldown     int
+	DefaultQueue        int
+	DefaultParallel     int
+	DefaultRate         string
+	DefaultSleep        float64
+	DefaultFlare        bool
+	Tasks               []taskView // pending + running (ListActive order)
 }
 
 func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
@@ -111,66 +109,56 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		lv = &laneView{
-			Domain:                domain,
-			Paused:                paused,
-			CanPause:              canPause,
-			DefaultCooldown:       defLim.TaskCooldownSeconds,
-			DefaultQueue:          defLim.MaxDownloadQueue,
-			DefaultParallel:       defLim.MaxParallelTasks,
-			DefaultRate:           defLim.DownloadRateLimit,
-			DefaultStreamPlayRate: defLim.StreamPlayRateLimit,
-			DefaultSleep:          defLim.SleepRequests,
-			DefaultFlare:          defLim.UseFlareSolverr,
+			Domain:          domain,
+			Paused:          paused,
+			CanPause:        canPause,
+			DefaultCooldown: defLim.TaskCooldownSeconds,
+			DefaultQueue:    defLim.MaxDownloadQueue,
+			DefaultParallel: defLim.MaxParallelTasks,
+			DefaultRate:     defLim.DownloadRateLimit,
+			DefaultSleep:    defLim.SleepRequests,
+			DefaultFlare:    defLim.UseFlareSolverr,
 		}
 		if domain == queue.SystemDomain {
 			lv.MaxParallelTasks = 1
 		} else {
 			// Effective Domain defaults ∪ host overrides (LimitsForDomain).
 			lv.RateLimit = defLim.DownloadRateLimit
-			lv.StreamPlayRateLimit = defLim.StreamPlayRateLimit
 			lv.SleepRequests = defLim.SleepRequests
 			lv.MaxParallelTasks = defLim.MaxParallelTasks
+			lv.MaxDownloadQueue = defLim.MaxDownloadQueue
 			lv.TaskCooldownSeconds = defLim.TaskCooldownSeconds
 			lv.UseFlareSolverr = defLim.UseFlareSolverr
 			if lim, err := settings.LimitsForDomain(h.Queue.DB, domain); err == nil {
 				lv.RateLimit = lim.DownloadRateLimit
-				lv.StreamPlayRateLimit = lim.StreamPlayRateLimit
 				lv.SleepRequests = lim.SleepRequests
 				lv.MaxParallelTasks = lim.MaxParallelTasks
+				lv.MaxDownloadQueue = lim.MaxDownloadQueue
 				lv.TaskCooldownSeconds = lim.TaskCooldownSeconds
 				lv.UseFlareSolverr = lim.UseFlareSolverr
 			}
 			if lv.UseFlareSolverr {
-				lv.FlareTip = "FlareSolverr on (Domain defaults or host override)"
+				lv.FlareTip = "FlareSolverr on (host Domain override)"
 				if ytdlp.HasFlareSession(domain) {
 					lv.FlareWarm = true
 					lv.FlareTip = "FlareSolverr session warm"
 				}
 			} else {
-				lv.FlareTip = "FlareSolverr off (Domain defaults or host override)"
+				lv.FlareTip = "FlareSolverr off (host Domain override)"
 			}
-			if ok, tip, err := cookies.Applies(h.Queue.DB, domain); err == nil && ok {
+			if ok, _, err := cookies.Applies(h.Queue.DB, domain); err == nil && ok {
 				lv.HasCookies = true
-				switch tip {
-				case "Default cookies":
-					lv.CookiesTip = "Default cookies (Domain defaults jar)"
-				default:
-					lv.CookiesFromHost = true
-					lv.CookiesTip = "Cookies set (host jar)"
-				}
+				lv.CookiesFromHost = true
+				lv.CookiesTip = "Cookies set (host jar)"
 			} else {
-				lv.CookiesTip = "No cookies (Domain defaults or host jar)"
+				lv.CookiesTip = "No cookies (host Domain override)"
 			}
 			if creds, err := settings.CredentialsForDomain(h.Queue.DB, domain); err == nil && strings.TrimSpace(creds.Username) != "" {
 				lv.HasCredentials = true
-				if creds.FromHost {
-					lv.CredentialsFromHost = true
-					lv.CredentialsTip = "Credentials set (host override)"
-				} else {
-					lv.CredentialsTip = "Credentials (Domain defaults)"
-				}
+				lv.CredentialsFromHost = true
+				lv.CredentialsTip = "Credentials set (host override)"
 			} else {
-				lv.CredentialsTip = "No credentials (Domain defaults or host override)"
+				lv.CredentialsTip = "No credentials (host Domain override)"
 			}
 			if meta, ok := knownMeta[domain]; ok {
 				lv.HasOverrideRow = true
@@ -190,13 +178,6 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 						s = "off"
 					}
 					lv.RateOverride = s
-				}
-				if meta.StreamPlayRateLimit.Valid {
-					s := strings.TrimSpace(meta.StreamPlayRateLimit.String)
-					if s == "" {
-						s = "off"
-					}
-					lv.StreamPlayRateOverride = s
 				}
 				if meta.SleepRequests.Valid {
 					lv.SleepOverride = strconv.FormatFloat(meta.SleepRequests.Float64, 'f', -1, 64)
@@ -263,7 +244,7 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 		if t.Status == queue.StatusRunning {
 			lv.RunningCount++
 		}
-		if t.Kind == queue.KindDownload || t.Kind == queue.KindCacheBeginning {
+		if t.Kind == queue.KindDownload {
 			lv.DownloadCount++
 		}
 	}

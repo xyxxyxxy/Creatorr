@@ -14,11 +14,10 @@ import (
 
 // Store is library CRUD over SQLite.
 type Store struct {
-	DB            *db.DB
-	Queue         *queue.Store
-	ImportRoot    string // import inbox path (/media/import or var/media/import)
-	CacheDir      string // /cache or var/cache; download beginnings under download-beginnings/
-	PublicBaseURL string // deprecated field; prefer EffectivePublicBaseURL (settings external_base_url)
+	DB         *db.DB
+	Queue      *queue.Store
+	ImportRoot string // import inbox path (/media/import or var/media/import)
+	CacheDir   string // /cache or var/cache
 }
 
 func NewStore(database *db.DB, q *queue.Store) *Store {
@@ -29,20 +28,6 @@ func NewStore(database *db.DB, q *queue.Store) *Store {
 		}
 	}
 	return s
-}
-
-// EffectivePublicBaseURL returns Settings external_base_url, falling back to PublicBaseURL
-// for tests that set the field directly.
-func (s *Store) EffectivePublicBaseURL() string {
-	if s == nil {
-		return ""
-	}
-	if s.DB != nil {
-		if u, err := settings.ExternalBaseURL(s.DB); err == nil && u != "" {
-			return u
-		}
-	}
-	return strings.TrimRight(strings.TrimSpace(s.PublicBaseURL), "/")
 }
 
 var (

@@ -89,32 +89,3 @@ func TestCombineDownloadRateLimitOverride(t *testing.T) {
 	}
 }
 
-func TestValidateStreamPlayRateAgainstDownload(t *testing.T) {
-	tests := []struct {
-		download, stream string
-		wantErr          bool
-	}{
-		{"10M", "off", false},
-		{"10M", "10M", false},
-		{"10M", "20M", false},
-		{"10M", "10240K", false},
-		{"5M", "500K", true},
-		{"off", "10M", true},
-		{"off", "off", false},
-		{"1G", "1024M", false},
-		{"", "off", true},
-		{"10M", "", true},
-	}
-	for _, tc := range tests {
-		err := ValidateStreamPlayRateAgainstDownload(tc.download, tc.stream)
-		if tc.wantErr {
-			if err == nil {
-				t.Errorf("ValidateStreamPlayRateAgainstDownload(%q,%q) err=nil, want error", tc.download, tc.stream)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("ValidateStreamPlayRateAgainstDownload(%q,%q) err=%v", tc.download, tc.stream, err)
-		}
-	}
-}

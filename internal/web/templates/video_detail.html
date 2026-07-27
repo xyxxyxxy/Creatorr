@@ -27,7 +27,7 @@
       {{if $canRefreshSidecars}}
       <button type="submit" class="btn btn-outline">Refresh sidecars</button>
       {{else}}
-      {{$sideTip := "Needs a packed video or .strm on disk"}}
+      {{$sideTip := "Needs packed media on disk"}}
       {{if and .HasPackAnchor (not .DomainActive)}}{{$sideTip = .DomainDisabledTitle}}{{end}}
       <span class="tooltip tooltip-bottom" data-tip="{{$sideTip}}">
         <button type="submit" class="btn btn-outline btn-disabled" disabled aria-label="Refresh sidecars">Refresh sidecars</button>
@@ -41,12 +41,8 @@
       "DomainActive" .DomainActive
       "DomainDisabledTitle" .DomainDisabledTitle
       "DeliveryQueued" .DeliveryQueued
-      "IsStream" .IsStream
-      "CDNDirect" .TaskInd.CDNDirect
-      "BeginningReady" .TaskInd.BeginningReady
       "Redirect" (printf "/series/%d/videos/%d" .Series.ID .Video.ID)
       "BtnClass" "btn btn-outline"
-      "NeutralClass" "btn btn-neutral"
       "PrimaryClass" "btn btn-primary"
     }}
     {{$wantIgnore := dict
@@ -56,7 +52,6 @@
       "DomainActive" .DomainActive
       "DomainDisabledTitle" .DomainDisabledTitle
       "DownloadRunning" .DownloadRunning
-      "IsStream" .IsStream
       "Redirect" (printf "/series/%d/videos/%d" .Series.ID .Video.ID)
       "Class" "btn btn-neutral"
       "DeleteClass" "btn btn-soft btn-error"
@@ -72,13 +67,13 @@
 <div class="modal">
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Ignore video</h3>
-    <p class="text-sm mb-4">A download or pack stream task is in progress. Ignore and cancel it?</p>
+    <p class="text-sm mb-4">A download task is in progress. Ignore and cancel it?</p>
     <form method="post" action="/actions/ignore-video">
       <input type="hidden" name="video_id" value="{{.Video.ID}}" />
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="redirect" value="/series/{{.Series.ID}}/videos/{{.Video.ID}}" />
       <div class="modal-action">
-        <label for="modal-ignore-video-{{.Video.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-ignore-video-{{.Video.ID}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-warning">Ignore and cancel task</button>
       </div>
     </form>
@@ -90,17 +85,9 @@
      hx-get="/series/{{.Series.ID}}/videos/{{.Video.ID}}/task-indicator"
      hx-trigger="every 2s"
      hx-swap="none"></div>
-{{if .StreamCacheLive}}
-<div id="video-stream-cache-poll" class="hidden"
-     hx-get="/series/{{.Series.ID}}/videos/{{.Video.ID}}"
-     hx-trigger="every 2s"
-     hx-select="#video-stream-cache-live"
-     hx-target="#video-stream-cache-live"
-     hx-swap="outerHTML"></div>
-{{end}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Details" "help" "Index metadata and Creatorr-owned download/stream state.")}}
+{{template "list_header" (dict "level" "section" "title" "Details" "help" "Index metadata and Creatorr-owned download state.")}}
 {{template "list_table"}}
 <tbody>
   <tr><th class="w-40">Status</th>
@@ -139,19 +126,10 @@
   {{template "detail_row" (dict "Label" "Source URL" "TdClass" "text-xs break-all")}}
   {{end}}
   {{range .DetailRows}}
-  <tr{{if eq .Label "Stream cache"}} id="video-stream-cache-live"{{end}}>
+  <tr>
     <th class="w-40">{{.Label}}</th>
-    <td class="text-sm break-all{{if and (eq .Value "none") (not .ProgressOn)}} opacity-60{{end}}">
-      {{if .ProgressOn}}
-      <div class="flex flex-col gap-1 max-w-md">
-        <span>{{.Value}}</span>
-        {{if ge .ProgressPct 0}}
-        <progress class="progress progress-primary w-full" value="{{.ProgressPct}}" max="100" aria-label="Stream cache {{.ProgressPct}} percent"></progress>
-        {{else if gt (len .Value) 0}}
-        <progress class="progress progress-primary w-full" aria-label="Stream cache filling"></progress>
-        {{end}}
-      </div>
-      {{else if .IsURL}}<a class="link" href="{{.Value}}" target="_blank" rel="noopener">{{displayURL .Value}}</a>
+    <td class="text-sm break-all">
+      {{if .IsURL}}<a class="link" href="{{.Value}}" target="_blank" rel="noopener">{{displayURL .Value}}</a>
       {{else if .IsPath}}<code class="text-xs">{{.Value}}</code>
       {{else}}{{.Value}}{{end}}
     </td>

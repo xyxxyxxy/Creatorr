@@ -26,7 +26,7 @@ func TestTickEnqueuesCatchupScanAndDownloadWanted(t *testing.T) {
 	_ = settings.Set(d, settings.KeySyncFilesCron, "")
 	_ = settings.Set(d, settings.KeyRetentionDeleteCron, "")
 	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "off", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
 
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
@@ -102,7 +102,7 @@ func TestRunSkipsMissedSchedulesAtBoot(t *testing.T) {
 	_ = settings.Set(d, settings.KeyDownloadWantedCron, "0 * * * *")
 	_ = settings.Set(d, settings.KeySyncFilesCron, "0 * * * *")
 	_ = settings.Set(d, settings.KeyRetentionDeleteCron, "")
-	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "off", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
 
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)

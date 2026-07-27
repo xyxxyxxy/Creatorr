@@ -18,6 +18,7 @@ import (
 var (
 	mediaExts = map[string]bool{
 		".mkv": true, ".mp4": true, ".mov": true, ".webm": true, ".m4v": true,
+		".mka": true, ".m4a": true, ".mp3": true, ".opus": true, ".ogg": true, ".flac": true,
 	}
 	uniqueIDTyped = regexp.MustCompile(`(?i)<uniqueid[^>]*type="([^"]*)"[^>]*>([^<]+)</uniqueid>`)
 	uniqueIDAny   = regexp.MustCompile(`(?i)<uniqueid[^>]*>([^<]+)</uniqueid>`)
@@ -306,8 +307,7 @@ func (s *Store) buildImportCandidate(path, source string, known map[string]struc
 	}
 
 	// info.json is download-time provenance: list only; never stem-match or attach alone.
-	// .strm must be regenerated with the current external URL + token (never import/bind).
-	if role == ImportRoleJSON || role == ImportRoleStrm || role == ImportRoleOther {
+	if role == ImportRoleJSON || role == ImportRoleOther {
 		return &c, nil
 	}
 
@@ -729,9 +729,6 @@ func (s *Store) EnqueueImport(path string, videoID int64, verify, replace bool) 
 	if role == ImportRoleJSON {
 		return 0, fmt.Errorf("%w: info.json cannot be imported alone (provenance travels with media)", ErrInvalid)
 	}
-	if role == ImportRoleStrm {
-		return 0, fmt.Errorf("%w: .strm cannot be imported (regenerate with current External Creatorr URL)", ErrInvalid)
-	}
 	if IsImportSidecarRole(role) {
 		return s.EnqueueAttachSidecars(videoID, []string{abs})
 	}
@@ -782,8 +779,9 @@ func (s *Store) EnqueueImport(path string, videoID int64, verify, replace bool) 
 	})
 }
 
-// EnqueueAttachSidecars queues a task that registers orphan sidecar paths on an
-// existing video that already has a media file.
+// EnqueueAttachSidecars queues a task that attaches orphan sidecar paths to a
+// video that already has media. Inbox paths are moved beside the media on run;
+// library orphans must already sit beside the media file.
 func (s *Store) EnqueueAttachSidecars(videoID int64, paths []string) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
@@ -853,11 +851,12 @@ func (s *Store) EnqueueAttachSidecars(videoID int64, paths []string) (int64, err
 	})
 }
 
-// AttachSidecarFiles registers on-disk sidecar paths for a video that already has media.
-// Paths must live in the same directory as the video media file. NFO is data import only:
-// requires the same normalized basename stem as the media file; updates editable metadata
-// then regenerates the episode .nfo from DB (source XML is not kept as the library file).
-// Thumb/sub rows are registered in place. Rejects info.json (provenance packs only with media).
+// AttachSidecarFiles registers sidecar paths on a video that already has media.
+// Paths already beside the media file are registered in place. Inbox paths
+// (under ImportRoot) are moved beside the media first (subs keep language
+// suffix; thumbs become `{stem}-thumb{ext}`). Library orphans in another folder
+// are rejected. NFO is data import only (same-stem beside media); source XML is
+// not kept. Rejects info.json (provenance packs only with media).
 func (s *Store) AttachSidecarFiles(videoID int64, paths []string, taskID int64) error {
 	mediaPath, ok, err := s.HasVideoFile(videoID)
 	if err != nil {
@@ -871,6 +870,7 @@ func (s *Store) AttachSidecarFiles(videoID int64, paths []string, taskID int64) 
 		mediaAbs = mediaPath
 	}
 	mediaDir := filepath.Dir(mediaAbs)
+	mediaStem := strings.TrimSuffix(filepath.Base(mediaAbs), filepath.Ext(mediaAbs))
 
 	type item struct {
 		kind string
@@ -886,12 +886,28 @@ func (s *Store) AttachSidecarFiles(videoID int64, paths []string, taskID int64) 
 		if !fileExists(abs) {
 			return fmt.Errorf("%w: sidecar not found: %s", ErrNotFound, abs)
 		}
-		if filepath.Dir(abs) != mediaDir {
-			return fmt.Errorf("%w: sidecar must be beside the video media file", ErrInvalid)
-		}
 		role, _ := ClassifyImportFile(filepath.Base(abs))
 		if role == ImportRoleJSON {
 			return fmt.Errorf("%w: info.json cannot be attached alone (provenance travels with media)", ErrInvalid)
+		}
+		if filepath.Dir(abs) != mediaDir {
+			if !s.pathUnderImportInbox(abs) {
+				return fmt.Errorf("%w: sidecar must be beside the video media file", ErrInvalid)
+			}
+			if role == ImportRoleNFO {
+				return fmt.Errorf("%w: .nfo data import requires a same-basename video file beside it", ErrInvalid)
+			}
+			dest, derr := inboxSidecarLibraryDest(abs, mediaDir, mediaStem, role)
+			if derr != nil {
+				return derr
+			}
+			if DestinationOccupied(dest, nil) {
+				return fmt.Errorf("%w: destination exists: %s", ErrInvalid, filepath.Base(dest))
+			}
+			if err := moveFile(abs, dest); err != nil {
+				return fmt.Errorf("move sidecar into library: %w", err)
+			}
+			abs = dest
 		}
 		if role == ImportRoleNFO {
 			if !ImportSidecarStemMatchesMedia(abs, mediaAbs) {
@@ -957,6 +973,44 @@ func (s *Store) AttachSidecarFiles(videoID int64, paths []string, taskID int64) 
 		return err
 	}
 	return tx.Commit()
+}
+
+// pathUnderImportInbox reports whether abs lives under ImportRoot (inbox move source).
+func (s *Store) pathUnderImportInbox(abs string) bool {
+	root := strings.TrimSpace(s.ImportRoot)
+	if root == "" {
+		return false
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(absRoot, abs)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// inboxSidecarLibraryDest builds the library path for an inbox sub/thumb beside media.
+func inboxSidecarLibraryDest(src, mediaDir, mediaStem, role string) (string, error) {
+	switch role {
+	case ImportRoleSub:
+		srcStem := guessSubtitleWorkStem(src)
+		suffix := SubtitleLangAndExt(src, srcStem)
+		if suffix == "" {
+			suffix = filepath.Ext(src)
+		}
+		if suffix == "" {
+			return "", fmt.Errorf("%w: subtitle has no extension", ErrInvalid)
+		}
+		return filepath.Join(mediaDir, mediaStem+suffix), nil
+	case ImportRoleThumb:
+		ext := strings.ToLower(filepath.Ext(src))
+		if ext == "" {
+			ext = ".jpg"
+		}
+		return filepath.Join(mediaDir, mediaStem+"-thumb"+ext), nil
+	default:
+		return "", fmt.Errorf("%w: cannot move %s from inbox", ErrInvalid, role)
+	}
 }
 
 // ValidateImportPath ensures path is an existing media file under ImportRoot.

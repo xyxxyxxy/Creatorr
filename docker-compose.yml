@@ -23,9 +23,6 @@ services:
       # Optional custom yt-dlp (replaces image /usr/local/bin/yt-dlp):
       # - /path/to/your/yt-dlp:/usr/local/bin/yt-dlp:ro
     environment:
-      # First-boot seed for Settings external_base_url. Required for streaming
-      # (.strm / proxy URLs); set in .env or later under Settings → Library → Streaming.
-      CREATORR_PUBLIC_BASE_URL: ${CREATORR_PUBLIC_BASE_URL:-}
       # PO Token provider (creatorr-po-token sidecar). Empty disables Settings pot_fetch.
       CREATORR_POT_PROVIDER_URL: ${CREATORR_POT_PROVIDER_URL:-http://creatorr-po-token:4416}
       # FlareSolverr base URL (creatorr-flaresolverr sidecar). Chrome-based; notable RAM.

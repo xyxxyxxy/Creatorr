@@ -19,10 +19,6 @@ const (
 	KeyRetentionDeleteCron          = "retention_delete_cron"
 	KeyStatsRetentionDays           = "stats_retention_days"
 	KeySourceDownloadErrorThreshold = "source_download_error_threshold"
-	KeyCacheBeginningSeconds        = "cache_beginning_seconds"
-	KeyStreamPlaybackCache          = "stream_playback_cache"
-	KeyStreamPlaybackCacheMaxHours  = "stream_playback_cache_max_hours"
-	KeyExternalBaseURL              = "external_base_url"
 	KeyMetadataDomainTag            = "metadata_domain_tag"
 	KeyMetadataGenresFromCategories = "metadata_genres_from_categories"
 )
@@ -37,14 +33,10 @@ var Help = map[string]string{
 	KeyRetentionDeleteCron:          "Deleting old data according to root folder retention ('Settings → Library').",
 	KeyStatsRetentionDays:           "",
 	KeySourceDownloadErrorThreshold: "When this many videos of a source enter an error state, other videos from that source are held until the issue is resolved.\nSet to 1 so the first error stops further downloads from that source.",
-	KeyCacheBeginningSeconds:        "Piped streams need a few seconds before playback can start. Caching the beginning beforehand enables instant playback while the rest of the stream loads in the background. Changing this does not alter beginnings already cached.",
-	KeyStreamPlaybackCache:          "Enables later plays to stream without re-fetching via yt-dlp.",
-	KeyStreamPlaybackCacheMaxHours:  "Rolling total hours of playback cache kept. When over budget, least-recently-played whole-video caches are removed. Does not apply to beginning caches.",
-	KeyExternalBaseURL:              "Essential for Creatorr streaming: the external media server (Emby/Jellyfin/Kodi/etc.) plays .strm entries by streaming through Creatorr’s proxy. Absolute origin clients can reach (scheme+host+port, no trailing slash). Empty disables stream delivery. Changing this requires Regenerate all .strm files under Settings → Maintenance.",
 	KeySubtitleLangs:                "Supports all, regex (en.*), and -TAG exclusions. Saving does not re-fetch existing episodes.",
 	KeySubtitleAuto:                 "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",
-	KeyMetadataDomainTag:            "On download and stream pack, prepend the source domain to video tags when source_url is known.",
-	KeyMetadataGenresFromCategories: "On download and stream pack, add yt-dlp categories as video genres when categories are known.",
+	KeyMetadataDomainTag:            "On download and metadata rescan, prepend the source domain to video tags when source_url is known.",
+	KeyMetadataGenresFromCategories: "On download and metadata rescan, add yt-dlp categories as video genres when categories are known.",
 }
 
 // Labels are human-readable Settings titles (DB/API keys are snake_case).
@@ -57,10 +49,6 @@ var Labels = map[string]string{
 	KeyRetentionDeleteCron:          "Retention delete schedule",
 	KeyStatsRetentionDays:           "Retention",
 	KeySourceDownloadErrorThreshold: "Source download error threshold",
-	KeyCacheBeginningSeconds:        "Cache beginning of streams",
-	KeyStreamPlaybackCache:          "Build cache on playback",
-	KeyStreamPlaybackCacheMaxHours:  "Max playback cache",
-	KeyExternalBaseURL:              "External Creatorr URL",
 	KeySubtitleLangs:                "Subtitle languages",
 	KeySubtitleAuto:                 "Include auto-generated subtitles",
 	KeyMetadataDomainTag:            "Add source domain as video tag",
@@ -86,12 +74,8 @@ var queueOrder = []string{
 	KeySourceDownloadErrorThreshold,
 }
 
-// libraryOrder is Settings → Library (stream + subtitles; episode_format is separate).
+// libraryOrder is Settings → Library (subtitles; episode_format is separate).
 var libraryOrder = []string{
-	KeyExternalBaseURL,
-	KeyCacheBeginningSeconds,
-	KeyStreamPlaybackCache,
-	KeyStreamPlaybackCacheMaxHours,
 	KeySubtitleLangs,
 	KeySubtitleAuto,
 }
@@ -128,10 +112,6 @@ func SeedDefaults(database *db.DB) error {
 		KeyRetentionDeleteCron:          "@daily",
 		KeyStatsRetentionDays:           "365",
 		KeySourceDownloadErrorThreshold: strconv.Itoa(DefaultSourceDownloadErrorThreshold),
-		KeyCacheBeginningSeconds:        strconv.Itoa(DefaultCacheBeginningSeconds),
-		KeyStreamPlaybackCache:          DefaultStreamPlaybackCache,
-		KeyStreamPlaybackCacheMaxHours:  strconv.Itoa(DefaultStreamPlaybackCacheMaxHours),
-		KeyExternalBaseURL:              "",
 		KeySubtitleLangs:                DefaultSubtitleLangs,
 		KeySubtitleAuto:                 DefaultSubtitleAuto,
 		KeyMetadataDomainTag:            DefaultMetadataDomainTag,
@@ -164,7 +144,6 @@ func migrateLegacySettingKeys(database *db.DB) error {
 	renames := []struct{ old, neu string }{
 		{"file_sync_cron", KeySyncFilesCron},
 		{"retention_purge_cron", KeyRetentionDeleteCron},
-		{"download_beginning_seconds", KeyCacheBeginningSeconds},
 	}
 	for _, r := range renames {
 		var n int
@@ -179,22 +158,22 @@ func migrateLegacySettingKeys(database *db.DB) error {
 			return fmt.Errorf("rename setting %s→%s: %w", r.old, r.neu, err)
 		}
 	}
-	// Drop removed tip-scan auto-download toggle (no longer used).
-	_, _ = database.SQL.Exec(`DELETE FROM settings WHERE key = ?`, "download_new_on_scan")
+	// Drop removed settings no longer used.
+	for _, key := range []string{"download_new_on_scan"} {
+		_, _ = database.SQL.Exec(`DELETE FROM settings WHERE key = ?`, key)
+	}
 	return nil
 }
 
 // migrateLegacyTaskKinds rewrites queued/history task kind strings to current names.
 func migrateLegacyTaskKinds(database *db.DB) error {
 	renames := []struct{ old, neu string }{
-		{"download_beginning", "cache_beginning"},
 		{"metadata_rescan", "rescan_metadata"},
 		{"sidecar_refresh", "refresh_sidecars"},
 		{"file_sync", "sync_files"},
 		{"retention_purge", "retention_delete"},
 		{"apply_episode_naming", "rename_episodes"},
 		{"nfo_regenerate", "regenerate_nfo"},
-		{"strm_regenerate", "regenerate_strm"},
 		{"file_delete", "delete_files"},
 		{"series_meta_prefetch", "prefetch_series_meta"},
 		{"video_meta_prefetch", "prefetch_video_meta"},
@@ -273,9 +252,6 @@ func Set(database *db.DB, key, value string) error {
 	if _, ok := Help[key]; !ok {
 		return fmt.Errorf("unknown setting key %q", key)
 	}
-	if key == KeyExternalBaseURL {
-		value = NormalizeExternalBaseURL(value)
-	}
 	if key == KeySubtitleLangs {
 		value = SubtitleLangsJSON(ParseSubtitleLangsJSON(value))
 	}
@@ -309,10 +285,6 @@ func SetMany(database *db.DB, values map[string]string) error {
 		if _, ok := Help[k]; !ok {
 			return fmt.Errorf("unknown setting key %q", k)
 		}
-		if k == KeyExternalBaseURL {
-			v = NormalizeExternalBaseURL(v)
-			values[k] = v
-		}
 		if k == KeySubtitleLangs {
 			v = SubtitleLangsJSON(ParseSubtitleLangsJSON(v))
 			values[k] = v
@@ -344,24 +316,22 @@ func SetMany(database *db.DB, values map[string]string) error {
 
 // DomainQueueRow is one host override row for Settings → Queue / Domains (domain != default).
 type DomainQueueRow struct {
-	Domain               string
-	TaskCooldownSeconds  int     // effective value for display
-	MaxDownloadQueue     int     // effective
-	MaxParallelTasks     int     // effective
-	DownloadRateLimit    string  // effective value for display
-	StreamPlayRateLimit  string  // effective value for display
-	SleepRequests        float64 // effective value for display
-	CooldownOverride      string  // empty = using default
-	QueueOverride        string  // empty = using default
-	ParallelOverride     string  // empty = using default
-	RateOverride         string  // empty = using default
-	StreamPlayRateOverride string // empty = using default
-	SleepOverride        string  // empty = using default
-	FlareOverride        string  // "", "on", "off" - empty = inherit Domain defaults
-	Active               bool
-	UseFlareSolverr      bool // effective resolved flare (defaults + override)
-	HasCookies           bool
-	CookieContent        string // Netscape jar text for edit modal
+	Domain              string
+	TaskCooldownSeconds int     // effective value for display
+	MaxDownloadQueue    int     // effective
+	MaxParallelTasks    int     // effective
+	DownloadRateLimit   string  // effective value for display
+	SleepRequests       float64 // effective value for display
+	CooldownOverride    string  // empty = using default
+	QueueOverride       string  // empty = using default
+	ParallelOverride    string  // empty = using default
+	RateOverride        string  // empty = using default
+	SleepOverride       string  // empty = using default
+	FlareOverride       string  // "", "on", "off" - empty = inherit Domain defaults
+	Active              bool
+	UseFlareSolverr     bool // effective resolved flare (defaults + override)
+	HasCookies          bool
+	CookieContent       string // Netscape jar text for edit modal
 	HasCredentials              bool   // host row sets non-empty username
 	CredentialsUsername         string // host override username for edit modal
 	CredentialsInherit          bool   // host row username NULL (inherit default)
@@ -395,7 +365,7 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 	}
 	rows, err := database.SQL.Query(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-		       download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr, username, password
+		       download_rate_limit, sleep_requests, use_flaresolverr, username, password
 		FROM domains WHERE domain != ? ORDER BY domain
 	`, DomainDefault)
 	if err != nil {
@@ -408,11 +378,11 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 		var host string
 		var active int
 		var delay, maxQ, maxP sql.NullInt64
-		var rate, streamRate sql.NullString
+		var rate sql.NullString
 		var sleep sql.NullFloat64
 		var flare sql.NullInt64
 		var credUser, credPass sql.NullString
-		if err := rows.Scan(&host, &active, &delay, &maxQ, &maxP, &rate, &streamRate, &sleep, &flare, &credUser, &credPass); err != nil {
+		if err := rows.Scan(&host, &active, &delay, &maxQ, &maxP, &rate, &sleep, &flare, &credUser, &credPass); err != nil {
 			return nil, err
 		}
 		r := DomainQueueRow{
@@ -421,7 +391,6 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 			MaxDownloadQueue:    def.MaxDownloadQueue,
 			MaxParallelTasks:    def.MaxParallelTasks,
 			DownloadRateLimit:   def.DownloadRateLimit,
-			StreamPlayRateLimit: def.StreamPlayRateLimit,
 			SleepRequests:       def.SleepRequests,
 			UseFlareSolverr:     def.UseFlareSolverr,
 			CookieContent:       cookieByDomain[NormalizeDomain(host)],
@@ -447,14 +416,6 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 			r.DownloadRateLimit = s
 			r.RateOverride = s
 		}
-		if streamRate.Valid {
-			s := strings.TrimSpace(streamRate.String)
-			if s == "" {
-				s = "off"
-			}
-			r.StreamPlayRateLimit = s
-			r.StreamPlayRateOverride = s
-		}
 		if sleep.Valid && sleep.Float64 >= 0 {
 			r.SleepRequests = sleep.Float64
 			r.SleepOverride = strconv.FormatFloat(sleep.Float64, 'f', -1, 64)
@@ -464,7 +425,7 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 				r.FlareOverride = "on"
 				r.UseFlareSolverr = true
 			} else {
-				r.FlareOverride = "off"
+				// Legacy host 0: treat as NULL inherit for UI (do not show muted "off").
 				r.UseFlareSolverr = false
 			}
 		}
@@ -494,7 +455,6 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 			MaxDownloadQueue:    def.MaxDownloadQueue,
 			MaxParallelTasks:    def.MaxParallelTasks,
 			DownloadRateLimit:   def.DownloadRateLimit,
-			StreamPlayRateLimit: def.StreamPlayRateLimit,
 			SleepRequests:       def.SleepRequests,
 			UseFlareSolverr:     def.UseFlareSolverr,
 			CookieContent:       content,

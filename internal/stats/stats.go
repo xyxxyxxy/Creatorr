@@ -32,7 +32,6 @@ const (
 	MetricQueueScan        = "queue_scan"
 	MetricVideosWanted     = "videos_wanted"
 	MetricVideosDownloaded = "videos_downloaded"
-	MetricVideosStreamable = "videos_streamable"
 	MetricLibrarySizeBytes = "library_size_bytes"
 )
 
@@ -41,7 +40,6 @@ var minuteMetrics = []string{
 	MetricQueueScan,
 	MetricVideosWanted,
 	MetricVideosDownloaded,
-	MetricVideosStreamable,
 }
 
 // Sampler runs sampling independently of other Creatorr schedules.
@@ -233,10 +231,10 @@ func SampleWithWriter(database *db.DB, at time.Time, writeFn func(metric string,
 		return err
 	}
 
-	var wanted, downloaded, streamable int
+	var wanted, downloaded int
 	vrows, err := database.SQL.Query(`
 		SELECT status, COUNT(*) FROM videos
-		WHERE status IN ('wanted', 'downloaded', 'streamable')
+		WHERE status IN ('wanted', 'downloaded')
 		GROUP BY status
 	`)
 	if err != nil {
@@ -254,8 +252,6 @@ func SampleWithWriter(database *db.DB, at time.Time, writeFn func(metric string,
 			wanted = n
 		case "downloaded":
 			downloaded = n
-		case "streamable":
-			streamable = n
 		}
 	}
 	if err := vrows.Err(); err != nil {
@@ -271,7 +267,6 @@ func SampleWithWriter(database *db.DB, at time.Time, writeFn func(metric string,
 		MetricQueueScan:        qs,
 		MetricVideosWanted:     wanted,
 		MetricVideosDownloaded: downloaded,
-		MetricVideosStreamable: streamable,
 	}
 
 	tx, err := database.SQL.Begin()
@@ -413,10 +408,10 @@ func Prune(database *db.DB, now time.Time, retentionDays int) (int64, error) {
 	res, err := tx.Exec(`
 		DELETE FROM stats_samples
 		WHERE sampled_at < ?
-		  AND metric NOT IN (?, ?, ?, ?, ?, ?)
+		  AND metric NOT IN (?, ?, ?, ?, ?)
 	`, cutoff,
 		MetricQueueDownload, MetricQueueScan,
-		MetricVideosWanted, MetricVideosDownloaded, MetricVideosStreamable,
+		MetricVideosWanted, MetricVideosDownloaded,
 		MetricLibrarySizeBytes)
 	if err != nil {
 		return 0, err
@@ -508,7 +503,6 @@ func LoadChartAt(database *db.DB, now time.Time) (ChartPayload, error) {
 	out.VideoStatus = forwardFillSeries(minuteTimes, byTime, []struct{ metric, name, stack string }{
 		{MetricVideosWanted, "wanted", "video_status"},
 		{MetricVideosDownloaded, "downloaded", "video_status"},
-		{MetricVideosStreamable, "streamable", "video_status"},
 	})
 
 	storageCutoff := now.AddDate(0, 0, -StorageChartMaxDays).Truncate(24 * time.Hour).Format(time.RFC3339)

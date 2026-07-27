@@ -7,11 +7,11 @@
   "icon" .Icon
   "help" "Scan lists every untracked file under the chosen folder. Media and sidecars show as one list item. Match media to an indexed video or create a new one before import."
 )}}
+{{if not .Series}}
 <div role="alert" class="alert alert-info text-sm">
   <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
   <span>It is recommended to create the series first and add relevant sources with 'Mark new videos as ignored' enabled before importing, so a video index is available to match the files automatically.</span>
 </div>
-{{if not .Series}}
 <div class="flex w-full max-w-xl flex-col gap-4 py-6">
   <div role="alert" class="alert">
     <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
@@ -20,7 +20,24 @@
   <label for="modal-add-series" class="btn btn-primary w-full sm:w-auto">Add series</label>
 </div>
 {{else}}
-<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full items-start">
+<div class="flex flex-col gap-3 w-full">
+  {{template "list_header" (dict "level" "section" "title" "File matching")}}
+  <ol class="list-decimal pl-5 space-y-1 text-sm">
+    <li>
+      Media auto-match.
+      <ol class="list-[lower-alpha] pl-5 space-y-0.5 mt-1">
+        <li>Remote ID: <code class="text-xs">[id]</code> in filename, then <code class="text-xs">info.json</code> <code class="text-xs">id</code>, then sibling <code class="text-xs">.nfo</code> <code class="text-xs">&lt;uniqueid&gt;</code>.</li>
+        <li>Title similarity on cleaned filename basename.</li>
+        <li>Series suggestion from parent folder / basename (series only; pick a video in 'Match').</li>
+      </ol>
+    </li>
+    <li>Sidecars: <code class="text-xs">.nfo</code> / thumb need a same-basename video beside them. Subs match by directory + basename to packed media. <code class="text-xs">info.json</code> helps ID lookup only.</li>
+  </ol>
+  <div role="alert" class="alert alert-info text-sm">
+    <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
+    <span>It is recommended to create the series first and add relevant sources with 'Mark new videos as ignored' enabled before importing, so a video index is available to match the files automatically.</span>
+  </div>
+</div>
 <label class="form-control w-full min-w-0">
   <div class="label py-1"><span class="label-text text-sm opacity-70">Scan folder</span></div>
   <div class="join w-full">
@@ -33,25 +50,11 @@
     <button type="button" class="btn join-item shrink-0" id="btn-import-rescan" title="Scan again for new files without changing current matches">Rescan</button>
   </div>
 </label>
-<details class="collapse collapse-arrow bg-base-100 border border-base-300 w-full min-w-0">
-  <summary class="collapse-title font-medium text-sm min-h-0 py-3">File matching</summary>
-  <div class="collapse-content text-sm">
-    <ol class="list-decimal pl-5 space-y-1">
-      <li>
-        Media auto-match.
-        <ol class="list-[lower-alpha] pl-5 space-y-0.5 mt-1">
-          <li>Remote ID: <code class="text-xs">[id]</code> in filename, then <code class="text-xs">info.json</code> <code class="text-xs">id</code>, then sibling <code class="text-xs">.nfo</code> <code class="text-xs">&lt;uniqueid&gt;</code>.</li>
-          <li>Title similarity on cleaned filename basename.</li>
-          <li>Series suggestion from parent folder / basename (series only; pick a video in 'Match').</li>
-        </ol>
-      </li>
-      <li>Sidecars: <code class="text-xs">.nfo</code> / thumb need a same-basename video beside them. Subs match by directory + basename to packed media. <code class="text-xs">info.json</code> helps ID lookup only.</li>
-    </ol>
+<div class="list-actions flex flex-col gap-3" id="import-bulk">
+  <div id="btn-import-wrap" class="w-full block p-0.5 rounded-[calc(0.125rem+var(--radius-field))]">
+    <button type="button" class="btn btn-primary w-full tooltip tooltip-top" id="btn-import" disabled data-tip="Review ready items, then schedule import">Import</button>
   </div>
-</details>
-</div>
-<div class="list-actions flex flex-wrap items-center justify-between gap-3" id="import-bulk">
-  <div class="flex flex-wrap items-center gap-3 min-w-0">
+  <div class="flex flex-wrap items-center gap-3 min-w-0 w-full">
     <div class="join">
       <button type="button" class="join-item btn btn-ghost" id="btn-import-auto-match" disabled title="Re-apply scan auto-matches">Auto-match</button>
       <button type="button" class="join-item btn btn-ghost" id="btn-import-reset-matches" disabled>Reset matches</button>
@@ -62,17 +65,14 @@
       <span class="label-text text-sm">Show only unmatched</span>
     </label>
   </div>
-  <div id="btn-import-wrap" class="shrink-0 inline-block p-0.5 rounded-[calc(0.125rem+var(--radius-field))]">
-    <button type="button" class="btn btn-primary tooltip tooltip-top" id="btn-import" disabled data-tip="Review ready items, then schedule import">Import</button>
-  </div>
 </div>
 <div id="status" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm opacity-60 mt-2">
   <span id="status-scan">Scanning…</span>
   <span id="status-match" class="text-right"></span>
 </div>
-<div id="import-full-scan-note" role="alert" class="alert alert-info text-sm mt-2{{if not .IncompleteFullScan}} hidden{{end}}">
-  <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
-  <span>A 'Full scan' is still indexing one or more sources. Not all videos may be indexed yet for auto-match.</span>
+<div id="import-full-scan-note" role="alert" class="alert alert-warning text-sm mt-2{{if not .IncompleteFullScan}} hidden{{end}}">
+  <i data-lucide="triangle-alert" class="size-5 shrink-0" aria-hidden="true"></i>
+  <span>'Full scan' is incomplete on one or more sources. Not all videos may be indexed yet for auto-match.</span>
 </div>
 <ul id="import-list" class="flex flex-col gap-3 w-full list-none p-0 m-0 mt-2" aria-label="Import candidates"></ul>
 <div id="import-pager" class="hidden flex flex-wrap items-center justify-between gap-2 mt-3">
@@ -95,7 +95,7 @@
     <div id="import-summary-list" class="flex flex-col gap-3 w-full max-h-[60vh] overflow-y-auto" aria-label="Import summary"></div>
     <p id="import-summary-replace-warn" class="hidden text-sm text-warning mt-3">One or more items replace existing library media. That media (and companion sidecars) will be deleted on import.</p>
     <div class="modal-action">
-      <label for="modal-import-summary" class="btn btn-ghost">Cancel</label>
+      <label for="modal-import-summary" class="btn">Cancel</label>
       <button type="button" class="btn btn-secondary" id="btn-import-now">Import now</button>
       <button type="button" class="btn btn-primary" id="btn-import-now-verify">Import now and verify media</button>
     </div>
@@ -126,7 +126,7 @@
       </div>
     </div>
     <div class="modal-action shrink-0">
-      <button type="button" class="btn btn-ghost" id="btn-import-match-cancel">Cancel</button>
+      <button type="button" class="btn" id="btn-import-match-cancel">Cancel</button>
     </div>
   </div>
   <div class="modal-backdrop" aria-hidden="true"></div>
@@ -239,6 +239,9 @@ function videosForSeries(seriesId, opts) {
     if (!allowExistingMedia()) {
       list = list.filter((v) => !v.has_media);
     }
+  } else {
+    // Sidecar Attach: only videos that already have library media.
+    list = list.filter((v) => !!v.has_media);
   }
   if (q) {
     list = list.filter((v) => nameMatch(v.title, q) || nameMatch(v.series_title, q));
@@ -259,6 +262,15 @@ function scrubMediaVideoPick(st, exceptKey) {
   if (videoMatchedElsewhere(st.videoId, exceptKey) ||
       (!allowExistingMedia() && videoHasMedia(st.videoId))) {
     st.videoId = '';
+  }
+  return st;
+}
+
+/** Sidecar Attach needs a video that already has packed library media (not CREATE). */
+function scrubSidecarVideoPick(st) {
+  if (!st) return st;
+  if (!st.videoId || String(st.videoId) === CREATE || !videoHasMedia(st.videoId)) {
+    if (st.videoId) st.videoId = '';
   }
   return st;
 }
@@ -422,7 +434,7 @@ function videoLabel(id) {
 
 function itemReady(kind, st) {
   const videoId = st.videoId || '';
-  if (kind === 'sidecar') return !!videoId && videoId !== CREATE;
+  if (kind === 'sidecar') return !!videoId && videoId !== CREATE && videoHasMedia(videoId);
   if (!videoId) return false;
   if (videoId === CREATE) {
     return !!(st.seriesId || '') && !!(st.title || '').trim() && !!(st.upload || '').trim();
@@ -601,11 +613,14 @@ function renderMatchModalLists() {
     seriesList.innerHTML = lockedSeriesRowHTML(s);
   } else {
     const series = seriesForQuery(q);
-    let html = createSeriesListRowHTML();
+    // Sidecar Attach needs an existing series with packed media - no Create new series.
+    let html = matchCtx.kind === 'sidecar' ? '' : createSeriesListRowHTML();
     if (series.length) {
       html += series.map((s) => seriesListRowHTML(s, draft.seriesId)).join('');
     } else if (String(q || '').trim()) {
       html += '<li class="list-row"><span class="opacity-60 text-sm px-2">No series match</span></li>';
+    } else if (!html) {
+      html += '<li class="list-row"><span class="opacity-60 text-sm px-2">No series</span></li>';
     }
     seriesList.innerHTML = html;
   }
@@ -628,19 +643,15 @@ function renderMatchModalLists() {
       videos = videosForSeries(null, { forMedia, q, exceptKey });
     }
     let html = '';
-    // Always offer create for media Match (needs a series before Add video opens).
+    // Create only for media Match (sidecar Attach needs an existing packed video).
     if (forMedia) {
       html += createListRowHTML(String(draft.videoId) === CREATE);
     }
     if (videos.length) {
       html += videos.map((v) => videoListRowHTML(v, '', exceptKey)).join('');
-    } else if (!forMedia) {
-      html += '<li class="list-row"><span class="opacity-60 text-sm px-2">' +
-        (draft.seriesId || String(q || '').trim() ? 'No videos match' : 'Pick a series or search') +
-        '</span></li>';
-    } else if (!videos.length && !draft.seriesId && !String(q || '').trim()) {
+    } else if (!draft.seriesId && !String(q || '').trim()) {
       html += '<li class="list-row"><span class="opacity-60 text-sm px-2">Pick a series or search</span></li>';
-    } else if (!videos.length && (draft.seriesId || String(q || '').trim())) {
+    } else {
       html += '<li class="list-row"><span class="opacity-60 text-sm px-2">No videos match</span></li>';
     }
     videoList.innerHTML = html;
@@ -1037,6 +1048,8 @@ function applyMatchModal() {
     if (st.videoId && String(st.videoId) !== CREATE) {
       claimMediaVideoExclusive(matchCtx.key, st.videoId);
     }
+  } else if (matchCtx.kind === 'sidecar') {
+    scrubSidecarVideoPick(st);
   }
   markAutoMatchStale();
   closeMatchModal();
@@ -1160,7 +1173,6 @@ function roleIcon(role) {
     case 'json': return 'braces';
     case 'thumb': return 'image';
     case 'sub': return 'captions';
-    case 'strm': return 'radio';
     case 'sponsorblock': return 'scissors';
     default: return 'file';
   }
@@ -1173,7 +1185,6 @@ function roleLabel(role) {
     case 'json': return 'info.json';
     case 'thumb': return 'Thumbnail';
     case 'sub': return 'Subtitle';
-    case 'strm': return 'Stream link';
     case 'sponsorblock': return 'SponsorBlock';
     default: return role || 'other';
   }
@@ -1253,6 +1264,7 @@ function defaultStateForBundle(b) {
   const st = getUIState(key);
   if (st.videoId != null || st.seriesId != null) {
     if (b.kind === 'media') scrubMediaVideoPick(st, key);
+    else if (b.kind === 'sidecars') scrubSidecarVideoPick(st);
     return st;
   }
   if (b.kind === 'media') {
@@ -1269,6 +1281,7 @@ function defaultStateForBundle(b) {
     const lead = b.sidecars.find((s) => s.suggested_video_id) || b.sidecars[0];
     st.seriesId = lead.suggested_series_id ? String(lead.suggested_series_id) : '';
     st.videoId = lead.suggested_video_id ? String(lead.suggested_video_id) : '';
+    scrubSidecarVideoPick(st);
   }
   return st;
 }
@@ -1563,8 +1576,6 @@ function buildOtherItem(c) {
   li.className = 'import-item rounded-box border border-base-300 p-4';
   const note = c.role === 'json'
     ? '<span class="opacity-60 text-xs">info.json is provenance - import only with media</span>'
-    : c.role === 'strm'
-    ? '<span class="opacity-60 text-xs">.strm cannot be imported - regenerate via \'Settings → Maintenance\'</span>'
     : '<span class="opacity-60 text-xs">not importable</span>';
   li.innerHTML = `
     <div class="flex items-center gap-2">
@@ -1909,6 +1920,7 @@ document.getElementById('import-match-series').addEventListener('click', (ev) =>
   }
   if (matchCtx.draft.seriesId) return; // locked
   if (ev.target.closest('[data-create-series]')) {
+    if (matchCtx.kind === 'sidecar') return;
     openAddSeriesForImportMatch();
     return;
   }
@@ -1929,6 +1941,7 @@ document.getElementById('import-match-videos').addEventListener('click', (ev) =>
   if (!row) return;
   const vid = String(row.dataset.videoId);
   if (vid === CREATE) {
+    if (matchCtx.kind === 'sidecar') return;
     if (!matchCtx.draft.seriesId) {
       showImportMsg('Create video', 'Pick a series first', { error: true });
       return;
@@ -1941,6 +1954,7 @@ document.getElementById('import-match-videos').addEventListener('click', (ev) =>
   }
   if (matchCtx.kind === 'media' && videoMatchedElsewhere(vid, matchCtx.key)) return;
   if (matchCtx.kind === 'media' && !allowExistingMedia() && videoHasMedia(vid)) return;
+  if (matchCtx.kind === 'sidecar' && !videoHasMedia(vid)) return;
   matchCtx.draft.videoId = vid;
   const v = VIDEOS.find((x) => String(x.id) === vid);
   if (v && String(matchCtx.draft.seriesId) !== String(v.series_id)) {

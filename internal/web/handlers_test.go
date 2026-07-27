@@ -18,7 +18,6 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/web"
-	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 func seedHandler(t *testing.T, d *db.DB) {
@@ -162,8 +161,11 @@ func TestImportPageRequiresSeries(t *testing.T) {
 	if !strings.Contains(body2, `id="import-full-scan-note"`) || !strings.Contains(body2, "Not all videos may be indexed yet") {
 		t.Fatalf("expected full-scan import note after create series: %s", truncate(body2, 400))
 	}
-	if strings.Contains(body2, `id="import-full-scan-note" role="alert" class="alert alert-info text-sm hidden"`) {
+	if strings.Contains(body2, `id="import-full-scan-note" role="alert" class="alert alert-warning text-sm hidden"`) {
 		t.Fatalf("full-scan note should be visible while full_scan_done=0: %s", truncate(body2, 400))
+	}
+	if !strings.Contains(body2, `alert alert-warning`) || !strings.Contains(body2, "incomplete on one or more sources") {
+		t.Fatalf("expected warning full-scan import note: %s", truncate(body2, 400))
 	}
 	if !strings.Contains(body2, `id="btn-import"`) || !strings.Contains(body2, "File matching") {
 		t.Fatalf("expected import UI with series: %s", truncate(body2, 400))
@@ -328,8 +330,25 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "Domain defaults") || !strings.Contains(body, "Domain overrides") || !strings.Contains(body, "modal-add-domain-override") {
 				t.Fatalf("%s missing domain defaults/overrides", path)
 			}
-			if !strings.Contains(body, "Set CREATORR_FLARESOLVERR_URL first.") {
-				t.Fatalf("%s missing FlareSolverr URL gate hint", path)
+			if !strings.Contains(body, "FlareSolverr, cookies, and membership credentials are set on a 'Domain override' per domain") {
+				t.Fatalf("%s missing Access info-only blurb", path)
+			}
+			if strings.Contains(body, `name="use_flaresolverr"`) && strings.Contains(body, `action="/actions/save-domain-default"`) {
+				// Flare checkbox must not appear on Domain defaults save form (override modal OK).
+				defaultsIdx := strings.Index(body, `action="/actions/save-domain-default"`)
+				overridesIdx := strings.Index(body, "Domain overrides")
+				if defaultsIdx >= 0 && overridesIdx > defaultsIdx {
+					chunk := body[defaultsIdx:overridesIdx]
+					if strings.Contains(chunk, `name="use_flaresolverr"`) || strings.Contains(chunk, `name="cookies"`) || strings.Contains(chunk, `name="username"`) {
+						t.Fatalf("%s Domain defaults still has Access fields", path)
+					}
+				}
+			}
+			if !strings.Contains(body, "How to export cookies") || !strings.Contains(body, "Site membership login") {
+				t.Fatalf("%s missing Access guides in override modal", path)
+			}
+			if !strings.Contains(body, "Use FlareSolverr") || !strings.Contains(body, `name="use_flaresolverr"`) {
+				t.Fatalf("%s missing FlareSolverr control in override modal", path)
 			}
 			if !strings.Contains(body, "list-panel") {
 				t.Fatalf("%s missing list-panel", path)
@@ -338,15 +357,6 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		}
 		if path == "/settings/library" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "Streaming") || !strings.Contains(body, "external_base_url") {
-				t.Fatalf("%s missing Streaming / external_base_url", path)
-			}
-			if !strings.Contains(body, "cache_beginning_seconds") {
-				t.Fatalf("%s missing cache_beginning_seconds", path)
-			}
-			if !strings.Contains(body, "External Creatorr URL") {
-				t.Fatalf("%s missing External Creatorr URL label", path)
-			}
 			if strings.Contains(body, "Scan for missing files") {
 				t.Fatalf("%s still has Maintenance actions", path)
 			}
@@ -357,14 +367,11 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		}
 		if path == "/settings/maintenance" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "Scan for missing files") || !strings.Contains(body, "Regenerate all .strm files") {
+			if !strings.Contains(body, "Scan for missing files") {
 				t.Fatalf("%s missing maintenance actions", path)
 			}
 			if !strings.Contains(body, "Apply episode format") {
 				t.Fatalf("%s missing apply episode format", path)
-			}
-			if !strings.Contains(body, "Caches") || !strings.Contains(body, "Clear beginning of stream cache") {
-				t.Fatalf("%s missing caches section", path)
 			}
 			if !strings.Contains(body, "list-panel") {
 				t.Fatalf("%s missing list-panel", path)
@@ -387,67 +394,6 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 	}
 	if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, "/settings/general") {
 		t.Fatalf("/settings redirect=%q", loc)
-	}
-}
-
-func TestLibraryShowsDownloadBeginningWhenStreamingEnabled(t *testing.T) {
-	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer d.Close()
-	_ = settings.SeedDefaults(d)
-	seedHandler(t, d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
-	if err := settings.Set(d, settings.KeyExternalBaseURL, "http://creatorr.example.com:8787"); err != nil {
-		t.Fatal(err)
-	}
-	q := queue.NewStore(d)
-	lib := library.NewStore(d, q)
-	h := &web.Handler{
-		Library: lib,
-		Queue:   q,
-		YtDlp:   &ytdlp.Client{Bin: filepath.Join(t.TempDir(), "yt-dlp")},
-	}
-	r := chi.NewRouter()
-	h.Mount(r)
-
-	req := httptest.NewRequest(http.MethodGet, "/settings/library", nil)
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != 200 {
-		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Streaming") {
-		t.Fatal("expected Streaming section")
-	}
-	if !strings.Contains(body, "cache_beginning_seconds") {
-		t.Fatal("expected cache_beginning_seconds when stream supported")
-	}
-	if !strings.Contains(body, "Cache beginning of streams") {
-		t.Fatal("expected cache beginning label")
-	}
-	if !strings.Contains(body, "Stream URL token") {
-		t.Fatal("expected stream URL token when enabled")
-	}
-	if !strings.Contains(body, "modal-regen-stream-token") {
-		t.Fatal("expected token rotate modal")
-	}
-	if !strings.Contains(body, `id="setting-stream-url-token"`) || !strings.Contains(body, "disabled") {
-		t.Fatal("expected disabled stream token input")
-	}
-	if !strings.Contains(body, `data-lucide="refresh-cw"`) {
-		t.Fatal("expected refresh icon on token regenerate")
-	}
-	if !strings.Contains(body, "join w-full") {
-		t.Fatal("expected token+regenerate join")
-	}
-	if !strings.Contains(body, "Regenerate all .strm files") {
-		t.Fatal("expected strm regenerate maintenance")
-	}
-	if !strings.Contains(body, "Essential for Creatorr streaming") {
-		t.Fatal("expected external URL help about streaming through Creatorr")
 	}
 }
 

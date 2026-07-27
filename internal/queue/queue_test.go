@@ -20,7 +20,7 @@ func openStore(t *testing.T) *queue.Store {
 	if err := settings.SeedDefaults(d); err != nil {
 		t.Fatal(err)
 	}
-	_ = settings.SetDomainDefault(d, 0, 100, 1, "10M", "off", "0", false)
+	_ = settings.SetDomainDefault(d, 0, 100, 1, "10M", "0", false)
 	return queue.NewStore(d)
 }
 
@@ -80,7 +80,7 @@ func TestEnqueueClaimFinish(t *testing.T) {
 
 func TestClaimNextAllowsParallelTasks(t *testing.T) {
 	s := openStore(t)
-	_ = settings.SetDomainDefault(s.DB, 0, 8, 2, "10M", "off", "0", false)
+	_ = settings.SetDomainDefault(s.DB, 0, 8, 2, "10M", "0", false)
 	v1 := seedVideo(t, s, "p1")
 	v2 := seedVideo(t, s, "p2")
 	id1, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com", VideoID: v1})
@@ -111,7 +111,7 @@ func TestClaimNextAllowsParallelTasks(t *testing.T) {
 func TestCooldownUntil(t *testing.T) {
 	s := openStore(t)
 	_ = settings.SeedDefaults(s.DB)
-	_ = settings.SetDomainDefault(s.DB, 30, 8, 1, "10M", "off", "1", false)
+	_ = settings.SetDomainDefault(s.DB, 30, 8, 1, "10M", "1", false)
 	_ = domains.EnsureHost(s.DB, "example.com")
 	vid := seedVideo(t, s, "cd1")
 	id, err := s.Enqueue(queue.EnqueueParams{
@@ -139,7 +139,7 @@ func TestCooldownUntil(t *testing.T) {
 func TestSystemLaneNoCooldown(t *testing.T) {
 	s := openStore(t)
 	_ = settings.SeedDefaults(s.DB)
-	_ = settings.SetDomainDefault(s.DB, 30, 8, 1, "10M", "off", "1", false)
+	_ = settings.SetDomainDefault(s.DB, 30, 8, 1, "10M", "1", false)
 	id, err := s.Enqueue(queue.EnqueueParams{
 		Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "sync",
 	})

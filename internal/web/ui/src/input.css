@@ -106,14 +106,27 @@
   daisyUI validator paints success green on :user-valid. We only want error
   styling on invalid fields (:user-invalid / aria-invalid). Reset to the stock
   .input border mix so valid fields stay neutral.
+  Skip when aria-invalid is set: empty optional fields stay :user-valid after
+  Save, and this rule would otherwise override daisyUI error --input-color.
   https://daisyui.com/components/validator/
 */
-:is(.validator:user-valid, .validator:has(:user-valid)),
-:is(.validator:user-valid, .validator:has(:user-valid)):focus,
-:is(.validator:user-valid, .validator:has(:user-valid)):checked,
-:is(.validator:user-valid, .validator:has(:user-valid))[aria-checked="true"],
-:is(.validator:user-valid, .validator:has(:user-valid)):focus-within {
+:is(.validator:user-valid, .validator:has(:user-valid)):not([aria-invalid]):not(:has([aria-invalid])),
+:is(.validator:user-valid, .validator:has(:user-valid)):not([aria-invalid]):not(:has([aria-invalid])):focus,
+:is(.validator:user-valid, .validator:has(:user-valid)):not([aria-invalid]):not(:has([aria-invalid])):checked,
+:is(.validator:user-valid, .validator:has(:user-valid)):not([aria-invalid]):not(:has([aria-invalid]))[aria-checked="true"],
+:is(.validator:user-valid, .validator:has(:user-valid)):not([aria-invalid]):not(:has([aria-invalid])):focus-within {
   --input-color: color-mix(in oklab, var(--color-base-content) 20%, #0000);
+}
+
+/*
+  daisyUI tooltips wrap at max-width 20rem (white-space:normal). Long yt-dlp
+  --format selectors on quality profile names must stay one line.
+  https://daisyui.com/components/tooltip/
+*/
+.tooltip.tooltip-nowrap[data-tip]:before {
+  white-space: nowrap;
+  max-width: none;
+  font-family: var(--font-mono);
 }
 
 /*

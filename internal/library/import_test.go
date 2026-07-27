@@ -447,7 +447,6 @@ func TestClassifyImportFile(t *testing.T) {
 		{"Show S01E01.info.json", library.ImportRoleJSON, "Show S01E01"},
 		{"Show S01E01-thumb.jpg", library.ImportRoleThumb, "Show S01E01"},
 		{"Show S01E01.srt", library.ImportRoleSub, "Show S01E01"},
-		{"Show S01E01.strm", library.ImportRoleStrm, "Show S01E01"},
 		{"readme.txt", library.ImportRoleOther, "readme"},
 	}
 	for _, tc := range cases {
@@ -576,6 +575,67 @@ func TestScanImportSidecarStemAndOther(t *testing.T) {
 		if c.Path == nfo {
 			t.Fatalf("attached sidecar still listed: %s", c.Path)
 		}
+	}
+}
+
+func TestAttachInboxSubtitleMovesBesideMedia(t *testing.T) {
+	s := openLib(t)
+	inbox := filepath.Join(t.TempDir(), "import")
+	_ = os.MkdirAll(inbox, 0o755)
+	s.ImportRoot = inbox
+	libRoot := t.TempDir()
+	root, err := s.CreateRoot("archive", libRoot, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := s.CreateProfile("default", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Sub Show", SourceURL: "https://example.com/sub", RootID: root.ID, QualityProfileID: profile.ID, Monitored: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.DB.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, status)
+		VALUES (?, 'sub1', 'Ep Sub', 'downloaded')
+	`, ser.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var videoID int64
+	_ = s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'sub1'`).Scan(&videoID)
+
+	dir := filepath.Join(libRoot, "Sub Show")
+	_ = os.MkdirAll(dir, 0o755)
+	media := filepath.Join(dir, "Ep Sub [sub1].mkv")
+	_ = os.WriteFile(media, []byte("media"), 0o644)
+	if err := s.CompleteImport(videoID, media, "", "", library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+		t.Fatal(err)
+	}
+
+	inboxSub := filepath.Join(inbox, "test.en.srt")
+	_ = os.WriteFile(inboxSub, []byte("1\n00:00:01,000 --> 00:00:02,000\nhi\n"), 0o644)
+	taskID, err := s.EnqueueAttachSidecars(videoID, []string{inboxSub})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AttachSidecarFiles(videoID, []string{inboxSub}, taskID); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, "Ep Sub [sub1].en.srt")
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("want moved subtitle at %s: %v", want, err)
+	}
+	if _, err := os.Stat(inboxSub); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("inbox subtitle should be gone, stat=%v", err)
+	}
+	var n int
+	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM files WHERE video_id = ? AND kind = 'sub' AND path = ?`, videoID, want).Scan(&n)
+	if n != 1 {
+		t.Fatalf("want 1 sub file row, got %d", n)
 	}
 }
 

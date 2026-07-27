@@ -107,7 +107,6 @@ func stripWWWHost(s string) string {
 	return s
 }
 
-
 func flashFromQuery(r *http.Request) *flash {
 	if e := r.URL.Query().Get("err"); e != "" {
 		e = strings.TrimPrefix(e, "conflict: ")
@@ -153,8 +152,6 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Episode metadata saved. Rename skipped while a download or pack task is busy - run Apply episode format later.")
 	case "download":
 		return flashOK("Download now enqueued.")
-	case "prepare-stream":
-		return flashOK("Prepare stream enqueued.")
 	case "video-deleted":
 		return flashOK("Video delete queued - files remove in the background.")
 	case "sidecar-deleted":
@@ -179,18 +176,10 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Quality profile updated.")
 	case "nfo-regen-queued":
 		return flashOK("NFO regenerate queued.")
-	case "strm-regen-queued":
-		return flashOK("strm regenerate queued.")
-	case "begin-clear-queued":
-		return flashOK("Clear beginning cache queued.")
-	case "playback-clear-queued":
-		return flashOK("Clear progressive stream cache queued.")
 	case "sync-files-queued":
 		return flashOK("File sync queued.")
 	case "sync-files-empty":
 		return flashWarn("No videos to sync.")
-	case "stream-token-rotated":
-		return flashOK("Stream URL token rotated.")
 	case "nfo-regen":
 		rewrote := r.URL.Query().Get("rewrote")
 		failed := r.URL.Query().Get("failed")

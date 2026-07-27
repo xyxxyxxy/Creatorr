@@ -41,14 +41,6 @@
     <i data-lucide="trash-2" class="size-5 opacity-50"></i>
     {{else if eq .VideoStatus "ignored"}}
     <i data-lucide="eye-off" class="size-5 opacity-50"></i>
-    {{else if eq .VideoStatus "streamable"}}
-      {{if .BeginningReady}}
-    <i data-lucide="circle-play" class="size-5 text-success"></i>
-      {{else if .CDNDirect}}
-    <i data-lucide="zap" class="size-5 text-success"></i>
-      {{else}}
-    <i data-lucide="radio" class="size-5 text-info"></i>
-      {{end}}
     {{else}}
     <i data-lucide="circle-help" class="size-5 opacity-50"></i>
     {{end}}

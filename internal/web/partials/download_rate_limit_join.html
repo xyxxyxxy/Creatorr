@@ -12,8 +12,10 @@
 {{$name := .Name}}{{if not $name}}{{$name = "download_rate_limit"}}{{end}}
 {{$stored := rateLimitParts .Value}}
 {{$def := rateLimitParts .DefaultRate}}
-{{$inherit := and .Override (eq .Value "")}}
+{{/* Empty/missing Value (nil or "") with no unit = inherit Domain defaults. */}}
+{{$inherit := and .Override (eq $stored.Value "") (eq $stored.Unit "")}}
 {{$unit := $stored.Unit}}{{if $inherit}}{{$unit = $def.Unit}}{{end}}
+{{if not $unit}}{{$unit = "M"}}{{end}}
 {{$ph := .Placeholder}}
 {{if not $ph}}
   {{if .Override}}
@@ -24,7 +26,7 @@
 {{$off := eq $unit "off"}}
 <div class="join w-full{{if $inherit}} opacity-70{{end}}"
      data-rate-limit-join{{if .Required}} data-rate-required{{end}}
-     {{if .Override}}data-default-unit="{{$def.Unit}}" data-default-value="{{$def.Value}}"{{end}}>
+     {{if .Override}}data-default-unit="{{if $def.Unit}}{{$def.Unit}}{{else}}M{{end}}" data-default-value="{{$def.Value}}"{{end}}>
   <input type="number" name="{{$name}}_value" min="0" step="any"
          class="input join-item grow min-w-0"
          value="{{$stored.Value}}"

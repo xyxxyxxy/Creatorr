@@ -245,7 +245,7 @@ func TestDeletableSidecarKind(t *testing.T) {
 			t.Fatalf("%q should be deletable", k)
 		}
 	}
-	for _, k := range []string{"video", "strm", "nfo", "json", "sponsorblock", ""} {
+	for _, k := range []string{"video", "nfo", "json", "sponsorblock", ""} {
 		if library.DeletableSidecarKind(k) {
 			t.Fatalf("%q must not be deletable", k)
 		}

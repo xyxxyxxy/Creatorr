@@ -22,7 +22,6 @@ type seriesVideoRow struct {
 	Deleting            bool
 	SizeLabel           string
 	ResolutionLabel     string
-	StreamTypeLabel     string
 	DurationLabel       string
 	MediaTypeLabel      string
 	ThumbURL            string
@@ -98,13 +97,12 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 		}
 		videos = append(videos, seriesVideoRow{
 			Video:               v,
-			TaskInd:             h.streamIndicator(v.ID, best, v.Status, v.StreamKind()),
+			TaskInd:             h.videoIndicator(v.ID, best, v.Status),
 			DownloadRunning:     dlRunning,
 			DeliveryQueued:      videoDeliveryQueued(tasks),
 			Deleting:            taskIsFileDelete(best),
 			SizeLabel:           sizeLabel,
 			ResolutionLabel:     h.Library.ResolveResolutionLabel(v.ID, v.Width, v.Height, jsonPaths[v.ID]),
-			StreamTypeLabel:     library.StreamTypeListLabel(v.StreamKind(), v.StreamBeginningCached),
 			DurationLabel:       formatDurationClock(h.Library.ResolveDurationSeconds(v.ID, v.DurationSeconds, jsonPaths[v.ID])),
 			MediaTypeLabel:      mediaTypeLabel,
 			ThumbURL:            thumbURL,
@@ -117,7 +115,6 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 
 type seriesVideosLiveData struct {
 	SeriesID    int64
-	IsStream    bool
 	Videos      []seriesVideoRow
 	VideosPage  PageInfo
 	VideoFilter struct {
@@ -222,7 +219,6 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 
 	return seriesVideosLiveData{
 		SeriesID:     id,
-		IsStream:     ser.IsStream(),
 		Videos:       videos,
 		VideosPage:   videosPageInfo,
 		VideoFilter:  videoFilter,

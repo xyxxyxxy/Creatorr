@@ -1,6 +1,6 @@
 {{define "video_list_row"}}
-{{/* Dot is a dict: ID Title Status UploadDate SizeLabel ResolutionLabel StreamTypeLabel DurationLabel MediaTypeLabel ThumbURL TaskInd DownloadRunning
-     DeliveryQueued DomainActive DomainDisabledTitle SeriesID IsStream KeepScroll LiveSwap Redirect FormClass Deleting
+{{/* Dot is a dict: ID Title Status UploadDate SizeLabel ResolutionLabel DurationLabel MediaTypeLabel ThumbURL TaskInd DownloadRunning
+     DeliveryQueued DomainActive DomainDisabledTitle SeriesID KeepScroll LiveSwap Redirect FormClass Deleting
      SeriesTitle? (cross-series lists: link in meta), NoActions - thumb + title + meta only */}}
 <li class="list-row">
   <div class="relative shrink-0 w-[112px] aspect-video">
@@ -24,9 +24,8 @@
       {{if .SeriesTitle}}<a class="link link-hover" href="/series/{{.SeriesID}}">{{.SeriesTitle}}</a>{{end}}
       {{if .UploadDate.Valid}}<time datetime="{{.UploadDate.String}}" data-local-time>{{.UploadDate.String}}</time>{{end}}
       {{if eq .MediaTypeLabel "-"}}{{template "empty_value"}}{{else if .MediaTypeLabel}}<span>{{.MediaTypeLabel}}</span>{{end}}
-      {{if and .IsStream .StreamTypeLabel}}<span>{{.StreamTypeLabel}}</span>{{end}}
       {{if .ResolutionLabel}}<span>{{.ResolutionLabel}}</span>{{end}}
-      {{if and (not .IsStream) .SizeLabel (ne .SizeLabel "-")}}<span>{{.SizeLabel}}</span>{{end}}
+      {{if and .SizeLabel (ne .SizeLabel "-")}}<span>{{.SizeLabel}}</span>{{end}}
     </div>
   </div>
   {{if not .NoActions}}
@@ -42,15 +41,11 @@
         "DomainActive" .DomainActive
         "DomainDisabledTitle" .DomainDisabledTitle
         "DeliveryQueued" .DeliveryQueued
-        "IsStream" .IsStream
-        "CDNDirect" .TaskInd.CDNDirect
-        "BeginningReady" .TaskInd.BeginningReady
         "Redirect" .Redirect
         "FormClass" "contents"
         "LiveSwap" .LiveSwap
         "Icons" true
         "BtnClass" "btn btn-ghost btn-square join-item"
-        "NeutralClass" "btn btn-neutral btn-square join-item"
         "PrimaryClass" "btn btn-primary btn-square join-item"
       }}
       {{$wantIgnore := dict
@@ -60,7 +55,6 @@
         "DomainActive" .DomainActive
         "DomainDisabledTitle" .DomainDisabledTitle
         "DownloadRunning" .DownloadRunning
-        "IsStream" .IsStream
         "KeepScroll" .KeepScroll
         "LiveSwap" .LiveSwap
         "FormClass" "contents"
@@ -73,7 +67,7 @@
       {{template "video_delivery_actions" $delivery}}
       {{template "want_ignore_button" $wantIgnore}}
     </div>
-    {{if or (eq .Status "streamable") (eq .Status "downloaded")}}
+    {{if eq .Status "downloaded"}}
     {{template "delete_video_modal" $wantIgnore}}
     {{end}}
     {{end}}

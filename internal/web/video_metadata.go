@@ -9,34 +9,34 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
-	"github.com/go-chi/chi/v5"
 )
 
 type videoMetadataView struct {
-	Series              *library.Series
-	Video               *library.Video
-	Suggestions         library.MetaSuggestions
-	PrefetchTaskID      int64
-	PrefetchPending     bool
-	PrefetchDraft       library.VideoPrefetchDraft
-	PrefetchArt         map[string]string
-	FetchURL            string
-	HasPackAnchor       bool
-	HasThumb            bool
-	ThumbMtime          int64
-	Open                bool
-	SeasonEpisodeHint   string
-	UploadDateDay       string // YYYY-MM-DD for type=date
-	UploadDateTime      string // HH:MM for type=time; empty = optional unset
-	ManagedTagItems     []string
-	ManagedGenreItems   []string
-	ManagedTagPipe      string
-	ManagedGenrePipe    string
-	OperatorTagItems    []string
-	OperatorGenreItems  []string
+	Series             *library.Series
+	Video              *library.Video
+	Suggestions        library.MetaSuggestions
+	PrefetchTaskID     int64
+	PrefetchPending    bool
+	PrefetchDraft      library.VideoPrefetchDraft
+	PrefetchArt        map[string]string
+	FetchURL           string
+	HasPackAnchor      bool
+	HasThumb           bool
+	ThumbMtime         int64
+	Open               bool
+	SeasonEpisodeHint  string
+	UploadDateDay      string // YYYY-MM-DD for type=date
+	UploadDateTime     string // HH:MM for type=time; empty = optional unset
+	ManagedTagItems    []string
+	ManagedGenreItems  []string
+	ManagedTagPipe     string
+	ManagedGenrePipe   string
+	OperatorTagItems   []string
+	OperatorGenreItems []string
 }
 
 func (h *Handler) buildVideoMetadataView(ser *library.Series, video *library.Video) videoMetadataView {
@@ -213,7 +213,7 @@ func (h *Handler) actionSaveVideoMetadata(w http.ResponseWriter, r *http.Request
 		thumbSrc = dest
 	} else if r.FormValue("clear_"+library.ArtThumb) == "1" {
 		thumbClear = true
-	} else if pref := strings.TrimSpace(r.FormValue("prefetch_"+library.ArtThumb)); pref != "" && fileExistsWeb(pref) {
+	} else if pref := strings.TrimSpace(r.FormValue("prefetch_" + library.ArtThumb)); pref != "" && fileExistsWeb(pref) {
 		thumbSrc = pref
 	}
 
@@ -239,7 +239,7 @@ func (h *Handler) actionSaveVideoMetadata(w http.ResponseWriter, r *http.Request
 		Tagline:       r.FormValue("tagline"),
 		Country:       r.FormValue("country"),
 		MPAA:          r.FormValue("mpaa"),
-		UploadDate: library.CombineUploadFormDateTime(r.FormValue("upload_date"), r.FormValue("upload_time")),
+		UploadDate:    library.CombineUploadFormDateTime(r.FormValue("upload_date"), r.FormValue("upload_time")),
 		ThumbSrc:      thumbSrc,
 		ThumbClear:    thumbClear,
 	})

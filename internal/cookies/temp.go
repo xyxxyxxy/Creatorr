@@ -36,7 +36,7 @@ func WriteTempJar(dir, domain, content string) (string, error) {
 
 // TempJarForURL resolves Settings cookie jars for rawURL and materializes a temp Netscape file
 // so workers can pass --cookies to external handlers during scan/download/metadata work.
-// Lookup order: exact host → suffix match on stored host jars → default jar.
+// Lookup order: exact host → suffix match on stored host jars (no Domain defaults jar).
 // Returns empty path when nothing is stored (omit --cookies).
 func TempJarForURL(database *db.DB, dir, rawURL string) (string, error) {
 	host := queue.DomainFromURL(rawURL)
@@ -48,22 +48,17 @@ func TempJarForURL(database *db.DB, dir, rawURL string) (string, error) {
 }
 
 // Applies reports whether a cookie jar would be passed for this hostname
-// (host jar, suffix match, or default). tip is a short UI label when ok.
+// (host jar or suffix match). tip is a short UI label when ok.
 func Applies(database *db.DB, domain string) (ok bool, tip string, err error) {
 	domain = settings.NormalizeDomain(domain)
 	if domain == "" || domain == "unknown" || domain == "system" {
 		return false, "", nil
 	}
-	content, src, err := resolveContent(database, domain)
+	content, _, err := resolveContent(database, domain)
 	if err != nil || content == "" {
 		return false, "", err
 	}
-	switch src {
-	case settings.DomainDefault:
-		return true, "Default cookies", nil
-	default:
-		return true, "Cookies", nil
-	}
+	return true, "Cookies", nil
 }
 
 // ResolveContent returns Netscape jar text for a hostname (same order as TempJarForURL).
@@ -97,11 +92,7 @@ func resolveContent(database *db.DB, domain string) (content, source string, err
 			return c.Content, d, nil
 		}
 	}
-	content, err = Get(database, settings.DomainDefault)
-	if err != nil || content == "" {
-		return "", "", err
-	}
-	return content, settings.DomainDefault, nil
+	return "", "", nil
 }
 
 // DomainOfURL returns hostname for cookie lookup (www. stripped).

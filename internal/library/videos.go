@@ -22,9 +22,7 @@ const videoDownloadOrderOldest = `(v.upload_date IS NULL OR v.upload_date = '') 
 // videoSelectCols is the shared SELECT list for scanVideo (order must match Scan).
 const videoSelectCols = `id, series_id, source_id, remote_id, title, upload_date, source_url,
 		       status, season, episode, COALESCE(description,''), thumbnail_url,
-		       COALESCE(media_type,''), duration_seconds, width, height, fps, stream_urls_kind, stream_beginning_cached,
-		       stream_playback_cached_seconds, stream_playback_cache_complete,
-		       stream_playback_cache_written_at, stream_playback_cache_last_access,
+		       COALESCE(media_type,''), duration_seconds, width, height, fps,
 		       download_format_selector, download_remux_container, tool, import_src, acquired_at, sidecars_acquired_at,
 		       COALESCE(sorttitle,''), COALESCE(originaltitle,''), COALESCE(studio,''),
 		       COALESCE(genres,'[]'), COALESCE(tags,'[]'),
@@ -50,12 +48,6 @@ type Video struct {
 	Width                         sql.NullInt64
 	Height                        sql.NullInt64
 	FPS                           sql.NullFloat64
-	StreamURLsKind                sql.NullString
-	StreamBeginningCached         bool
-	StreamPlaybackCachedSeconds   float64
-	StreamPlaybackCacheComplete   bool
-	StreamPlaybackCacheWrittenAt  sql.NullString
-	StreamPlaybackCacheLastAccess sql.NullString
 	DownloadFormatSelector        sql.NullString
 	DownloadRemuxContainer        sql.NullString
 	Tool                          sql.NullString
@@ -144,7 +136,7 @@ func likeContainsPattern(s string) string {
 	return `%` + replacer.Replace(s) + `%`
 }
 
-// ListRecentVideos returns newest packed library videos (downloaded / streamable)
+// ListRecentVideos returns newest packed library videos (downloaded)
 // across all series, ordered by acquired_at then id (highest first).
 func (s *Store) ListRecentVideos(limit int) ([]Video, error) {
 	if limit <= 0 {
@@ -153,7 +145,7 @@ func (s *Store) ListRecentVideos(limit int) ([]Video, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT `+videoSelectCols+`
 		FROM videos
-		WHERE status IN ('downloaded', 'streamable')
+		WHERE status = 'downloaded'
 		ORDER BY (acquired_at IS NULL OR acquired_at = ''), acquired_at DESC, id DESC
 		LIMIT ?
 	`, limit)
@@ -490,22 +482,17 @@ func scanVideo(scanner interface {
 	Scan(dest ...any) error
 }) (Video, error) {
 	var v Video
-	var beginning, playbackComplete int
 	var genresRaw, tagsRaw, actorsRaw string
 	err := scanner.Scan(
 		&v.ID, &v.SeriesID, &v.SourceID, &v.RemoteID, &v.Title,
 		&v.UploadDate, &v.SourceURL, &v.Status, &v.Season, &v.Episode,
 		&v.Description, &v.ThumbnailURL, &v.MediaType,
-		&v.DurationSeconds, &v.Width, &v.Height, &v.FPS, &v.StreamURLsKind, &beginning,
-		&v.StreamPlaybackCachedSeconds, &playbackComplete,
-		&v.StreamPlaybackCacheWrittenAt, &v.StreamPlaybackCacheLastAccess,
+		&v.DurationSeconds, &v.Width, &v.Height, &v.FPS,
 		&v.DownloadFormatSelector, &v.DownloadRemuxContainer, &v.Tool, &v.ImportSrc, &v.AcquiredAt, &v.SidecarsAcquiredAt,
 		&v.SortTitle, &v.OriginalTitle, &v.Studio,
 		&genresRaw, &tagsRaw, &v.UniqueIDType, &v.UniqueIDValue, &actorsRaw,
 		&v.Tagline, &v.Country, &v.MPAA,
 	)
-	v.StreamBeginningCached = beginning != 0
-	v.StreamPlaybackCacheComplete = playbackComplete != 0
 	v.Genres = decodeStringSlice(genresRaw)
 	v.Tags = decodeStringSlice(tagsRaw)
 	v.Actors = decodeActors(actorsRaw)
@@ -569,7 +556,7 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 		}
 	}
 	switch cur.Status {
-	case "ignored", "deleted", "missing", "wanted_download_error", "wanted_source_error", "streamable", "verify_failed":
+	case "ignored", "deleted", "missing", "wanted_download_error", "wanted_source_error", "verify_failed":
 		_, _ = s.DB.SQL.Exec(`UPDATE videos SET status = 'wanted' WHERE id = ?`, videoID)
 	}
 	params := enqueueDownloadParams(videoID, cur.SeriesID, domain)
@@ -592,14 +579,14 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 // IgnoreVideo marks a video ignored (will not auto-download).
 // Pending and running download tasks for the video are cancelled.
 // Returns cancelled download tasks so the caller can write Activity rows.
-// Streamable and downloaded videos cannot be ignored - use DeleteVideo.
+// Downloaded videos cannot be ignored - use DeleteVideo.
 func (s *Store) IgnoreVideo(videoID int64) ([]queue.Task, error) {
 	cur, err := s.GetVideo(videoID)
 	if err != nil {
 		return nil, err
 	}
 	switch cur.Status {
-	case "streamable", "downloaded", "verify_failed":
+	case "downloaded", "verify_failed":
 		return nil, fmt.Errorf("cannot ignore %s video; delete library files instead", cur.Status)
 	}
 	_, err = s.DB.SQL.Exec(`UPDATE videos SET status = 'ignored' WHERE id = ?`, videoID)
@@ -616,7 +603,7 @@ func (s *Store) IgnoreVideo(videoID int64) ([]queue.Task, error) {
 	return cancelled, nil
 }
 
-// RecordLiveBroadcastSkipped appends video_history when download/pack_stream soft-skips
+// RecordLiveBroadcastSkipped appends video_history when download soft-skips
 // a currently live broadcast. Status is unchanged (stays wanted for later retry).
 func (s *Store) RecordLiveBroadcastSkipped(videoID, taskID int64) error {
 	if s == nil || videoID <= 0 || taskID <= 0 {
@@ -627,7 +614,7 @@ func (s *Store) RecordLiveBroadcastSkipped(videoID, taskID int64) error {
 	}, taskID)
 }
 
-// MarkIgnoredMediaType sets status ignored after a media_type exclude match (download or pack_stream).
+// MarkIgnoredMediaType sets status ignored after a media_type exclude match (download).
 // Writes video history; cancels other pending downloads for the video.
 func (s *Store) MarkIgnoredMediaType(videoID, taskID int64, mediaType string) error {
 	cur, err := s.GetVideo(videoID)
@@ -635,7 +622,7 @@ func (s *Store) MarkIgnoredMediaType(videoID, taskID int64, mediaType string) er
 		return err
 	}
 	switch cur.Status {
-	case "streamable", "downloaded":
+	case "downloaded":
 		return fmt.Errorf("cannot ignore %s video for media_type", cur.Status)
 	}
 	mediaType = NormalizeMediaType(mediaType)
@@ -689,14 +676,14 @@ func (s *Store) ListSeriesMediaTypes(seriesID int64) ([]string, error) {
 }
 
 // DeleteVideo cancels download tasks and enqueues a delete_files for worker-owned removal.
-// Allowed for streamable, downloaded, missing. Returns cancelled pending download tasks.
+// Allowed for downloaded, missing. Returns cancelled pending download tasks.
 func (s *Store) DeleteVideo(videoID int64) ([]queue.Task, error) {
 	cur, err := s.GetVideo(videoID)
 	if err != nil {
 		return nil, err
 	}
 	switch cur.Status {
-	case "streamable", "downloaded", "missing":
+	case "downloaded", "missing":
 	default:
 		return nil, fmt.Errorf("cannot delete video with status %s", cur.Status)
 	}

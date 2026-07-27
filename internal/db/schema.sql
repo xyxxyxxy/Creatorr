@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS series (
   root_id INTEGER NOT NULL REFERENCES root_folders(id),
   quality_profile_id INTEGER NOT NULL REFERENCES quality_profiles(id),
   monitored INTEGER NOT NULL DEFAULT 1,
-  delivery_mode TEXT NOT NULL DEFAULT 'download',
+  delivery_mode TEXT NOT NULL DEFAULT 'video',
   added_at TEXT NOT NULL,
   -- Show metadata for tvshow.nfo (art files live on disk only; year/status derived).
   plot TEXT NOT NULL DEFAULT '',
@@ -84,12 +84,6 @@ CREATE TABLE IF NOT EXISTS videos (
   width INTEGER,
   height INTEGER,
   fps REAL,
-  stream_urls_kind TEXT,
-  stream_beginning_cached INTEGER NOT NULL DEFAULT 0,
-  stream_playback_cached_seconds REAL NOT NULL DEFAULT 0,
-  stream_playback_cache_complete INTEGER NOT NULL DEFAULT 0,
-  stream_playback_cache_written_at TEXT,
-  stream_playback_cache_last_access TEXT,
   download_format_selector TEXT,
   download_remux_container TEXT,
   tool TEXT,
@@ -155,7 +149,7 @@ CREATE TABLE IF NOT EXISTS domain_runtime (
 );
 
 -- Known hostnames + reserved domain=default (global limit defaults).
--- Host rows: NULL task_cooldown_seconds / max_download_queue / max_parallel_tasks / download_rate_limit / stream_play_rate_limit / sleep_requests / use_flaresolverr → use domain=default.
+-- Host rows: NULL task_cooldown_seconds / max_download_queue / max_parallel_tasks / download_rate_limit / sleep_requests / use_flaresolverr → use domain=default.
 -- domain=default limit columns + use_flaresolverr must be non-NULL. Domains are never auto-deleted when sources go away.
 CREATE TABLE IF NOT EXISTS domains (
   domain TEXT PRIMARY KEY,
@@ -164,7 +158,6 @@ CREATE TABLE IF NOT EXISTS domains (
   max_download_queue INTEGER,
   max_parallel_tasks INTEGER,
   download_rate_limit TEXT,
-  stream_play_rate_limit TEXT,
   sleep_requests REAL,
   use_flaresolverr INTEGER,
   username TEXT,

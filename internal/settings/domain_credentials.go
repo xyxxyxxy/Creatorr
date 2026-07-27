@@ -26,29 +26,25 @@ func CredentialsForURL(database *db.DB, rawURL string) (ResolvedCredentials, err
 	return CredentialsForDomain(database, NormalizeDomain(host))
 }
 
-// CredentialsForDomain resolves host override then Domain defaults.
-// Host NULL username inherits default. Host empty username = explicitly none.
+// CredentialsForDomain resolves host override credentials only (no Domain defaults).
+// Host NULL username or missing row = none. Host empty username = explicitly none.
 func CredentialsForDomain(database *db.DB, domain string) (ResolvedCredentials, error) {
 	domain = NormalizeDomain(domain)
 	if domain == "" || domain == "unknown" || domain == "system" || domain == DomainDefault {
 		return ResolvedCredentials{}, nil
 	}
-	defUser, defPass, err := defaultCredentialPair(database)
-	if err != nil {
-		return ResolvedCredentials{}, err
-	}
 	var user, pass sql.NullString
-	err = database.SQL.QueryRow(`
+	err := database.SQL.QueryRow(`
 		SELECT username, password FROM domains WHERE domain = ?
 	`, domain).Scan(&user, &pass)
 	if err == sql.ErrNoRows {
-		return ResolvedCredentials{Username: defUser, Password: defPass}, nil
+		return ResolvedCredentials{}, nil
 	}
 	if err != nil {
 		return ResolvedCredentials{}, err
 	}
 	if !user.Valid {
-		return ResolvedCredentials{Username: defUser, Password: defPass}, nil
+		return ResolvedCredentials{}, nil
 	}
 	u := strings.TrimSpace(user.String)
 	if u == "" {

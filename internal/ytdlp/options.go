@@ -16,13 +16,6 @@ type options struct {
 	subLangs         []string
 	subAuto          bool
 	playlistEnd      int
-	hlsDir           string
-	hlsStartSec      float64
-	hlsStartNumber   int
-	videoURL         string
-	audioURL         string
-	videoHeadersJSON string
-	audioHeadersJSON string
 	matchFilter      string
 
 	ytdlpPath        string

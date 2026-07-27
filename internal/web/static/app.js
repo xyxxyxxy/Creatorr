@@ -433,7 +433,6 @@
       wanted_source_error: "Source has too many download errors - Retry on the source",
       wanted_download_error: "Last download failed",
       verify_failed: "Post-pack media verify failed - file kept; Want or Download now",
-      streamable: "Stream files ready - play via Creatorr proxy",
       missing: "File path recorded but media not on disk - file sync may restore",
     };
     const icons = {
@@ -448,7 +447,6 @@
       wanted_source_error: { icon: "circle-alert", color: "text-error" },
       wanted_download_error: { icon: "circle-x", color: "text-error" },
       verify_failed: { icon: "badge-alert", color: "text-warning" },
-      streamable: { icon: "radio", color: "text-info" },
       downloaded: { icon: "circle-check", color: "text-success" },
       missing: { icon: "file-question", color: "text-warning" },
       deleted: { icon: "trash-2", color: "text-base-content/50" },
@@ -633,7 +631,6 @@
 
   let videoHistoryRefreshAt = 0;
   let taskHistoryRefreshAt = 0;
-  let videoStreamCacheRefreshAt = 0;
 
   /** Refresh video History panel while a related task is progressing. */
   function refreshVideoHistoryIfMatch(ev) {
@@ -656,39 +653,6 @@
     window.htmx.ajax("GET", location.pathname + q, {
       target: "#video-history-live",
       select: "#video-history-live",
-      swap: "outerHTML",
-    });
-  }
-
-  /** Refresh Stream cache row while stream_play / cache_beginning / download progresses. */
-  function refreshVideoStreamCacheIfMatch(ev) {
-    if (!window.htmx) return;
-    let data;
-    try {
-      data = JSON.parse(ev.data || "{}");
-    } catch (_) {
-      return;
-    }
-    const kind = data.kind || "";
-    if (
-      kind !== "stream_play" &&
-      kind !== "cache_beginning" &&
-      kind !== "download"
-    ) {
-      return;
-    }
-    const m = location.pathname.match(/^\/series\/(\d+)\/videos\/(\d+)/);
-    if (!m) return;
-    const pageVid = Number(m[2]);
-    if (!pageVid || !data.video_id || Number(data.video_id) !== pageVid) return;
-    if (!document.getElementById("video-stream-cache-live")) return;
-    const now = Date.now();
-    if (now - videoStreamCacheRefreshAt < 1500) return;
-    videoStreamCacheRefreshAt = now;
-    const q = location.search || "";
-    window.htmx.ajax("GET", location.pathname + q, {
-      target: "#video-stream-cache-live",
-      select: "#video-stream-cache-live",
       swap: "outerHTML",
     });
   }
@@ -940,9 +904,6 @@
     "sync_files",
     "rename_episodes",
     "regenerate_nfo",
-    "regenerate_strm",
-    "clear_beginning_cache",
-    "clear_playback_cache",
   ]);
 
   function refreshMaintenanceLive() {
@@ -985,7 +946,6 @@
       patchTaskDetail(ev);
       refreshTaskIndicators();
       refreshVideoHistoryIfMatch(ev);
-      refreshVideoStreamCacheIfMatch(ev);
       refreshTaskVideoHistoryIfMatch(ev);
     } else if (ev.type === "task.done" || ev.type === "task.failed") {
       refreshTasksPanel();
@@ -1431,29 +1391,59 @@
     document.querySelectorAll("[data-sb-profile]").forEach(syncSponsorBlockCardsGate);
   }
 
-  function syncPlaybackCacheHoursGate() {
-    const toggle = document.querySelector("input.js-playback-cache-toggle");
-    const hours = document.querySelector("input.js-playback-cache-hours");
-    if (!toggle || !hours) return;
-    const on = !!toggle.checked;
-    hours.disabled = !on;
-    const fieldset = hours.closest("fieldset");
+  const AUDIO_QUALITY_PROFILE_TIP =
+    "Audio always uses the best available quality.";
+
+  /** Disable the quality profile select when delivery_mode=audio; hidden input carries the value instead. */
+  function syncQualityProfileGate(form) {
+    if (!form) return;
+    const fieldset = form.querySelector("[data-quality-profile-fieldset]");
     if (!fieldset) return;
-    const legendLabel = fieldset.querySelector(".fieldset-legend .inline-flex > span:first-child");
-    if (legendLabel) legendLabel.classList.toggle("opacity-60", !on);
-    const out = fieldset.querySelector("[id$='-out']");
-    if (out) out.classList.toggle("opacity-60", !on);
-    const hint = fieldset.querySelector(":scope > p.label");
-    if (hint) hint.classList.toggle("opacity-60", !on);
+    const radio = form.querySelector('input[name="delivery_mode"]:checked');
+    const isAudio = !!radio && radio.value === "audio";
+    const select = fieldset.querySelector("[data-quality-profile-select]");
+    const hidden = fieldset.querySelector("[data-quality-profile-hidden]");
+    const tip = fieldset.querySelector("[data-quality-profile-tip]");
+    if (select) {
+      select.disabled = isAudio || !select.options.length;
+      select.required = !isAudio;
+      select.classList.toggle("validator", !isAudio);
+      if (isAudio) {
+        select.removeAttribute("name");
+      } else {
+        select.setAttribute("name", "quality_profile_id");
+      }
+    }
+    if (hidden) {
+      if (select && select.value) hidden.value = select.value;
+      if (isAudio) {
+        hidden.disabled = false;
+        hidden.setAttribute("name", "quality_profile_id");
+      } else {
+        hidden.disabled = true;
+        hidden.removeAttribute("name");
+      }
+    }
+    if (tip) {
+      if (isAudio) {
+        tip.classList.add("tooltip", "tooltip-top");
+        tip.setAttribute("data-tip", AUDIO_QUALITY_PROFILE_TIP);
+      } else {
+        tip.classList.remove("tooltip", "tooltip-top");
+        tip.removeAttribute("data-tip");
+      }
+    }
   }
 
-  function initPlaybackCacheHoursGate() {
+  function initQualityProfileGate() {
     document.body.addEventListener("change", (ev) => {
       const el = ev.target;
-      if (!el || !el.matches || !el.matches("input.js-playback-cache-toggle")) return;
-      syncPlaybackCacheHoursGate();
+      if (!el || !el.matches || !el.matches('input[name="delivery_mode"]')) return;
+      syncQualityProfileGate(el.closest("form"));
     });
-    syncPlaybackCacheHoursGate();
+    document.querySelectorAll("[data-quality-profile-fieldset]").forEach((fieldset) => {
+      syncQualityProfileGate(fieldset.closest("form"));
+    });
   }
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -1478,7 +1468,7 @@
     initRangeOutputs();
     initSponsorBlockExclusive();
     initSponsorBlockReencodeGate();
-    initPlaybackCacheHoursGate();
+    initQualityProfileGate();
     syncAllRateLimitJoins();
     syncAllScanCronJoins();
     document.querySelectorAll("form.js-add-series-form").forEach(syncAddSeriesForm);
@@ -1548,7 +1538,11 @@
     if (!panel) return;
     // Caller owns panel visibility (.hidden). Only soft-enable/disable controls here.
     panel.querySelectorAll("input, select, textarea").forEach((el) => {
-      // Remember HTML-permanent disabled (e.g. Stream when External Creatorr URL unset)
+      // Delivery-mode gate owns these; soft panel toggle must not lock them.
+      if (el.hasAttribute("data-quality-profile-hidden") || el.hasAttribute("data-quality-profile-select")) {
+        return;
+      }
+      // Remember HTML-permanent disabled (e.g. a field disabled by server-rendered state)
       // before we soft-disable for a hidden wizard step.
       if (el.dataset.permanentlyDisabled == null) {
         el.dataset.permanentlyDisabled =
@@ -1603,6 +1597,12 @@
   /** daisyUI validator hint sibling (https://daisyui.com/components/validator/). */
   function controlValidatorHint(el) {
     if (!el) return null;
+    const labelHost = el.closest("label.input.validator");
+    if (labelHost) {
+      let n = labelHost.nextElementSibling;
+      while (n && n.tagName === "DATALIST") n = n.nextElementSibling;
+      if (n && n.classList.contains("validator-hint")) return n;
+    }
     const join = el.closest(".join.validator");
     if (join) {
       let n = join.nextElementSibling;
@@ -1632,8 +1632,29 @@
       if (invalid) join.setAttribute("aria-invalid", "true");
       else join.removeAttribute("aria-invalid");
     }
+    // label-for-input: paint the label.input host (daisyUI .validator[aria-invalid] → --input-color error).
+    const labelHost = el.closest("label.input.validator");
+    if (labelHost && labelHost !== el) {
+      if (invalid) labelHost.setAttribute("aria-invalid", "true");
+      else labelHost.removeAttribute("aria-invalid");
+    }
     const hint = controlValidatorHint(el);
-    if (hint && text) hint.textContent = text;
+    if (!hint) return;
+    const daisySibling =
+      (labelHost && labelHost.nextElementSibling === hint) ||
+      (el.classList.contains("validator") && el.parentElement === hint.parentElement);
+    if (text) {
+      hint.textContent = text;
+      if (!daisySibling) {
+        hint.classList.remove("hidden");
+        hint.style.visibility = "visible";
+        hint.style.color = "var(--color-error)";
+      }
+    } else if (!daisySibling) {
+      hint.style.visibility = "";
+      hint.style.color = "";
+      hint.classList.add("hidden");
+    }
   }
   window.setControlValidity = setControlValidity;
 
@@ -1707,7 +1728,7 @@
     } else if (/\broot\b/.test(lower)) {
       field = form.querySelector('select[name="root_id"]');
     } else if (/quality|profile/.test(lower)) {
-      field = form.querySelector('select[name="quality_profile_id"]');
+      field = form.querySelector("[data-quality-profile-select]") || form.querySelector('select[name="quality_profile_id"]');
     }
     // yt-dlp / prefetch failures stay in the alert (not URL field validators).
     if (field) {
@@ -1728,22 +1749,19 @@
   }
   window.setAddSeriesFetchErr = setAddSeriesFetchErr;
 
-  /** Snapshot form as urlencoded body (matches server ParseForm / tests). Includes disabled fields. */
+  /** Snapshot form as urlencoded body (matches server ParseForm / tests). Skips disabled controls. */
   function serializeAddSeriesForm(form) {
     const params = new URLSearchParams();
     form.querySelectorAll("input, select, textarea").forEach((el) => {
-      if (!el.name || el.type === "submit" || el.type === "button" || el.type === "file" || el.type === "reset") {
+      if (!el.name || el.disabled || el.type === "submit" || el.type === "button" || el.type === "file" || el.type === "reset") {
         return;
       }
       if (el.type === "checkbox") {
-        // Disabled checkbox: companion hidden may carry the value.
-        // Disabled radio: Import-forced index_as_ignored uses a companion hidden.
-        if (el.disabled) return;
         if (el.checked) params.append(el.name, el.value || "1");
         return;
       }
       if (el.type === "radio") {
-        if (el.disabled || !el.checked) return;
+        if (!el.checked) return;
         params.append(el.name, el.value);
         return;
       }
@@ -1771,6 +1789,7 @@
     // Enable series controls before read so soft-disable cannot drop title.
     const seriesPanel = form.querySelector('[data-add-series-step="series"]');
     if (seriesPanel) setPanelControls(seriesPanel, true);
+    syncQualityProfileGate(form);
     const titleEl = form.querySelector("#add-series-title") || form.querySelector('input[name="title"]');
     const titleVal = String((titleEl && titleEl.value) || "").trim();
     if (!titleVal) {
@@ -1886,6 +1905,7 @@
       // Keep series fields enabled for the whole URL/manual flow (hide-only when off-step).
       // Soft-disable made title look filled while submit omitted it (browser skips disabled).
       setPanelControls(series, mode === "manual" || mode === "url");
+      syncQualityProfileGate(form);
     }
     if (titleInfo) {
       titleInfo.textContent = mode === "manual"
@@ -2155,6 +2175,7 @@
     modal.querySelectorAll("form").forEach((form) => {
       form.reset();
       resetArtSlots(form);
+      resetCredentialsPasswordUI(form);
       delete form.dataset.addSeriesMode;
       delete form.dataset.addSeriesStep;
       delete form.dataset.importMatchLock;
@@ -2296,17 +2317,83 @@
     // no-op: cron fields use datalist; chips removed
   }
 
+  function syncCredentialsPasswordValidity(form) {
+    if (!form) return "";
+    const wrap = form.querySelector(".js-credentials-override");
+    if (!wrap) return "";
+    const user = wrap.querySelector('input[name="username"]');
+    const pass = wrap.querySelector('input[name="password"]');
+    if (!user || !pass) return "";
+    const keep = wrap.querySelector("[data-password-keep]");
+    const keeping = !!(keep && keep.value === "1" && pass.disabled);
+    const userSet = user.value.trim() !== "";
+    const passSet = String(pass.value || "").trim() !== "";
+    clearControlValidity(pass);
+    if (userSet && !keeping && !passSet) {
+      const msg = "Password required when username is set.";
+      setControlValidity(pass, msg);
+      return msg;
+    }
+    return "";
+  }
+
+  function setCredentialsPasswordMode(wrap, editing) {
+    if (!wrap) return;
+    const keep = wrap.querySelector("[data-password-keep]");
+    const btn = wrap.querySelector("[data-credentials-reset-password]");
+    const stored = wrap.querySelector("[data-credentials-password-stored]");
+    const edit = wrap.querySelector("[data-credentials-password-edit]");
+    const pass = edit && edit.querySelector('input[name="password"]');
+    if (!keep || !btn || !stored || !edit || !pass) return;
+    if (editing) {
+      keep.value = "0";
+      stored.hidden = true;
+      edit.hidden = false;
+      pass.disabled = false;
+      clearControlValidity(pass);
+      pass.focus();
+    } else {
+      keep.value = "1";
+      stored.hidden = false;
+      edit.hidden = true;
+      pass.value = "";
+      pass.disabled = true;
+      clearControlValidity(pass);
+    }
+  }
+
+  function resetCredentialsPasswordUI(form) {
+    if (!form) return;
+    form.querySelectorAll(".js-credentials-override").forEach((wrap) => {
+      setCredentialsPasswordMode(wrap, false);
+    });
+  }
+
   document.body.addEventListener("input", (ev) => {
     const input = ev.target;
-    if (!(input instanceof HTMLInputElement) || input.name !== "username") return;
+    if (!(input instanceof HTMLInputElement)) return;
+    if (input.name !== "username" && input.name !== "password") return;
     const credWrap = input.closest(".js-credentials-override");
     if (!credWrap) return;
-    const credInherit = credWrap.querySelector("[data-credentials-inherit]");
-    if (credInherit && input.value.trim() !== "") credInherit.value = "0";
+    if (input.name === "username") {
+      const credInherit = credWrap.querySelector("[data-credentials-inherit]");
+      if (credInherit && input.value.trim() !== "") credInherit.value = "0";
+    }
+    // Clear prior Save error while editing; re-validate only on submit.
+    const pass = credWrap.querySelector('input[name="password"]');
+    if (pass) clearControlValidity(pass);
   });
 
   // Preset chips fill the linked text field (legacy).
   document.body.addEventListener("click", (ev) => {
+    const resetPassBtn = ev.target.closest("[data-credentials-reset-password]");
+    if (resetPassBtn) {
+      ev.preventDefault();
+      const wrap = resetPassBtn.closest(".js-credentials-override");
+      if (!wrap) return;
+      setCredentialsPasswordMode(wrap, true);
+      return;
+    }
     const artClearBtn = ev.target.closest("[data-art-clear-btn]");
     if (artClearBtn) {
       ev.preventDefault();
@@ -2336,13 +2423,6 @@
       if (join) {
         join.classList.add("opacity-70");
         syncRateLimitJoin(join);
-      }
-      const flareJoin = wrap && wrap.querySelector("select[name='use_flaresolverr']")?.closest(".join");
-      if (flareJoin) flareJoin.classList.add("opacity-70");
-      const credWrap = clearBtn.closest(".js-credentials-override");
-      if (credWrap) {
-        const credInherit = credWrap.querySelector("[data-credentials-inherit]");
-        if (credInherit) credInherit.value = "1";
       }
       return;
     }
@@ -2401,13 +2481,6 @@
       return;
     }
     if (!(el instanceof HTMLSelectElement) || !el.hasAttribute("data-rate-unit")) {
-      if (el instanceof HTMLSelectElement && el.name === "use_flaresolverr") {
-        const flareJoin = el.closest(".join");
-        if (flareJoin) {
-          flareJoin.classList.toggle("opacity-70", el.value === "default");
-        }
-        el.classList.remove("opacity-70");
-      }
       return;
     }
     const join = el.closest("[data-rate-limit-join]");
@@ -2558,8 +2631,8 @@
   document.body.addEventListener("submit", (ev) => {
     const form = ev.target.closest(".js-domain-override-form");
     if (!form) return;
-    const msg = syncDomainOverrideForm(form);
-    if (msg) {
+    const domainMsg = syncDomainOverrideForm(form);
+    if (domainMsg) {
       ev.preventDefault();
       const input = form.querySelector(".js-domain-override-domain");
       try {
@@ -2567,6 +2640,15 @@
           input.focus();
           if (typeof input.select === "function") input.select();
         }
+      } catch (_) {}
+      return;
+    }
+    const credMsg = syncCredentialsPasswordValidity(form);
+    if (credMsg) {
+      ev.preventDefault();
+      const pass = form.querySelector('.js-credentials-override input[name="password"]');
+      try {
+        if (pass && !pass.disabled) pass.focus();
       } catch (_) {}
     }
   });

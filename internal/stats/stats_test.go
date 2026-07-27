@@ -30,7 +30,7 @@ func seedSeries(t *testing.T, d *db.DB) {
 		INSERT INTO root_folders (id, name, path) VALUES (1, 'lib', '/tmp/lib');
 		INSERT INTO quality_profiles (id, name, format_selector) VALUES (1, 'best', 'bv*+ba/b');
 		INSERT INTO series (id, title, root_id, quality_profile_id, monitored, delivery_mode, added_at)
-		VALUES (1, 'Show', 1, 1, 1, 'download', datetime('now'))
+		VALUES (1, 'Show', 1, 1, 1, 'video', datetime('now'))
 	`)
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestSampleAndLoadChart(t *testing.T) {
 		INSERT INTO videos (id, series_id, remote_id, title, status) VALUES
 			(1, 1, 'a', 'A', 'wanted'),
 			(2, 1, 'b', 'B', 'downloaded'),
-			(3, 1, 'c', 'C', 'streamable');
+			(3, 1, 'c', 'C', 'ignored');
 		INSERT INTO tasks (kind, domain, status, message, created_at)
 		VALUES (?, 'example.com', ?, 'x', datetime('now'))
 	`, queue.KindDownload, queue.StatusPending)
@@ -66,7 +66,6 @@ func TestSampleAndLoadChart(t *testing.T) {
 	wantMetrics := map[string]int{
 		stats.MetricVideosWanted:     1,
 		stats.MetricVideosDownloaded: 1,
-		stats.MetricVideosStreamable: 1,
 		stats.MetricQueueDownload:    1,
 		stats.MetricQueueScan:        0,
 	}
@@ -99,15 +98,15 @@ func TestSamplerChangeOnly(t *testing.T) {
 	}
 	var n int
 	_ = d.SQL.QueryRow(`SELECT COUNT(*) FROM stats_samples`).Scan(&n)
-	if n != 5 {
-		t.Fatalf("first sample rows=%d want 5", n)
+	if n != 4 {
+		t.Fatalf("first sample rows=%d want 4", n)
 	}
 	if err := s.Sample(at.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	_ = d.SQL.QueryRow(`SELECT COUNT(*) FROM stats_samples`).Scan(&n)
-	if n != 5 {
-		t.Fatalf("unchanged second sample rows=%d want 5", n)
+	if n != 4 {
+		t.Fatalf("unchanged second sample rows=%d want 4", n)
 	}
 	_, err = d.SQL.Exec(`INSERT INTO videos (id, series_id, remote_id, title, status) VALUES (2, 1, 'b', 'B', 'wanted')`)
 	if err != nil {
@@ -117,8 +116,8 @@ func TestSamplerChangeOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = d.SQL.QueryRow(`SELECT COUNT(*) FROM stats_samples`).Scan(&n)
-	if n != 6 {
-		t.Fatalf("after wanted bump rows=%d want 6 (one new videos_wanted)", n)
+	if n != 5 {
+		t.Fatalf("after wanted bump rows=%d want 5 (one new videos_wanted)", n)
 	}
 }
 
@@ -284,9 +283,9 @@ func TestLoadLibrarySize(t *testing.T) {
 		INSERT INTO root_folders (id, name, path) VALUES (1, 'A', '/a'), (2, 'B', '/b');
 		INSERT INTO quality_profiles (id, name, format_selector) VALUES (1, 'best', 'bv*+ba/b');
 		INSERT INTO series (id, title, root_id, quality_profile_id, monitored, delivery_mode, added_at) VALUES
-			(1, 'S1', 1, 1, 1, 'download', datetime('now')),
-			(2, 'S2', 1, 1, 1, 'download', datetime('now')),
-			(3, 'S3', 2, 1, 1, 'download', datetime('now'));
+			(1, 'S1', 1, 1, 1, 'video', datetime('now')),
+			(2, 'S2', 1, 1, 1, 'video', datetime('now')),
+			(3, 'S3', 2, 1, 1, 'video', datetime('now'));
 		INSERT INTO videos (id, series_id, remote_id, title, status) VALUES
 			(1, 1, 'a', 'A', 'downloaded'),
 			(2, 2, 'b', 'B', 'downloaded'),

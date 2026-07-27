@@ -164,25 +164,18 @@ type VideoFile struct {
 	SizeBytes  sql.NullInt64
 }
 
-// SidecarKinds are known non-media companion roles (not packed video/.strm media).
+// SidecarKinds are known non-media companion roles (not packed video media).
 var SidecarKinds = map[string]bool{
 	"nfo": true, "json": true, "thumb": true, "sub": true, "sponsorblock": true,
 }
 
-// ListVideoMediaFiles returns kind=video and kind=strm rows for a video.
-// Ordered: video first, then strm, then path.
+// ListVideoMediaFiles returns kind=video rows for a video.
 func (s *Store) ListVideoMediaFiles(videoID int64) ([]VideoFile, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, path, kind, acquired_at, size_bytes
 		FROM files
-		WHERE video_id = ? AND kind IN ('video','strm')
-		ORDER BY
-		  CASE kind
-		    WHEN 'video' THEN 1
-		    WHEN 'strm' THEN 2
-		    ELSE 9
-		  END,
-		  path
+		WHERE video_id = ? AND kind = 'video'
+		ORDER BY path
 	`, videoID)
 	if err != nil {
 		return nil, err
@@ -201,7 +194,7 @@ func (s *Store) ListVideoMediaFiles(videoID int64) ([]VideoFile, error) {
 
 // ListVideoSidecars returns companion files beside the packed media whose basename
 // starts with the media stem (filename without final extension). Merges on-disk
-// matches with files-table rows (DB wins for id/kind). Media (video/strm) excluded.
+// matches with files-table rows (DB wins for id/kind). Media (video) excluded.
 // Ordered: nfo, json, thumb, sub, sponsorblock, then other, then path.
 func (s *Store) ListVideoSidecars(videoID int64) ([]VideoFile, error) {
 	mediaPath, mediaBases, err := s.videoMediaStemContext(videoID)
@@ -240,7 +233,7 @@ func (s *Store) ListVideoSidecars(videoID int64) ([]VideoFile, error) {
 			path := filepath.Join(dir, name)
 			seen[path] = struct{}{}
 			if f, ok := byPath[path]; ok {
-				if f.Kind == "video" || f.Kind == "strm" {
+				if f.Kind == "video" {
 					continue
 				}
 				out = append(out, f)
@@ -254,7 +247,7 @@ func (s *Store) ListVideoSidecars(videoID int64) ([]VideoFile, error) {
 	}
 
 	for path, f := range byPath {
-		if f.Kind == "video" || f.Kind == "strm" {
+		if f.Kind == "video" {
 			continue
 		}
 		base := filepath.Base(path)
@@ -318,13 +311,13 @@ func InferEpisodeSidecarKind(name string) string {
 	}
 }
 
-// videoMediaStemContext returns a packed media path (video preferred, else strm)
-// for stem derivation, plus basenames of all video/strm rows to exclude from sidecars.
+// videoMediaStemContext returns a packed media path (kind=video)
+// for stem derivation, plus basenames of all video rows to exclude from sidecars.
 func (s *Store) videoMediaStemContext(videoID int64) (mediaPath string, mediaBases map[string]struct{}, err error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT path, kind FROM files
-		WHERE video_id = ? AND kind IN ('video','strm')
-		ORDER BY CASE kind WHEN 'video' THEN 1 WHEN 'strm' THEN 2 ELSE 9 END, id
+		WHERE video_id = ? AND kind = 'video'
+		ORDER BY id
 	`, videoID)
 	if err != nil {
 		return "", nil, err
@@ -488,7 +481,3 @@ func (s *Store) RegisterFileKind(videoID int64, path, kind string) error {
 	return err
 }
 
-// StrmOrVideoPath returns packed strm or video path for sidecar/plan lookups.
-func (s *Store) StrmOrVideoPath(videoID int64) (string, bool, error) {
-	return s.HasPackAnchor(videoID)
-}

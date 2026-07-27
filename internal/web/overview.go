@@ -15,7 +15,6 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
 	allSourceURLs, _ := h.Library.ListAllSourceURLs()
-	canStream, streamReason := h.streamGate()
 
 	recentVids, _ := h.Library.ListRecentVideos(VideoPageSize)
 	recentRows := h.buildSeriesVideoRows(recentVids, nil, nil)
@@ -42,8 +41,6 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		ScanCronDescriptors        []string
 		AutoIgnoreMediaTypeOptions []string
 		AllSourceURLs              []string
-		CanStream                  bool
-		StreamDisabledReason       string
 	}{
 		pageBase:                   newPage("Overview", "overview", flashFromQuery(r)),
 		SeriesCount:                totals.SeriesCount,
@@ -56,7 +53,5 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		ScanCronDescriptors:        scanCronDescriptors(),
 		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
 		AllSourceURLs:              allSourceURLs,
-		CanStream:                  canStream,
-		StreamDisabledReason:       streamReason,
 	})
 }

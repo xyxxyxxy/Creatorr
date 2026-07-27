@@ -74,9 +74,7 @@
 
       <div class="space-y-3 hidden" data-add-series-step="series">
         {{template "series_settings_fields" (dict
-          "DeliveryMode" "download"
-          "CanStream" .CanStream
-          "StreamDisabledReason" .StreamDisabledReason
+          "DeliveryMode" "video"
           "TitleID" "add-series-title"
           "Roots" .Roots
           "Profiles" .Profiles
@@ -86,7 +84,7 @@
       </div>
 
       <div class="modal-action">
-        <label for="modal-add-series" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-add-series" class="btn modal-cancel">Cancel</label>
         <button type="button" class="btn btn-primary hidden js-add-series-fetch" data-add-series-continue
                 {{if or (not .Roots) (not .Profiles)}}disabled{{end}}>Continue</button>
         <button type="submit" class="btn btn-primary hidden" data-add-series-submit

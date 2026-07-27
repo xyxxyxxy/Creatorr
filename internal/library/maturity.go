@@ -1,7 +1,6 @@
 package library
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -47,7 +46,7 @@ func (s *Store) enqueueMaturityMedia(limit int) (int, error) {
 		LEFT JOIN sources src ON src.id = v.source_id
 		WHERE ser.monitored = 1
 		  AND qp.maturity_redownload_hours > 0
-		  AND v.status IN ('downloaded', 'streamable')
+		  AND v.status = 'downloaded'
 		  AND v.upload_date IS NOT NULL AND TRIM(v.upload_date) != ''
 		  AND v.acquired_at IS NOT NULL AND TRIM(v.acquired_at) != ''
 		  AND datetime('now') >= datetime(v.upload_date, '+' || qp.maturity_redownload_hours || ' hours')
@@ -108,29 +107,6 @@ func (s *Store) enqueueMaturityMedia(limit int) (int, error) {
 				return n, err
 			}
 			n++
-		case "streamable":
-			busy, err := s.hasPendingPackStream(id)
-			if err != nil {
-				return n, err
-			}
-			if busy {
-				continue
-			}
-			_, err = s.Queue.Enqueue(queue.EnqueueParams{
-				Kind:     queue.KindPackStream,
-				Domain:   domain,
-				SeriesID: seriesID,
-				VideoID:  id,
-				Message:  "Maturity stream re-pack",
-				Payload:  map[string]any{"video_id": id, "maturity": true},
-			})
-			if err != nil {
-				if errors.Is(err, queue.ErrDuplicate) {
-					continue
-				}
-				return n, err
-			}
-			n++
 		}
 	}
 	return n, rows.Err()
@@ -148,7 +124,7 @@ func (s *Store) enqueueMaturitySidecars(limit int) (int, error) {
 		LEFT JOIN sources src ON src.id = v.source_id
 		WHERE ser.monitored = 1
 		  AND qp.maturity_sidecar_hours > 0
-		  AND v.status IN ('downloaded', 'streamable')
+		  AND v.status = 'downloaded'
 		  AND v.upload_date IS NOT NULL AND TRIM(v.upload_date) != ''
 		  AND v.acquired_at IS NOT NULL AND TRIM(v.acquired_at) != ''
 		  AND datetime('now') >= datetime(v.upload_date, '+' || qp.maturity_sidecar_hours || ' hours')
@@ -158,13 +134,13 @@ func (s *Store) enqueueMaturitySidecars(limit int) (int, error) {
 		  AND NOT EXISTS (
 		    SELECT 1 FROM tasks t
 		    WHERE t.video_id = v.id AND t.status IN (?, ?)
-		      AND t.kind IN (?, ?, ?, ?, ?)
+		      AND t.kind IN (?, ?, ?, ?)
 		  )
 		ORDER BY v.upload_date ASC, v.id ASC
 		LIMIT ?
 	`,
 		queue.StatusPending, queue.StatusRunning,
-		queue.KindDownload, queue.KindPackStream, queue.KindRefreshSidecars, queue.KindSponsorblockCut, queue.KindMediaVerify,
+		queue.KindDownload, queue.KindRefreshSidecars, queue.KindSponsorblockCut, queue.KindMediaVerify,
 		limit*4)
 	if err != nil {
 		return 0, err
@@ -214,22 +190,6 @@ func (s *Store) enqueueMaturitySidecars(limit int) (int, error) {
 		n++
 	}
 	return n, rows.Err()
-}
-
-func (s *Store) hasPendingPackStream(videoID int64) (bool, error) {
-	var id sql.NullInt64
-	err := s.DB.SQL.QueryRow(`
-		SELECT id FROM tasks
-		WHERE kind = ? AND video_id = ? AND status IN (?, ?)
-		LIMIT 1
-	`, queue.KindPackStream, videoID, queue.StatusPending, queue.StatusRunning).Scan(&id)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return id.Valid, nil
 }
 
 // MarkSidecarsAcquired sets videos.sidecars_acquired_at to now (maturity sidecar success).

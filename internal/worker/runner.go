@@ -174,7 +174,7 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 	if runErr != nil {
 		code, msg := classify(runErr)
 		if code == apperrors.CodeLiveBroadcastSkipped &&
-			(task.Kind == queue.KindDownload || task.Kind == queue.KindPackStream) &&
+			task.Kind == queue.KindDownload &&
 			task.VideoID.Valid && r.Library != nil {
 			doneMsg := "Skipped (currently live)"
 			_ = r.Queue.Finish(task.ID, queue.StatusDone, doneMsg, code, runErr.Error())
@@ -328,26 +328,21 @@ func StubHandlers() map[string]TaskHandler {
 		}
 	}
 	return map[string]TaskHandler{
-		queue.KindScan:                stub(queue.KindScan),
-		queue.KindDownload:            stub(queue.KindDownload),
-		queue.KindCacheBeginning:      stub(queue.KindCacheBeginning),
-		queue.KindPackStream:          stub(queue.KindPackStream),
-		queue.KindRescanMetadata:      stub(queue.KindRescanMetadata),
-		queue.KindRefreshSidecars:     stub(queue.KindRefreshSidecars),
-		queue.KindImport:              stub(queue.KindImport),
-		queue.KindPrefetchSeriesMeta:  stub(queue.KindPrefetchSeriesMeta),
-		queue.KindPrefetchVideoMeta:   stub(queue.KindPrefetchVideoMeta),
-		queue.KindPrefetchAddSeries:   stub(queue.KindPrefetchAddSeries),
-		queue.KindPrefetchAddVideo:    stub(queue.KindPrefetchAddVideo),
-		queue.KindSyncFiles:           stub(queue.KindSyncFiles),
-		queue.KindRetentionDelete:     stub(queue.KindRetentionDelete),
-		queue.KindRenameEpisodes:      stub(queue.KindRenameEpisodes),
-		queue.KindRegenerateNFO:       stub(queue.KindRegenerateNFO),
-		queue.KindRegenerateStrm:      stub(queue.KindRegenerateStrm),
-		queue.KindClearBeginningCache: stub(queue.KindClearBeginningCache),
-		queue.KindClearPlaybackCache:  stub(queue.KindClearPlaybackCache),
-		queue.KindDeleteFiles:         stub(queue.KindDeleteFiles),
-		queue.KindSponsorblockCut:     stub(queue.KindSponsorblockCut),
-		queue.KindMediaVerify:         stub(queue.KindMediaVerify),
+		queue.KindScan:               stub(queue.KindScan),
+		queue.KindDownload:           stub(queue.KindDownload),
+		queue.KindRescanMetadata:     stub(queue.KindRescanMetadata),
+		queue.KindRefreshSidecars:    stub(queue.KindRefreshSidecars),
+		queue.KindImport:             stub(queue.KindImport),
+		queue.KindPrefetchSeriesMeta: stub(queue.KindPrefetchSeriesMeta),
+		queue.KindPrefetchVideoMeta:  stub(queue.KindPrefetchVideoMeta),
+		queue.KindPrefetchAddSeries:  stub(queue.KindPrefetchAddSeries),
+		queue.KindPrefetchAddVideo:   stub(queue.KindPrefetchAddVideo),
+		queue.KindSyncFiles:          stub(queue.KindSyncFiles),
+		queue.KindRetentionDelete:    stub(queue.KindRetentionDelete),
+		queue.KindRenameEpisodes:     stub(queue.KindRenameEpisodes),
+		queue.KindRegenerateNFO:      stub(queue.KindRegenerateNFO),
+		queue.KindDeleteFiles:        stub(queue.KindDeleteFiles),
+		queue.KindSponsorblockCut:    stub(queue.KindSponsorblockCut),
+		queue.KindMediaVerify:        stub(queue.KindMediaVerify),
 	}
 }

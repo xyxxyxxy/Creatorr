@@ -170,7 +170,7 @@ func uniqInt64(ids []int64) []int64 {
 }
 
 // applyVideoThumbEdit installs or clears the episode thumb beside the pack anchor.
-// No-op when neither clear nor src is set. Requires a packed video/.strm.
+// No-op when neither clear nor src is set. Requires packed media on disk.
 func (s *Store) applyVideoThumbEdit(videoID int64, thumbSrc string, clear bool) error {
 	thumbSrc = strings.TrimSpace(thumbSrc)
 	if !clear && thumbSrc == "" {

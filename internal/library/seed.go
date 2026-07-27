@@ -17,12 +17,14 @@ const (
 	Profile1080Format = "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"
 	Profile720Name    = "720p"
 	Profile720Format  = "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b"
+	Profile480Name    = "480p"
+	Profile480Format  = "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b"
 )
 
 // SeedDefaults inserts the shipped root folder and quality profiles when tables are empty.
 // Root path comes from cfg.LibraryRoot (/media/library in container; var/media/library local),
 // stored as an absolute path. Seeded root name is the last path segment (operator create may leave name empty).
-// Profiles: best (bv*+ba/b merge with progressive fallback), 1080p, 720p (soft unrestricted tails).
+// Profiles: best (bv*+ba/b merge with progressive fallback), 1080p, 720p, 480p (soft unrestricted tails).
 // Seed insert order is unrelated to UI order (ListProfiles sorts by name).
 // Remux is always MKV (library.RemuxContainer; not a Setting).
 // Bare yt-dlp "best" alone is avoided as the primary selector (soft progressive on DASH sites).
@@ -63,6 +65,7 @@ func SeedDefaults(database *db.DB, cfg config.Config) error {
 			{DefaultProfileName, DefaultFormat},
 			{Profile1080Name, Profile1080Format},
 			{Profile720Name, Profile720Format},
+			{Profile480Name, Profile480Format},
 		}
 		for _, s := range seeds {
 			_, err := database.SQL.Exec(`

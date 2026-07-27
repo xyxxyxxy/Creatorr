@@ -1,5 +1,5 @@
 {{define "want_ignore_button"}}
-{{/* Same UI slot: Want / Ignore / Delete. Expects VideoID, SeriesID, Status, DomainActive, DomainDisabledTitle, DownloadRunning, Class, optional DeleteClass, FormClass, IsStream, Redirect, KeepScroll, LiveSwap, Icons.
+{{/* Same UI slot: Want / Ignore / Delete. Expects VideoID, SeriesID, Status, DomainActive, DomainDisabledTitle, DownloadRunning, Class, optional DeleteClass, FormClass, Redirect, KeepScroll, LiveSwap, Icons.
      Delete: label only here - call delete_video_modal outside any .join (modal siblings break join :last-child radius). */}}
 {{$formClass := ""}}{{if .LiveSwap}}{{$formClass = "inline"}}{{else if .KeepScroll}}{{$formClass = "inline js-keep-scroll"}}{{end}}
 {{if .FormClass}}{{$formClass = .FormClass}}{{end}}
@@ -14,13 +14,13 @@
     {{if .Icons}}<i data-lucide="eye" class="{{$icon}}"></i>{{else}}Want{{end}}
   </button>
 </form>
-{{else if or (eq .Status "streamable") (eq .Status "downloaded")}}
+{{else if eq .Status "downloaded"}}
 {{$delClass := .DeleteClass}}{{if not $delClass}}{{$delClass = "btn btn-soft btn-error"}}{{end}}
 <label for="modal-delete-video-{{.VideoID}}" class="{{$delClass}}{{if .Icons}} tooltip tooltip-top{{end}}" aria-label="Delete"{{if .Icons}} data-tip="Delete"{{end}}>
   {{if .Icons}}<i data-lucide="trash-2" class="{{$icon}}"></i>{{else}}Delete{{end}}
 </label>
 {{if not .DeferModal}}{{template "delete_video_modal" .}}{{end}}
-{{else if and (ne .Status "downloaded") (ne .Status "ignored") (ne .Status "missing") (ne .Status "deleted") (ne .Status "streamable") (ne .Status "verify_failed")}}
+{{else if and (ne .Status "downloaded") (ne .Status "ignored") (ne .Status "missing") (ne .Status "deleted") (ne .Status "verify_failed")}}
 {{if .DownloadRunning}}
 <label for="modal-ignore-video-{{.VideoID}}" class="{{.Class}}{{if .Icons}} tooltip tooltip-top{{end}}" aria-label="Ignore" {{if not .DomainActive}}aria-disabled="true"{{end}}{{if .Icons}} data-tip="{{if not .DomainActive}}{{.DomainDisabledTitle}}{{else}}Ignore{{end}}"{{end}}>
   {{if .Icons}}<i data-lucide="eye-off" class="{{$icon}}"></i>{{else}}Ignore{{end}}
@@ -45,19 +45,14 @@
 <input type="checkbox" id="modal-delete-video-{{.VideoID}}" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box">
-    {{if eq .Status "streamable"}}
-    <h3 class="font-bold text-lg mb-2">Delete stream files</h3>
-    <p class="text-sm mb-4">Removes library files for this video and sets status to deleted. Can be added again later.</p>
-    {{else}}
     <h3 class="font-bold text-lg mb-2">Delete downloaded files</h3>
     <p class="text-sm mb-4">Removes library media and sidecars for this video and sets status to deleted.</p>
-    {{end}}
     <form method="post" action="/actions/delete-video"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/delete-video" hx-target="#series-videos-live" hx-swap="outerHTML"{{end}}>
       <input type="hidden" name="video_id" value="{{.VideoID}}" />
       <input type="hidden" name="series_id" value="{{.SeriesID}}" />
       {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
       <div class="modal-action">
-        <label for="modal-delete-video-{{.VideoID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-delete-video-{{.VideoID}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-error">Delete files</button>
       </div>
     </form>

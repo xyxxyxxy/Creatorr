@@ -35,7 +35,7 @@ type EpisodeNFO struct {
 	UniqueID       string
 	SourceSite     string // legacy fallback when UniqueIDType empty
 	Domain         string // source hostname for {domain}; empty when unknown
-	RuntimeSeconds int    // 0 = omit; Emby/Kodi use this for .strm duration
+	RuntimeSeconds int    // 0 = omit; Emby/Kodi use this for episode duration
 }
 
 // WriteEpisodeNFO writes episodedetails XML at path.
@@ -175,7 +175,7 @@ type SidecarBundle struct {
 
 // RefreshDiskSidecars rewrites NFO/thumb/subs beside an existing packed file.
 // Leaves the media file and info.json untouched (info.json updates only when media changes).
-// No-op (nil) when no video/.strm pack anchor on disk.
+// No-op (nil) when no video pack anchor on disk.
 // Removes prior nfo/thumb/sub files from disk before rewrite (orphan cleanup).
 func (s *Store) RefreshDiskSidecars(videoID int64, bundle SidecarBundle, taskID int64) error {
 	_ = bundle.InfoJSON // never write info.json on independent sidecar refresh
@@ -339,7 +339,7 @@ func looksLikeLangTag(tag string) bool {
 	return true
 }
 
-// RewriteVideoNFO rewrites the episode NFO beside an on-disk video or .strm from current DB metadata.
+// RewriteVideoNFO rewrites the episode NFO beside an on-disk video from current DB metadata.
 // Returns changed=false when there is no pack anchor or on-disk bytes already match.
 // When taskID > 0 and bytes change, appends video_history (nfo_regenerated).
 func (s *Store) RewriteVideoNFO(videoID, taskID int64) (changed bool, err error) {

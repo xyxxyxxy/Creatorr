@@ -26,7 +26,6 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 	}
 	profiles, _ := h.Library.ListProfiles()
 	allSourceURLs, _ := h.Library.ListAllSourceURLs()
-	canStream, streamReason := h.streamGate()
 	incompleteFullScan, _ := h.Library.HasIncompleteFullScan()
 
 	rootPath := map[int64]string{}
@@ -58,8 +57,6 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 		ScanCronDescriptors        []string
 		AutoIgnoreMediaTypeOptions []string
 		AllSourceURLs              []string
-		CanStream                  bool
-		StreamDisabledReason       string
 		IncompleteFullScan         bool
 	}{
 		pageBase:                   newPage("Import", "import", nil),
@@ -71,8 +68,6 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 		ScanCronDescriptors:        scanCronDescriptors(),
 		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
 		AllSourceURLs:              allSourceURLs,
-		CanStream:                  canStream,
-		StreamDisabledReason:       streamReason,
 		IncompleteFullScan:         incompleteFullScan,
 	})
 }

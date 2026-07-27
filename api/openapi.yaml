@@ -1717,7 +1717,7 @@ components:
           description: Video page URL (watch/clip); never the feed channel/playlist URL
         status:
           type: string
-          description: wanted, wanted_source_error, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored, streamable
+          description: wanted, wanted_source_error, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored
         season:
           type: integer
           nullable: true
@@ -1795,8 +1795,7 @@ components:
           description: >
             yt-dlp media_type values to auto-ignore (e.g. short, livestream). Empty = none.
             Missing media_type is never auto-ignored. Applied at index create when type is known,
-            at download via --match-filters, and at stream pack_stream from the urls extract
-            (indexed, then marked ignored; no cache_beginning).
+            and at download via --match-filters (indexed, then marked ignored).
         added_at:
           type: string
           format: date-time
