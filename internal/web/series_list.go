@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -241,6 +242,17 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 		SeriesFilter: seriesFilter,
 		FilterActive: filter.Active(),
 	}, nil
+}
+
+func (h *Handler) seriesErrorCountJSON(w http.ResponseWriter, r *http.Request) {
+	n, err := h.Library.CountSeriesWithError()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(map[string]int{"count": n})
 }
 
 func (h *Handler) seriesListLive(w http.ResponseWriter, r *http.Request) {

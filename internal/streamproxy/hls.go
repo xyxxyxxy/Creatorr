@@ -11,8 +11,9 @@ import (
 )
 
 // rewriteHLSPlaylist rewrites absolute/relative URI lines so the client fetches
-// through Creatorr. baseProxy is e.g. /stream/videos/1/hls?token=…&u=
-func rewriteHLSPlaylist(body []byte, playlistURL string, baseProxy string) []byte {
+// through Creatorr. pathPrefix is e.g. /stream/videos/1/hls/u/ and token is the
+// sole query param (no '&' - Emby/ffmpeg HLS parsers choke on query ampersands).
+func rewriteHLSPlaylist(body []byte, playlistURL, pathPrefix, token string) []byte {
 	base, err := url.Parse(playlistURL)
 	if err != nil {
 		return body
@@ -28,21 +29,28 @@ func rewriteHLSPlaylist(body []byte, playlistURL string, baseProxy string) []byt
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			// Rewrite URI="..." inside EXT-X-KEY / EXT-X-MAP / EXT-X-MEDIA etc.
 			if strings.Contains(trimmed, "URI=\"") {
-				line = rewriteAttrURIs(line, base, baseProxy)
+				line = rewriteAttrURIs(line, base, pathPrefix, token)
 			}
 			out.WriteString(line)
 			out.WriteByte('\n')
 			continue
 		}
 		abs := resolveHLSURI(base, trimmed)
-		out.WriteString(baseProxy)
-		out.WriteString(encodeUpstream(abs))
+		out.WriteString(proxyURI(pathPrefix, token, abs))
 		out.WriteByte('\n')
 	}
 	return []byte(out.String())
 }
 
-func rewriteAttrURIs(line string, base *url.URL, baseProxy string) string {
+func proxyURI(pathPrefix, token, abs string) string {
+	u := pathPrefix + encodeUpstream(abs)
+	if token != "" {
+		u += "?token=" + url.QueryEscape(token)
+	}
+	return u
+}
+
+func rewriteAttrURIs(line string, base *url.URL, pathPrefix, token string) string {
 	const key = `URI="`
 	var b strings.Builder
 	rest := line
@@ -61,8 +69,7 @@ func rewriteAttrURIs(line string, base *url.URL, baseProxy string) string {
 		}
 		raw := rest[:j]
 		abs := resolveHLSURI(base, raw)
-		b.WriteString(baseProxy)
-		b.WriteString(encodeUpstream(abs))
+		b.WriteString(proxyURI(pathPrefix, token, abs))
 		b.WriteByte('"')
 		rest = rest[j+1:]
 	}
@@ -77,7 +84,7 @@ func resolveHLSURI(base *url.URL, ref string) string {
 	return base.ResolveReference(u).String()
 }
 
-// encodeUpstream packs an absolute URL for the u= query param (base64url, no pad).
+// encodeUpstream packs an absolute URL for the path segment (base64url, no pad).
 func encodeUpstream(abs string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(abs))
 }
@@ -98,7 +105,7 @@ func decodeUpstream(enc string) (string, error) {
 	return s, nil
 }
 
-func proxyUpstream(w http.ResponseWriter, r *http.Request, mediaURL string, hdrs map[string]string, rewritePlaylist bool, playlistSelf string, baseProxy string) error {
+func proxyUpstream(w http.ResponseWriter, r *http.Request, mediaURL string, hdrs map[string]string, rewritePlaylist bool, playlistSelf, pathPrefix, token string) error {
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, mediaURL, nil)
 	if err != nil {
 		http.Error(w, "bad upstream URL", http.StatusBadGateway)
@@ -129,7 +136,7 @@ func proxyUpstream(w http.ResponseWriter, r *http.Request, mediaURL string, hdrs
 	}
 	ct := resp.Header.Get("Content-Type")
 	if rewritePlaylist || looksLikeM3U(ct, body) {
-		body = rewriteHLSPlaylist(body, playlistSelf, baseProxy)
+		body = rewriteHLSPlaylist(body, playlistSelf, pathPrefix, token)
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(body)

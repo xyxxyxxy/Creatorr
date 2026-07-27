@@ -159,6 +159,33 @@
 </section>
 
 <section class="card bg-base-100 border border-base-300 mb-4">
+  <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl">
+    <input type="hidden" name="redirect" value="/settings/library" />
+    <input type="hidden" name="metadata_settings" value="1" />
+    <h2 class="text-lg font-semibold">Metadata</h2>
+    <p class="text-sm opacity-60">Automatic enrichment updates tags/genres and is written into the episode NFO on pack and Save.</p>
+    <div class="space-y-3 w-full min-w-0">
+      {{template "checkbox_field" (dict
+        "Name" "metadata_domain_tag"
+        "Label" "Add source domain as video tag"
+        "Checked" .MetadataDomainTag
+        "Hint" "Prepend the source domain to video tags when source_url is known."
+      )}}
+      {{template "checkbox_field" (dict
+        "Name" "metadata_genres_from_categories"
+        "Label" "Add genres from yt-dlp categories"
+        "Checked" .MetadataGenresFromCategories
+        "Hint" "Add yt-dlp categories as video genres when categories are known."
+      )}}
+    </div>
+    <div class="card-actions items-center gap-2">
+      <button type="submit" class="btn btn-primary">Save</button>
+      {{template "field_info" (dict "Info" "Saving does not rewrite existing episodes.")}}
+    </div>
+  </form>
+</section>
+
+<section class="card bg-base-100 border border-base-300 mb-4">
   <form method="post" action="/actions/save-settings" class="card-body gap-3">
     <input type="hidden" name="redirect" value="/settings/library" />
     <h2 class="text-lg font-semibold">Streaming</h2>

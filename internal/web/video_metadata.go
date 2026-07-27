@@ -11,25 +11,32 @@ import (
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/go-chi/chi/v5"
 )
 
 type videoMetadataView struct {
-	Series            *library.Series
-	Video             *library.Video
-	Suggestions       library.MetaSuggestions
-	PrefetchTaskID    int64
-	PrefetchPending   bool
-	PrefetchDraft     library.VideoPrefetchDraft
-	PrefetchArt       map[string]string
-	FetchURL          string
-	HasPackAnchor     bool
-	HasThumb          bool
-	ThumbMtime        int64
-	Open              bool
-	SeasonEpisodeHint string
-	UploadDateDay     string // YYYY-MM-DD for type=date
-	UploadDateTime    string // HH:MM for type=time; empty = optional unset
+	Series              *library.Series
+	Video               *library.Video
+	Suggestions         library.MetaSuggestions
+	PrefetchTaskID      int64
+	PrefetchPending     bool
+	PrefetchDraft       library.VideoPrefetchDraft
+	PrefetchArt         map[string]string
+	FetchURL            string
+	HasPackAnchor       bool
+	HasThumb            bool
+	ThumbMtime          int64
+	Open                bool
+	SeasonEpisodeHint   string
+	UploadDateDay       string // YYYY-MM-DD for type=date
+	UploadDateTime      string // HH:MM for type=time; empty = optional unset
+	ManagedTagItems     []string
+	ManagedGenreItems   []string
+	ManagedTagPipe      string
+	ManagedGenrePipe    string
+	OperatorTagItems    []string
+	OperatorGenreItems  []string
 }
 
 func (h *Handler) buildVideoMetadataView(ser *library.Series, video *library.Video) videoMetadataView {
@@ -47,6 +54,7 @@ func (h *Handler) buildVideoMetadataView(ser *library.Series, video *library.Vid
 			v.HasThumb = true
 			v.ThumbMtime = h.Library.VideoThumbMtime(video.ID)
 		}
+		h.applyVideoMetadataManagedLists(&v, nil)
 	}
 	if video.SourceURL.Valid {
 		v.FetchURL = video.SourceURL.String
@@ -60,7 +68,26 @@ func (h *Handler) buildVideoMetadataView(ser *library.Series, video *library.Vid
 	return v
 }
 
-func applyVideoPrefetchDraft(video *library.Video, d library.VideoPrefetchDraft) *library.Video {
+// applyVideoMetadataManagedLists sets managed/operator tag and genre rows for the metadata form.
+// draftGenres supplies yt-dlp categories from an ephemeral prefetch draft when present.
+func (h *Handler) applyVideoMetadataManagedLists(view *videoMetadataView, draftGenres []string) {
+	if h.Library == nil || view == nil || view.Video == nil {
+		return
+	}
+	_, _ = settings.MetadataDomainTagEnabled(h.Library.DB)
+	_, _ = settings.MetadataGenresFromCategoriesEnabled(h.Library.DB)
+	_ = draftGenres
+	// Metadata editor is operator-editable: show full current lists as removable items.
+	// Auto-fill remains in download/pack/prefetch flows, but modal rows are not locked.
+	view.ManagedTagItems = nil
+	view.ManagedTagPipe = ""
+	view.ManagedGenreItems = nil
+	view.ManagedGenrePipe = ""
+	view.OperatorTagItems = library.ParseStringListFields(view.Video.Tags)
+	view.OperatorGenreItems = library.ParseStringListFields(view.Video.Genres)
+}
+
+func applyVideoPrefetchDraft(video *library.Video, d library.VideoPrefetchDraft, lib *library.Store) *library.Video {
 	if video == nil {
 		return nil
 	}
@@ -98,12 +125,19 @@ func applyVideoPrefetchDraft(video *library.Video, d library.VideoPrefetchDraft)
 	if d.MPAA != "" {
 		out.MPAA = d.MPAA
 	}
-	// Soft-fill genres/tags only when the current video list is empty.
-	if len(out.Genres) == 0 && len(d.Genres) > 0 {
-		out.Genres = d.Genres
-	}
-	if len(out.Tags) == 0 && len(d.Tags) > 0 {
-		out.Tags = d.Tags
+	if lib != nil {
+		sourceURL := ""
+		if out.SourceURL.Valid {
+			sourceURL = out.SourceURL.String
+		}
+		domainOn, _ := settings.MetadataDomainTagEnabled(lib.DB)
+		if domainOn {
+			out.Tags = library.MergeDomainTag(out.Tags, sourceURL)
+		}
+		genresOn, _ := settings.MetadataGenresFromCategoriesEnabled(lib.DB)
+		if genresOn && len(d.Genres) > 0 {
+			out.Genres = library.MergeCategoryGenres(out.Genres, d.Genres)
+		}
 	}
 	return &out
 }
@@ -213,9 +247,6 @@ func (h *Handler) actionSaveVideoMetadata(w http.ResponseWriter, r *http.Request
 		http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
 		return
 	}
-	if draftTID > 0 {
-		_ = h.Library.ClearVideoPrefetchDraft(vid, draftTID)
-	}
 	ok := "video-metadata"
 	if outcome.RenameSkippedBusy {
 		ok = "video-metadata-busy"
@@ -308,7 +339,8 @@ func (h *Handler) videoMetadataPrefetchStatus(w http.ResponseWriter, r *http.Req
 	case queue.StatusDone:
 		if d, err := h.Library.ReadVideoPrefetchDraft(vid, tid); err == nil {
 			draft = d
-			view.Video = applyVideoPrefetchDraft(video, draft)
+			view.Video = applyVideoPrefetchDraft(video, draft, h.Library)
+			h.applyVideoMetadataManagedLists(&view, draft.Genres)
 			view.PrefetchArt = videoPrefetchArtFromDraft(draft)
 		}
 	}

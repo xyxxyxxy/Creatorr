@@ -24,6 +24,7 @@ import (
 
 func openStreamLib(t *testing.T) *library.Store {
 	t.Helper()
+	clearUrlsCacheForTest()
 	d, err := db.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -129,10 +130,14 @@ https://cdn.example.com/720.m3u8
 #EXT-X-STREAM-INF:BANDWIDTH=400000
 rel/360.m3u8
 `
-	baseProxy := "/stream/videos/1/hls?token=tok&u="
-	got := string(rewriteHLSPlaylist([]byte(master), "https://cdn.example.com/master.m3u8", baseProxy))
-	if !strings.Contains(got, baseProxy) {
+	pathPrefix := "/stream/videos/1/hls/u/"
+	token := "tok"
+	got := string(rewriteHLSPlaylist([]byte(master), "https://cdn.example.com/master.m3u8", pathPrefix, token))
+	if !strings.Contains(got, pathPrefix) {
 		t.Fatalf("missing proxy prefix: %s", got)
+	}
+	if strings.Contains(got, "&") {
+		t.Fatalf("proxy URI must not contain '&': %s", got)
 	}
 	if strings.Contains(got, "https://cdn.example.com/720.m3u8\n") {
 		t.Fatalf("absolute URI not rewritten: %s", got)
@@ -141,8 +146,9 @@ rel/360.m3u8
 		t.Fatalf("relative URI not rewritten: %s", got)
 	}
 	enc720 := encodeUpstream("https://cdn.example.com/720.m3u8")
-	if !strings.Contains(got, enc720) {
-		t.Fatalf("missing encoded 720: %s", got)
+	wantLine := pathPrefix + enc720 + "?token=" + token
+	if !strings.Contains(got, wantLine) {
+		t.Fatalf("missing encoded 720 line %q in %s", wantLine, got)
 	}
 	dec, err := decodeUpstream(enc720)
 	if err != nil || dec != "https://cdn.example.com/720.m3u8" {
@@ -201,6 +207,102 @@ func TestServeVideoHead(t *testing.T) {
 		if rec.Body.Len() != 0 {
 			t.Fatalf("%s HEAD wrote body", path)
 		}
+	}
+}
+
+func TestServeVideoProgressiveRedirectsToProgressive(t *testing.T) {
+	t.Setenv("CREATORR_FAKE_URLS_KIND", "progressive")
+	lib := openStreamLib(t)
+	root, err := lib.CreateRoot("r", t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, err := lib.CreateProfile("p", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Prog", SourceURL: "https://www.example.com/@prog",
+		RootID: root.ID, QualityProfileID: prof.ID, Monitored: true,
+		DeliveryMode: library.DeliveryStream,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := lib.DB.SQL.Exec(`
+		INSERT INTO videos (series_id, source_id, remote_id, title, source_url, status)
+		VALUES (?, ?, 'v1', 'Ep', 'https://www.example.com/watch?v=v1', 'streamable')`,
+		ser.ID, ser.Sources[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vid, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := library.EnsureStreamToken(lib.DB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := mountHandler(t, lib)
+	req := httptest.NewRequest(http.MethodGet, "/stream/videos/"+strconv.FormatInt(vid, 10)+"/master.m3u8?token="+tok, nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	loc := rec.Header().Get("Location")
+	want := "/stream/videos/" + strconv.FormatInt(vid, 10) + "/progressive?token=" + tok
+	if loc != want {
+		t.Fatalf("Location=%q want %q", loc, want)
+	}
+}
+
+func TestServeProgressiveHead(t *testing.T) {
+	lib := openStreamLib(t)
+	root, err := lib.CreateRoot("r", t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, err := lib.CreateProfile("p", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "ProgHead", SourceURL: "https://www.example.com/@proghead",
+		RootID: root.ID, QualityProfileID: prof.ID, Monitored: true,
+		DeliveryMode: library.DeliveryStream,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := lib.DB.SQL.Exec(`
+		INSERT INTO videos (series_id, source_id, remote_id, title, source_url, status)
+		VALUES (?, ?, 'v1', 'Ep', 'https://www.example.com/watch?v=v1', 'streamable')`,
+		ser.ID, ser.Sources[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vid, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := library.EnsureStreamToken(lib.DB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := mountHandler(t, lib)
+	req := httptest.NewRequest(http.MethodHead, "/stream/videos/"+strconv.FormatInt(vid, 10)+"/progressive?token="+tok, nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "video/mp4" {
+		t.Fatalf("Content-Type=%q", ct)
+	}
+	if rec.Body.Len() != 0 {
+		t.Fatal("HEAD wrote body")
 	}
 }
 

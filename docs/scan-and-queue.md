@@ -153,7 +153,7 @@ Store in `tasks` table. Never use kind name `poll`. Boot renames legacy kind str
 |---|---|---|
 | Scope | Series → its **sources** (manual tip Scan / full scan: domain active; scheduled tip Scan also needs series monitored) | Existing **videos** (one or all in series) |
 | Discovers new videos | Yes | **No** |
-| Updates existing | Soft-fill empty **title** / **description** / **thumbnail_url** only | Soft-fill empty **title** / **description** / **thumbnail_url** only; may soft-fill empty **genres** from packed `info.json` `categories` when rewriting NFO |
+| Updates existing | Soft-fill empty **title** / **description** / **thumbnail_url** only | Soft-fill empty **title** / **description** / **thumbnail_url** only; may merge **genres** from packed `info.json` `categories` when `metadata_genres_from_categories` is on |
 | On-disk sidecars | Unchanged | Rewrites **NFO / thumb / subs** beside existing media; **never** replaces the video file or `info.json` |
 | Missing at source | May mark/unlist per rules (TBD) | Leaves video unchanged |
 

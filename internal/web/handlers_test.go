@@ -53,6 +53,9 @@ func TestSeriesListRenders(t *testing.T) {
 	if !strings.Contains(body, "list-panel") || !strings.Contains(body, "Add series") {
 		t.Fatalf("missing list chrome: %s", truncate(body, 300))
 	}
+	if !strings.Contains(body, `id="series-error-badge"`) {
+		t.Fatalf("missing series error nav badge: %s", truncate(body, 400))
+	}
 	if !strings.Contains(body, `id="series-list-live"`) {
 		t.Fatalf("missing series list live: %s", truncate(body, 400))
 	}
@@ -86,6 +89,22 @@ func TestSeriesListRenders(t *testing.T) {
 	}
 	if strings.Contains(body, "add-series-url-preview") || strings.Contains(body, "data-add-series-url-entry") {
 		t.Fatalf("old URL-entry/preview still present: %s", truncate(body, 400))
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/series/error-count.json", nil)
+	rec2 := httptest.NewRecorder()
+	r.ServeHTTP(rec2, req2)
+	if rec2.Code != 200 {
+		t.Fatalf("error-count status %d: %s", rec2.Code, rec2.Body.String())
+	}
+	var countPayload struct {
+		Count int `json:"count"`
+	}
+	if err := json.NewDecoder(rec2.Body).Decode(&countPayload); err != nil {
+		t.Fatal(err)
+	}
+	if countPayload.Count != 0 {
+		t.Fatalf("empty library error count=%d", countPayload.Count)
 	}
 }
 

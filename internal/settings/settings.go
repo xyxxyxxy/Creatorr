@@ -23,6 +23,8 @@ const (
 	KeyStreamPlaybackCache          = "stream_playback_cache"
 	KeyStreamPlaybackCacheMaxHours  = "stream_playback_cache_max_hours"
 	KeyExternalBaseURL              = "external_base_url"
+	KeyMetadataDomainTag            = "metadata_domain_tag"
+	KeyMetadataGenresFromCategories = "metadata_genres_from_categories"
 )
 
 // Help is one-line UI help text per key.
@@ -41,6 +43,8 @@ var Help = map[string]string{
 	KeyExternalBaseURL:              "Essential for Creatorr streaming: the external media server (Emby/Jellyfin/Kodi/etc.) plays .strm entries by streaming through Creatorr’s proxy. Absolute origin clients can reach (scheme+host+port, no trailing slash). Empty disables stream delivery. Changing this requires Regenerate all .strm files under Settings → Maintenance.",
 	KeySubtitleLangs:                "Supports all, regex (en.*), and -TAG exclusions. Saving does not re-fetch existing episodes.",
 	KeySubtitleAuto:                 "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",
+	KeyMetadataDomainTag:            "On download and stream pack, prepend the source domain to video tags when source_url is known.",
+	KeyMetadataGenresFromCategories: "On download and stream pack, add yt-dlp categories as video genres when categories are known.",
 }
 
 // Labels are human-readable Settings titles (DB/API keys are snake_case).
@@ -59,6 +63,8 @@ var Labels = map[string]string{
 	KeyExternalBaseURL:              "External Creatorr URL",
 	KeySubtitleLangs:                "Subtitle languages",
 	KeySubtitleAuto:                 "Include auto-generated subtitles",
+	KeyMetadataDomainTag:            "Add source domain as video tag",
+	KeyMetadataGenresFromCategories: "Add genres from yt-dlp categories",
 }
 
 // generalOrder is Settings → General (not schedules).
@@ -128,12 +134,15 @@ func SeedDefaults(database *db.DB) error {
 		KeyExternalBaseURL:              "",
 		KeySubtitleLangs:                DefaultSubtitleLangs,
 		KeySubtitleAuto:                 DefaultSubtitleAuto,
+		KeyMetadataDomainTag:            DefaultMetadataDomainTag,
+		KeyMetadataGenresFromCategories: DefaultMetadataGenresFromCategories,
 	}
 	allKeys := append([]string{}, generalOrder...)
 	allKeys = append(allKeys, schedulerOrder...)
 	allKeys = append(allKeys, queueOrder...)
 	allKeys = append(allKeys, libraryOrder...)
 	allKeys = append(allKeys, KeyEpisodeFormat)
+	allKeys = append(allKeys, KeyMetadataDomainTag, KeyMetadataGenresFromCategories)
 	for _, key := range allKeys {
 		val := defaults[key]
 		_, err := database.SQL.Exec(`
@@ -273,6 +282,9 @@ func Set(database *db.DB, key, value string) error {
 	if key == KeySubtitleAuto {
 		value = NormalizeSubtitleAuto(value)
 	}
+	if key == KeyMetadataDomainTag || key == KeyMetadataGenresFromCategories {
+		value = NormalizeMetadataFlag(value)
+	}
 	if key == KeySourceDownloadErrorThreshold {
 		value = NormalizeSourceDownloadErrorThreshold(value)
 	}
@@ -307,6 +319,10 @@ func SetMany(database *db.DB, values map[string]string) error {
 		}
 		if k == KeySubtitleAuto {
 			v = NormalizeSubtitleAuto(v)
+			values[k] = v
+		}
+		if k == KeyMetadataDomainTag || k == KeyMetadataGenresFromCategories {
+			v = NormalizeMetadataFlag(v)
 			values[k] = v
 		}
 		if k == KeySourceDownloadErrorThreshold {
@@ -346,7 +362,11 @@ type DomainQueueRow struct {
 	UseFlareSolverr      bool // effective resolved flare (defaults + override)
 	HasCookies           bool
 	CookieContent        string // Netscape jar text for edit modal
-	HasRow               bool   // true when domains row exists
+	HasCredentials              bool   // host row sets non-empty username
+	CredentialsUsername         string // host override username for edit modal
+	CredentialsInherit          bool   // host row username NULL (inherit default)
+	CredentialsHasStoredPassword bool  // host row has stored password (edit modal hint)
+	HasRow                      bool   // true when domains row exists
 }
 
 // DomainOverrideRows returns host override rows (excludes domain=default).
@@ -375,7 +395,7 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 	}
 	rows, err := database.SQL.Query(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-		       download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr
+		       download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr, username, password
 		FROM domains WHERE domain != ? ORDER BY domain
 	`, DomainDefault)
 	if err != nil {
@@ -391,7 +411,8 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 		var rate, streamRate sql.NullString
 		var sleep sql.NullFloat64
 		var flare sql.NullInt64
-		if err := rows.Scan(&host, &active, &delay, &maxQ, &maxP, &rate, &streamRate, &sleep, &flare); err != nil {
+		var credUser, credPass sql.NullString
+		if err := rows.Scan(&host, &active, &delay, &maxQ, &maxP, &rate, &streamRate, &sleep, &flare, &credUser, &credPass); err != nil {
 			return nil, err
 		}
 		r := DomainQueueRow{
@@ -447,6 +468,14 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 				r.UseFlareSolverr = false
 			}
 		}
+		if credUser.Valid {
+			u := strings.TrimSpace(credUser.String)
+			r.CredentialsUsername = u
+			r.HasCredentials = u != ""
+		} else {
+			r.CredentialsInherit = true
+		}
+		r.CredentialsHasStoredPassword = credPass.Valid && strings.TrimSpace(credPass.String) != ""
 		out = append(out, r)
 		seen[NormalizeDomain(host)] = true
 	}

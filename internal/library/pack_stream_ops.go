@@ -197,10 +197,11 @@ func (s *Store) EnqueuePackStreamWanted() (int, error) {
 	return n, nil
 }
 
-// PackStreamForVideo builds strm+nfo (+ optional subtitle sidecars) for one video (used by worker).
+// PackStreamForVideo builds strm+nfo (+ optional thumb + subtitle sidecars) for one video (used by worker).
 // runtimeSeconds may be 0; when >0 it is written into NFO (Emby strm duration) and duration_seconds.
+// thumbSrc is an optional on-disk image from yt-dlp --write-thumbnail; when empty, soft-fetches thumbnail_url.
 // subSrcs are optional yt-dlp subtitle files to copy beside the .strm (soft-ok if empty/missing).
-func (s *Store) PackStreamForVideo(videoID, taskID int64, runtimeSeconds int, subSrcs []string) error {
+func (s *Store) PackStreamForVideo(videoID, taskID int64, runtimeSeconds int, thumbSrc string, subSrcs []string) error {
 	if strings.TrimSpace(s.EffectivePublicBaseURL()) == "" {
 		return fmt.Errorf("%w: external Creatorr URL required", ErrInvalid)
 	}
@@ -211,6 +212,14 @@ func (s *Store) PackStreamForVideo(videoID, taskID int64, runtimeSeconds int, su
 		return err
 	}
 	s.softFillGenresOntoVideo(v)
+	sourceURL := ""
+	if v.SourceURL.Valid {
+		sourceURL = v.SourceURL.String
+	}
+	_, _ = s.EnsureVideoDomainTag(videoID, sourceURL)
+	if fresh, gerr := s.GetVideo(videoID); gerr == nil {
+		v = fresh
+	}
 	if runtimeSeconds <= 0 && v.DurationSeconds.Valid {
 		runtimeSeconds = int(v.DurationSeconds.Int64)
 	}
@@ -226,7 +235,7 @@ func (s *Store) PackStreamForVideo(videoID, taskID int64, runtimeSeconds int, su
 	if err != nil {
 		return err
 	}
-	streamURL, err := StreamURL(s.EffectivePublicBaseURL(), videoID, tok)
+	streamURL, err := StreamURLForKind(s.EffectivePublicBaseURL(), videoID, tok, v.StreamKind())
 	if err != nil {
 		return err
 	}
@@ -247,10 +256,10 @@ func (s *Store) PackStreamForVideo(videoID, taskID int64, runtimeSeconds int, su
 	if v.ThumbnailURL.Valid {
 		thumbURL = v.ThumbnailURL.String
 	}
-	thumbSrc, cleanupThumb := MaterializeThumbSrc("", thumbURL)
+	resolvedThumb, cleanupThumb := MaterializeThumbSrc(thumbSrc, thumbURL)
 	defer cleanupThumb()
 	allowPaths, _ := s.filePathsForVideo(videoID)
-	strmPath, nfoPath, thumbPath, subPaths, err := PackStream(streamURL, root.Path, meta, LoadNamingConfig(s.DB), thumbSrc, subSrcs, allowPaths)
+	strmPath, nfoPath, thumbPath, subPaths, err := PackStream(streamURL, root.Path, meta, LoadNamingConfig(s.DB), resolvedThumb, subSrcs, allowPaths)
 	if err != nil {
 		return err
 	}

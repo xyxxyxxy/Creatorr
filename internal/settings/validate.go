@@ -43,5 +43,8 @@ func validateValue(key, value string) error {
 	if key == KeySubtitleAuto {
 		return validateSubtitleAuto(value)
 	}
+	if key == KeyMetadataDomainTag || key == KeyMetadataGenresFromCategories {
+		return validateMetadataFlag(value)
+	}
 	return nil
 }

@@ -28,7 +28,7 @@ Use these terms consistently in code comments, UI copy, OpenAPI, tests, and docs
 | **Root folder** / **Quality profile** | Absolute path (+ optional display name, optional retention TTL) / named yt-dlp `--format` selector plus optional maturity delays and optional SponsorBlock mark/remove/reencode/info-cards. Remux always MKV. |
 | **Series warn** | Virtual UI health (not a column): `incomplete` (full scan stalled with **no** tip schedule) or `error` (download/source errors - overwrites incomplete). Scheduled incomplete does not escalate (tip cron continues full scan). Shown via series status indicator. |
 | **Job** / **Task** / **Queue** | Implicit schedule only / one domain-queue unit / per-domain ordered pending+running. |
-| **Domain** | Hostname from source URLs: optional limit overrides, FlareSolverr (inherit/on/off), cookies; soft **Paused** via `domain_runtime`. Never auto-deleted. |
+| **Domain** | Hostname from source URLs: optional limit overrides, FlareSolverr (inherit/on/off), cookies, membership credentials (inherit/on host); soft **Paused** via `domain_runtime`. Never auto-deleted. |
 | **History** | `/history` UI: shared UTC **From**/**To** range, then **Notifications** (in-app `notifications` log) above **Tasks** (finished tasks). Task rows link to **Task** detail (`/task/{id}`). Notification rows link to `/notification/{id}`. Outcome JSON in `tasks.detail`. Task statuses `done` / `failed` / `cancelled`. Cancelled ≠ download error. |
 | **Notification** | In-app row for every notify event (`notifications`), delivered by the fixed Creatorr channel. **Alert** events (`cookie_invalid` / `rate_limited` / `ytdlp_failed` / `verify_failed` / `file_sync_issues`) stay unread until History open (marks all), detail open, mark-read, or any Apprise success and require `task_id`. **Info** events (`download_digest`, `live_skipped`) are stored read; digest has no `task_id`, live skip sets `task_id` to link the finished task. Apprise channels are optional fan-out. |
 | **Task detail** | `/task/{id}` for any status (pending/running/finished). Live pages SSE-patch status/message/progress; Logs panel (in-memory progress lines + Refresh) only while pending/running. Scan `created_ids` rows show scan-time state (`wanted`\|`ignored`) and optional ignore reason. `skipped_title_regexp_include` / `skipped_title_regexp_exclude` list titles not indexed by title filters. |
@@ -37,7 +37,7 @@ Use these terms consistently in code comments, UI copy, OpenAPI, tests, and docs
 | **Pack** / **Import** / **Retention** / **File sync** | Turn a **video** into an on-disk **episode** under the root (TV path + NFO + optional sidecars) / inbox or per-root library orphan bind / root TTL purge (`retention_delete`) / missing·restore·size-mismatch (media + sidecars)·beginning-cache pass (`sync_files`). |
 | **Wanted** / **Ignored** / **Missing** / **Deleted** | Statuses: eligible / not auto-downloaded / path gone (recoverable) / intentional remove (Import or Want to recover). |
 | **Metadata rescan** | Refresh metadata for existing videos only (no discovery). |
-| **Cookies** / **Settings** | Netscape jar per domain (`default` fallback) / SQLite runtime config (env seeds first boot). |
+| **Cookies** / **Credentials** / **Settings** | Netscape jar per domain (`default` fallback) / yt-dlp login username+password on `domains` (NULL inherit) / SQLite runtime config (env seeds first boot). |
 | **Source URL** | `videos.source_url` - watch/clip page only (never feed URL). |
 | **Metadata suggestion pool** | Library-wide datalist values per field name (studio, genres, tags, country, mpaa, actor name, actor role) from `series` ∪ `videos`. Shared by series and video Metadata forms - see [download-and-library.md](download-and-library.md). |
 | **Video columns** / **Acquired** / **info.json** / **File size** / **Upload time** | Creatorr-owned packed fields; episode meta columns (plot=`description`, sorttitle, …) feed episode NFO; `acquired_at` on pack; `sidecars_acquired_at` when sidecars packed/refreshed; opaque yt-dlp sidecar written only with media (never edit content via Metadata editor; never rewrite on sidecar-only refresh); `files.size_bytes` for video kind; `upload_date` RFC3339 UTC. |
@@ -62,7 +62,7 @@ When introducing a new domain term, add it here (or the topic doc above if it be
 | `notifications` | In-app notify log (event, title, body, optional `task_id`, `external_ok`, `read_at`) |
 | `cookies` | Netscape jar text per domain key (`default` = fallback for all hosts) |
 | `domain_runtime` | Soft pause per hostname (`paused`); missing row = not paused; never a limits override |
-| `domains` | Hostname profiles: `default` (global limits + Use FlareSolverr) + host overrides; `active`, optional limit overrides and `use_flaresolverr` (NULL = inherit `default`; 0/1 = Off/On), FlareSolverr HTTP pre-solve when effective on |
+| `domains` | Hostname profiles: `default` (global limits + Use FlareSolverr + optional cookies/credentials) + host overrides; `active`, optional limit overrides and `use_flaresolverr` (NULL = inherit `default`; 0/1 = Off/On), optional `username`/`password` (NULL = inherit; empty username = explicitly none), FlareSolverr HTTP pre-solve when effective on |
 | `settings` | Key/value runtime config |
 
 ## Video statuses (minimum)

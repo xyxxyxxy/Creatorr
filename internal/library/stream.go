@@ -9,13 +9,20 @@ import (
 	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/db"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 const keyStreamURLToken = "stream_url_token" // settings row; shown in Streaming UI (not SeedDefaults form key)
 
-// StreamURL builds the client-facing proxy URL for a video (.strm contents).
+// StreamURL builds the default HLS master proxy URL (.strm for pipe/hls kinds).
 // publicBase must be scheme+host+port with no trailing slash (Settings external_base_url).
 func StreamURL(publicBase string, videoID int64, token string) (string, error) {
+	return StreamURLForKind(publicBase, videoID, token, "")
+}
+
+// StreamURLForKind builds the client-facing proxy URL for a video (.strm contents).
+// Progressive CDN uses /progressive (no .m3u8) so Emby Direct Plays MP4; pipe/hls use master.m3u8.
+func StreamURLForKind(publicBase string, videoID int64, token, kind string) (string, error) {
 	base := strings.TrimRight(strings.TrimSpace(publicBase), "/")
 	if base == "" {
 		return "", fmt.Errorf("%w: external Creatorr URL required for stream", ErrInvalid)
@@ -23,7 +30,11 @@ func StreamURL(publicBase string, videoID int64, token string) (string, error) {
 	if token == "" {
 		return "", fmt.Errorf("%w: stream token missing", ErrInvalid)
 	}
-	u, err := url.Parse(base + "/stream/videos/" + fmt.Sprintf("%d", videoID) + "/master.m3u8")
+	suffix := "/master.m3u8"
+	if strings.EqualFold(strings.TrimSpace(kind), ytdlp.UrlsKindProgressive) {
+		suffix = "/progressive"
+	}
+	u, err := url.Parse(base + "/stream/videos/" + fmt.Sprintf("%d", videoID) + suffix)
 	if err != nil {
 		return "", err
 	}

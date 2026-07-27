@@ -413,6 +413,42 @@ seg00000.ts
 	}
 }
 
+func TestPromoteSkipsCompleteCache(t *testing.T) {
+	s := openLib(t)
+	s.CacheDir = t.TempDir()
+	_ = settings.Set(s.DB, settings.KeyStreamPlaybackCache, "true")
+	vid := seedStreamVideo(t, s, "pc-complete-skip")
+
+	dir := s.PlaybackCacheDir(vid)
+	_ = os.MkdirAll(dir, 0o755)
+	playlist := "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:10.0,\nseg00000.ts\n#EXT-X-ENDLIST\n"
+	_ = os.WriteFile(filepath.Join(dir, "index.m3u8"), []byte(playlist), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "seg00000.ts"), []byte("vod"), 0o644)
+	writePlaybackMeta(t, s, vid, library.PlaybackMeta{
+		CachedSeconds: 10, HandoffSourceSeconds: 10, Complete: true,
+		WrittenAt: "t", LastAccess: "t", NextSeg: 1, LiveSegsCopied: 0,
+	})
+
+	live := t.TempDir()
+	_ = os.WriteFile(filepath.Join(live, "index.m3u8"), []byte("#EXTM3U\n#EXTINF:4.0,\nseg00000.ts\n#EXT-X-ENDLIST\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(live, "seg00000.ts"), []byte("live-again"), 0o644)
+
+	if err := s.PromoteLiveSegmentsToPlayback(vid, live, 10); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != playlist {
+		t.Fatalf("complete cache mutated:\n%s", body)
+	}
+	m, ok := s.LoadPlaybackMeta(vid)
+	if !ok || !m.Complete || m.CachedSeconds != 10 {
+		t.Fatalf("meta changed: ok=%v %+v", ok, m)
+	}
+}
+
 func TestEnsurePlaybackHandoffDiscontinuity(t *testing.T) {
 	s := openLib(t)
 	s.CacheDir = t.TempDir()
@@ -535,11 +571,16 @@ func writePlaybackMeta(t *testing.T, s *library.Store, vid int64, m library.Play
 		_ = os.WriteFile(filepath.Join(dir, "index.m3u8"), []byte("#EXTM3U\n#EXTINF:1.0,\nseg00000.ts\n"), 0o644)
 	}
 	// Write meta via promote path isn't available; use JSON file like production.
+	completeJSON := "false"
+	if m.Complete {
+		completeJSON = "true"
+	}
 	path := filepath.Join(dir, "meta.json")
 	raw := []byte(`{"cached_seconds":` + formatFloat(m.CachedSeconds) +
 		`,"handoff_source_seconds":` + formatFloat(m.HandoffSourceSeconds) +
-		`,"complete":false,"written_at":"` + m.WrittenAt + `","last_access":"` + m.LastAccess +
-		`","next_seg":` + strconv.Itoa(m.NextSeg) + `}`)
+		`,"complete":` + completeJSON + `,"written_at":"` + m.WrittenAt + `","last_access":"` + m.LastAccess +
+		`","next_seg":` + strconv.Itoa(m.NextSeg) +
+		`,"live_segs_copied":` + strconv.Itoa(m.LiveSegsCopied) + `}`)
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		t.Fatal(err)
 	}

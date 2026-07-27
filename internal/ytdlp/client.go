@@ -27,6 +27,8 @@ type Client struct {
 type ListOpts struct {
 	URL             string
 	CookiesPath     string
+	Username        string
+	Password        string
 	PlaylistEnd     int // 0 = no cap
 	FlareSolverrURL string
 	LimitRate       string
@@ -37,6 +39,8 @@ type ListOpts struct {
 type ResolveOpts struct {
 	URL             string
 	CookiesPath     string
+	Username        string
+	Password        string
 	FlareSolverrURL string
 	LimitRate       string
 	SleepRequests   float64
@@ -47,6 +51,8 @@ type UrlsOpts struct {
 	URL             string
 	FormatSelector  string
 	CookiesPath     string
+	Username        string
+	Password        string
 	FlareSolverrURL string
 	LimitRate       string
 	SleepRequests   float64
@@ -57,6 +63,8 @@ type StreamOpts struct {
 	URL             string
 	FormatSelector  string
 	CookiesPath     string
+	Username        string
+	Password        string
 	FlareSolverrURL string
 	LimitRate       string
 	SleepRequests   float64
@@ -77,6 +85,8 @@ type DownloadOpts struct {
 	OutDir          string
 	FormatSelector  string
 	CookiesPath     string
+	Username        string
+	Password        string
 	FlareSolverrURL string
 	LimitRate       string
 	SleepRequests   float64
@@ -91,6 +101,8 @@ type SidecarsOpts struct {
 	URL             string
 	OutDir          string
 	CookiesPath     string
+	Username        string
+	Password        string
 	FlareSolverrURL string
 	LimitRate       string
 	SleepRequests   float64
@@ -152,6 +164,8 @@ func (c *Client) List(ctx context.Context, opts ListOpts) ([]Entry, error) {
 	o := options{
 		url:           opts.URL,
 		cookies:       opts.CookiesPath,
+		username:      opts.Username,
+		password:      opts.Password,
 		flaresolverr:  opts.FlareSolverrURL,
 		limitRate:     opts.LimitRate,
 		sleepRequests: sleepSeconds(opts.SleepRequests),
@@ -184,6 +198,8 @@ func (c *Client) DumpPlaylistInfo(ctx context.Context, opts ListOpts) (map[strin
 	o := options{
 		url:           opts.URL,
 		cookies:       opts.CookiesPath,
+		username:      opts.Username,
+		password:      opts.Password,
 		flaresolverr:  opts.FlareSolverrURL,
 		limitRate:     opts.LimitRate,
 		sleepRequests: sleepSeconds(opts.SleepRequests),
@@ -206,6 +222,8 @@ func (c *Client) Resolve(ctx context.Context, opts ResolveOpts) (Entry, error) {
 	o := options{
 		url:           opts.URL,
 		cookies:       opts.CookiesPath,
+		username:      opts.Username,
+		password:      opts.Password,
 		flaresolverr:  opts.FlareSolverrURL,
 		limitRate:     opts.LimitRate,
 		sleepRequests: sleepSeconds(opts.SleepRequests),
@@ -240,6 +258,8 @@ func (c *Client) FetchUrls(ctx context.Context, opts UrlsOpts) (UrlsResult, erro
 	o := options{
 		url:           opts.URL,
 		cookies:       opts.CookiesPath,
+		username:      opts.Username,
+		password:      opts.Password,
 		format:        opts.FormatSelector,
 		flaresolverr:  opts.FlareSolverrURL,
 		limitRate:     opts.LimitRate,
@@ -269,6 +289,8 @@ func (c *Client) Download(ctx context.Context, opts DownloadOpts) (string, error
 		url:           opts.URL,
 		outdir:        opts.OutDir,
 		cookies:       opts.CookiesPath,
+		username:      opts.Username,
+		password:      opts.Password,
 		format:        opts.FormatSelector,
 		flaresolverr:  opts.FlareSolverrURL,
 		limitRate:     opts.LimitRate,
@@ -300,6 +322,8 @@ func (c *Client) FetchSidecars(ctx context.Context, opts SidecarsOpts) (info, th
 		url:           opts.URL,
 		outdir:        opts.OutDir,
 		cookies:       opts.CookiesPath,
+		username:      opts.Username,
+		password:      opts.Password,
 		flaresolverr:  opts.FlareSolverrURL,
 		limitRate:     opts.LimitRate,
 		sleepRequests: sleepSeconds(opts.SleepRequests),
@@ -433,6 +457,8 @@ func streamOptions(opts StreamOpts) options {
 	return options{
 		url:              opts.URL,
 		cookies:          opts.CookiesPath,
+		username:         opts.Username,
+		password:         opts.Password,
 		format:           opts.FormatSelector,
 		flaresolverr:     opts.FlareSolverrURL,
 		limitRate:        opts.LimitRate,

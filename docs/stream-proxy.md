@@ -26,9 +26,9 @@ Changing delivery mode does not move existing files. Operator toggles only.
 
 Worker calls yt-dlp **`urls`** (not full download) to validate the site can resolve a play path. Stream mode is VOD-focused (storage alternative to archive download), not live broadcast delivery. When the extract reports **`is_live`**, pack finishes **`done`**, video stays **`wanted`** (history `live_skipped`; code `LiveBroadcastSkipped`; info notify `live_skipped` with task link), and **no** `.strm` / NFO / `cache_beginning` - retry on a later wanted pass after the broadcast ends. When that extract reports a `media_type` listed in the series **auto ignore filters**, pack finishes **`done`**, video → **`ignored`** (reason `media_type`), and **no** `.strm` / NFO write and **no** `cache_beginning` enqueue. Empty/missing type never auto-ignores (same as download). Live check runs before media-type auto-ignore. Otherwise writes library files:
 
-1. **`.strm`** - one line: Creatorr proxy URL (see below). Still **one** `.strm` entry regardless of progressive / pipe / HLS.
+1. **`.strm`** - one line: Creatorr proxy URL shaped by `urls` kind (`/progressive` or `/master.m3u8`; see Stream proxy). Still **one** `.strm` entry regardless of progressive / pipe / HLS.
 2. **`.nfo`** - full episode NFO (same shape as download pack), including **runtime / durationinseconds** when resolve/urls reports duration (Emby uses this for `.strm` length).
-3. **Optional thumb** - copied beside the episode when `videos.thumbnail_url` is fetchable.
+3. **Optional thumb** - yt-dlp `--write-thumbnail` during pack (cookies / Flare / membership, same as Refresh sidecars). Falls back to a soft HTTP fetch of `videos.thumbnail_url` when yt-dlp did not write one.
 4. **Optional subtitle sidecars** - when Library `subtitle_langs` is non-empty, yt-dlp fetches subtitle files (same settings as archive download: langs / auto; always converted to SRT) and copies them beside the `.strm` with language in the filename (e.g. `.en.srt`, or `.en.auto.srt` for auto-only). Media servers can load these as external tracks. Subtitles are **not** muxed into the stream proxy. Soft-ok if fetch fails. Empty langs = skip. Replace sidecars also refreshes subs for `streamable` episodes (never rewrites `info.json`).
 
 **Maturity:** when a series' quality profile `maturity_redownload_hours` > 0, streamable videos due for media maturity enqueue **`pack_stream`** again (rebuild beginning + sidecars policy). Sidecar maturity uses `refresh_sidecars` without touching media. See [`download-and-library.md`](download-and-library.md).
@@ -62,7 +62,7 @@ Manual **Prepare stream** enqueues one `pack_stream` at front of the domain lane
 | `external_base_url` (Settings → Library → Streaming) | Absolute origin the external media server uses to reach Creatorr for `.strm` playback (scheme+host+port, no trailing slash). **Essential for streaming** - Emby/Jellyfin/Kodi/etc. play `.strm` by streaming **through** Creatorr’s proxy. |
 
 - **Empty:** stream pack and stream delivery UI disabled (`pack_stream` enqueue fails; proxy route still mounted but pack requires base URL).
-- **Set:** `.strm` contents and proxy links use `{external_base_url}/stream/videos/{id}/master.m3u8?token=…` (`.m3u8` suffix so Emby treats it as HLS). Legacy `/stream/videos/{id}?token=` still works.
+- **Set:** `.strm` contents depend on last `urls` kind: progressive → `{external_base_url}/stream/videos/{id}/progressive?token=…` (MP4 Range-proxy); pipe/hls → `{external_base_url}/stream/videos/{id}/master.m3u8?token=…`. Legacy `/stream/videos/{id}?token=` still works (resolves then redirects or pipes). After changing kinds or upgrading CDN-first play, run **Regenerate all .strm files**.
 
 **Bootstrap:** if Settings is empty on first boot and env `CREATORR_PUBLIC_BASE_URL` is set, Creatorr copies it into `external_base_url` once. Prefer the Settings field afterward; env is not a live override.
 
@@ -80,11 +80,13 @@ Creatorr stores a random **`stream_url_token`** in SQLite (auto-created). Shown 
 
 | Path | Role |
 | --- | --- |
-| `GET`/`HEAD` `/stream/videos/{id}/master.m3u8?token=` | Entry from `.strm` (also bare `/stream/videos/{id}`). `HEAD` returns Content-Type only (no mux). Pipe mux; beginning handoff when beginning cached. |
-| `GET`/`HEAD` `/stream/videos/{id}/hls?token=&u=` | HLS media playlists + segments (rewritten URIs only). |
+| `GET`/`HEAD` `/stream/videos/{id}/progressive?token=` | Progressive CDN `.strm` entry. Range-proxy of the signed media URL; 403 refreshes via `urls` once. `HEAD` returns `video/mp4` without resolve. |
+| `GET`/`HEAD` `/stream/videos/{id}/master.m3u8?token=` | HLS `.strm` entry (also bare `/stream/videos/{id}`). Native CDN HLS rewrite when kind is `hls`; pipe session MPEG-TS when kind is `pipe`. Progressive kind on this path **302**s to `/progressive`. `HEAD` returns HLS Content-Type only (no mux). |
+| `GET`/`HEAD` `/stream/videos/{id}/hls?token=&u=` | Legacy CDN HLS asset (query `u=`). Prefer path form below. |
+| `GET`/`HEAD` `/stream/videos/{id}/hls/u/{enc}?token=` | CDN HLS playlists + segments (path-encoded upstream; **no `&`** - Emby/ffmpeg choke on query ampersands). |
 | `GET`/`HEAD` `/stream/videos/{id}/hls/local/{sid}/{file}?token=` | Pipe session playlist/segments (MPEG-TS). |
 | `GET`/`HEAD` `/stream/videos/{id}/beginning/{file}?token=` | Cached download-beginning segments (durable; not library media). |
-| `GET`/`HEAD` `/stream/videos/{id}/playback/{file}?token=` | Progressive on-play cache segments (durable; not library media). |
+| `GET`/`HEAD` `/stream/videos/{id}/playback/{file}?token=` | Progressive on-play cache segments for **pipe** play (durable; not library media). |
 
 Flow when a client opens a `.strm` URL:
 
@@ -92,26 +94,24 @@ Flow when a client opens a `.strm` URL:
 2. Resolve page URL (video `source_url` only - no feed URL fallback).
 3. Gate: domain **active**, yt-dlp binary present.
 4. Invoke yt-dlp **`urls`** with quality profile format selector, domain cookies, optional FlareSolverr. Resolve has **no** pace flags (`download_rate_limit` / `sleep_requests` / `stream_play_rate_limit`). Mux/pipe uses optional domain **`stream_play_rate_limit`** (`--limit-rate` only; never sleep). **`cache_beginning`** uses `download_rate_limit` + `sleep_requests` like archive download.
-5. **Play path:** master/`.strm` always **pipe** (Emby cancels native CDN HLS on `.strm`). When a **download beginning** is on disk: beginning segs immediately, live mux at N (`--hls-start-sec`), one playlist with `#EXT-X-DISCONTINUITY`; **EVENT** (real segs only) while the mux is open, then **VOD + ENDLIST** when live ends (no phantom duration pad). Without beginning: pipe from 0 with the same EVENT→VOD rules. Native `/hls?u=` and progressive routes remain for non-master use.
+5. **Play path (CDN-first):** branch on `urls` kind. **Progressive** → Range-proxy CDN (no ffmpeg). **HLS** → rewrite CDN master through Creatorr `/hls?u=` (native CDN segments). **Pipe** (separate A+V) → session MPEG-TS HLS via ffmpeg. CDN failure falls back to pipe (progressive failure **302**s to `master.m3u8`). When a **download beginning** is on disk (pipe only): beginning segs immediately, live mux at N, EVENT then VOD + ENDLIST.
 
-| `kind` from `urls` | Used for | Seek |
+| `kind` from `urls` | `.strm` / play | Seek |
 | --- | --- | --- |
-| (any on master/`.strm`, beginning cached) | Beginning segs + live session MPEG-TS HLS from N; EVENT then VOD | **Linear** - mid scrub may stall until mux catches up |
-| (any on master/`.strm`, no beginning) | Session MPEG-TS HLS from 0; EVENT then VOD | **Linear** - mid scrub may stall until mux catches up |
-| `hls` (via `/hls?u=`) | Rewritten CDN playlist + segment proxy | Segment-based |
-| `progressive` (non-master) | Range-proxy CDN | Good (HTTP Range) |
+| `progressive` | `/progressive` Range-proxy | Good (HTTP Range) |
+| `hls` | `master.m3u8` → CDN rewrite | Segment-based |
+| `pipe` (beginning cached) | Beginning segs + live session MPEG-TS from N; EVENT then VOD | **Linear** - mid scrub may stall until mux catches up |
+| `pipe` (no beginning) | Session MPEG-TS HLS from 0; EVENT then VOD | **Linear** - mid scrub may stall until mux catches up |
 
-**ABR** = HLS multi-variant through Creatorr rewrite when using `/hls`. Not an Emby multi-quality API and not DASH MPD passthrough.
+**ABR** = HLS multi-variant through Creatorr rewrite when using CDN `hls` kind. Not an Emby multi-quality API and not DASH MPD passthrough.
 
-Remux does **not** run on the proxy path - archive **download** remux stays MKV-only ([download-and-library.md](download-and-library.md) § Remux). Creatorr owns A+V merge for `pipe` (ffmpeg / session HLS via yt-dlp).
+Remux does **not** run on the CDN progressive path. Archive **download** remux stays MKV-only ([download-and-library.md](download-and-library.md) § Remux). Creatorr owns A+V merge only for `pipe` (ffmpeg / session HLS).
 
 **DASH / progressive HD:** Progressive-only CDN URLs often cap ~360p–720p. yt-dlp prefers **hls** when a usable master exists, else **pipe** (DASH A+V → session MPEG-TS HLS; Matroska fallback), else progressive. Stream play prefers **H.264+AAC** when available so Emby can Direct Play HLS (AV1/VP9+Opus in HLS often fails with "No compatible streams"). See [ytdlp.md](ytdlp.md).
 
-**Cold start:** Pipe HLS needs one yt-dlp `urls` resolve plus ffmpeg until the first keyframe-backed segment (no `-hls_init_time`; copy mux waits for a clean cut). Emby HEAD probes skip resolve. Short in-memory `urls` cache (~45s) and a **warm HLS session** (idle TTL ~2m, extended while stream_play occupancy is fresh) skip resolve on master re-fetch. No mid-session mux restart for scrub. Growing progressive-cache handoff reuses the same mux (does not cancel/restart ffmpeg). Media playlists use `#EXT-X-START:TIME-OFFSET=0`. While the live mux is open, Creatorr serves an **EVENT** playlist of **real segs only** (durable prefix + unpromoted live segs) so Emby re-polls and never prefetches phantom URIs. Once live writes `#EXT-X-ENDLIST`, the playlist becomes **VOD + ENDLIST** at the real mux length (declared duration longer than content must not invent segs). When a **download beginning** / progressive prefix is on disk, play serves those segs first and starts live mux at N. Mid-timeline scrub may stall/404 until mux catches up.
+**Cold start:** Progressive/HLS CDN: one `urls` resolve then bytes from CDN (progressive has no EVENT scrubber growth; CDN HLS VOD masters usually advertise full duration). Pipe HLS still needs resolve plus ffmpeg until the first keyframe-backed segment; while the mux is open the playlist is **EVENT** (duration counts up in Emby until ENDLIST). Creatorr prefers **CDN `hls`** when yt-dlp A+V share one `manifest_url` (avoids pipe for Cloudflare Stream-style masters). Short in-memory `urls` cache (~45s) and a **warm HLS session** (idle TTL ~2m, pipe only) skip resolve on master re-fetch. Progressive 403 mid-play re-resolves once. Native CDN HLS segment `u=` URLs can expire without playlist refresh; pipe fallback covers hard failures. Do **not** pack raw CDN URLs into `.strm` (signed URLs expire).
 
-**Skipping resolve entirely on first cold play** is not reliable when CDN URLs from `urls` expire; packing them into the DB would still need a refresh on 403. Native `kind: hls` / progressive have the same expiry problem.
-
-**Concurrency:** No hard session cap in this phase; `pipe` costs CPU (ffmpeg) per concurrent play.
+**Concurrency:** No hard session cap; `pipe` costs CPU (ffmpeg) per concurrent play. Progressive/HLS CDN play is mostly proxy I/O.
 
 ## Operator expectations
 

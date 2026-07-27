@@ -88,6 +88,11 @@
           "Value" .DefaultCookies
           "ShowGuide" true
         )}}
+        {{template "domain_credentials_field" (dict
+          "DefaultUsername" .DefaultUsername
+          "CredentialsUsername" .DefaultUsername
+          "ShowGuide" true
+        )}}
       </fieldset>
     </div>
     <div class="card-actions"><button type="submit" class="btn btn-primary">Save</button></div>
@@ -109,19 +114,21 @@
   <th><span class="tooltip tooltip-top inline-flex" data-tip="Sleep" aria-label="Sleep"><i data-lucide="snail" class="size-4"></i></span></th>
   <th><span class="tooltip tooltip-top inline-flex" data-tip="Flare" aria-label="Flare"><i data-lucide="flame" class="size-4"></i></span></th>
   <th><span class="tooltip tooltip-top inline-flex" data-tip="Cookies" aria-label="Cookies"><i data-lucide="cookie" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Credentials" aria-label="Credentials"><i data-lucide="key-round" class="size-4"></i></span></th>
   <th></th>
 </tr></thead>
 <tbody>
   {{range .DomainOverrides}}
   <tr>
     <td class="font-mono">{{.Domain}}</td>
-    <td>{{if .CooldownOverride}}{{.CooldownOverride}}{{else}}{{template "muted" "default"}}{{end}}</td>
-    <td>{{if .QueueOverride}}{{.QueueOverride}}{{else}}{{template "muted" "default"}}{{end}}</td>
-    <td>{{if .ParallelOverride}}{{.ParallelOverride}}{{else}}{{template "muted" "default"}}{{end}}</td>
-    <td>{{if .RateOverride}}<span class="font-mono text-xs">{{.RateOverride}}</span>{{else}}{{template "muted" "default"}}{{end}}</td>
-    <td>{{if .SleepOverride}}{{.SleepOverride}}{{else}}{{template "muted" "default"}}{{end}}</td>
-    <td>{{if eq .FlareOverride "on"}}<span class="badge badge-info badge-sm">on</span>{{else if eq .FlareOverride "off"}}{{template "muted" "off"}}{{else}}{{template "muted" "default"}}{{end}}</td>
-    <td>{{if .HasCookies}}<span class="badge badge-success badge-sm">set</span>{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .CooldownOverride}}{{.CooldownOverride}}{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .QueueOverride}}{{.QueueOverride}}{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .ParallelOverride}}{{.ParallelOverride}}{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .RateOverride}}<span class="font-mono text-xs">{{.RateOverride}}</span>{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .SleepOverride}}{{.SleepOverride}}{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if eq .FlareOverride "on"}}<span class="tooltip tooltip-top inline-flex" data-tip="On" aria-label="FlareSolverr on"><i data-lucide="flame" class="size-4 text-error"></i></span>{{else if eq .FlareOverride "off"}}{{template "muted" "off"}}{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .HasCookies}}<span class="tooltip tooltip-top inline-flex" data-tip="Set" aria-label="Cookies set"><i data-lucide="cookie" class="size-4 text-amber-800"></i></span>{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .HasCredentials}}<span class="tooltip tooltip-top inline-flex" data-tip="Set" aria-label="Credentials set"><i data-lucide="key-round" class="size-4 text-primary"></i></span>{{else}}{{template "empty_value"}}{{end}}</td>
     <td class="whitespace-nowrap">
       <label for="modal-edit-domain-{{.Domain}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
         <i data-lucide="pencil" class="size-3.5"></i>
@@ -141,13 +148,16 @@
 {{template "list_panel_end"}}
 
 {{$defs := .DefaultLimits}}
+{{$defUser := .DefaultUsername}}
 {{$redir := "/settings/queue"}}
 {{$flareOK := .FlareConfigured}}
+{{$datalist := .DomainDatalist}}
 {{range .DomainOverrides}}
 {{template "domain_override_modal" (dict
   "Mode" "edit"
   "Redirect" $redir
   "Domain" .Domain
+  "DomainDatalist" $datalist
   "CooldownOverride" .CooldownOverride
   "QueueOverride" .QueueOverride
   "ParallelOverride" .ParallelOverride
@@ -156,6 +166,10 @@
   "SleepOverride" .SleepOverride
   "FlareOverride" .FlareOverride
   "CookieContent" .CookieContent
+  "CredentialsUsername" .CredentialsUsername
+  "CredentialsInherit" .CredentialsInherit
+  "CredentialsHasStoredPassword" .CredentialsHasStoredPassword
+  "DefaultUsername" $defUser
   "HasRow" .HasRow
   "DefaultCooldown" $defs.TaskCooldownSeconds
   "DefaultQueue" $defs.MaxDownloadQueue
@@ -197,6 +211,7 @@
   "DefaultStreamPlayRate" .DefaultLimits.StreamPlayRateLimit
   "DefaultSleep" .DefaultLimits.SleepRequests
   "DefaultFlare" .DefaultLimits.UseFlareSolverr
+  "DefaultUsername" .DefaultUsername
   "FlareConfigured" .FlareConfigured
 )}}
 

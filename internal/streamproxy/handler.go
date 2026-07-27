@@ -3,9 +3,11 @@ package streamproxy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -58,8 +60,14 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Method(http.MethodGet, p, http.HandlerFunc(h.serveVideo))
 		r.Method(http.MethodHead, p, http.HandlerFunc(h.serveVideo))
 	}
+	r.Method(http.MethodGet, "/stream/videos/{id}/progressive", http.HandlerFunc(h.serveProgressiveVideo))
+	r.Method(http.MethodHead, "/stream/videos/{id}/progressive", http.HandlerFunc(h.serveProgressiveVideo))
 	r.Method(http.MethodGet, "/stream/videos/{id}/hls", http.HandlerFunc(h.serveHLSAsset))
 	r.Method(http.MethodHead, "/stream/videos/{id}/hls", http.HandlerFunc(h.serveHLSAsset))
+	// Path-form upstream (no '&') - Emby/ffmpeg HLS parsers choke on query ampersands.
+	hlsU := "/stream/videos/{id}/hls/u/{enc}"
+	r.Method(http.MethodGet, hlsU, http.HandlerFunc(h.serveHLSAsset))
+	r.Method(http.MethodHead, hlsU, http.HandlerFunc(h.serveHLSAsset))
 	// Path form keeps segment URIs free of '&' (Emby/ffmpeg HLS parsers choke on query ampersands).
 	local := "/stream/videos/{id}/hls/local/{sid}/{file}"
 	r.Method(http.MethodGet, local, http.HandlerFunc(h.serveHLSLocal))
@@ -80,9 +88,30 @@ type playCtx struct {
 	format              string
 	jar                 string
 	flare               string
+	username            string
+	password            string
 	token               string
 	taskID              int64
 	streamPlayRateLimit string // yt-dlp --limit-rate for mux/pipe; never sleep
+}
+
+func (pc playCtx) urlsOpts() ytdlp.UrlsOpts {
+	return ytdlp.UrlsOpts{
+		URL:             pc.pageURL,
+		FormatSelector:  pc.format,
+		CookiesPath:     pc.jar,
+		Username:        pc.username,
+		Password:        pc.password,
+		FlareSolverrURL: pc.flare,
+	}
+}
+
+func (pc playCtx) streamOpts(urls ytdlp.UrlsResult) ytdlp.StreamOpts {
+	return ytdlp.StreamOptsFromUrls(ytdlp.StreamOpts{
+		URL: pc.pageURL, FormatSelector: pc.format,
+		CookiesPath: pc.jar, Username: pc.username, Password: pc.password,
+		FlareSolverrURL: pc.flare, LimitRate: pc.streamPlayRateLimit,
+	}, urls)
 }
 
 func (h *Handler) serveVideo(w http.ResponseWriter, r *http.Request) {
@@ -111,11 +140,106 @@ func (h *Handler) serveVideo(w http.ResponseWriter, r *http.Request) {
 		_ = h.Library.EnsureStreamNFODuration(pc.videoID, int(urls.DurationSeconds+0.5))
 	}
 
-	// Emby cancels native CDN HLS on .strm. Pipe mux (with beginning / progressive handoff when cached).
-	if h.tryServeCompletePlayback(w, r, pc.videoID, pc.token) {
+	kind := strings.TrimSpace(strings.ToLower(urls.Kind))
+	switch kind {
+	case ytdlp.UrlsKindProgressive:
+		// Old .strm pointed at master.m3u8; send Emby to the MP4 Range path.
+		h.redirectToProgressive(w, r, pc.videoID, pc.token)
+		return
+	case ytdlp.UrlsKindHLS:
+		if err := h.serveHLSMasterErr(w, r, pc, urls); err != nil {
+			slog.Warn("stream proxy", "msg", "cdn hls failed; falling back to pipe", "err", err, "video_id", pc.videoID)
+			h.servePipeOrHLS(w, r, pc, urls)
+		}
+		return
+	default:
+		// Pipe (separate A+V) or unknown: session MPEG-TS HLS.
+		if h.tryServeCompletePlayback(w, r, pc.videoID, pc.token) {
+			return
+		}
+		h.servePipeOrHLS(w, r, pc, urls)
+	}
+}
+
+// serveProgressiveVideo is the .strm target for progressive CDN (Range-proxy MP4).
+func (h *Handler) serveProgressiveVideo(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodHead {
+		h.serveProgressiveHead(w, r)
 		return
 	}
-	h.servePipeOrHLS(w, r, pc, urls)
+	pc, urls, cleanup, ok := h.resolvePlay(w, r)
+	if !ok {
+		return
+	}
+	defer cleanup()
+
+	if urls.DurationSeconds <= 0 {
+		if sec := h.durationSeconds(pc.videoID); sec > 0 {
+			urls.DurationSeconds = float64(sec)
+		}
+	}
+	if urls.DurationSeconds > 0 {
+		urls.DurationSeconds = h.playDuration(pc.videoID, urls.DurationSeconds)
+		_ = h.Library.EnsureStreamNFODuration(pc.videoID, int(urls.DurationSeconds+0.5))
+	}
+
+	kind := strings.TrimSpace(strings.ToLower(urls.Kind))
+	if kind != ytdlp.UrlsKindProgressive || strings.TrimSpace(urls.URL) == "" {
+		// Resolve said pipe/hls: send client to master HLS path.
+		h.redirectToMaster(w, r, pc.videoID, pc.token)
+		return
+	}
+	if err := h.serveProgressive(w, r, pc, urls); err != nil {
+		slog.Warn("stream proxy", "msg", "cdn progressive failed; falling back to pipe master", "err", err, "video_id", pc.videoID)
+		h.redirectToMaster(w, r, pc.videoID, pc.token)
+	}
+}
+
+func (h *Handler) redirectToProgressive(w http.ResponseWriter, r *http.Request, videoID int64, token string) {
+	loc := "/stream/videos/" + strconv.FormatInt(videoID, 10) + "/progressive?token=" + url.QueryEscape(token)
+	http.Redirect(w, r, loc, http.StatusFound)
+}
+
+func (h *Handler) redirectToMaster(w http.ResponseWriter, r *http.Request, videoID int64, token string) {
+	loc := "/stream/videos/" + strconv.FormatInt(videoID, 10) + "/master.m3u8?token=" + url.QueryEscape(token)
+	http.Redirect(w, r, loc, http.StatusFound)
+}
+
+func (h *Handler) serveProgressiveHead(w http.ResponseWriter, r *http.Request) {
+	if h.Library == nil {
+		streamFail(w, http.StatusServiceUnavailable, "stream unavailable", nil)
+		return
+	}
+	token := r.URL.Query().Get("token")
+	if !library.ValidStreamToken(h.Library.DB, token) {
+		streamFail(w, http.StatusUnauthorized, "unauthorized", nil)
+		return
+	}
+	vid, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || vid <= 0 {
+		streamFail(w, http.StatusNotFound, "not found", err)
+		return
+	}
+	v, err := h.Library.GetVideo(vid)
+	if err != nil {
+		streamFail(w, http.StatusNotFound, "not found", err)
+		return
+	}
+	ser, err := h.Library.GetSeries(v.SeriesID, false)
+	if err != nil || !ser.IsStream() {
+		streamFail(w, http.StatusBadRequest, "not a stream series", err)
+		return
+	}
+	if v.Status != "streamable" {
+		streamFail(w, http.StatusConflict, "video not streamable", nil)
+		return
+	}
+	w.Header().Set("Content-Type", "video/mp4")
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.WriteHeader(http.StatusOK)
+	if sec := h.durationSeconds(vid); sec > 0 {
+		_ = h.Library.EnsureStreamNFODuration(vid, sec)
+	}
 }
 
 // tryServeWarmPipeMaster returns true if an existing HLS session answered the master request.
@@ -296,6 +420,12 @@ func invalidateCachedUrls(videoID int64, format string) {
 	urlsCacheMu.Unlock()
 }
 
+func clearUrlsCacheForTest() {
+	urlsCacheMu.Lock()
+	urlsCache = map[string]urlsCacheEntry{}
+	urlsCacheMu.Unlock()
+}
+
 func (h *Handler) resolvePlay(w http.ResponseWriter, r *http.Request) (playCtx, ytdlp.UrlsResult, func(), bool) {
 	noop := func() {}
 	if h.Library == nil {
@@ -378,10 +508,15 @@ func (h *Handler) resolvePlay(w http.ResponseWriter, r *http.Request) (playCtx, 
 		streamRate = lim.StreamPlayRateLimit
 	}
 	taskID := h.touchOccupancy(vid, v.SeriesID, domain, token)
+	authUser, authPass := "", ""
+	if creds, err := settings.CredentialsForURL(h.Library.DB, pageURL); err == nil {
+		authUser, authPass = creds.Username, creds.Password
+	}
 	pcBase := playCtx{
 		videoID: vid, seriesID: v.SeriesID, domain: domain,
 		pageURL: pageURL, format: format,
-		jar: jar, flare: flare, token: token, taskID: taskID,
+		jar: jar, flare: flare, username: authUser, password: authPass,
+		token: token, taskID: taskID,
 		streamPlayRateLimit: streamRate,
 	}
 
@@ -405,12 +540,7 @@ func (h *Handler) resolvePlay(w http.ResponseWriter, r *http.Request) (playCtx, 
 			_ = h.Queue.MergeDetailJSON(taskID, map[string]any{ytdlp.DetailKeyPOToken: st})
 		},
 	)
-	urls, err := h.YtDlp.FetchUrls(ctx, ytdlp.UrlsOpts{
-		URL:             pageURL,
-		FormatSelector:  format,
-		CookiesPath:     jar,
-		FlareSolverrURL: flare,
-	})
+	urls, err := h.YtDlp.FetchUrls(ctx, pcBase.urlsOpts())
 	if err != nil {
 		cleanup()
 		h.handlePlayYtDlpFail(r.Context(), pcBase, err)
@@ -489,7 +619,7 @@ func (h *Handler) touchOccupancyForVideo(videoID int64, token string) {
 	h.touchOccupancy(videoID, v.SeriesID, domain, token)
 }
 
-func (h *Handler) serveProgressive(w http.ResponseWriter, r *http.Request, pc playCtx, urls ytdlp.UrlsResult) {
+func (h *Handler) serveProgressive(w http.ResponseWriter, r *http.Request, pc playCtx, urls ytdlp.UrlsResult) error {
 	err := proxyProgressive(w, r, urls.URL, urls.Headers)
 	if err == errUpstreamForbidden {
 		invalidateCachedUrls(pc.videoID, pc.format)
@@ -508,23 +638,22 @@ func (h *Handler) serveProgressive(w http.ResponseWriter, r *http.Request, pc pl
 				_ = h.Queue.MergeDetailJSON(pc.taskID, map[string]any{ytdlp.DetailKeyPOToken: st})
 			},
 		)
-		urls2, err2 := h.YtDlp.FetchUrls(ctx, ytdlp.UrlsOpts{
-			URL: pc.pageURL, FormatSelector: pc.format,
-			CookiesPath: pc.jar, FlareSolverrURL: pc.flare,
-		})
+		urls2, err2 := h.YtDlp.FetchUrls(ctx, pc.urlsOpts())
 		if err2 != nil || urls2.Kind != ytdlp.UrlsKindProgressive || strings.TrimSpace(urls2.URL) == "" {
-			streamFail(w, http.StatusBadGateway, "upstream forbidden", err2)
-			return
+			return fmt.Errorf("upstream forbidden after refresh: %w", err2)
 		}
 		putCachedUrls(pc.videoID, pc.format, urls2)
 		if err2 := proxyProgressive(w, r, urls2.URL, urls2.Headers); err2 != nil {
 			slog.Warn("stream proxy", "msg", "upstream retry failed", "err", err2)
+			return err2
 		}
-		return
+		return nil
 	}
 	if err != nil {
 		slog.Warn("stream proxy", "msg", "upstream proxy failed", "err", err)
+		return err
 	}
+	return nil
 }
 
 func (h *Handler) servePipeOrHLS(w http.ResponseWriter, r *http.Request, pc playCtx, urls ytdlp.UrlsResult) {
@@ -608,8 +737,8 @@ func (h *Handler) servePipeMatroska(w http.ResponseWriter, r *http.Request, pc p
 	flusher, _ := w.(http.Flusher)
 	opts := ytdlp.StreamOptsFromUrls(ytdlp.StreamOpts{
 		URL: pc.pageURL, FormatSelector: pc.format,
-		CookiesPath: pc.jar, FlareSolverrURL: pc.flare,
-		LimitRate: pc.streamPlayRateLimit,
+		CookiesPath: pc.jar, Username: pc.username, Password: pc.password,
+		FlareSolverrURL: pc.flare, LimitRate: pc.streamPlayRateLimit,
 	}, urls)
 	err := h.YtDlp.PipeStream(r.Context(), opts, flushWriter{w: w, f: flusher})
 	if err != nil && r.Context().Err() == nil {
@@ -658,6 +787,26 @@ func (h *Handler) serveHLSLocal(w http.ResponseWriter, r *http.Request) {
 		h.promotePlaybackCache(vid, sess.dir, dur)
 		var body []byte
 		if h.Library != nil {
+			// Prefer completed progressive cache (fixed VOD duration) over live EVENT handoff.
+			if m, ok := h.Library.LoadPlaybackMeta(vid); ok && m.Complete {
+				data, err := os.ReadFile(filepath.Join(h.Library.PlaybackCacheDir(vid), "index.m3u8"))
+				if err == nil && len(data) > 0 {
+					base := h.absoluteURL("/stream/videos/" + strconv.FormatInt(vid, 10) + "/playback/")
+					body = rewriteLocalHLSPlaylist(data, base, token, dur)
+					if !strings.Contains(string(body), "#EXT-X-ENDLIST") {
+						body = append(body, []byte("#EXT-X-ENDLIST\n")...)
+					}
+					w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+					w.Header().Set("Cache-Control", "no-store")
+					w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+					if r.Method == http.MethodHead {
+						w.WriteHeader(http.StatusOK)
+						return
+					}
+					_, _ = w.Write(body)
+					return
+				}
+			}
 			if dir, _, _, ok := h.Library.DurableStreamPrefix(vid); ok {
 				prefixBase := h.durablePrefixURL(vid, dir)
 				skipLive := 0
@@ -708,7 +857,18 @@ func (h *Handler) promotePlaybackCache(videoID int64, liveDir string, durationSe
 	if h == nil || h.Library == nil || !h.Library.PlaybackCacheEnabled() {
 		return
 	}
+	// Session may have started before duration soft-fill; DB/NFO length is required so
+	// near-duration finalize can flip EVENT → VOD+ENDLIST (otherwise Emby locks onto an
+	// early EXTINF sum and spins at "end").
+	if durationSec <= 0 {
+		if sec := h.durationSeconds(videoID); sec > 0 {
+			durationSec = float64(sec)
+		}
+	}
 	_ = h.Library.PromoteLiveSegmentsToPlayback(videoID, liveDir, durationSec)
+	if durationSec > 0 {
+		_ = h.Library.FinalizePlaybackCacheIfNearDuration(videoID, durationSec)
+	}
 	h.publishPlaybackCacheProgress(videoID)
 }
 
@@ -894,15 +1054,20 @@ func (f flushWriter) Write(p []byte) (int, error) {
 }
 
 func (h *Handler) serveHLSMaster(w http.ResponseWriter, r *http.Request, pc playCtx, urls ytdlp.UrlsResult) {
-	baseProxy := hlsProxyPrefix(pc.videoID, pc.token)
-	err := proxyUpstream(w, r, urls.URL, urls.Headers, true, urls.URL, baseProxy)
+	_ = h.serveHLSMasterErr(w, r, pc, urls)
+}
+
+func (h *Handler) serveHLSMasterErr(w http.ResponseWriter, r *http.Request, pc playCtx, urls ytdlp.UrlsResult) error {
+	pathPrefix := hlsProxyPrefix(pc.videoID)
+	err := proxyUpstream(w, r, urls.URL, urls.Headers, true, urls.URL, pathPrefix, pc.token)
 	if err == errUpstreamForbidden {
-		streamFail(w, http.StatusBadGateway, "upstream forbidden", err)
-		return
+		return err
 	}
 	if err != nil {
 		slog.Warn("stream proxy", "msg", "hls master failed", "err", err)
+		return err
 	}
+	return nil
 }
 
 func (h *Handler) serveHLSAsset(w http.ResponseWriter, r *http.Request) {
@@ -917,6 +1082,9 @@ func (h *Handler) serveHLSAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	enc := r.URL.Query().Get("u")
+	if enc == "" {
+		enc = chi.URLParam(r, "enc")
+	}
 	upstream, err := decodeUpstream(enc)
 	if err != nil {
 		streamFail(w, http.StatusBadRequest, "bad upstream", err)
@@ -949,10 +1117,10 @@ func (h *Handler) serveHLSAsset(w http.ResponseWriter, r *http.Request) {
 	if pageURL != "" {
 		hdrs["Referer"] = pageURL
 	}
-	baseProxy := hlsProxyPrefix(vid, token)
+	pathPrefix := hlsProxyPrefix(vid)
 	low := strings.ToLower(upstream)
 	if strings.Contains(low, ".m3u8") || strings.Contains(low, "m3u8") {
-		if err := proxyUpstream(w, r, upstream, hdrs, true, upstream, baseProxy); err != nil {
+		if err := proxyUpstream(w, r, upstream, hdrs, true, upstream, pathPrefix, token); err != nil {
 			if err == errUpstreamForbidden {
 				streamFail(w, http.StatusBadGateway, "upstream forbidden", err)
 				return
@@ -970,8 +1138,9 @@ func (h *Handler) serveHLSAsset(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func hlsProxyPrefix(videoID int64, token string) string {
-	return "/stream/videos/" + strconv.FormatInt(videoID, 10) + "/hls?token=" + token + "&u="
+func hlsProxyPrefix(videoID int64) string {
+	// Path-form only: .../hls/u/{enc}?token=  (no '&' - Emby/ffmpeg choke on query ampersands).
+	return "/stream/videos/" + strconv.FormatInt(videoID, 10) + "/hls/u/"
 }
 
 func streamFail(w http.ResponseWriter, code int, msg string, err error) {

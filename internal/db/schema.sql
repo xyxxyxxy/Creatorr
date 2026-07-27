@@ -167,6 +167,8 @@ CREATE TABLE IF NOT EXISTS domains (
   stream_play_rate_limit TEXT,
   sleep_requests REAL,
   use_flaresolverr INTEGER,
+  username TEXT,
+  password TEXT,
   updated_at TEXT NOT NULL
 );
 

@@ -46,7 +46,11 @@ func (s *Store) RewriteStreamFile(videoID int64) (changed bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	want, err := StreamURL(base, videoID, tok)
+	v, err := s.GetVideo(videoID)
+	if err != nil {
+		return false, err
+	}
+	want, err := StreamURLForKind(base, videoID, tok, v.StreamKind())
 	if err != nil {
 		return false, err
 	}

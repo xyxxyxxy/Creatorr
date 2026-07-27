@@ -24,6 +24,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/", h.overview)
 	r.Get("/series", h.seriesList)
 	r.Get("/series/list-live", h.seriesListLive)
+	r.Get("/series/error-count.json", h.seriesErrorCountJSON)
 	r.Get("/series/add", h.seriesAdd)
 	r.Get("/series/{id}", h.seriesDetail)
 	r.Get("/series/{id}/art/{role}", h.seriesArtFile)

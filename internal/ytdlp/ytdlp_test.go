@@ -8,6 +8,21 @@ import (
 	"testing"
 )
 
+func TestAppendCookiesAndAuth(t *testing.T) {
+	args := appendCookiesAndAuth(nil, "/tmp/cookies.txt", options{username: "u@example.com", password: "secret"})
+	if len(args) != 4 || args[0] != "--cookies" || args[2] != "--username" || args[3] != "u@example.com" {
+		t.Fatalf("cookies+user: %v", args)
+	}
+	args = appendCookiesAndAuth(nil, "", options{username: "u@example.com", password: "secret"})
+	if len(args) != 3 || args[0] != "--username" || args[2] != "secret" {
+		t.Fatalf("auth only: %v", args)
+	}
+	args = appendCookiesAndAuth(nil, "", options{username: "  ", password: "x"})
+	if len(args) != 0 {
+		t.Fatalf("blank username: %v", args)
+	}
+}
+
 func TestRateOff(t *testing.T) {
 	cases := map[string]bool{
 		"": true, "0": true, "off": true, "None": true, "UNLIMITED": true,
@@ -167,6 +182,54 @@ func TestStreamKindFromInfo(t *testing.T) {
 	}
 	if got["video_url"] != "https://cdn.example.com/v.webm" || got["audio_url"] != "https://cdn.example.com/a.m4a" {
 		t.Fatalf("pipe urls = %+v", got)
+	}
+
+	// Separate A+V HLS without shared master must be pipe (not hls): otherwise CDN-first
+	// would proxy video-only.
+	hlsAV := map[string]any{
+		"format_id": "hls-7130+hls-audio-audio",
+		"requested_formats": []any{
+			map[string]any{"url": "https://cdn.example.com/v.m3u8", "protocol": "m3u8_native"},
+			map[string]any{"url": "https://cdn.example.com/a.m3u8", "protocol": "m3u8_native"},
+		},
+	}
+	got, ok = streamKindFromInfo(hlsAV)
+	if !ok || got["kind"] != "pipe" {
+		t.Fatalf("hls A+V = %+v ok=%v", got, ok)
+	}
+
+	// Same master on both legs → CDN HLS (full VOD duration; no pipe EVENT growth).
+	hlsShared := map[string]any{
+		"format_id": "hls-7130+hls-audio-audio",
+		"requested_formats": []any{
+			map[string]any{
+				"url": "https://cdn.example.com/v.m3u8", "protocol": "m3u8_native",
+				"manifest_url": "https://cdn.example.com/master.m3u8",
+				"http_headers": map[string]any{"User-Agent": "v"},
+			},
+			map[string]any{
+				"url": "https://cdn.example.com/a.m3u8", "protocol": "m3u8_native",
+				"manifest_url": "https://cdn.example.com/master.m3u8",
+			},
+		},
+	}
+	got, ok = streamKindFromInfo(hlsShared)
+	if !ok || got["kind"] != "hls" || got["url"] != "https://cdn.example.com/master.m3u8" {
+		t.Fatalf("shared HLS master = %+v ok=%v", got, ok)
+	}
+
+	// Top-level manifest_url wins even when format_id has '+'.
+	hlsTop := map[string]any{
+		"format_id":    "hls-7130+hls-audio-audio",
+		"manifest_url": "https://cdn.example.com/from-top.m3u8",
+		"requested_formats": []any{
+			map[string]any{"url": "https://cdn.example.com/v.m3u8"},
+			map[string]any{"url": "https://cdn.example.com/a.m3u8"},
+		},
+	}
+	got, ok = streamKindFromInfo(hlsTop)
+	if !ok || got["kind"] != "hls" || got["url"] != "https://cdn.example.com/from-top.m3u8" {
+		t.Fatalf("top manifest_url = %+v ok=%v", got, ok)
 	}
 
 	mergedID := map[string]any{

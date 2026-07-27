@@ -16,7 +16,7 @@
     <div class="min-w-0 w-full">
       <h2 class="text-lg font-semibold flex flex-col items-stretch gap-1 w-full">
         <span class="flex flex-wrap items-center gap-2 w-full">
-          <span class="inline-flex flex-wrap items-center gap-2 min-w-0">
+          <span class="inline-flex flex-wrap items-center gap-2 min-w-0{{if .Paused}} text-warning{{end}}">
             {{.Domain}}
           </span>
           <span class="list-actions flex flex-wrap gap-2 shrink-0 items-center ml-auto">
@@ -119,6 +119,10 @@
           <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .CookiesFromHost}} text-base-content/50{{end}}" data-tip="Cookies · {{if .CookiesFromHost}}Domain override{{else}}default{{end}}" aria-label="{{if .HasCookies}}Cookies yes{{else}}Cookies no{{end}}">
             <i data-lucide="cookie" class="size-4 shrink-0{{if .CookiesFromHost}} text-amber-800{{end}}"></i>
             <span>{{if .HasCookies}}yes{{else}}no{{end}}</span>
+          </span>
+          <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .CredentialsFromHost}} text-base-content/50{{end}}" data-tip="Credentials · {{if .CredentialsFromHost}}Domain override{{else if .HasCredentials}}default{{else}}none{{end}}" aria-label="{{if .HasCredentials}}Credentials yes{{else}}Credentials no{{end}}">
+            <i data-lucide="key-round" class="size-4 shrink-0{{if .CredentialsFromHost}} text-primary{{end}}"></i>
+            <span>{{if .HasCredentials}}yes{{else}}no{{end}}</span>
           </span>
           {{$flareOver := or (eq .FlareOverride "on") (eq .FlareOverride "off")}}
           <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not $flareOver}} text-base-content/50{{end}}" data-tip="FlareSolverr · {{if $flareOver}}Domain override{{else}}default{{end}}" aria-label="FlareSolverr {{if .UseFlareSolverr}}yes{{else}}no{{end}}">

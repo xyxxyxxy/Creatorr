@@ -267,6 +267,11 @@ func (s *Store) PromoteLiveSegmentsToPlayback(videoID int64, liveDir string, dur
 	if err != nil {
 		return err
 	}
+	// Rematerialize resets LiveSegsCopied to 0. Never ingest live segs again or we
+	// double the playlist and strip ENDLIST while Complete stays true (Emby spinner).
+	if m.Complete {
+		return nil
+	}
 	dest := s.PlaybackCacheDir(videoID)
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
@@ -817,9 +822,12 @@ func rewritePlaybackPlaylistEntries(index string, entries []playbackMediaEntry) 
 	if err != nil {
 		return err
 	}
-	hadEndlist := strings.Contains(string(data), "#EXT-X-ENDLIST")
+	src := string(data)
+	hadEndlist := strings.Contains(src, "#EXT-X-ENDLIST")
+	// VOD playlists must keep ENDLIST even when coalesce ran after a strip/promote race.
+	wantEndlist := hadEndlist || strings.Contains(src, "#EXT-X-PLAYLIST-TYPE:VOD")
 	var header []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(src, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "#EXT-X-ENDLIST" || trimmed == "#EXT-X-DISCONTINUITY" ||
 			strings.HasPrefix(trimmed, "#EXTINF:") {
@@ -854,7 +862,7 @@ func rewritePlaybackPlaylistEntries(index string, entries []playbackMediaEntry) 
 		b.WriteString(e.uri)
 		b.WriteByte('\n')
 	}
-	if hadEndlist {
+	if wantEndlist {
 		b.WriteString("#EXT-X-ENDLIST\n")
 	}
 	return os.WriteFile(index, []byte(b.String()), 0o644)

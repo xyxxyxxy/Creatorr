@@ -143,8 +143,9 @@ func EnsureDefaultDomain(database *db.DB) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := database.SQL.Exec(`
 		INSERT INTO domains (domain, active, task_cooldown_seconds, max_download_queue,
-			max_parallel_tasks, download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr, updated_at)
-		VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+			max_parallel_tasks, download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr,
+			username, password, updated_at)
+		VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, '', '', ?)
 		ON CONFLICT(domain) DO NOTHING
 	`, DomainDefault, d.TaskCooldownSeconds, d.MaxDownloadQueue, d.MaxParallelTasks,
 		d.DownloadRateLimit, d.StreamPlayRateLimit, d.SleepRequests, 0, now)

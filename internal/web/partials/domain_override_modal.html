@@ -2,14 +2,16 @@
 {{/*
   Shared add/edit domain override modal.
   Mode: "add" | "edit"
-  Expects: Redirect, DefaultCooldown, DefaultRate, DefaultStreamPlayRate, DefaultSleep, DefaultFlare, FlareConfigured
-  Edit: Domain, CooldownOverride, RateOverride, StreamPlayRateOverride, SleepOverride, FlareOverride, CookieContent, HasRow
-  Add: DomainDatalist ([]string)
+  Expects: Redirect, DomainDatalist, DefaultCooldown, DefaultRate, DefaultStreamPlayRate, DefaultSleep, DefaultFlare, FlareConfigured
+  Edit: Domain (prefill), CooldownOverride, RateOverride, StreamPlayRateOverride, SleepOverride, FlareOverride, CookieContent, HasRow
+  Hostname is always editable. Save upserts the posted hostname only; changing it does not delete or rename the opened row
+  (overrides are soft lookups by hostname - no hard links).
   FlareConfigured: false disables On (requires CREATORR_FLARESOLVERR_URL).
 */}}
 {{$edit := eq .Mode "edit"}}
 {{$id := "modal-add-domain-override"}}
 {{if $edit}}{{$id = printf "modal-edit-domain-%s" .Domain}}{{end}}
+{{$listID := printf "%s-datalist" $id}}
 {{$flare := .FlareOverride}}{{if not $flare}}{{$flare = "default"}}{{end}}
 {{$flareOK := .FlareConfigured}}
 {{$defFlare := "off"}}{{if and .DefaultFlare $flareOK}}{{$defFlare = "on"}}{{end}}
@@ -21,20 +23,17 @@
     <form method="post" action="/actions/upsert-domain-override" class="space-y-3 js-domain-override-form" novalidate>
       <input type="hidden" name="redirect" value="{{.Redirect}}" />
       <div class="grid gap-3 md:grid-cols-2">
-        {{if $edit}}
-        <input type="hidden" name="domain" value="{{.Domain}}" />
-        {{else}}
         <fieldset class="fieldset md:col-span-2">
           <legend class="fieldset-legend">Domain</legend>
-          <input name="domain" id="domain-override-domain" list="domain-override-datalist"
+          <input name="domain" id="{{$id}}-domain" list="{{$listID}}"
                  class="input w-full font-mono validator js-domain-override-domain"
-                 placeholder="example.com" required autocomplete="off" />
-          <datalist id="domain-override-datalist">
+                 placeholder="example.com" required autocomplete="off"
+                 value="{{.Domain}}" />
+          <datalist id="{{$listID}}">
             {{range .DomainDatalist}}<option value="{{.}}"></option>{{end}}
           </datalist>
           <p class="validator-hint hidden">Enter a valid hostname (e.g. example.com).</p>
         </fieldset>
-        {{end}}
 
         <fieldset class="fieldset">
           <legend class="fieldset-legend">Task cooldown</legend>
@@ -100,6 +99,13 @@
           </fieldset>
           {{template "cookie_jar_field" (dict
             "Value" .CookieContent
+          )}}
+          {{template "domain_credentials_field" (dict
+            "Override" true
+            "DefaultUsername" .DefaultUsername
+            "CredentialsUsername" .CredentialsUsername
+            "CredentialsInherit" .CredentialsInherit
+            "CredentialsHasStoredPassword" .CredentialsHasStoredPassword
           )}}
         </fieldset>
       </div>

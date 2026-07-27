@@ -95,12 +95,14 @@
   const badge = () => document.getElementById("tasks-badge");
   const pausedBadge = () => document.getElementById("tasks-paused-badge");
   const notifyBadge = () => document.getElementById("notify-badge");
+  const seriesErrorBadge = () => document.getElementById("series-error-badge");
 
   async function refreshBadge() {
     try {
-      const [tasksRes, pausedRes] = await Promise.all([
+      const [tasksRes, pausedRes, seriesErrRes] = await Promise.all([
         fetch("/api/tasks"),
         fetch("/api/domains/paused"),
+        fetch("/series/error-count.json"),
       ]);
       let pausedSet = null;
       if (pausedRes.ok) {
@@ -124,6 +126,15 @@
         const b = badge();
         if (b) {
           b.textContent = String(n);
+          b.classList.toggle("hidden", n === 0);
+        }
+      }
+      if (seriesErrRes.ok) {
+        const data = await seriesErrRes.json();
+        const n = Math.max(0, Math.floor(Number(data && data.count) || 0));
+        const b = seriesErrorBadge();
+        if (b) {
+          b.textContent = n > 99 ? "99+" : String(n);
           b.classList.toggle("hidden", n === 0);
         }
       }
@@ -202,14 +213,13 @@
   async function refreshNotifyDropdown() {
     const menu = document.getElementById("notify-menu");
     const empty = document.getElementById("notify-dropdown-empty");
-    const markAll = document.getElementById("notify-menu-mark-all");
     const viewAll = document.getElementById("notify-menu-view-all");
     if (!menu || !empty || !viewAll) return;
     try {
       const res = await fetch("/api/notifications?limit=4");
       if (!res.ok) return;
       const items = await res.json();
-      // Drop previous notification rows (keep empty, mark-all, view-all).
+      // Drop previous notification rows (keep mark-all, empty, view-all).
       menu.querySelectorAll("[data-notify-item]").forEach((el) => el.remove());
       if (!Array.isArray(items) || items.length === 0) {
         empty.classList.remove("hidden");
@@ -256,7 +266,7 @@
         li.appendChild(a);
         frag.appendChild(li);
       });
-      menu.insertBefore(frag, markAll || viewAll);
+      menu.insertBefore(frag, viewAll);
       createLucideIcons(menu);
     } catch (_) {}
   }
@@ -1125,6 +1135,18 @@
     return document.body;
   }
 
+  /** After /task/{id}/logs HTMX swap, pin the log pane to the newest lines. */
+  function scrollTaskLogsToBottom(root) {
+    if (!root || root.nodeType !== 1) return;
+    const box = root.id === "task-logs" ? root : root.querySelector("#task-logs");
+    if (!box) return;
+    const pre = box.querySelector("pre");
+    if (!pre) return;
+    requestAnimationFrame(() => {
+      pre.scrollTop = pre.scrollHeight;
+    });
+  }
+
   const fieldInfoPlaces = ["tooltip-top", "tooltip-bottom", "tooltip-left", "tooltip-right"];
   const fieldInfoAligns = ["tooltip-start", "tooltip-center", "tooltip-end"];
 
@@ -1483,6 +1505,7 @@
     const root = htmxSwapRoot(ev);
     createLucideIcons(root);
     formatLocalTimes(root);
+    scrollTaskLogsToBottom(root);
     const y = document.body.dataset.listLiveScrollY;
     if (y != null && root && (root.id === "series-videos-live" || root.id === "series-list-live")) {
       delete document.body.dataset.listLiveScrollY;
@@ -2273,6 +2296,15 @@
     // no-op: cron fields use datalist; chips removed
   }
 
+  document.body.addEventListener("input", (ev) => {
+    const input = ev.target;
+    if (!(input instanceof HTMLInputElement) || input.name !== "username") return;
+    const credWrap = input.closest(".js-credentials-override");
+    if (!credWrap) return;
+    const credInherit = credWrap.querySelector("[data-credentials-inherit]");
+    if (credInherit && input.value.trim() !== "") credInherit.value = "0";
+  });
+
   // Preset chips fill the linked text field (legacy).
   document.body.addEventListener("click", (ev) => {
     const artClearBtn = ev.target.closest("[data-art-clear-btn]");
@@ -2307,6 +2339,11 @@
       }
       const flareJoin = wrap && wrap.querySelector("select[name='use_flaresolverr']")?.closest(".join");
       if (flareJoin) flareJoin.classList.add("opacity-70");
+      const credWrap = clearBtn.closest(".js-credentials-override");
+      if (credWrap) {
+        const credInherit = credWrap.querySelector("[data-credentials-inherit]");
+        if (credInherit) credInherit.value = "1";
+      }
       return;
     }
     const chip = ev.target.closest("button.preset-chip");
@@ -2578,6 +2615,7 @@
 
   function moveListRow(row, dir) {
     if (!row || !row.parentElement) return;
+    if (row.hasAttribute("data-string-list-managed-row")) return;
     if (dir < 0) {
       const prev = row.previousElementSibling;
       if (prev) row.parentElement.insertBefore(row, prev);
@@ -2660,12 +2698,54 @@
     return true;
   }
 
-  function stringListRowHTML(editor, value) {
+  function managedListValues(editor) {
+    if (!editor) return [];
+    const raw = editor.getAttribute("data-string-list-managed") || "";
+    if (!raw) return [];
+    return raw.split("|").map((s) => s.trim()).filter(Boolean);
+  }
+
+  function isManagedListValue(editor, value) {
+    const fold = String(value || "").trim().toLowerCase();
+    if (!fold) return false;
+    return managedListValues(editor).some((m) => m.toLowerCase() === fold);
+  }
+
+  function stringListRowHTML(editor, value, managed) {
     const name = editor.getAttribute("data-item-name") || "item";
     const singular = editor.getAttribute("data-item-singular") || name;
     const unordered = editor.hasAttribute("data-string-list-unordered");
     const esc = (s) =>
       String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    if (managed) {
+      if (unordered) {
+        return (
+          '<span class="badge badge-lg gap-1 pr-0.5 max-w-full" data-string-list-row data-string-list-managed-row>' +
+          '<input type="hidden" name="' +
+          esc(name) +
+          '" value="' +
+          esc(value) +
+          '" />' +
+          '<span class="tooltip tooltip-top max-w-48" data-tip="Managed by Creatorr - this value is locked here and cannot be edited">' +
+          '<span class="block truncate text-base-content/50">' +
+          esc(value) +
+          "</span></span></span>"
+        );
+      }
+      return (
+        '<div class="flex gap-2 items-center" data-string-list-row data-string-list-managed-row>' +
+        '<input type="hidden" name="' +
+        esc(name) +
+        '" value="' +
+        esc(value) +
+        '" />' +
+        '<span class="tabular-nums text-xs opacity-60 w-4 shrink-0 text-right" data-list-ord aria-hidden="true"></span>' +
+        '<span class="tooltip tooltip-top grow min-w-0" data-tip="Managed by Creatorr - this value is locked here and cannot be edited">' +
+        '<span class="block truncate text-sm text-base-content/50">' +
+        esc(value) +
+        "</span></span></div>"
+      );
+    }
     if (unordered) {
       return (
         '<span class="badge badge-lg gap-1 pr-0.5 max-w-full" data-string-list-row>' +
@@ -2751,7 +2831,12 @@
       input.focus();
       return false;
     }
-    list.insertAdjacentHTML("beforeend", stringListRowHTML(editor, item));
+    if (isManagedListValue(editor, item)) {
+      input.value = "";
+      input.focus();
+      return false;
+    }
+    list.insertAdjacentHTML("beforeend", stringListRowHTML(editor, item, false));
     createLucideIcons(list.lastElementChild);
     syncStringListEmptyLabel(editor);
     input.value = "";
@@ -2809,6 +2894,7 @@
     if (listRm) {
       ev.preventDefault();
       const row = listRm.closest("[data-string-list-row]");
+      if (row && row.hasAttribute("data-string-list-managed-row")) return;
       const editor = listRm.closest("[data-string-list-editor]");
       if (row) row.remove();
       syncStringListEmptyLabel(editor);

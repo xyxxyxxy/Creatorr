@@ -111,8 +111,8 @@ func TestBuildPrefetchDraftStudioNotActors(t *testing.T) {
 		"channel":       "iFixit",
 		"channel_id":    "UCexample",
 	}, "")
-	if d.Studio != "iFixit" {
-		t.Fatalf("studio=%q", d.Studio)
+	if d.Studio != "" {
+		t.Fatalf("studio must not be prefilled from uploader: %q", d.Studio)
 	}
 	if len(d.Actors) != 0 {
 		t.Fatalf("prefetch must not auto-fill actors from channel: %+v", d.Actors)

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 func TestSoftFillVideoGenresFromCategories(t *testing.T) {
@@ -42,15 +43,15 @@ func TestSoftFillVideoGenresFromCategories(t *testing.T) {
 	}
 
 	ok, err = s.SoftFillVideoGenresFromCategories(res.VideoID, []string{"News"})
-	if err != nil || ok {
-		t.Fatalf("second fill must no-op: ok=%v err=%v", ok, err)
+	if err != nil || !ok {
+		t.Fatalf("merge fill: ok=%v err=%v", ok, err)
 	}
 	v, err = s.GetVideo(res.VideoID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(v.Genres) != 2 || v.Genres[0] != "Education" {
-		t.Fatalf("genres clobbered: %v", v.Genres)
+	if len(v.Genres) != 3 || v.Genres[0] != "Education" || v.Genres[1] != "Science" || v.Genres[2] != "News" {
+		t.Fatalf("genres merged: %v", v.Genres)
 	}
 }
 
@@ -134,6 +135,10 @@ func TestSaveVideoMetadataClearedGenresStayCleared(t *testing.T) {
 	ok, err := s.SoftFillVideoGenresFromPackedInfo(res.VideoID)
 	if err != nil || !ok {
 		t.Fatalf("seed fill: ok=%v err=%v", ok, err)
+	}
+
+	if err := settings.Set(s.DB, settings.KeyMetadataGenresFromCategories, "0"); err != nil {
+		t.Fatal(err)
 	}
 
 	_, err = s.SaveVideoMetadata(res.VideoID, library.SaveVideoMetadataParams{

@@ -40,6 +40,7 @@ type notifyHistoryView struct {
 	Warning    bool
 	Level      string
 	ReadAt     string
+	ReadAgo    string
 }
 
 type hiddenFilter struct {
@@ -99,7 +100,9 @@ func notificationToView(n notify.Notification, now time.Time) notifyHistoryView 
 		v.TaskID = n.TaskID.Int64
 	}
 	if n.ReadAt.Valid {
-		v.ReadAt = n.ReadAt.String
+		absRead, agoRead := createdAgoPair(n.ReadAt.String, now)
+		v.ReadAt = absRead
+		v.ReadAgo = agoRead
 	}
 	return v
 }

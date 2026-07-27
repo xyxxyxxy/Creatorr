@@ -291,6 +291,7 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 	}
 	defLim, _ := settings.DefaultLimits(h.Queue.DB)
 	defCookies, _ := cookies.Get(h.Queue.DB, settings.DomainDefault)
+	defUsername, _, _ := settings.DefaultCredentials(h.Queue.DB)
 	dqRows, _ := settings.DomainOverrideRows(h.Queue.DB)
 	pageRows, pageInfo := SlicePage(r, "page", dqRows)
 	sourceDomains, _ := h.Library.ListSourceDomains()
@@ -300,6 +301,7 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 		Settings        []settingsRowView
 		DefaultLimits   settings.DomainLimits
 		DefaultCookies  string
+		DefaultUsername string
 		DomainOverrides []settings.DomainQueueRow
 		Page            PageInfo
 		DomainDatalist  []string
@@ -309,6 +311,7 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 		Settings:        rows,
 		DefaultLimits:   defLim,
 		DefaultCookies:  defCookies,
+		DefaultUsername: defUsername,
 		DomainOverrides: pageRows,
 		Page:            pageInfo,
 		DomainDatalist:  sourceDomains,
@@ -329,6 +332,8 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	metadataDomainTag, _ := settings.MetadataDomainTagEnabled(h.Queue.DB)
+	metadataGenresFromCategories, _ := settings.MetadataGenresFromCategoriesEnabled(h.Queue.DB)
 	var extRow *settingsRowView
 	settingRows := make([]settingsRowView, 0, len(entries))
 	subtitleLangs := settings.ParseSubtitleLangsJSON(settings.DefaultSubtitleLangs)
@@ -395,6 +400,8 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		SubtitleLangs        []string
 		SubtitleLangOptions  []string
 		SubtitleAuto         bool
+		MetadataDomainTag            bool
+		MetadataGenresFromCategories bool
 	}{
 		pageBase:             newSettingsPage("Settings · Library", "library", flashFromQuery(r)),
 		ExternalURLSetting:   extRow,
@@ -411,6 +418,8 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		SubtitleLangs:        subtitleLangs,
 		SubtitleLangOptions:  settings.SubtitleLangSeed,
 		SubtitleAuto:         subtitleAuto,
+		MetadataDomainTag:            metadataDomainTag,
+		MetadataGenresFromCategories: metadataGenresFromCategories,
 	})
 }
 
@@ -545,6 +554,18 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 				vals[settings.KeySubtitleAuto] = "1"
 			} else {
 				vals[settings.KeySubtitleAuto] = "0"
+			}
+		}
+		if r.FormValue("metadata_settings") == "1" {
+			if r.FormValue(settings.KeyMetadataDomainTag) == "1" {
+				vals[settings.KeyMetadataDomainTag] = "1"
+			} else {
+				vals[settings.KeyMetadataDomainTag] = "0"
+			}
+			if r.FormValue(settings.KeyMetadataGenresFromCategories) == "1" {
+				vals[settings.KeyMetadataGenresFromCategories] = "1"
+			} else {
+				vals[settings.KeyMetadataGenresFromCategories] = "0"
 			}
 		}
 	}
@@ -728,6 +749,12 @@ func (h *Handler) actionSaveDomainDefault(w http.ResponseWriter, r *http.Request
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
+	defUser, _, _ := settings.DefaultCredentials(h.Queue.DB)
+	keepPassword := strings.TrimSpace(r.FormValue("username")) != "" && r.FormValue("password") == "" && defUser != ""
+	if err := settings.SaveDefaultCredentials(h.Queue.DB, r.FormValue("username"), r.FormValue("password"), keepPassword); err != nil {
+		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
+		return
+	}
 	redirectSettings(w, r, "/settings/queue", "ok=domain-defaults")
 }
 
@@ -777,6 +804,26 @@ func (h *Handler) actionUpsertDomainOverride(w http.ResponseWriter, r *http.Requ
 	if err := h.saveDomainCookies(domain, r.FormValue("cookies")); err != nil {
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
+	}
+	inheritCreds := r.FormValue("credentials_inherit") == "1"
+	credUser := strings.TrimSpace(r.FormValue("username"))
+	credPass := r.FormValue("password")
+	touchCreds := inheritCreds || credUser != "" || credPass != ""
+	if !touchCreds {
+		if meta, ok, err := domains.Get(h.Queue.DB, domain); err == nil && ok && meta.Username.Valid {
+			touchCreds = true
+		}
+	}
+	if touchCreds {
+		keepPassword := false
+		if !inheritCreds && credUser != "" {
+			hasStored, _ := settings.HostHasStoredPassword(h.Queue.DB, domain)
+			keepPassword = hasStored && credPass == ""
+		}
+		if err := settings.SaveHostCredentials(h.Queue.DB, domain, credUser, credPass, inheritCreds, keepPassword); err != nil {
+			redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
+			return
+		}
 	}
 	redirectSettings(w, r, "/settings/queue", "ok=domain")
 }

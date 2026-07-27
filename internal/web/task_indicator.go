@@ -296,6 +296,7 @@ func videoIndicatorID(videoID int64) string {
 type seriesStatusView struct {
 	Kind  string // wanted_source_error | wanted_download_error | verify_failed | scan_error | incomplete | monitored | unmonitored
 	Title string
+	Count int // video error count for health badge; 0 = icon only
 }
 
 // buildSeriesMonitorStatus is left of series list title: always monitored | unmonitored.
@@ -306,16 +307,35 @@ func buildSeriesMonitorStatus(monitored bool) seriesStatusView {
 	return seriesStatusView{Kind: "unmonitored", Title: "Unmonitored"}
 }
 
+func seriesHealthTitle(label string, count int) string {
+	if count > 0 {
+		return fmt.Sprintf("%s (%d)", label, count)
+	}
+	return label
+}
+
 // buildSeriesHealthStatus is poster health badge only (errors/warnings; no task busy). ok false = idle healthy.
 func buildSeriesHealthStatus(errs library.SeriesVideoErrorFlags, warn library.SeriesWarnLevel) (seriesStatusView, bool) {
 	if errs.HasSourceError {
-		return seriesStatusView{Kind: "wanted_source_error", Title: "Source error"}, true
+		return seriesStatusView{
+			Kind:  "wanted_source_error",
+			Title: seriesHealthTitle("Source error", errs.SourceErrorCount),
+			Count: errs.SourceErrorCount,
+		}, true
 	}
 	if errs.HasDownloadError {
-		return seriesStatusView{Kind: "wanted_download_error", Title: "Download error"}, true
+		return seriesStatusView{
+			Kind:  "wanted_download_error",
+			Title: seriesHealthTitle("Download error", errs.DownloadErrorCount),
+			Count: errs.DownloadErrorCount,
+		}, true
 	}
 	if errs.HasVerifyFailed {
-		return seriesStatusView{Kind: "verify_failed", Title: "Verify failed"}, true
+		return seriesStatusView{
+			Kind:  "verify_failed",
+			Title: seriesHealthTitle("Verify failed", errs.VerifyFailedCount),
+			Count: errs.VerifyFailedCount,
+		}, true
 	}
 	if warn == library.SeriesWarnError {
 		return seriesStatusView{Kind: "scan_error", Title: "Source scan error"}, true

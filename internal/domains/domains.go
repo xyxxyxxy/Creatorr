@@ -24,6 +24,8 @@ type Domain struct {
 	StreamPlayRateLimit  sql.NullString  // Valid=false → use default
 	SleepRequests        sql.NullFloat64 // Valid=false → use default
 	UseFlareSolverr      sql.NullBool    // Valid=false → inherit default; Bool = on/off override
+	Username             sql.NullString
+	Password             sql.NullString
 	UpdatedAt            string
 }
 
@@ -77,8 +79,9 @@ func EnsureHost(database *db.DB, host string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := database.SQL.Exec(`
 		INSERT INTO domains (domain, active, task_cooldown_seconds, max_download_queue,
-			max_parallel_tasks, download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr, updated_at)
-		VALUES (?, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?)
+			max_parallel_tasks, download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr,
+			username, password, updated_at)
+		VALUES (?, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?)
 		ON CONFLICT(domain) DO NOTHING
 	`, host, now)
 	return err
@@ -92,7 +95,8 @@ func Get(database *db.DB, domain string) (Domain, bool, error) {
 	}
 	row := database.SQL.QueryRow(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-			download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr, updated_at
+			download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr,
+			username, password, updated_at
 		FROM domains WHERE domain = ?
 	`, domain)
 	d, err := scanDomain(row)
@@ -109,7 +113,8 @@ func Get(database *db.DB, domain string) (Domain, bool, error) {
 func List(database *db.DB) ([]Domain, error) {
 	rows, err := database.SQL.Query(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-			download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr, updated_at
+			download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr,
+			username, password, updated_at
 		FROM domains ORDER BY domain
 	`)
 	if err != nil {
@@ -131,7 +136,8 @@ func List(database *db.DB) ([]Domain, error) {
 func ListInactive(database *db.DB) ([]Domain, error) {
 	rows, err := database.SQL.Query(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-			download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr, updated_at
+			download_rate_limit, stream_play_rate_limit, sleep_requests, use_flaresolverr,
+			username, password, updated_at
 		FROM domains WHERE active = 0 ORDER BY domain
 	`)
 	if err != nil {
@@ -404,7 +410,7 @@ func scanDomain(row interface{ Scan(dest ...any) error }) (Domain, error) {
 	var active int
 	var flare sql.NullInt64
 	err := row.Scan(&d.Domain, &active, &d.TaskCooldownSeconds, &d.MaxDownloadQueue, &d.MaxParallelTasks,
-		&d.DownloadRateLimit, &d.StreamPlayRateLimit, &d.SleepRequests, &flare, &d.UpdatedAt)
+		&d.DownloadRateLimit, &d.StreamPlayRateLimit, &d.SleepRequests, &flare, &d.Username, &d.Password, &d.UpdatedAt)
 	d.Active = active != 0
 	if flare.Valid {
 		d.UseFlareSolverr = sql.NullBool{Bool: flare.Int64 != 0, Valid: true}

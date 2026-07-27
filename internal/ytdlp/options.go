@@ -6,6 +6,8 @@ package ytdlp
 type options struct {
 	url              string
 	cookies          string
+	username         string
+	password         string
 	outdir           string
 	format           string
 	flaresolverr     string

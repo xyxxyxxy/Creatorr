@@ -22,6 +22,19 @@ const defaultFfmpegBin = "ffmpeg"
 
 var errSeparateStreams = errors.New("format yields separate audio/video streams")
 
+func appendCookiesAndAuth(args []string, cookiesPath string, o options) []string {
+	if cookiesPath != "" {
+		args = append(args, "--cookies", cookiesPath)
+	}
+	if u := strings.TrimSpace(o.username); u != "" {
+		args = append(args, "--username", u)
+		if o.password != "" {
+			args = append(args, "--password", o.password)
+		}
+	}
+	return args
+}
+
 func (o options) resolveYtdlpBin() string {
 	if v := strings.TrimSpace(o.ytdlpPath); v != "" {
 		return v
@@ -240,9 +253,7 @@ func dumpJSON(ctx context.Context, url, cookiesPath string, flat bool, playlistE
 	if playlistEnd > 0 {
 		args = append(args, "--playlist-end", strconv.Itoa(playlistEnd))
 	}
-	if cookiesPath != "" {
-		args = append(args, "--cookies", cookiesPath)
-	}
+	args = appendCookiesAndAuth(args, cookiesPath, o)
 	if userAgent != "" {
 		args = append(args, "--user-agent", userAgent)
 	}
@@ -265,9 +276,7 @@ func dumpJSON(ctx context.Context, url, cookiesPath string, flat bool, playlistE
 // dumpJSONWithFormat runs `yt-dlp --skip-download -f FORMAT -J URL` and parses the result.
 func dumpJSONWithFormat(ctx context.Context, url, format, cookiesPath, userAgent string, o options) (map[string]any, error) {
 	args := []string{"--no-mtime", "--skip-download", "-f", format, "-J"}
-	if cookiesPath != "" {
-		args = append(args, "--cookies", cookiesPath)
-	}
+	args = appendCookiesAndAuth(args, cookiesPath, o)
 	if userAgent != "" {
 		args = append(args, "--user-agent", userAgent)
 	}
@@ -335,12 +344,19 @@ func withDuration(result map[string]any, info map[string]any) map[string]any {
 }
 
 // streamKindFromInfo classifies yt-dlp -J output. ok=false when progressive retry may help.
+// Prefer a shared HLS master when A+V were selected from the same manifest (CDN ABR + full
+// VOD duration for Emby). Separate A+V without a shared master must be pipe: Emby .strm
+// cannot play two CDN URLs, and classifying them as hls would proxy only the first
+// stream (often video-only).
 func streamKindFromInfo(info map[string]any) (map[string]any, bool) {
-	if u, headers, ok := hlsMasterFromInfo(info); ok {
+	if u, headers, ok := sharedHLSMasterFromInfo(info); ok {
 		return map[string]any{"kind": "hls", "url": u, "headers": headers}, true
 	}
 	if needsPipeStream(info) {
 		return pipeResultFromInfo(info), true
+	}
+	if u, headers, ok := hlsMasterFromInfo(info); ok {
+		return map[string]any{"kind": "hls", "url": u, "headers": headers}, true
 	}
 	mediaURL, headers, err := progressiveURLFromInfo(info)
 	if err != nil {
@@ -351,6 +367,48 @@ func streamKindFromInfo(info map[string]any) (map[string]any, bool) {
 		"url":     mediaURL,
 		"headers": headers,
 	}, true
+}
+
+// sharedHLSMasterFromInfo returns a CDN HLS master when A+V (or the info dict) share one.
+// Used to avoid pipe mux when yt-dlp split the same master into requested_formats.
+func sharedHLSMasterFromInfo(info map[string]any) (string, map[string]string, bool) {
+	defaultHeaders := httpHeadersFromInfo(info)
+	if u, ok := stringField(info, "manifest_url"); ok && isHLSURL(u) {
+		return u, defaultHeaders, true
+	}
+	req, ok := info["requested_formats"].([]any)
+	if !ok || len(req) < 2 {
+		return "", nil, false
+	}
+	var masters []string
+	var hdr map[string]string
+	for _, r := range req {
+		m, ok := r.(map[string]any)
+		if !ok {
+			return "", nil, false
+		}
+		u, ok := stringField(m, "manifest_url")
+		if !ok || !isHLSURL(u) {
+			return "", nil, false
+		}
+		masters = append(masters, u)
+		if hdr == nil {
+			hdr = httpHeadersFromInfo(m)
+		}
+	}
+	if len(masters) < 2 {
+		return "", nil, false
+	}
+	first := masters[0]
+	for _, u := range masters[1:] {
+		if u != first {
+			return "", nil, false
+		}
+	}
+	if len(hdr) == 0 {
+		hdr = defaultHeaders
+	}
+	return first, hdr, true
 }
 
 func needsPipeStream(info map[string]any) bool {
@@ -522,9 +580,7 @@ func resolveAVURLs(ctx context.Context, url, format, cookiesPath, userAgent stri
 
 func directURLsViaG(ctx context.Context, url, format, cookiesPath, userAgent string, o options) ([]string, error) {
 	args := []string{"--no-mtime", "--skip-download", "-f", normalizeStreamPlayFormat(format), "-g"}
-	if cookiesPath != "" {
-		args = append(args, "--cookies", cookiesPath)
-	}
+	args = appendCookiesAndAuth(args, cookiesPath, o)
 	if userAgent != "" {
 		args = append(args, "--user-agent", userAgent)
 	}
@@ -739,9 +795,7 @@ func downloadMedia(ctx context.Context, url, outdir, format, cookiesPath, userAg
 		"-o", "%(title).200B [%(id)s].%(ext)s",
 		"--write-info-json", "--write-thumbnail",
 	}
-	if cookiesPath != "" {
-		args = append(args, "--cookies", cookiesPath)
-	}
+	args = appendCookiesAndAuth(args, cookiesPath, o)
 	if userAgent != "" {
 		args = append(args, "--user-agent", userAgent)
 	}
@@ -787,9 +841,7 @@ func fetchSidecars(ctx context.Context, url, outdir, cookiesPath, userAgent stri
 		"--write-info-json", "--write-thumbnail",
 	}
 	args = appendSubtitleFlags(args, o.subLangs, o.subAuto)
-	if cookiesPath != "" {
-		args = append(args, "--cookies", cookiesPath)
-	}
+	args = appendCookiesAndAuth(args, cookiesPath, o)
 	if userAgent != "" {
 		args = append(args, "--user-agent", userAgent)
 	}

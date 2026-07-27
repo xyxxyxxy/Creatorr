@@ -89,16 +89,12 @@ func BuildPrefetchDraftFromInfo(info map[string]any, artDir string) PrefetchDraf
 	}
 	title := firstString(info, "title", "playlist_title", "channel", "uploader")
 	desc := firstString(info, "description")
-	uploader := firstString(info, "uploader", "channel", "uploader_id")
 	channelID := firstString(info, "channel_id", "uploader_id", "id")
 
 	draft.Plot = desc
 	draft.PlaylistOnly = isPlaylistOnlyInfo(info)
 	if title != "" {
 		draft.Title = title
-	}
-	if uploader != "" {
-		draft.Studio = uploader
 	}
 	if channelID != "" {
 		draft.UniqueIDType = "yt-dlp"

@@ -138,8 +138,13 @@ func (h *Handler) actionProbeSourceTitle(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	authUser, authPass := "", ""
+	if creds, err := settings.CredentialsForURL(h.Library.DB, url); err == nil {
+		authUser, authPass = creds.Username, creds.Password
+	}
 	e, err := h.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
-		URL: url, CookiesPath: jar, FlareSolverrURL: flare,
+		URL: url, CookiesPath: jar, Username: authUser, Password: authPass,
+		FlareSolverrURL: flare,
 	})
 	if err != nil {
 		slog.Warn("probe source title failed", "url", url, "err", err)
@@ -696,7 +701,8 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 				case queue.StatusDone:
 					if d, err := h.Library.ReadVideoPrefetchDraft(vid, tid); err == nil {
 						metaForm.PrefetchDraft = d
-						metaForm.Video = applyVideoPrefetchDraft(video, d)
+						metaForm.Video = applyVideoPrefetchDraft(video, d, h.Library)
+						h.applyVideoMetadataManagedLists(&metaForm, d.Genres)
 						metaForm.PrefetchArt = videoPrefetchArtFromDraft(d)
 						metaForm.FetchURL = queue.URLFromPayload(task.Payload)
 					}

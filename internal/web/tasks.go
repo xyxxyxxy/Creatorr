@@ -51,6 +51,9 @@ type laneView struct {
 	HasCookies             bool
 	CookiesFromHost        bool // host jar (not Domain defaults fallback)
 	CookiesTip             string
+	HasCredentials         bool
+	CredentialsFromHost    bool
+	CredentialsTip         string
 	FlareWarm              bool
 	FlareTip               string
 	HasOverrideRow         bool
@@ -157,6 +160,17 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 				}
 			} else {
 				lv.CookiesTip = "No cookies (Domain defaults or host jar)"
+			}
+			if creds, err := settings.CredentialsForDomain(h.Queue.DB, domain); err == nil && strings.TrimSpace(creds.Username) != "" {
+				lv.HasCredentials = true
+				if creds.FromHost {
+					lv.CredentialsFromHost = true
+					lv.CredentialsTip = "Credentials set (host override)"
+				} else {
+					lv.CredentialsTip = "Credentials (Domain defaults)"
+				}
+			} else {
+				lv.CredentialsTip = "No credentials (Domain defaults or host override)"
 			}
 			if meta, ok := knownMeta[domain]; ok {
 				lv.HasOverrideRow = true

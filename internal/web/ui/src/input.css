@@ -115,3 +115,11 @@
 :is(.validator:user-valid, .validator:has(:user-valid)):focus-within {
   --input-color: color-mix(in oklab, var(--color-base-content) 20%, #0000);
 }
+
+/*
+  Series list poster health badge: badge-sm height comes from --size; force the same
+  min-width so single-digit counts stay square. Wider counts (10+) may grow.
+*/
+.series-health-badge {
+  min-width: var(--size);
+}

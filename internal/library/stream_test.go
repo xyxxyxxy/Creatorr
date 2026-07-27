@@ -31,6 +31,28 @@ func TestStreamURL(t *testing.T) {
 	}
 }
 
+func TestStreamURLForKind(t *testing.T) {
+	base := "http://creatorr.example.com:8787"
+	got, err := library.StreamURLForKind(base, 7, "tok", "progressive")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "http://creatorr.example.com:8787/stream/videos/7/progressive?token=tok"
+	if got != want {
+		t.Fatalf("progressive: got %q want %q", got, want)
+	}
+	for _, kind := range []string{"", "pipe", "hls", "PIPE"} {
+		got, err = library.StreamURLForKind(base, 7, "tok", kind)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = "http://creatorr.example.com:8787/stream/videos/7/master.m3u8?token=tok"
+		if got != want {
+			t.Fatalf("kind %q: got %q want %q", kind, got, want)
+		}
+	}
+}
+
 func TestStreamTokenRoundtrip(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/xyxxyxxy/Creatorr/internal/cookies"
+	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
 	"github.com/xyxxyxxy/Creatorr/internal/events"
@@ -250,17 +251,16 @@ func PackStreamHandler(d Deps) TaskHandler {
 			}
 		}
 		progress("Writing stream files…", nil)
+		var thumbSrc string
 		var subSrcs []string
-		subOpts, _ := settings.GetSubtitleOpts(d.Library.DB)
-		if len(subOpts.Langs) > 0 {
-			progress("Fetching subtitles…", nil)
-			fetched, cleanup, ferr := fetchPackStreamSubs(ctx, d, videoID, t.Domain)
-			if cleanup != nil {
-				defer cleanup()
-			}
-			if ferr == nil {
-				subSrcs = fetched
-			}
+		progress("Fetching sidecars…", nil)
+		fetchedThumb, fetchedSubs, cleanup, ferr := fetchPackStreamSidecars(ctx, d, videoID, t.Domain)
+		if cleanup != nil {
+			defer cleanup()
+		}
+		if ferr == nil {
+			thumbSrc = fetchedThumb
+			subSrcs = fetchedSubs
 		}
 		sbWarn := ""
 		var streamPlan sponsorblock.AppliedCutPlan
@@ -278,7 +278,7 @@ func PackStreamHandler(d Deps) TaskHandler {
 				sponsorblock.RemapSubtitleFiles(subSrcs, plan.Cuts(), plan.CardDurationSec, plan.InfoCards)
 			}
 		}
-		if err := d.Library.PackStreamForVideo(videoID, t.ID, runtimeSec, subSrcs); err != nil {
+		if err := d.Library.PackStreamForVideo(videoID, t.ID, runtimeSec, thumbSrc, subSrcs); err != nil {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "pack stream failed"), err.Error())
 		}
 		if strm, ok, _ := d.Library.HasPackAnchor(videoID); ok {
@@ -386,11 +386,14 @@ func CacheBeginningHandler(d Deps) TaskHandler {
 			return err
 		}
 		lim, _ := settings.LimitsForDomain(d.Library.DB, t.Domain)
+		authUser, authPass := ytdlpAuth(d.Library.DB, dlctx.URL)
 		progress("Resolving stream URLs…", ptrFloat(0.15))
-		urls, err := d.YtDlp.FetchUrls(ctx, ytdlp.UrlsOpts{
+		urls, err := fetchUrls(ctx, d, ytdlp.UrlsOpts{
 			URL:             dlctx.URL,
 			FormatSelector:  dlctx.FormatSelector,
 			CookiesPath:     jar,
+			Username:        authUser,
+			Password:        authPass,
 			FlareSolverrURL: flare,
 			LimitRate:       lim.DownloadRateLimit,
 			SleepRequests:   lim.SleepRequests,
@@ -446,7 +449,8 @@ func CacheBeginningHandler(d Deps) TaskHandler {
 				muxCtx, cancel := context.WithCancel(ctx)
 				opts := ytdlp.StreamOptsFromUrls(ytdlp.StreamOpts{
 					URL: dlctx.URL, FormatSelector: dlctx.FormatSelector,
-					CookiesPath: jar, FlareSolverrURL: flare, HLSDir: partDir,
+					CookiesPath: jar, Username: authUser, Password: authPass,
+					FlareSolverrURL: flare, HLSDir: partDir,
 					HLSStartSec: win.Start, HLSMaxSec: win.End - win.Start,
 					LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 				}, urls)
@@ -507,7 +511,8 @@ func CacheBeginningHandler(d Deps) TaskHandler {
 			defer cancel()
 			opts := ytdlp.StreamOptsFromUrls(ytdlp.StreamOpts{
 				URL: dlctx.URL, FormatSelector: dlctx.FormatSelector,
-				CookiesPath: jar, FlareSolverrURL: flare, HLSDir: hlsDir,
+				CookiesPath: jar, Username: authUser, Password: authPass,
+				FlareSolverrURL: flare, HLSDir: hlsDir,
 				HLSMaxSec: float64(wantSec) + 2,
 				LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 			}, urls)
@@ -737,7 +742,7 @@ func resolveStreamForPack(ctx context.Context, d Deps, videoID, taskID int64) (p
 	if err != nil {
 		return out, err
 	}
-	urls, err := d.YtDlp.FetchUrls(ctx, ytdlp.UrlsOpts{
+	urls, err := fetchUrls(ctx, d, ytdlp.UrlsOpts{
 		URL:             dlctx.URL,
 		FormatSelector:  dlctx.FormatSelector,
 		CookiesPath:     jar,
@@ -758,7 +763,7 @@ func resolveStreamForPack(ctx context.Context, d Deps, videoID, taskID int64) (p
 	}
 
 	// Always Resolve for empty-column soft-fill (title/date/thumb/…). Soft-ok on resolve failure.
-	e, rerr := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
+	e, rerr := resolveEntry(ctx, d, ytdlp.ResolveOpts{
 		URL: dlctx.URL, CookiesPath: jar, FlareSolverrURL: flare,
 	})
 	if rerr == nil {
@@ -1486,8 +1491,13 @@ func finishArchivePack(
 	thumbSrc, cleanupThumb := library.MaterializeThumbSrc(thumbSrc, thumbURL)
 	defer cleanupThumb()
 
-	// Soft-fill empty genres from download-time info.json, then build NFO from full DB row.
+	// Soft-fill empty genres from download-time info.json, then ensure domain tag, then build NFO.
 	_, _ = d.Library.SoftFillVideoGenresFromInfoJSON(t.VideoID.Int64, infoSrc)
+	sourceURL := dlctx.URL
+	if dlctx.Video.SourceURL.Valid && strings.TrimSpace(dlctx.Video.SourceURL.String) != "" {
+		sourceURL = dlctx.Video.SourceURL.String
+	}
+	_, _ = d.Library.EnsureVideoDomainTag(t.VideoID.Int64, sourceURL)
 	v := &dlctx.Video
 	if fresh, gerr := d.Library.GetVideo(t.VideoID.Int64); gerr == nil {
 		v = fresh
@@ -1832,7 +1842,7 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 		return err
 	}
 	lim, _ := settings.LimitsForDomain(d.Library.DB, t.Domain)
-	e, err := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
+	e, err := resolveEntry(ctx, d, ytdlp.ResolveOpts{
 		URL: url, CookiesPath: jar, FlareSolverrURL: flare,
 		LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 	})
@@ -2035,7 +2045,7 @@ func PrefetchSeriesMetaHandler(d Deps) TaskHandler {
 			return err
 		}
 		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
-		info, err := d.YtDlp.DumpPlaylistInfo(ctx, ytdlp.ListOpts{
+		info, err := dumpPlaylistInfo(ctx, d, ytdlp.ListOpts{
 			URL: fetchURL, CookiesPath: jar, PlaylistEnd: 1, FlareSolverrURL: flare,
 		})
 		if err != nil {
@@ -2117,7 +2127,7 @@ func PrefetchAddSeriesHandler(d Deps) TaskHandler {
 			return err
 		}
 		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
-		info, err := d.YtDlp.DumpPlaylistInfo(ctx, ytdlp.ListOpts{
+		info, err := dumpPlaylistInfo(ctx, d, ytdlp.ListOpts{
 			URL: fetchURL, CookiesPath: jar, PlaylistEnd: 1, FlareSolverrURL: flare,
 		})
 		if err != nil {
@@ -2181,7 +2191,7 @@ func PrefetchAddVideoHandler(d Deps) TaskHandler {
 			return err
 		}
 		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
-		e, err := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
+		e, err := resolveEntry(ctx, d, ytdlp.ResolveOpts{
 			URL: fetchURL, CookiesPath: jar, FlareSolverrURL: flare,
 		})
 		if err != nil {
@@ -2240,7 +2250,7 @@ func PrefetchVideoMetaHandler(d Deps) TaskHandler {
 			return err
 		}
 		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
-		e, err := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
+		e, err := resolveEntry(ctx, d, ytdlp.ResolveOpts{
 			URL: fetchURL, CookiesPath: jar, FlareSolverrURL: flare,
 		})
 		if err != nil {
@@ -2276,8 +2286,10 @@ func listEntries(ctx context.Context, d Deps, url, jar string, playlistEnd int, 
 	if err != nil {
 		return nil, err
 	}
+	user, pass := ytdlpAuth(d.Library.DB, url)
 	return d.YtDlp.List(ctx, ytdlp.ListOpts{
-		URL: url, CookiesPath: jar, PlaylistEnd: playlistEnd, FlareSolverrURL: flare,
+		URL: url, CookiesPath: jar, Username: user, Password: pass,
+		PlaylistEnd: playlistEnd, FlareSolverrURL: flare,
 		LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 	})
 }
@@ -2291,6 +2303,7 @@ func downloadMedia(ctx context.Context, d Deps, opts ytdlp.DownloadOpts) (string
 		return "", err
 	}
 	opts.FlareSolverrURL = flare
+	opts.Username, opts.Password = ytdlpAuth(d.Library.DB, opts.URL)
 	return d.YtDlp.Download(ctx, opts)
 }
 
@@ -2303,49 +2316,106 @@ func fetchSidecars(ctx context.Context, d Deps, opts ytdlp.SidecarsOpts) (infoPa
 		return "", "", nil, err
 	}
 	opts.FlareSolverrURL = flare
+	opts.Username, opts.Password = ytdlpAuth(d.Library.DB, opts.URL)
 	return d.YtDlp.FetchSidecars(ctx, opts)
 }
 
-// fetchPackStreamSubs downloads subtitle sidecars for stream pack. cleanup removes the temp work dir.
-func fetchPackStreamSubs(ctx context.Context, d Deps, videoID int64, domain string) (subPaths []string, cleanup func(), err error) {
-	subOpts, err := settings.GetSubtitleOpts(d.Library.DB)
-	if err != nil || len(subOpts.Langs) == 0 {
-		return nil, nil, err
+func resolveEntry(ctx context.Context, d Deps, opts ytdlp.ResolveOpts) (ytdlp.Entry, error) {
+	if d.YtDlp == nil {
+		return ytdlp.Entry{}, apperrors.New(apperrors.CodeInternal, "yt-dlp client missing")
 	}
+	if strings.TrimSpace(opts.FlareSolverrURL) == "" {
+		flare, err := domains.FlareSolverrURL(d.Library.DB, queue.DomainFromURL(opts.URL))
+		if err != nil {
+			return ytdlp.Entry{}, err
+		}
+		opts.FlareSolverrURL = flare
+	}
+	opts.Username, opts.Password = ytdlpAuth(d.Library.DB, opts.URL)
+	return d.YtDlp.Resolve(ctx, opts)
+}
+
+func fetchUrls(ctx context.Context, d Deps, opts ytdlp.UrlsOpts) (ytdlp.UrlsResult, error) {
+	if d.YtDlp == nil {
+		return ytdlp.UrlsResult{}, apperrors.New(apperrors.CodeInternal, "yt-dlp client missing")
+	}
+	if strings.TrimSpace(opts.FlareSolverrURL) == "" {
+		flare, err := domains.FlareSolverrURL(d.Library.DB, queue.DomainFromURL(opts.URL))
+		if err != nil {
+			return ytdlp.UrlsResult{}, err
+		}
+		opts.FlareSolverrURL = flare
+	}
+	opts.Username, opts.Password = ytdlpAuth(d.Library.DB, opts.URL)
+	return d.YtDlp.FetchUrls(ctx, opts)
+}
+
+func dumpPlaylistInfo(ctx context.Context, d Deps, opts ytdlp.ListOpts) (map[string]any, error) {
+	if d.YtDlp == nil {
+		return nil, apperrors.New(apperrors.CodeInternal, "yt-dlp client missing")
+	}
+	if strings.TrimSpace(opts.FlareSolverrURL) == "" {
+		flare, err := domains.FlareSolverrURL(d.Library.DB, queue.DomainFromURL(opts.URL))
+		if err != nil {
+			return nil, err
+		}
+		opts.FlareSolverrURL = flare
+	}
+	opts.Username, opts.Password = ytdlpAuth(d.Library.DB, opts.URL)
+	return d.YtDlp.DumpPlaylistInfo(ctx, opts)
+}
+
+func ytdlpAuth(database *db.DB, rawURL string) (username, password string) {
+	creds, err := settings.CredentialsForURL(database, rawURL)
+	if err != nil {
+		return "", ""
+	}
+	return creds.Username, creds.Password
+}
+
+// fetchPackStreamSidecars downloads thumbnail (+ optional subtitle) sidecars for stream pack
+// via yt-dlp --skip-download (cookies / Flare / membership). Soft-ok when yt-dlp missing.
+// cleanup removes the temp work dir; call even when thumb/subs empty.
+func fetchPackStreamSidecars(ctx context.Context, d Deps, videoID int64, domain string) (thumbPath string, subPaths []string, cleanup func(), err error) {
 	dlctx, err := d.Library.PrepareDownload(videoID)
 	if err != nil {
-		return nil, nil, err
+		return "", nil, nil, err
 	}
 	if strings.TrimSpace(dlctx.URL) == "" {
-		return nil, nil, fmt.Errorf("no url")
+		return "", nil, nil, fmt.Errorf("no url")
 	}
 	tmpRoot := d.TmpRoot
 	if tmpRoot == "" {
 		tmpRoot = os.TempDir()
 	}
-	work, err := os.MkdirTemp(tmpRoot, "creatorr-packstream-subs-*")
+	work, err := os.MkdirTemp(tmpRoot, "creatorr-packstream-side-*")
 	if err != nil {
-		return nil, nil, err
+		return "", nil, nil, err
 	}
 	cleanup = func() { _ = os.RemoveAll(work) }
 	jar, err := cookies.TempJarForURL(d.Library.DB, work, dlctx.URL)
 	if err != nil {
 		cleanup()
-		return nil, nil, err
+		return "", nil, nil, err
 	}
 	if domain == "" {
 		domain = queue.DomainFromURL(dlctx.URL)
 	}
 	lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
-	infoPath, _, subPaths, err := fetchSidecars(ctx, d, ytdlp.SidecarsOpts{
+	subOpts, _ := settings.GetSubtitleOpts(d.Library.DB)
+	infoPath, thumbPath, subPaths, err := fetchSidecars(ctx, d, ytdlp.SidecarsOpts{
 		URL: dlctx.URL, CookiesPath: jar, OutDir: work,
 		LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 		SubLangs: subOpts.Langs, SubAuto: subOpts.Auto,
 	})
 	if err != nil {
 		cleanup()
-		return nil, nil, err
+		return "", nil, nil, err
 	}
-	subPaths = library.MarkAutoSubtitleFiles(subPaths, infoPath)
-	return subPaths, cleanup, nil
+	if len(subOpts.Langs) > 0 {
+		subPaths = library.MarkAutoSubtitleFiles(subPaths, infoPath)
+	} else {
+		subPaths = nil
+	}
+	return thumbPath, subPaths, cleanup, nil
 }

@@ -110,7 +110,8 @@ func (h *Handler) ensureHLSSession(pc playCtx, urls ytdlp.UrlsResult, cookiesSrc
 	ctx = h.withOccupancyTrace(ctx, tid)
 	opts := ytdlp.StreamOptsFromUrls(ytdlp.StreamOpts{
 		URL: pc.pageURL, FormatSelector: pc.format,
-		CookiesPath: jar, FlareSolverrURL: pc.flare,
+		CookiesPath: jar, Username: pc.username, Password: pc.password,
+		FlareSolverrURL: pc.flare,
 		HLSDir: dir, HLSStartSec: startSec,
 		LimitRate: pc.streamPlayRateLimit,
 	}, urls)
@@ -203,7 +204,16 @@ func reapHLSSession(h *Handler, key string, s *hlsSession) {
 		h.clearHLSCancel(s.videoID, s.token)
 		// Final promote before deleting live dir so ENDLIST can mark cache complete.
 		if h != nil {
-			h.promotePlaybackCache(s.videoID, s.dir, s.durationSec)
+			dur := s.durationSec
+			if dur <= 0 && h.Library != nil {
+				if sec := h.durationSeconds(s.videoID); sec > 0 {
+					dur = float64(sec)
+				}
+			}
+			h.promotePlaybackCache(s.videoID, s.dir, dur)
+			if dur > 0 && h.Library != nil {
+				_ = h.Library.FinalizePlaybackCacheIfNearDuration(s.videoID, dur)
+			}
 		}
 		s.cancel()
 		_ = os.RemoveAll(s.dir)
