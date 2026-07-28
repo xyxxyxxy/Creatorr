@@ -29,27 +29,23 @@ const (
 	StatusFailed    = "failed"
 	StatusCancelled = "cancelled"
 
-	KindScan                = "scan"
-	KindDownload            = "download"
-	KindCacheBeginning      = "cache_beginning"
-	KindPackStream          = "pack_stream"
-	KindRescanMetadata      = "rescan_metadata"
-	KindRefreshSidecars     = "refresh_sidecars"
-	KindImport              = "import"
-	KindPrefetchSeriesMeta  = "prefetch_series_meta"
-	KindPrefetchVideoMeta   = "prefetch_video_meta"
-	KindPrefetchAddSeries   = "prefetch_add_series"
-	KindSyncFiles           = "sync_files"
-	KindRetentionDelete     = "retention_delete"
-	KindRenameEpisodes      = "rename_episodes"
-	KindRegenerateNFO       = "regenerate_nfo"
-	KindRegenerateStrm      = "regenerate_strm"
-	KindClearBeginningCache = "clear_beginning_cache"
-	KindClearPlaybackCache  = "clear_playback_cache"
-	KindDeleteFiles         = "delete_files"
-	KindSponsorblockCut     = "sponsorblock_cut"
-	KindMediaVerify         = "media_verify"
-	KindStreamPlay          = "stream_play"
+	KindScan               = "scan"
+	KindDownload           = "download"
+	KindRescanMetadata     = "rescan_metadata"
+	KindRefreshSidecars    = "refresh_sidecars"
+	KindImport             = "import"
+	KindPrefetchSeriesMeta = "prefetch_series_meta"
+	KindPrefetchVideoMeta  = "prefetch_video_meta"
+	KindPrefetchAddSeries  = "prefetch_add_series"
+	KindPrefetchAddVideo   = "prefetch_add_video"
+	KindSyncFiles          = "sync_files"
+	KindRetentionDelete    = "retention_delete"
+	KindRenameEpisodes     = "rename_episodes"
+	KindRegenerateNFO      = "regenerate_nfo"
+	KindDeleteFiles        = "delete_files"
+	KindDeleteSidecar      = "delete_sidecar"
+	KindSponsorblockCut    = "sponsorblock_cut"
+	KindMediaVerify        = "media_verify"
 
 	// SystemDomain is the queue lane for maintenance tasks.
 	SystemDomain = "system"
@@ -58,15 +54,15 @@ const (
 // IsPrefetchKind is true for ClaimInteractive metadata prefetch tasks.
 // These do not occupy max_parallel_tasks slots.
 func IsPrefetchKind(kind string) bool {
-	return kind == KindPrefetchSeriesMeta || kind == KindPrefetchVideoMeta || kind == KindPrefetchAddSeries
+	return kind == KindPrefetchSeriesMeta || kind == KindPrefetchVideoMeta ||
+		kind == KindPrefetchAddSeries || kind == KindPrefetchAddVideo
 }
 
 // IsInteractiveKind is true for tasks that must not wait behind other work
-// (prefetch ClaimInteractive, or stream_play InsertRunning occupancy).
-// Finish does not start domain cooldown. Prefetch kinds do not occupy parallel slots;
-// stream_play does.
+// (prefetch ClaimInteractive). Finish does not start domain cooldown.
+// Prefetch kinds do not occupy parallel slots.
 func IsInteractiveKind(kind string) bool {
-	return IsPrefetchKind(kind) || kind == KindStreamPlay
+	return IsPrefetchKind(kind)
 }
 
 // PrioritySyncFilesDue bumps cron sync_files ahead of pending apply naming.
@@ -213,7 +209,7 @@ func (s *Store) Enqueue(p EnqueueParams) (int64, error) {
 	if err := s.rejectDuplicate(p, payload); err != nil {
 		return 0, err
 	}
-	if (p.Kind == KindDownload || p.Kind == KindCacheBeginning) && !p.BypassDownloadCap {
+	if p.Kind == KindDownload && !p.BypassDownloadCap {
 		if err := s.rejectDownloadQueueFull(domain); err != nil {
 			return 0, err
 		}
@@ -280,7 +276,7 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 	// System lane: at most one pending/running task per kind (except import keeps per-video).
 	if p.Domain == SystemDomain {
 		switch p.Kind {
-		case KindSyncFiles, KindRetentionDelete, KindRenameEpisodes, KindRegenerateNFO, KindRegenerateStrm, KindClearBeginningCache, KindClearPlaybackCache:
+		case KindSyncFiles, KindRetentionDelete, KindRenameEpisodes, KindRegenerateNFO:
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE domain = ? AND kind = ? AND status IN (?, ?) LIMIT 1
 			`, SystemDomain, p.Kind, StatusPending, StatusRunning)
@@ -292,20 +288,6 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE kind = ? AND video_id = ? AND status IN (?, ?) LIMIT 1
 			`, KindDownload, p.VideoID, StatusPending, StatusRunning)
-		}
-		return nil
-	case KindCacheBeginning:
-		if p.VideoID > 0 {
-			return s.rejectIfExists(`
-				SELECT 1 FROM tasks WHERE kind = ? AND video_id = ? AND status IN (?, ?) LIMIT 1
-			`, KindCacheBeginning, p.VideoID, StatusPending, StatusRunning)
-		}
-		return nil
-	case KindPackStream:
-		if p.VideoID > 0 {
-			return s.rejectIfExists(`
-				SELECT 1 FROM tasks WHERE kind = ? AND video_id = ? AND status IN (?, ?) LIMIT 1
-			`, KindPackStream, p.VideoID, StatusPending, StatusRunning)
 		}
 		return nil
 	case KindScan:
@@ -378,20 +360,14 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 				SELECT 1 FROM tasks WHERE kind = ? AND video_id = ? AND status IN (?, ?) LIMIT 1
 			`, KindPrefetchVideoMeta, p.VideoID, StatusPending, StatusRunning)
 		}
-	case KindStreamPlay:
-		if p.VideoID > 0 {
-			return s.rejectIfExists(`
-				SELECT 1 FROM tasks WHERE kind = ? AND video_id = ? AND status IN (?, ?) LIMIT 1
-			`, KindStreamPlay, p.VideoID, StatusPending, StatusRunning)
-		}
-	case KindPrefetchAddSeries:
+	case KindPrefetchAddSeries, KindPrefetchAddVideo:
 		tok := DraftTokenFromPayload(payloadJSON)
 		if tok != "" {
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE kind = ? AND status IN (?, ?)
 				  AND json_extract(payload, '$.draft_token') = ?
 				LIMIT 1
-			`, KindPrefetchAddSeries, StatusPending, StatusRunning, tok)
+			`, p.Kind, StatusPending, StatusRunning, tok)
 		}
 	}
 	return nil
@@ -421,8 +397,8 @@ func (s *Store) rejectDownloadQueueFull(domain string) error {
 	var n int
 	err = s.DB.SQL.QueryRow(`
 		SELECT COUNT(*) FROM tasks
-		WHERE domain = ? AND kind IN (?, ?) AND status IN (?, ?)
-	`, domain, KindDownload, KindCacheBeginning, StatusPending, StatusRunning).Scan(&n)
+		WHERE domain = ? AND kind = ? AND status IN (?, ?)
+	`, domain, KindDownload, StatusPending, StatusRunning).Scan(&n)
 	if err != nil {
 		return err
 	}
@@ -445,7 +421,7 @@ func (s *Store) ClaimNext() (*Task, error) {
 		       COALESCE(t.detail,''), t.progress, t.domain, t.priority, t.created_at, t.started_at, t.finished_at
 		FROM tasks t
 		WHERE t.status = ?
-		  AND t.kind NOT IN (?, ?, ?)
+		  AND t.kind NOT IN (?, ?, ?, ?)
 		  AND NOT EXISTS (
 		    SELECT 1 FROM domains d WHERE d.domain = t.domain AND d.active = 0
 		  )
@@ -453,7 +429,7 @@ func (s *Store) ClaimNext() (*Task, error) {
 		    SELECT 1 FROM domain_runtime r WHERE r.domain = t.domain AND r.paused != 0
 		  )
 		ORDER BY t.priority DESC, t.id ASC
-	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries)
+	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo)
 	if err != nil {
 		return nil, err
 	}
@@ -473,12 +449,12 @@ func (s *Store) ClaimInteractive() (*Task, error) {
 		       COALESCE(t.detail,''), t.progress, t.domain, t.priority, t.created_at, t.started_at, t.finished_at
 		FROM tasks t
 		WHERE t.status = ?
-		  AND t.kind IN (?, ?, ?)
+		  AND t.kind IN (?, ?, ?, ?)
 		  AND NOT EXISTS (
 		    SELECT 1 FROM domains d WHERE d.domain = t.domain AND d.active = 0
 		  )
 		ORDER BY t.priority DESC, t.id ASC
-	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries)
+	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo)
 	if err != nil {
 		return nil, err
 	}
@@ -558,9 +534,9 @@ func (s *Store) domainHasParallelSlot(domain string) bool {
 	_ = s.DB.SQL.QueryRow(`
 		SELECT COUNT(*) FROM tasks
 		WHERE domain = ? AND status = ?
-		  AND kind NOT IN (?, ?, ?)
-	`, domain, StatusRunning, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries).Scan(&n)
-	// Prefetch kinds are excluded from the count; stream_play (interactive occupancy) counts.
+		  AND kind NOT IN (?, ?, ?, ?)
+	`, domain, StatusRunning, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo).Scan(&n)
+	// Prefetch kinds are excluded from the count.
 	return n < max
 }
 
@@ -573,6 +549,25 @@ func (s *Store) startDomainCooldown(domain string) {
 		return
 	}
 	s.cooldown[domain] = time.Now().Add(time.Duration(lim.TaskCooldownSeconds) * time.Second)
+}
+
+// HasPendingOrRunningDomain reports whether any task is pending or running for domain.
+func (s *Store) HasPendingOrRunningDomain(domain string) (bool, error) {
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		return false, nil
+	}
+	var one int
+	err := s.DB.SQL.QueryRow(`
+		SELECT 1 FROM tasks WHERE domain = ? AND status IN (?, ?) LIMIT 1
+	`, domain, StatusPending, StatusRunning).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // HasPendingOrRunningKind reports whether any task of kind is pending or running
@@ -598,25 +593,23 @@ func (s *Store) HasPendingOrRunningKind(kind, domain string) (bool, error) {
 	return true, nil
 }
 
-// CountMediaActive returns pending+running count for download, pack_stream,
-// cache_beginning, sponsorblock_cut, media_verify, and stream_play across all domains.
+// CountMediaActive returns pending+running count for download, sponsorblock_cut,
+// and media_verify across all domains.
 func (s *Store) CountMediaActive() (int, error) {
 	var n int
 	err := s.DB.SQL.QueryRow(`
 		SELECT COUNT(*) FROM tasks
-		WHERE kind IN (?, ?, ?, ?, ?, ?) AND status IN (?, ?)
-	`, KindDownload, KindPackStream, KindCacheBeginning, KindSponsorblockCut, KindMediaVerify, KindStreamPlay, StatusPending, StatusRunning).Scan(&n)
+		WHERE kind IN (?, ?, ?) AND status IN (?, ?)
+	`, KindDownload, KindSponsorblockCut, KindMediaVerify, StatusPending, StatusRunning).Scan(&n)
 	return n, err
 }
 
-// Finish marks a task done or failed. Host lanes start domain cooldown (non-interactive only);
-// the system lane never cools down.
+// Finish marks a task done, failed, or cancelled.
+// Domain cooldown is started on ClaimNext only (not here); interactive finishes never cool down.
 func (s *Store) Finish(id int64, status, message, errCode, errMsg string) error {
 	if status != StatusDone && status != StatusFailed && status != StatusCancelled {
 		return fmt.Errorf("invalid finish status %q", status)
 	}
-	var domain, kind string
-	_ = s.DB.SQL.QueryRow(`SELECT domain, kind FROM tasks WHERE id = ?`, id).Scan(&domain, &kind)
 
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.DB.SQL.Exec(`
@@ -627,16 +620,6 @@ func (s *Store) Finish(id int64, status, message, errCode, errMsg string) error 
 		return err
 	}
 	s.Logs.Clear(id)
-
-	// System lane is serial only - no task_cooldown_seconds between system tasks.
-	if domain != "" && domain != SystemDomain && !IsInteractiveKind(kind) {
-		lim, err := settings.LimitsForDomain(s.DB, domain)
-		if err == nil && lim.TaskCooldownSeconds > 0 {
-			s.mu.Lock()
-			s.cooldown[domain] = time.Now().Add(time.Duration(lim.TaskCooldownSeconds) * time.Second)
-			s.mu.Unlock()
-		}
-	}
 	return nil
 }
 
@@ -681,6 +664,33 @@ func (s *Store) UpdatePayload(id int64, payload map[string]any) error {
 func (s *Store) SetDetail(id int64, detail string) error {
 	_, err := s.DB.SQL.Exec(`UPDATE tasks SET detail = NULLIF(?, '') WHERE id = ?`, detail, id)
 	return err
+}
+
+// MergeDetailJSON merges patch keys into tasks.detail (JSON object).
+// Non-JSON existing detail is preserved under key "error".
+func (s *Store) MergeDetailJSON(id int64, patch map[string]any) error {
+	if s == nil || id <= 0 || len(patch) == 0 {
+		return nil
+	}
+	var cur string
+	err := s.DB.SQL.QueryRow(`SELECT COALESCE(detail, '') FROM tasks WHERE id = ?`, id).Scan(&cur)
+	if err != nil {
+		return err
+	}
+	m := map[string]any{}
+	if strings.TrimSpace(cur) != "" {
+		if json.Unmarshal([]byte(cur), &m) != nil || m == nil {
+			m = map[string]any{"error": cur}
+		}
+	}
+	for k, v := range patch {
+		m[k] = v
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return s.SetDetail(id, string(b))
 }
 
 const taskCommandsCap = 100
@@ -749,8 +759,8 @@ func (s *Store) CancelWithMessage(id int64, message string) (prevStatus string, 
 	return prevStatus, nil
 }
 
-// CancelDownloadsForVideo cancels pending and running download, cache_beginning,
-// pack_stream, sponsorblock_cut, media_verify, and stream_play tasks for one video.
+// CancelDownloadsForVideo cancels pending and running download, sponsorblock_cut,
+// and media_verify tasks for one video.
 // Returns snapshots with pre-cancel Status (pending|running) and the cancel Message applied.
 func (s *Store) CancelDownloadsForVideo(videoID int64, message string) ([]Task, error) {
 	if videoID <= 0 {
@@ -764,8 +774,8 @@ func (s *Store) CancelDownloadsForVideo(videoID int64, message string) ([]Task, 
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
 		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at
 		FROM tasks
-		WHERE kind IN (?, ?, ?, ?, ?, ?) AND video_id = ? AND status IN (?, ?)
-	`, KindDownload, KindCacheBeginning, KindPackStream, KindSponsorblockCut, KindMediaVerify, KindStreamPlay, videoID, StatusPending, StatusRunning)
+		WHERE kind IN (?, ?, ?) AND video_id = ? AND status IN (?, ?)
+	`, KindDownload, KindSponsorblockCut, KindMediaVerify, videoID, StatusPending, StatusRunning)
 	if err != nil {
 		return nil, err
 	}
@@ -832,21 +842,6 @@ func (s *Store) TaskStatus(id int64) (string, error) {
 		return "", nil
 	}
 	return st, err
-}
-
-// Bump raises priority so the task moves forward in its domain lane.
-func (s *Store) Bump(id int64) error {
-	res, err := s.DB.SQL.Exec(`
-		UPDATE tasks SET priority = priority + 10 WHERE id = ? AND status = ?
-	`, id, StatusPending)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("task %d not pending", id)
-	}
-	return nil
 }
 
 // CancelAll cancels all pending tasks and returns snapshots for Activity.
@@ -1225,7 +1220,7 @@ func URLFromPayload(payload string) string {
 	return strings.TrimSpace(p.URL)
 }
 
-// DraftTokenFromPayload reads draft_token from prefetch_add_series payload JSON.
+// DraftTokenFromPayload reads draft_token from prefetch_add_series / prefetch_add_video payload JSON.
 func DraftTokenFromPayload(payload string) string {
 	var p struct {
 		DraftToken string `json:"draft_token"`
@@ -1303,26 +1298,11 @@ func parseCommandsJSON(raw string) []string {
 }
 
 // RequeueStaleRunning marks interrupted running tasks as pending after process restart.
-// stream_play occupancy is excluded (sessions are gone; see CancelStaleStreamPlay).
 func (s *Store) RequeueStaleRunning() (int64, error) {
 	res, err := s.DB.SQL.Exec(`
 		UPDATE tasks SET status = ?, started_at = NULL, message = 'Requeued after restart'
-		WHERE status = ? AND kind != ?
-	`, StatusPending, StatusRunning, KindStreamPlay)
-	if err != nil {
-		return 0, err
-	}
-	return res.RowsAffected()
-}
-
-// CancelStaleStreamPlay marks orphaned running stream_play rows cancelled after restart
-// (in-memory occupancy is gone; do not requeue).
-func (s *Store) CancelStaleStreamPlay() (int64, error) {
-	finished := time.Now().UTC().Format(time.RFC3339Nano)
-	res, err := s.DB.SQL.Exec(`
-		UPDATE tasks SET status = ?, finished_at = ?, message = ?, error_code = ?, error_message = NULL
-		WHERE status = ? AND kind = ?
-	`, StatusCancelled, finished, "Session lost on restart", "Cancelled", StatusRunning, KindStreamPlay)
+		WHERE status = ?
+	`, StatusPending, StatusRunning)
 	if err != nil {
 		return 0, err
 	}

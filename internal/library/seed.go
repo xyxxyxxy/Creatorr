@@ -13,18 +13,21 @@ const (
 	DefaultProfileName = "best"
 	DefaultFormat      = "bv*+ba/b"
 
-	Profile1080Name   = "1080p"
+	Profile1080Name   = "HD 1080p"
 	Profile1080Format = "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"
-	Profile720Name    = "720p"
+	Profile720Name    = "HD 720p"
 	Profile720Format  = "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b"
+	Profile480Name    = "SD 480p"
+	Profile480Format  = "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b"
 )
 
 // SeedDefaults inserts the shipped root folder and quality profiles when tables are empty.
 // Root path comes from cfg.LibraryRoot (/media/library in container; var/media/library local),
-// stored as an absolute path. Root name is the last path segment (same as empty Name on create).
-// Profiles: best (default selector bv*+ba/b), 1080p, 720p. Insert order keeps best as lowest id.
+// stored as an absolute path. Seeded root name is the last path segment (operator create may leave name empty).
+// Profiles: best (bv*+ba/b merge with progressive fallback), HD 1080p, HD 720p, SD 480p (soft unrestricted tails).
+// Seed insert order is unrelated to UI order (ListProfiles sorts by name).
 // Remux is always MKV (library.RemuxContainer; not a Setting).
-// Bare yt-dlp "best" is intentionally avoided: on DASH sites it often picks a soft progressive file.
+// Bare yt-dlp "best" alone is avoided as the primary selector (soft progressive on DASH sites).
 func SeedDefaults(database *db.DB, cfg config.Config) error {
 	path := cfg.LibraryRoot
 	if path == "" {
@@ -44,10 +47,7 @@ func SeedDefaults(database *db.DB, cfg config.Config) error {
 		return err
 	}
 	if roots == 0 {
-		name, err := resolveRootName("", path)
-		if err != nil {
-			return fmt.Errorf("seed root name: %w", err)
-		}
+		name := filepath.Base(path)
 		_, err = database.SQL.Exec(`
 			INSERT INTO root_folders (name, path, retention_ttl_seconds) VALUES (?, ?, NULL)
 		`, name, path)
@@ -65,6 +65,7 @@ func SeedDefaults(database *db.DB, cfg config.Config) error {
 			{DefaultProfileName, DefaultFormat},
 			{Profile1080Name, Profile1080Format},
 			{Profile720Name, Profile720Format},
+			{Profile480Name, Profile480Format},
 		}
 		for _, s := range seeds {
 			_, err := database.SQL.Exec(`

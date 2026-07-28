@@ -1,0 +1,45 @@
+{{define "maintenance_live"}}
+{{/* Busy flags for Scan / Apply / NFO regenerate buttons. */}}
+<div id="maintenance-live"{{if .OOB}} hx-swap-oob="true"{{end}}>
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Library maintenance" "help" "Library-wide one-shot actions. Large libraries may take a while.")}}
+  <div class="flex flex-col items-stretch gap-3 w-full max-w-md">
+    {{if .SyncFilesBusy}}
+    <div class="join w-full">
+      <button type="button" class="btn btn-warning join-item grow" disabled>Scan for missing files (queued)</button>
+      {{template "field_info" (dict "Join" true "Info" "Find missing or restored media. Same pass as 'File sync schedule'.")}}
+    </div>
+    {{else}}
+    <form method="post" action="/actions/sync-files" class="join w-full">
+      <button type="submit" class="btn btn-warning join-item grow">Scan for missing files</button>
+      {{template "field_info" (dict "Join" true "Info" "Find missing or restored media. Same pass as 'File sync schedule'.")}}
+    </form>
+    {{end}}
+
+    {{if .ApplyNamingBusy}}
+    <div class="join w-full">
+      <button type="button" class="btn btn-warning join-item grow" disabled>Apply episode format (queued)</button>
+      {{template "field_info" (dict "Join" true "Info" "Rename packed episodes to the current 'Episode format'. Busy videos are skipped.")}}
+    </div>
+    {{else}}
+    <form method="post" action="/actions/apply-episode-naming" class="join w-full">
+      <button type="submit" class="btn btn-warning join-item grow">Apply episode format</button>
+      {{template "field_info" (dict "Join" true "Info" "Rename packed episodes to the current 'Episode format'. Busy videos are skipped.")}}
+    </form>
+    {{end}}
+
+    {{if .NFORegenBusy}}
+    <div class="join w-full">
+      <button type="button" class="btn btn-warning join-item grow" disabled>Regenerate all NFO files (queued)</button>
+      {{template "field_info" (dict "Join" true "Info" "Rewrite episode and series NFO from the library. Skips unchanged files.")}}
+    </div>
+    {{else}}
+    <form method="post" action="/actions/regenerate-nfos" class="join w-full">
+      <button type="submit" class="btn btn-warning join-item grow">Regenerate all NFO files</button>
+      {{template "field_info" (dict "Join" true "Info" "Rewrite episode and series NFO from the library. Skips unchanged files.")}}
+    </form>
+    {{end}}
+  </div>
+{{template "list_panel_end"}}
+</div>
+{{end}}

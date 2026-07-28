@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -16,7 +17,7 @@ type seriesListRow struct {
 	HasMonitoredSource bool
 	Busy               bool
 	MonitorInd         seriesStatusView  // left of title: always monitored | unmonitored
-	StatusInd          *seriesStatusView // poster top-left: health/busy only
+	StatusInd          *seriesStatusView // poster top-left: health errors/warnings only
 	PosterURL          string
 	Line2              string
 	KindIcon           string
@@ -55,6 +56,12 @@ func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
 			f.QualityProfileID = id
 		}
+	}
+	switch strings.ToLower(strings.TrimSpace(q.Get("delivery"))) {
+	case library.DeliveryVideo:
+		f.DeliveryMode = library.DeliveryVideo
+	case library.DeliveryAudio:
+		f.DeliveryMode = library.DeliveryAudio
 	}
 	switch strings.TrimSpace(q.Get("monitored")) {
 	case "1":
@@ -119,11 +126,10 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 				posterURL = fmt.Sprintf("/series/%d/art/poster", s.ID)
 			}
 		}
-		kindIcon, kindTip := "download", "Download series"
+		kindIcon, kindTip := "", ""
 		monitorTitle := "Include this series in scans and download-wanted (does not change source flags)"
-		if s.IsStream() {
-			kindIcon, kindTip = "radio", "Stream series (.strm + proxy)"
-			monitorTitle = "Include in scans; wanted videos pack .strm (download-wanted cron skips stream series)"
+		if s.IsAudio() {
+			kindIcon, kindTip = "headphones", "Audio series"
 		}
 		srcLabel := fmt.Sprintf("%d sources", s.SourceCount)
 		if s.SourceCount == 1 {
@@ -131,11 +137,17 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 		}
 		line2Parts := []string{s.QualityProfileName}
 		if len(roots) > 1 {
-			line2Parts = append(line2Parts, s.RootName)
+			rootLabel := strings.TrimSpace(s.RootName)
+			if rootLabel == "" {
+				rootLabel = rootPath[s.RootID]
+			}
+			if rootLabel != "" {
+				line2Parts = append(line2Parts, rootLabel)
+			}
 		}
 		line2Parts = append(line2Parts, srcLabel)
 		var statusInd *seriesStatusView
-		if v, ok := buildSeriesHealthStatus(errFlags[s.ID], warnLevels[s.ID], best); ok {
+		if v, ok := buildSeriesHealthStatus(errFlags[s.ID], warnLevels[s.ID]); ok {
 			statusInd = &v
 		}
 		rows = append(rows, seriesListRow{
@@ -173,9 +185,13 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 	if len(roots) > 1 {
 		opts := make([]listFilterOpt, 0, len(roots))
 		for _, root := range roots {
+			label := strings.TrimSpace(root.Name)
+			if label == "" {
+				label = root.Path
+			}
 			opts = append(opts, listFilterOpt{
 				Value:    strconv.FormatInt(root.ID, 10),
-				Label:    root.Name,
+				Label:    label,
 				Selected: filter.RootID == root.ID,
 			})
 		}
@@ -196,6 +212,13 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 			Name: "quality", AriaLabel: "Quality profile", EmptyLabel: "All quality", Options: opts,
 		})
 	}
+	seriesFilter.Selects = append(seriesFilter.Selects, listFilterSelect{
+		Name: "delivery", AriaLabel: "Delivery mode", EmptyLabel: "All delivery",
+		Options: []listFilterOpt{
+			{Value: library.DeliveryVideo, Label: "Video", Selected: filter.DeliveryMode == library.DeliveryVideo},
+			{Value: library.DeliveryAudio, Label: "Audio", Selected: filter.DeliveryMode == library.DeliveryAudio},
+		},
+	})
 	monSel := ""
 	if filter.Monitored != nil {
 		if *filter.Monitored {
@@ -218,6 +241,17 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 		SeriesFilter: seriesFilter,
 		FilterActive: filter.Active(),
 	}, nil
+}
+
+func (h *Handler) seriesErrorCountJSON(w http.ResponseWriter, r *http.Request) {
+	n, err := h.Library.CountSeriesWithError()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(map[string]int{"count": n})
 }
 
 func (h *Handler) seriesListLive(w http.ResponseWriter, r *http.Request) {

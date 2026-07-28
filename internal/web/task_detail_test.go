@@ -7,6 +7,32 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 )
 
+func TestParsePOTDetail(t *testing.T) {
+	got := parsePOTDetail(`{"po-token":{"state":"issued","detail":"Retrieved a gvs PO Token","fetch":"auto"}}`)
+	if got == nil || got.State != "issued" || got.Label != "Issued" || got.Fetch != "auto" {
+		t.Fatalf("got %#v", got)
+	}
+	if parsePOTDetail(`{"created_ids":[1]}`) != nil {
+		t.Fatal("expected nil without pot")
+	}
+	if parsePOTDetail("not-json") != nil {
+		t.Fatal("expected nil for non-json")
+	}
+}
+
+func TestParseDomainAccessDetail(t *testing.T) {
+	got := parseDomainAccessDetail(`{"domain-access":{"rate_limit":"10M","rate_override":true,"sleep_requests":1,"cookies":true,"cookies_override":true,"flare":false,"credentials":true,"credentials_override":true}}`)
+	if got == nil || got.RateLimit != "10M" || !got.RateOverride || !got.Cookies || !got.Credentials || got.Flare {
+		t.Fatalf("got %#v", got)
+	}
+	if !got.ShowRate() || !got.ShowSleep() {
+		t.Fatal("expected show rate+sleep")
+	}
+	if parseDomainAccessDetail(`{"created_ids":[1]}`) != nil {
+		t.Fatal("expected nil without domain-access")
+	}
+}
+
 func TestTaskDetailFieldsCreatedState(t *testing.T) {
 	h := &Handler{}
 	detail := `{
@@ -90,32 +116,32 @@ func TestTaskDetailFieldsCreatedAllWanted(t *testing.T) {
 
 func TestMergeVideoHistoryDetailFields(t *testing.T) {
 	rows := []taskDetailHistRow{
-		{Event: "stream_packed", VideoID: 10, VideoTitle: "Alpha", SeriesID: 1},
-		{Event: "stream_packed", VideoID: 10, VideoTitle: "Alpha", SeriesID: 1}, // dup
+		{Event: "sidecar_refreshed", VideoID: 10, VideoTitle: "Alpha", SeriesID: 1},
+		{Event: "sidecar_refreshed", VideoID: 10, VideoTitle: "Alpha", SeriesID: 1}, // dup
 		{Event: "downloaded", VideoID: 11, VideoTitle: "Beta", SeriesID: 1},
-		{Event: "stream_packed", VideoID: 12, VideoTitle: "Gamma", SeriesID: 2},
-		{Event: "cancelled", Detail: `{"kind":"pack_stream"}`, VideoID: 13, VideoTitle: "Delta", SeriesID: 1},
+		{Event: "sidecar_refreshed", VideoID: 12, VideoTitle: "Gamma", SeriesID: 2},
+		{Event: "cancelled", Detail: `{"kind":"media_verify"}`, VideoID: 13, VideoTitle: "Delta", SeriesID: 1},
 	}
 	got := mergeVideoHistoryDetailFields(nil, rows)
 	if len(got) != 3 {
 		t.Fatalf("want 3 event keys, got %d: %+v", len(got), got)
 	}
-	if got[0].Key != "stream_packed" || !got[0].IsVideoList || len(got[0].Videos) != 2 {
-		t.Fatalf("stream_packed: %+v", got[0])
+	if got[0].Key != "sidecar_refreshed" || !got[0].IsVideoList || len(got[0].Videos) != 2 {
+		t.Fatalf("sidecar_refreshed: %+v", got[0])
 	}
 	if got[0].Videos[0].Title != "Alpha" || got[0].Videos[1].ID != 12 {
-		t.Fatalf("stream_packed videos: %+v", got[0].Videos)
+		t.Fatalf("sidecar_refreshed videos: %+v", got[0].Videos)
 	}
 	if got[1].Key != "downloaded" || len(got[1].Videos) != 1 {
 		t.Fatalf("downloaded: %+v", got[1])
 	}
-	if got[2].Key != "pack_stream" || len(got[2].Videos) != 1 || got[2].Videos[0].ID != 13 {
-		t.Fatalf("cancelled→pack_stream: %+v", got[2])
+	if got[2].Key != "media_verify" || len(got[2].Videos) != 1 || got[2].Videos[0].ID != 13 {
+		t.Fatalf("cancelled→media_verify: %+v", got[2])
 	}
 	// Existing JSON key wins; do not duplicate as history event list.
-	existing := []detailField{{Key: "stream_packed", Text: "already"}}
+	existing := []detailField{{Key: "sidecar_refreshed", Text: "already"}}
 	got = mergeVideoHistoryDetailFields(existing, rows)
-	if len(got) != 3 || got[0].Text != "already" || got[1].Key != "downloaded" || got[2].Key != "pack_stream" {
+	if len(got) != 3 || got[0].Text != "already" || got[1].Key != "downloaded" || got[2].Key != "media_verify" {
 		t.Fatalf("skip existing key: %+v", got)
 	}
 }
@@ -124,9 +150,9 @@ func TestHistoryEventLabel(t *testing.T) {
 	cases := []struct {
 		event, detail, want string
 	}{
-		{"stream_packed", "", "stream_packed"},
-		{"cancelled", `{"kind":"pack_stream"}`, "pack_stream"},
-		{"cancelled", `{"kind":"cache_beginning"}`, "cache_beginning"},
+		{"sidecar_refreshed", "", "sidecar_refreshed"},
+		{"cancelled", `{"kind":"media_verify"}`, "media_verify"},
+		{"cancelled", `{"kind":"sponsorblock_cut"}`, "sponsorblock_cut"},
 		{"cancelled", `{}`, "cancelled"},
 		{"cancelled", "", "cancelled"},
 		{library.SourceHistCancelled, `{"mode":"scan"}`, "scan"},
@@ -137,4 +163,3 @@ func TestHistoryEventLabel(t *testing.T) {
 		}
 	}
 }
-

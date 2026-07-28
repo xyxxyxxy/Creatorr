@@ -19,6 +19,10 @@ type pageBase struct {
 	Flash       *flash
 }
 
+// EpisodeLucideIcon is the Lucide name for indexed episodes (library videos).
+// Packed media files (kind=video) use "film" via sidecarKindIcon instead.
+const EpisodeLucideIcon = "square-play"
+
 // newPage builds pageBase with a nav-matched lucide icon.
 func newPage(title, nav string, flash *flash) pageBase {
 	return pageBase{Title: title, Nav: nav, Icon: pageIcon(nav), Flash: flash}
@@ -60,6 +64,8 @@ func settingsTabIcon(tab string) string {
 		return "sliders-horizontal"
 	case "library":
 		return "folder"
+	case "maintenance":
+		return "wrench"
 	case "scheduler":
 		return "calendar-clock"
 	case "queue":
@@ -100,7 +106,6 @@ func stripWWWHost(s string) string {
 	}
 	return s
 }
-
 
 func flashFromQuery(r *http.Request) *flash {
 	if e := r.URL.Query().Get("err"); e != "" {
@@ -143,12 +148,14 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Series metadata saved (tvshow.nfo + art).")
 	case "video-metadata":
 		return flashOK("Episode metadata saved.")
+	case "video-metadata-busy":
+		return flashOK("Episode metadata saved. Rename skipped while a download or pack task is busy - run Apply episode format later.")
 	case "download":
 		return flashOK("Download now enqueued.")
-	case "prepare-stream":
-		return flashOK("Prepare stream enqueued.")
 	case "video-deleted":
 		return flashOK("Video delete queued - files remove in the background.")
+	case "sidecar-deleted":
+		return flashOK("Sidecar deleted.")
 	case "retry":
 		return flashOK("Source errors cleared; videos set to wanted.")
 	case "deleted":
@@ -168,15 +175,11 @@ func flashFromQuery(r *http.Request) *flash {
 	case "profile-updated":
 		return flashOK("Quality profile updated.")
 	case "nfo-regen-queued":
-		return flashOK("NFO regenerate queued - see Tasks (system lane). Resumes after restart.")
-	case "strm-regen-queued":
-		return flashOK("strm regenerate queued - see Tasks (system lane). Resumes after restart.")
-	case "begin-clear-queued":
-		return flashOK("Clear beginning cache queued - see Tasks (system lane).")
-	case "playback-clear-queued":
-		return flashOK("Clear progressive stream cache queued - see Tasks (system lane).")
-	case "stream-token-rotated":
-		return flashOK("Stream URL token rotated.")
+		return flashOK("NFO regenerate queued.")
+	case "sync-files-queued":
+		return flashOK("File sync queued.")
+	case "sync-files-empty":
+		return flashWarn("No videos to sync.")
 	case "nfo-regen":
 		rewrote := r.URL.Query().Get("rewrote")
 		failed := r.URL.Query().Get("failed")
@@ -187,7 +190,7 @@ func flashFromQuery(r *http.Request) *flash {
 		}
 		return flashOK(msg)
 	case "apply-naming":
-		return flashOK("Apply episode format queued - see Tasks (system lane).")
+		return flashOK("'Apply episode format' queued.")
 	case "delete-queued":
 		return flashOK("Delete queued - files remove in the background.")
 	case "domain-queue":

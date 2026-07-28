@@ -108,11 +108,11 @@ func (s *Store) ApplyEpisodeNamingPass(ctx context.Context, task *queue.Task, pr
 		FROM videos v
 		JOIN series s ON s.id = v.series_id
 		JOIN root_folders r ON r.id = s.root_id
-		WHERE v.status IN ('downloaded', 'streamable', 'verify_failed')
+		WHERE v.status IN ('downloaded', 'verify_failed')
 		  AND v.id > ?
 		  AND EXISTS (
 		    SELECT 1 FROM files f
-		    WHERE f.video_id = v.id AND f.kind IN ('video', 'strm')
+		    WHERE f.video_id = v.id AND f.kind = 'video'
 		  )
 		ORDER BY v.id ASC
 	`, p.Cursor)
@@ -179,9 +179,9 @@ func (s *Store) videoBusyForRename(videoID int64) (bool, error) {
 	var one int
 	err := s.DB.SQL.QueryRow(`
 		SELECT 1 FROM tasks
-		WHERE video_id = ? AND kind IN (?, ?, ?, ?, ?, ?) AND status IN (?, ?)
+		WHERE video_id = ? AND kind IN (?, ?, ?) AND status IN (?, ?)
 		LIMIT 1
-	`, videoID, queue.KindDownload, queue.KindPackStream, queue.KindCacheBeginning, queue.KindSponsorblockCut, queue.KindMediaVerify, queue.KindStreamPlay,
+	`, videoID, queue.KindDownload, queue.KindSponsorblockCut, queue.KindMediaVerify,
 		queue.StatusPending, queue.StatusRunning).Scan(&one)
 	if err == sql.ErrNoRows {
 		return false, nil
@@ -216,7 +216,7 @@ func (s *Store) renameVideoEpisodeSet(taskID, videoID int64, seriesTitle, title,
 			return false, false, true
 		}
 		files = append(files, f)
-		if (f.Kind == "video" || f.Kind == "strm") && primary == "" {
+		if f.Kind == "video" && primary == "" {
 			primary = f.Path
 		}
 	}

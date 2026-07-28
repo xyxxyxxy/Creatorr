@@ -1,15 +1,15 @@
 {{define "list_row_shell"}}
 {{/* Shared daisyUI list-row: media | title+meta | actions.
      MediaURL?, MediaClass?, ImgClass?, Circle?, PlaceholderIcon?, Badge?,
-     TitleHref, Title, KindIcon?, KindTip? (delivery indicator on media bottom-right),
-     StatusInd? (series_status_indicator health/busy on media top-left),
+     TitleHref, Title, KindIcon?, KindTip? (optional delivery badge on media bottom-right; audio only),
+     StatusInd? (series_status_indicator health on media top-left),
      MonitorInd? (series_monitor_indicator left of title; always monitor state),
      TaskInd?, WarnLevel?,
      Line2? (plain text), ShowProgress? (uses series_progress on .; shares Line2 row 50/50),
      Monitor? (dict for monitor_toggle). */}}
 {{$mediaClass := .MediaClass}}{{if not $mediaClass}}{{$mediaClass = "relative shrink-0 w-[112px] aspect-video"}}{{end}}
 {{$imgClass := .ImgClass}}{{if not $imgClass}}{{if .Circle}}{{$imgClass = "size-full rounded-full object-cover"}}{{else}}{{$imgClass = "size-full rounded object-cover"}}{{end}}{{end}}
-{{$ph := .PlaceholderIcon}}{{if not $ph}}{{$ph = "film"}}{{end}}
+{{$ph := .PlaceholderIcon}}{{if not $ph}}{{$ph = "square-play"}}{{end}}
 <li class="list-row">
   <div class="relative self-start {{$mediaClass}}">
     {{if .MediaURL}}

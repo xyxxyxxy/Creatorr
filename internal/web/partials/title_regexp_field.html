@@ -1,12 +1,11 @@
 {{define "title_regexp_field"}}
 {{/*
   Go regexp title filter field.
-  Expects optional: Value, ID, Name, Label, Info.
-  Defaults: Name title_regexp_include, Label Title include, include Info text.
+  Expects optional: Value, ID, Name, Label, Info, Class.
+  Defaults: Name title_regexp_include, Label Include (no Info tip).
 */}}
 {{$name := .Name}}{{if not $name}}{{$name = "title_regexp_include"}}{{end}}
-{{$label := .Label}}{{if not $label}}{{$label = "Title include"}}{{end}}
-{{$info := .Info}}{{if not $info}}{{$info = "Go regexp matched against video titles. Only matching titles are indexed."}}{{end}}
+{{$label := .Label}}{{if not $label}}{{$label = "Include"}}{{end}}
 {{template "field_input" (dict
   "Name" $name
   "ID" .ID
@@ -14,7 +13,7 @@
   "Value" .Value
   "Mono" true
   "Placeholder" "regexp"
-  "Info" $info
+  "Info" .Info
   "Class" .Class
 )}}
 {{end}}

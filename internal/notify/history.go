@@ -21,21 +21,22 @@ type Notification struct {
 	ReadAt     sql.NullString
 }
 
-// Unread reports whether this alert notification is still unread.
+// Unread reports whether this alert/warning notification is still unread.
 func (n Notification) Unread() bool {
-	return IsAlertEvent(n.Event) && !n.ReadAt.Valid
+	return IsUnreadEvent(n.Event) && !n.ReadAt.Valid
 }
 
 // ListFilter selects notification rows.
 type ListFilter struct {
 	Event      string
+	Level      string // info | warning | alert; empty = all
 	From       string // inclusive UTC RFC3339Nano on created_at
 	To         string // inclusive UTC RFC3339Nano on created_at
 	UnreadOnly bool
 }
 
 // InsertNotification writes a notification row. taskID <= 0 stores NULL.
-// readAt empty means unread (alert events); non-empty marks read at insert.
+// readAt empty means unread (alert/warning events); non-empty marks read at insert.
 func InsertNotification(database *db.DB, event, title, body string, taskID int64, externalOK bool, readAt string) (int64, error) {
 	if database == nil {
 		return 0, fmt.Errorf("database required")
@@ -163,16 +164,24 @@ func MarkRead(database *db.DB, id int64) error {
 	return err
 }
 
-// MarkAllRead marks all unread alert notifications as read.
+// MarkAllRead marks all unread alert/warning notifications as read.
 func MarkAllRead(database *db.DB) (int64, error) {
 	if database == nil {
 		return 0, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	evs := UnreadEvents()
+	ph := strings.Repeat("?,", len(evs))
+	ph = ph[:len(ph)-1]
+	args := make([]any, 0, 1+len(evs))
+	args = append(args, now)
+	for _, e := range evs {
+		args = append(args, e)
+	}
 	res, err := database.SQL.Exec(`
 		UPDATE notifications SET read_at = ?
-		WHERE read_at IS NULL AND event IN (?, ?, ?, ?)
-	`, now, EventCookieInvalid, EventRateLimited, EventYtDlpFailed, EventVerifyFailed)
+		WHERE read_at IS NULL AND event IN (`+ph+`)
+	`, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -190,6 +199,14 @@ func notificationWhere(f ListFilter) (string, []any) {
 		parts = append(parts, `event = ?`)
 		args = append(args, AliasEvent(ev))
 	}
+	if evs := EventsForLevel(f.Level); len(evs) > 0 {
+		ph := strings.Repeat("?,", len(evs))
+		ph = ph[:len(ph)-1]
+		parts = append(parts, `event IN (`+ph+`)`)
+		for _, e := range evs {
+			args = append(args, e)
+		}
+	}
 	if from := strings.TrimSpace(f.From); from != "" {
 		parts = append(parts, `datetime(created_at) >= datetime(?)`)
 		args = append(args, from)
@@ -199,8 +216,13 @@ func notificationWhere(f ListFilter) (string, []any) {
 		args = append(args, to)
 	}
 	if f.UnreadOnly {
-		parts = append(parts, `read_at IS NULL AND event IN (?, ?, ?, ?)`)
-		args = append(args, EventCookieInvalid, EventRateLimited, EventYtDlpFailed, EventVerifyFailed)
+		evs := UnreadEvents()
+		ph := strings.Repeat("?,", len(evs))
+		ph = ph[:len(ph)-1]
+		parts = append(parts, `read_at IS NULL AND event IN (`+ph+`)`)
+		for _, e := range evs {
+			args = append(args, e)
+		}
 	}
 	if len(parts) == 0 {
 		return "", args

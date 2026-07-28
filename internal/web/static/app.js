@@ -1,15 +1,31 @@
 (() => {
   const THEME_KEY = "creatorr-theme";
-  const THEME_LIGHT = "light";
-  const THEME_DARK = "dim"; // OS dark + sun/moon dark side
-  // daisyUI themeOrder - keep in sync with node_modules/daisyui/functions/themeOrder.js
-  const THEMES = [
-    "light", "dark", "cupcake", "bumblebee", "emerald", "corporate", "synthwave", "retro",
-    "cyberpunk", "valentine", "halloween", "garden", "forest", "aqua", "lofi", "pastel",
-    "fantasy", "wireframe", "black", "luxury", "dracula", "cmyk", "autumn", "business",
-    "acid", "lemonade", "night", "coffee", "winter", "dim", "nord", "sunset",
-    "caramellatte", "abyss", "silk",
-  ];
+  const THEME_LIGHT = "emerald"; // OS light fallback
+  const THEME_DARK = "dark"; // OS dark fallback
+  const THEME_GROUPS = {
+    dark: ["dark", "synthwave", "forest", "black", "dracula", "coffee", "dim", "sunset", "abyss"],
+    light: ["cupcake", "emerald", "corporate", "garden", "fantasy", "autumn"],
+    special: ["cyberpunk", "valentine", "halloween", "aqua"],
+  };
+  const THEMES = [].concat(THEME_GROUPS.dark, THEME_GROUPS.light, THEME_GROUPS.special);
+  const LEGACY_THEMES = {
+    light: "emerald",
+    night: "dark",
+    bumblebee: "cupcake",
+    retro: "cupcake",
+    lofi: "cupcake",
+    pastel: "cupcake",
+    wireframe: "cupcake",
+    luxury: "dracula",
+    cmyk: "cupcake",
+    business: "corporate",
+    acid: "cupcake",
+    lemonade: "cupcake",
+    winter: "cupcake",
+    nord: "dark",
+    caramellatte: "cupcake",
+    silk: "cupcake",
+  };
 
   function osTheme() {
     try {
@@ -19,14 +35,20 @@
     }
   }
 
+  function normalizeTheme(t) {
+    if (typeof t !== "string") return null;
+    if (THEMES.includes(t)) return t;
+    if (LEGACY_THEMES[t]) return LEGACY_THEMES[t];
+    return null;
+  }
+
   function isTheme(t) {
-    return typeof t === "string" && THEMES.includes(t);
+    return normalizeTheme(t) != null;
   }
 
   function storedTheme() {
     try {
-      const t = localStorage.getItem(THEME_KEY);
-      if (isTheme(t)) return t;
+      return normalizeTheme(localStorage.getItem(THEME_KEY));
     } catch (_) {}
     return null;
   }
@@ -35,25 +57,14 @@
     return storedTheme() || osTheme();
   }
 
-  function isDarkScheme() {
-    try {
-      return getComputedStyle(document.documentElement).getPropertyValue("color-scheme").includes("dark");
-    } catch (_) {
-      return false;
-    }
-  }
-
   function syncThemeControls(theme) {
-    document.querySelectorAll("[data-theme-toggle]").forEach((el) => {
-      el.checked = isDarkScheme();
-    });
-    document.querySelectorAll('input[name="theme-dropdown"]').forEach((el) => {
+    document.querySelectorAll('input[name="theme-picker"]').forEach((el) => {
       el.checked = el.value === theme;
     });
   }
 
   function applyTheme(theme, opts) {
-    const t = isTheme(theme) ? theme : osTheme();
+    const t = normalizeTheme(theme) || osTheme();
     document.documentElement.setAttribute("data-theme", t);
     syncThemeControls(t);
     if (opts && opts.persist) {
@@ -64,35 +75,11 @@
     window.dispatchEvent(new CustomEvent("creatorr:theme", { detail: { theme: t } }));
   }
 
-  function buildThemeMenu() {
-    const ul = document.getElementById("theme-menu");
-    if (!ul || ul.dataset.ready === "1") return;
-    ul.dataset.ready = "1";
-    const cur = resolveTheme();
-    THEMES.forEach((name) => {
-      const li = document.createElement("li");
-      const input = document.createElement("input");
-      input.type = "radio";
-      input.name = "theme-dropdown";
-      input.value = name;
-      input.className = "theme-controller btn btn-sm btn-block btn-ghost justify-start w-full";
-      input.setAttribute("aria-label", name);
-      input.autocomplete = "off";
-      if (name === cur) input.checked = true;
-      input.addEventListener("change", () => {
-        if (input.checked) applyTheme(name, { persist: true });
-      });
-      li.appendChild(input);
-      ul.appendChild(li);
-    });
-  }
-
   function initTheme() {
-    buildThemeMenu();
     applyTheme(resolveTheme(), { persist: false });
-    document.querySelectorAll("[data-theme-toggle]").forEach((el) => {
+    document.querySelectorAll('input[name="theme-picker"]').forEach((el) => {
       el.addEventListener("change", () => {
-        applyTheme(el.checked ? THEME_DARK : THEME_LIGHT, { persist: true });
+        if (el.checked) applyTheme(el.value, { persist: true });
       });
     });
     try {
@@ -108,28 +95,46 @@
   const badge = () => document.getElementById("tasks-badge");
   const pausedBadge = () => document.getElementById("tasks-paused-badge");
   const notifyBadge = () => document.getElementById("notify-badge");
+  const seriesErrorBadge = () => document.getElementById("series-error-badge");
 
   async function refreshBadge() {
     try {
-      const [tasksRes, pausedRes] = await Promise.all([
+      const [tasksRes, pausedRes, seriesErrRes] = await Promise.all([
         fetch("/api/tasks"),
         fetch("/api/domains/paused"),
+        fetch("/series/error-count.json"),
       ]);
+      let pausedSet = null;
+      if (pausedRes.ok) {
+        const paused = await pausedRes.json();
+        const list = Array.isArray(paused) ? paused : [];
+        pausedSet = new Set(list);
+        const b = pausedBadge();
+        if (b) {
+          b.textContent = String(list.length);
+          b.classList.toggle("hidden", list.length === 0);
+        }
+      }
       if (tasksRes.ok) {
         const tasks = await tasksRes.json();
-        const n = Array.isArray(tasks) ? tasks.length : 0;
+        let list = Array.isArray(tasks) ? tasks : [];
+        // Soft-paused lanes still hold pending/running rows; omit them from the nav count.
+        if (pausedSet) {
+          list = list.filter((t) => t && !pausedSet.has(t.domain));
+        }
+        const n = list.length;
         const b = badge();
         if (b) {
           b.textContent = String(n);
           b.classList.toggle("hidden", n === 0);
         }
       }
-      if (pausedRes.ok) {
-        const paused = await pausedRes.json();
-        const n = Array.isArray(paused) ? paused.length : 0;
-        const b = pausedBadge();
+      if (seriesErrRes.ok) {
+        const data = await seriesErrRes.json();
+        const n = Math.max(0, Math.floor(Number(data && data.count) || 0));
+        const b = seriesErrorBadge();
         if (b) {
-          b.textContent = String(n);
+          b.textContent = n > 99 ? "99+" : String(n);
           b.classList.toggle("hidden", n === 0);
         }
       }
@@ -157,38 +162,122 @@
     } catch (_) {}
   }
 
+  function formatNotifyAgo(raw) {
+    const then = new Date(raw);
+    if (Number.isNaN(then.getTime())) return "";
+    let t = then.getTime();
+    let n = Date.now();
+    if (t > n) {
+      const swap = t;
+      t = n;
+      n = swap;
+    }
+    let years = 0;
+    while (true) {
+      const d = new Date(t);
+      d.setUTCFullYear(d.getUTCFullYear() + years + 1);
+      if (d.getTime() > n) break;
+      years++;
+    }
+    const afterYears = new Date(t);
+    afterYears.setUTCFullYear(afterYears.getUTCFullYear() + years);
+    t = afterYears.getTime();
+    let months = 0;
+    while (true) {
+      const d = new Date(t);
+      d.setUTCMonth(d.getUTCMonth() + months + 1);
+      if (d.getTime() > n) break;
+      months++;
+    }
+    const afterMonths = new Date(t);
+    afterMonths.setUTCMonth(afterMonths.getUTCMonth() + months);
+    let rem = n - afterMonths.getTime();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const hourMs = 60 * 60 * 1000;
+    const minMs = 60 * 1000;
+    const days = Math.floor(rem / dayMs);
+    rem -= days * dayMs;
+    const hours = Math.floor(rem / hourMs);
+    rem -= hours * hourMs;
+    const minutes = Math.floor(rem / minMs);
+    const parts = [];
+    if (years > 0) parts.push(years + " y");
+    if (months > 0) parts.push(months + " mo");
+    if (days > 0) parts.push(days + " d");
+    if (hours > 0) parts.push(hours + " h");
+    if (minutes > 0) parts.push(minutes + " m");
+    if (!parts.length) return "just now";
+    return parts.slice(0, 2).join(" ") + " ago";
+  }
+
   async function refreshNotifyDropdown() {
-    const list = document.getElementById("notify-dropdown-list");
+    const menu = document.getElementById("notify-menu");
     const empty = document.getElementById("notify-dropdown-empty");
-    if (!list || !empty) return;
+    const viewAll = document.getElementById("notify-menu-view-all");
+    if (!menu || !empty || !viewAll) return;
     try {
-      const res = await fetch("/api/notifications?unread_only=true&limit=10");
+      const res = await fetch("/api/notifications?limit=4");
       if (!res.ok) return;
       const items = await res.json();
-      list.replaceChildren();
+      // Drop previous notification rows (keep mark-all, empty, view-all).
+      menu.querySelectorAll("[data-notify-item]").forEach((el) => el.remove());
       if (!Array.isArray(items) || items.length === 0) {
-        list.classList.add("hidden");
         empty.classList.remove("hidden");
         return;
       }
       empty.classList.add("hidden");
-      list.classList.remove("hidden");
+      const frag = document.createDocumentFragment();
       items.forEach((n) => {
         const li = document.createElement("li");
+        li.setAttribute("data-notify-item", "");
         const a = document.createElement("a");
         a.href = "/notification/" + n.id;
-        a.className = "flex flex-col items-start gap-0.5 whitespace-normal";
+        a.className = "items-start gap-2 whitespace-normal h-auto min-h-0 py-2";
+        if (n.unread) a.classList.add("menu-active");
+        const level = String(n.level || "info");
+        const iconWrap = document.createElement("span");
+        iconWrap.className = "inline-flex shrink-0 mt-0.5";
+        const icon = document.createElement("i");
+        if (level === "alert") {
+          icon.setAttribute("data-lucide", "megaphone");
+          icon.className = "size-4 text-error";
+        } else if (level === "warning") {
+          icon.setAttribute("data-lucide", "siren");
+          icon.className = "size-4 text-warning";
+        } else {
+          icon.setAttribute("data-lucide", "bell");
+          icon.className = "size-4 opacity-70";
+        }
+        iconWrap.appendChild(icon);
+        const text = document.createElement("span");
+        text.className = "flex flex-col items-start gap-0.5 min-w-0";
         const title = document.createElement("span");
         title.className = "font-medium text-sm";
         title.textContent = n.title || n.event || "Notification";
         const meta = document.createElement("span");
         meta.className = "text-xs opacity-60";
-        meta.textContent = n.event || "";
-        a.appendChild(title);
-        a.appendChild(meta);
+        const event = n.event || "";
+        const ago = formatNotifyAgo(n.created_at);
+        meta.textContent = [event, ago].filter(Boolean).join(" · ");
+        text.appendChild(title);
+        text.appendChild(meta);
+        a.appendChild(iconWrap);
+        a.appendChild(text);
         li.appendChild(a);
-        list.appendChild(li);
+        frag.appendChild(li);
       });
+      menu.insertBefore(frag, viewAll);
+      createLucideIcons(menu);
+    } catch (_) {}
+  }
+
+  async function markAllNotificationsRead() {
+    try {
+      const res = await fetch("/api/notifications/read-all", { method: "POST" });
+      if (!res.ok) return;
+      const data = await res.json();
+      refreshNotifyBadge(data && data.count);
+      await refreshNotifyDropdown();
     } catch (_) {}
   }
 
@@ -205,46 +294,290 @@
     }
   }
 
-  function refreshTasksPanel() {
+  function refreshTasksPanel(force) {
     const panel = document.getElementById("tasks-live");
-    if (panel && window.htmx) {
-      const q = location.search || "";
-      window.htmx.ajax("GET", "/tasks" + q, { target: "#tasks-live", select: "#tasks-live", swap: "outerHTML" });
+    if (!panel || !window.htmx) return;
+    const now = Date.now();
+    // Soft refreshes (SSE miss / 15s poll) recreate lane Busy indeterminate bars;
+    // throttle so the CSS animation is not restarted every progress tick.
+    if (!force) {
+      if (now - (refreshTasksPanel._at || 0) < 2500) return;
     }
+    refreshTasksPanel._at = now;
+    const q = location.search || "";
+    window.htmx.ajax("GET", "/tasks" + q, { target: "#tasks-live", select: "#tasks-live", swap: "outerHTML" });
   }
 
-  function setCountdownValue(el, n) {
-    if (!el) return;
-    const v = Math.max(0, Math.min(999, Math.floor(n)));
-    el.style.setProperty("--value", String(v));
-    el.textContent = el.hasAttribute("data-cd-sec")
-      ? String(v).padStart(2, "0")
-      : String(v);
-    el.setAttribute("aria-label", String(v));
+  function clearCooldownBusyTip(wrap) {
+    wrap.classList.remove("tooltip", "tooltip-top");
+    wrap.removeAttribute("data-tip");
+  }
+
+  /** Lane card that owns a cooldown/status wrap (or a task row inside it). */
+  function lanePanelFor(el) {
+    return el && el.closest ? el.closest("section.list-panel") : null;
+  }
+
+  function inferLaneActivity(wrap) {
+    const panel = lanePanelFor(wrap);
+    let running = 0;
+    let pending = 0;
+    let max = 1;
+    if (panel) {
+      panel.querySelectorAll("[data-task-row-status]").forEach((row) => {
+        const st = row.getAttribute("data-task-row-status");
+        if (st === "running") running++;
+        else if (st === "pending") pending++;
+      });
+      const parallel = panel.querySelector('[aria-label^="Parallel "]');
+      const m = parallel && parallel.getAttribute("aria-label").match(/Parallel\s+(\d+)/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > 0) max = n;
+      }
+    }
+    return { running, pending, max };
+  }
+
+  /**
+   * Paint Busy/Active/Idle from task rows in the lane.
+   * Used when cooldown ends client-side and when SSE patches pending→running
+   * without a full #tasks-live swap (which otherwise leaves a Idle flash).
+   */
+  function applyInferredLaneStatus(wrap) {
+    if (!wrap || wrap.hasAttribute("data-paused")) return;
+    const endsAttr = wrap.getAttribute("data-ends-at");
+    if (endsAttr) {
+      const ends = Date.parse(endsAttr);
+      if (Number.isFinite(ends) && ends > Date.now()) return;
+    }
+    wrap.removeAttribute("data-ends-at");
+    wrap.removeAttribute("data-total-sec");
+    const { running, pending, max } = inferLaneActivity(wrap);
+    if (running > 0 && running >= max) {
+      showCooldownBusy(wrap);
+      return;
+    }
+    if (running > 0) {
+      showCooldownActive(wrap);
+      return;
+    }
+    if (pending > 0) {
+      // Cooldown just ended / claim about to land: avoid Idle→Busy flash.
+      // max_parallel=1 fills the only slot on the next claim.
+      if (max <= 1) {
+        showCooldownBusy(wrap);
+        return;
+      }
+      const label = wrap.querySelector("[data-cd-label]");
+      if (label && label.textContent === "Cooldown") {
+        const bar = wrap.querySelector("[data-cd-bar]");
+        if (bar) {
+          bar.value = 0;
+          if (!bar.max || Number(bar.max) < 1) bar.max = 1;
+        }
+        wrap.setAttribute("aria-label", "Waiting before the next task on this lane");
+        return;
+      }
+      showCooldownActive(wrap);
+      return;
+    }
+    wrap.removeAttribute("data-slots-full");
+    wrap.removeAttribute("data-lane-active");
+    showCooldownReady(wrap);
+  }
+
+  function showCooldownPaused(wrap) {
+    wrap.removeAttribute("data-ends-at");
+    wrap.removeAttribute("data-total-sec");
+    wrap.removeAttribute("data-slots-full");
+    wrap.removeAttribute("data-lane-active");
+    clearCooldownBusyTip(wrap);
+    wrap.setAttribute("aria-label", "Paused");
+    const label = wrap.querySelector("[data-cd-label]");
+    const bar = wrap.querySelector("[data-cd-bar]");
+    if (
+      label &&
+      bar &&
+      label.textContent === "Paused" &&
+      bar.hasAttribute("value") &&
+      Number(bar.value) === 100
+    ) {
+      return;
+    }
+    wrap.innerHTML =
+      '<span data-cd-label class="shrink-0 leading-none text-warning">Paused</span>' +
+      '<progress data-cd-bar class="progress progress-warning w-24 sm:w-32 h-2 shrink-0" value="100" max="100" aria-hidden="true"></progress>';
+  }
+
+  function showCooldownBusy(wrap) {
+    wrap.removeAttribute("data-ends-at");
+    wrap.removeAttribute("data-total-sec");
+    wrap.removeAttribute("data-lane-active");
+    wrap.setAttribute("data-slots-full", "");
+    wrap.classList.remove("tooltip", "tooltip-top");
+    wrap.removeAttribute("data-tip");
+    wrap.setAttribute("aria-label", "Maximum of parallel tasks reached");
+    // Keep existing indeterminate <progress> — rewriting innerHTML restarts the slide.
+    const label = wrap.querySelector("[data-cd-label]");
+    const bar = wrap.querySelector("[data-cd-bar]");
+    if (label && bar && label.textContent === "Busy" && !bar.hasAttribute("value")) {
+      const tip = label.closest(".tooltip");
+      if (tip) {
+        tip.classList.add("tooltip", "tooltip-top");
+        tip.setAttribute("data-tip", "Maximum of parallel tasks reached");
+      }
+      return;
+    }
+    wrap.innerHTML =
+      '<span class="tooltip tooltip-top" data-tip="Maximum of parallel tasks reached">' +
+      '<span data-cd-label class="shrink-0 leading-none">Busy</span></span>' +
+      '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" max="100" aria-hidden="true"></progress>';
+  }
+
+  function showCooldownActive(wrap) {
+    wrap.removeAttribute("data-ends-at");
+    wrap.removeAttribute("data-total-sec");
+    wrap.removeAttribute("data-slots-full");
+    wrap.setAttribute("data-lane-active", "");
+    wrap.classList.remove("tooltip", "tooltip-top");
+    wrap.removeAttribute("data-tip");
+    wrap.setAttribute("aria-label", "Running with free parallel slots");
+    const label = wrap.querySelector("[data-cd-label]");
+    const bar = wrap.querySelector("[data-cd-bar]");
+    if (label && bar && label.textContent === "Active" && !bar.hasAttribute("value")) {
+      const tip = label.closest(".tooltip");
+      if (tip) {
+        tip.classList.add("tooltip", "tooltip-top");
+        tip.setAttribute("data-tip", "Running with free parallel slots");
+      }
+      return;
+    }
+    wrap.innerHTML =
+      '<span class="tooltip tooltip-top" data-tip="Running with free parallel slots">' +
+      '<span data-cd-label class="shrink-0 leading-none">Active</span></span>' +
+      '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" max="100" aria-hidden="true"></progress>';
+  }
+
+  function showCooldownReady(wrap) {
+    if (wrap.hasAttribute("data-paused")) {
+      showCooldownPaused(wrap);
+      return;
+    }
+    if (wrap.hasAttribute("data-slots-full")) {
+      showCooldownBusy(wrap);
+      return;
+    }
+    if (wrap.hasAttribute("data-lane-active")) {
+      showCooldownActive(wrap);
+      return;
+    }
+    wrap.removeAttribute("data-ends-at");
+    wrap.removeAttribute("data-total-sec");
+    wrap.removeAttribute("data-slots-full");
+    wrap.removeAttribute("data-lane-active");
+    clearCooldownBusyTip(wrap);
+    wrap.setAttribute("aria-label", "Idle");
+    const label = wrap.querySelector("[data-cd-label]");
+    const bar = wrap.querySelector("[data-cd-bar]");
+    if (
+      label &&
+      bar &&
+      label.textContent === "Idle" &&
+      bar.hasAttribute("value") &&
+      Number(bar.value) === 0
+    ) {
+      return;
+    }
+    wrap.innerHTML =
+      '<span data-cd-label class="shrink-0 leading-none text-base-content/50">Idle</span>' +
+      '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="0" max="100" aria-hidden="true"></progress>';
   }
 
   function tickDomainCooldowns() {
+    let anyActive = false;
     document.querySelectorAll("[data-domain-cooldown]").forEach((wrap) => {
-      const ends = Date.parse(wrap.getAttribute("data-ends-at") || "");
+      if (wrap.hasAttribute("data-paused")) return;
+      // Active / Busy have no ends-at — leave the indeterminate bar alone.
+      if (
+        (wrap.hasAttribute("data-slots-full") || wrap.hasAttribute("data-lane-active")) &&
+        !wrap.getAttribute("data-ends-at")
+      ) {
+        return;
+      }
+      const endsAttr = wrap.getAttribute("data-ends-at");
+      if (!endsAttr) return;
+      const ends = Date.parse(endsAttr);
       if (!Number.isFinite(ends)) {
-        wrap.remove();
+        applyInferredLaneStatus(wrap);
+        refreshTasksPanel(true);
         return;
       }
-      let rem = Math.ceil((ends - Date.now()) / 1000);
-      if (rem <= 0) {
-        wrap.remove();
+      const remMs = ends - Date.now();
+      if (remMs <= 0) {
+        // Do not paint Idle here: claim often lands next and Busy would flash Idle first.
+        applyInferredLaneStatus(wrap);
+        refreshTasksPanel(true);
         return;
       }
-      if (rem > 999 * 60 + 59) rem = 999 * 60 + 59;
-      const min = Math.floor(rem / 60);
-      setCountdownValue(wrap.querySelector("[data-cd-min]"), min);
-      setCountdownValue(wrap.querySelector("[data-cd-sec]"), rem % 60);
-      const minWrap = wrap.querySelector("[data-cd-min-wrap]");
-      if (minWrap) minWrap.classList.toggle("hidden", min === 0);
+      anyActive = true;
+      const remSec = Math.ceil(remMs / 1000);
+      const remFrac = remMs / 1000;
+      let total = parseInt(wrap.getAttribute("data-total-sec") || "0", 10);
+      if (!Number.isFinite(total) || total < 1) total = remSec;
+      if (remSec > total) total = remSec;
+      clearCooldownBusyTip(wrap);
+      let bar = wrap.querySelector("[data-cd-bar]");
+      let label = wrap.querySelector("[data-cd-label]");
+      const tipText = "Waiting " + remSec + "s before the next task on this lane";
+      if (!bar || !label) {
+        wrap.innerHTML =
+          '<span class="tooltip tooltip-top" data-tip="' +
+          tipText +
+          '"><span data-cd-label class="shrink-0 leading-none">Cooldown</span></span>' +
+          '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="' +
+          remFrac +
+          '" max="' +
+          total +
+          '" aria-hidden="true"></progress>';
+        bar = wrap.querySelector("[data-cd-bar]");
+        label = wrap.querySelector("[data-cd-label]");
+      }
+      if (label) {
+        if (label.textContent !== "Cooldown") label.textContent = "Cooldown";
+        label.classList.remove("text-base-content/50", "text-warning");
+        let tipHost = label.closest(".tooltip");
+        if (!tipHost) {
+          tipHost = document.createElement("span");
+          tipHost.className = "tooltip tooltip-top";
+          label.parentNode.insertBefore(tipHost, label);
+          tipHost.appendChild(label);
+        }
+        tipHost.classList.add("tooltip", "tooltip-top");
+        tipHost.setAttribute("data-tip", tipText);
+      }
+      if (bar) {
+        const cls = "progress progress-primary w-24 sm:w-32 h-2 shrink-0";
+        if (bar.className !== cls) bar.className = cls;
+        if (Number(bar.max) !== total) bar.max = total;
+        if (Number(bar.value) !== remFrac) bar.value = remFrac;
+      }
+      wrap.setAttribute("aria-label", tipText);
     });
+    return anyActive;
   }
 
-  setInterval(tickDomainCooldowns, 1000);
+  (function runDomainCooldownLoop() {
+    function frame() {
+      if (tickDomainCooldowns()) {
+        requestAnimationFrame(frame);
+      } else {
+        // Idle: poll slowly so HTMX lane swaps still pick up a new cooldown.
+        setTimeout(() => requestAnimationFrame(frame), 250);
+      }
+    }
+    requestAnimationFrame(frame);
+  })();
 
   function refreshHistoryPanel() {
     if (!location.pathname.startsWith("/history")) return;
@@ -271,7 +604,6 @@
       wanted_source_error: "Source has too many download errors - Retry on the source",
       wanted_download_error: "Last download failed",
       verify_failed: "Post-pack media verify failed - file kept; Want or Download now",
-      streamable: "Stream files ready - play via Creatorr proxy",
       missing: "File path recorded but media not on disk - file sync may restore",
     };
     const icons = {
@@ -286,7 +618,6 @@
       wanted_source_error: { icon: "circle-alert", color: "text-error" },
       wanted_download_error: { icon: "circle-x", color: "text-error" },
       verify_failed: { icon: "badge-alert", color: "text-warning" },
-      streamable: { icon: "radio", color: "text-info" },
       downloaded: { icon: "circle-check", color: "text-success" },
       missing: { icon: "file-question", color: "text-warning" },
       deleted: { icon: "trash-2", color: "text-base-content/50" },
@@ -313,10 +644,61 @@
 
   function patchStatusCell(root, status) {
     if (!root || typeof status !== "string" || !status) return;
+    if (root.hasAttribute("data-task-row-status")) {
+      root.setAttribute("data-task-row-status", status);
+    }
     const cell = root.querySelector("[data-task-status]");
     if (!cell) return;
     cell.replaceChildren(statusBadgeEl(status));
     createLucideIcons(cell);
+  }
+
+  /** Sync Tasks list progress bar in place. Skip no-op writes so daisyUI
+   * indeterminate CSS animation is not restarted every SSE tick. */
+  function syncTaskRowProgress(row, status, progress) {
+    const wrap = row.querySelector("[data-task-progress-wrap]");
+    if (!wrap) return;
+    let bar = wrap.querySelector("progress[data-task-progress]");
+    if (!bar) {
+      bar = document.createElement("progress");
+      bar.setAttribute("data-task-progress", "");
+      bar.max = 100;
+      wrap.replaceChildren(bar);
+    }
+    if (status === "pending") {
+      const paused = row.hasAttribute("data-lane-paused");
+      const cls = "progress " + (paused ? "progress-warning" : "progress-secondary") + " w-full";
+      if (bar.className !== cls) bar.className = cls;
+      bar.max = 100;
+      if (bar.getAttribute("aria-label") !== "pending" || Number(bar.value) !== 0 || !bar.hasAttribute("value")) {
+        bar.value = 0;
+        bar.setAttribute("aria-label", "pending");
+      }
+      return;
+    }
+    const cls = "progress progress-secondary w-full";
+    if (bar.className !== cls) bar.className = cls;
+    bar.max = 100;
+    const n = progress == null ? NaN : Number(progress);
+    // Mid (0,1): determinate. 0% / 100% / nil: daisyUI indeterminate busy slide.
+    const mid = Number.isFinite(n) && n > 0 && n < 1;
+    if (mid) {
+      const pct = Math.max(1, Math.min(99, Math.round(n * 100)));
+      if (!bar.hasAttribute("value") || Number(bar.value) !== pct) {
+        bar.value = pct;
+        bar.setAttribute("aria-label", pct + "%");
+      }
+      return;
+    }
+    // Already busy: do not touch value/class (re-removing value restarts animation).
+    if (!bar.hasAttribute("value")) {
+      if (bar.getAttribute("aria-label") !== "In progress") {
+        bar.setAttribute("aria-label", "In progress");
+      }
+      return;
+    }
+    bar.removeAttribute("value");
+    bar.setAttribute("aria-label", "In progress");
   }
 
   /** Patch message/progress on an existing task row. Avoids full panel swap (button flicker). */
@@ -331,40 +713,39 @@
     if (!id) return false;
     const row = document.getElementById("task-row-" + id);
     if (!row) return false;
-    if (typeof data.status === "string" && data.status) {
+    const statusChanged = typeof data.status === "string" && data.status;
+    if (statusChanged) {
       patchStatusCell(row, data.status);
-      if (data.status !== "pending") {
-        const bump = row.querySelector('form[action="/actions/bump-task"]');
-        if (bump) bump.remove();
-      }
+      const panel = lanePanelFor(row);
+      const wrap = panel && panel.querySelector("[data-domain-cooldown]");
+      if (wrap) applyInferredLaneStatus(wrap);
     }
     const msgEl = row.querySelector("[data-task-message]");
-    if (msgEl && typeof data.message === "string") {
-      msgEl.textContent = data.message || "-";
-    }
-    if (data.progress != null && Number.isFinite(Number(data.progress))) {
-      const raw = Number(data.progress);
-      const pct = Math.max(0, Math.min(100, Math.round(raw * 100)));
-      let bar = row.querySelector("progress[data-task-progress]");
-      const showBar = raw > 0 && raw < 1;
-      if (!showBar) {
-        if (bar) bar.remove();
-      } else {
-        if (!bar) {
-          const cell = row.querySelector("[data-task-status-cell]");
-          if (cell) {
-            bar = document.createElement("progress");
-            bar.setAttribute("data-task-progress", "");
-            bar.className = "progress progress-primary w-full max-w-xs mt-1";
-            bar.max = 100;
-            cell.appendChild(bar);
-          }
-        }
-        if (bar) bar.value = pct;
+    if (msgEl) {
+      const st = statusChanged
+        ? data.status
+        : row.getAttribute("data-task-row-status") || "";
+      if (st === "pending") {
+        msgEl.textContent = "Queued";
+      } else if (typeof data.message === "string") {
+        msgEl.textContent = data.message || "-";
       }
-    } else if (data.progress === null) {
-      const bar = row.querySelector("progress[data-task-progress]");
-      if (bar) bar.remove();
+    }
+    const progressChanged = Object.prototype.hasOwnProperty.call(data, "progress");
+    if (statusChanged || progressChanged) {
+      const st = statusChanged
+        ? data.status
+        : row.getAttribute("data-task-row-status") || "running";
+      let progress = null;
+      if (progressChanged) {
+        progress = data.progress;
+      } else {
+        const bar = row.querySelector("progress[data-task-progress]");
+        if (bar && bar.hasAttribute("value") && Number(bar.max) > 0) {
+          progress = Number(bar.value) / Number(bar.max);
+        }
+      }
+      syncTaskRowProgress(row, st, progress);
     }
     return true;
   }
@@ -386,45 +767,50 @@
       patchStatusCell(page, data.status);
     }
     const msgEl = page.querySelector("[data-task-message]");
-    if (msgEl && typeof data.message === "string") {
-      msgEl.textContent = data.message || "-";
+    if (msgEl) {
+      const st =
+        typeof data.status === "string" && data.status
+          ? data.status
+          : page.querySelector("[data-task-status]")?.getAttribute("aria-label") || "";
+      if (st === "pending") {
+        msgEl.textContent = "Queued";
+      } else if (typeof data.message === "string") {
+        msgEl.textContent = data.message || "-";
+      }
     }
-    if (data.progress != null && Number.isFinite(Number(data.progress))) {
-      const raw = Number(data.progress);
-      const pct = Math.max(0, Math.min(100, Math.round(raw * 100)));
+    if (Object.prototype.hasOwnProperty.call(data, "progress")) {
       const cell = page.querySelector("[data-task-progress-cell]");
+      if (!cell) return true;
+      const raw =
+        data.progress != null && Number.isFinite(Number(data.progress))
+          ? Number(data.progress)
+          : null;
+      const mid = raw != null && raw > 0 && raw < 1;
       let bar = page.querySelector("progress[data-task-progress]");
-      const showBar = raw > 0 && raw < 1;
-      if (!showBar) {
-        if (bar) bar.remove();
-        if (cell && !cell.querySelector("[data-task-progress]")) {
-          cell.textContent = "";
-          const dash = document.createElement("span");
-          dash.className = "opacity-60";
-          dash.textContent = "-";
-          cell.appendChild(dash);
+      if (!bar) {
+        cell.textContent = "";
+        bar = document.createElement("progress");
+        bar.setAttribute("data-task-progress", "");
+        bar.className = "progress progress-primary w-full max-w-xs";
+        cell.appendChild(bar);
+      }
+      // Always set max before value. SSR indeterminate bars omit max (HTML
+      // default max=1), so value=4 would clamp to full bar.
+      bar.max = 100;
+      if (mid) {
+        const pct = Math.max(1, Math.min(99, Math.round(raw * 100)));
+        if (!bar.hasAttribute("value") || Number(bar.value) !== pct) {
+          bar.value = pct;
+          bar.setAttribute("aria-label", pct + "%");
+        }
+      } else if (!bar.hasAttribute("value")) {
+        if (bar.getAttribute("aria-label") !== "In progress") {
+          bar.setAttribute("aria-label", "In progress");
         }
       } else {
-        if (!bar && cell) {
-          cell.textContent = "";
-          bar = document.createElement("progress");
-          bar.setAttribute("data-task-progress", "");
-          bar.className = "progress progress-primary w-full max-w-xs";
-          bar.max = 100;
-          cell.appendChild(bar);
-        }
-        if (bar) bar.value = pct;
-      }
-    } else if (data.progress === null) {
-      const cell = page.querySelector("[data-task-progress-cell]");
-      const bar = page.querySelector("progress[data-task-progress]");
-      if (bar) bar.remove();
-      if (cell && !cell.querySelector("progress")) {
-        cell.textContent = "";
-        const dash = document.createElement("span");
-        dash.className = "opacity-60";
-        dash.textContent = "-";
-        cell.appendChild(dash);
+        // 0% / 100% / null while running: busy indeterminate (in place).
+        bar.removeAttribute("value");
+        bar.setAttribute("aria-label", "In progress");
       }
     }
     return true;
@@ -511,7 +897,8 @@
     if (
       kind === "prefetch_video_meta" ||
       kind === "prefetch_series_meta" ||
-      kind === "prefetch_add_series"
+      kind === "prefetch_add_series" ||
+      kind === "prefetch_add_video"
     ) {
       return;
     }
@@ -633,6 +1020,29 @@
     });
   }
 
+  function onSeriesListPage() {
+    return /^\/series\/?$/.test(location.pathname);
+  }
+
+  function refreshSeriesList(preserveScroll) {
+    if (!window.htmx) return;
+    if (!onSeriesListPage() || !document.getElementById("series-list-live")) return;
+    const y = preserveScroll ? window.scrollY : null;
+    const q = location.search || "";
+    window.htmx.ajax("GET", "/series/list-live" + q, {
+      target: "#series-list-live",
+      select: "#series-list-live",
+      swap: "outerHTML",
+    });
+    if (y == null) return;
+    const restore = () => window.scrollTo(0, y);
+    document.body.addEventListener("htmx:afterSwap", function onSwap(ev) {
+      if (!ev.detail || !ev.detail.target || ev.detail.target.id !== "series-list-live") return;
+      document.body.removeEventListener("htmx:afterSwap", onSwap);
+      requestAnimationFrame(restore);
+    });
+  }
+
   let videosRefreshAt = 0;
   function maybeRefreshSeriesVideos(ev) {
     let kind = "";
@@ -652,6 +1062,58 @@
     }
   }
 
+  let seriesListRefreshAt = 0;
+  function maybeRefreshSeriesList(ev) {
+    if (!onSeriesListPage()) return;
+    let kind = "";
+    try {
+      const data = JSON.parse(ev.data || "{}");
+      kind = data.kind || "";
+    } catch (_) {}
+    // Drop deleted series (and clear deleting state) when delete_files finishes.
+    if ((ev.type === "task.done" || ev.type === "task.failed") && kind === "delete_files") {
+      refreshSeriesList(true);
+      return;
+    }
+    if (ev.type === "task.updated" && kind === "delete_files") {
+      const now = Date.now();
+      if (now - seriesListRefreshAt < 2000) return;
+      seriesListRefreshAt = now;
+      refreshSeriesList(true);
+    }
+  }
+
+  function onMaintenancePage() {
+    return location.pathname === "/settings/maintenance";
+  }
+
+  const maintenanceTaskKinds = new Set([
+    "sync_files",
+    "rename_episodes",
+    "regenerate_nfo",
+  ]);
+
+  function refreshMaintenanceLive() {
+    if (!onMaintenancePage() || !document.getElementById("maintenance-live") || !window.htmx) return;
+    window.htmx.ajax("GET", "/settings/maintenance", {
+      target: "#maintenance-live",
+      select: "#maintenance-live",
+      swap: "outerHTML",
+    });
+  }
+
+  function maybeRefreshMaintenance(ev) {
+    if (!onMaintenancePage()) return;
+    if (ev.type !== "task.done" && ev.type !== "task.failed") return;
+    let kind = "";
+    try {
+      const data = JSON.parse(ev.data || "{}");
+      kind = data.kind || "";
+    } catch (_) {}
+    if (!maintenanceTaskKinds.has(kind)) return;
+    refreshMaintenanceLive();
+  }
+
   function onSSE(ev) {
     refreshBadge();
     if (ev.type === "notification.created" || ev.type === "notification.read") {
@@ -666,24 +1128,31 @@
       return;
     }
     if (ev.type === "task.updated") {
-      // In-place patch on Tasks page - full swap recreates Cancel/To top buttons every tick.
-      if (!patchTaskRow(ev)) refreshTasksPanel();
+      // In-place patch on Tasks page - full swap recreates Busy/Cancel every tick.
+      if (!patchTaskRow(ev)) refreshTasksPanel(false);
       patchTaskDetail(ev);
       refreshTaskIndicators();
       refreshVideoHistoryIfMatch(ev);
       refreshTaskVideoHistoryIfMatch(ev);
     } else if (ev.type === "task.done" || ev.type === "task.failed") {
-      refreshTasksPanel();
+      refreshTasksPanel(true);
       refreshTaskIndicators();
       refreshHistoryPanel();
       reloadTaskDetailIfMatch(ev);
       reloadVideoDetailIfMatch(ev);
     }
     maybeRefreshSeriesVideos(ev);
+    maybeRefreshSeriesList(ev);
+    maybeRefreshMaintenance(ev);
+    if (typeof window.refreshImportFullScanNote === "function") {
+      window.refreshImportFullScanNote(ev);
+    }
   }
 
-  // Full-page nav that should not jump to top: mark link/form with js-keep-scroll.
-  // Live panels (e.g. #series-videos-live) use HTMX + dataset restore instead.
+  // Full-page nav that should not jump to top:
+  // - mark link/form with js-keep-scroll, or
+  // - POST forms with hidden redirect back to the current pathname (Settings Save, etc.)
+  // Opt out with js-no-keep-scroll. Live panels use HTMX + dataset restore instead.
   const SCROLL_KEY = "creatorr:keep-scroll";
 
   function saveKeepScroll() {
@@ -707,6 +1176,28 @@
     const top = Number(data.y);
     if (!Number.isFinite(top)) return;
     requestAnimationFrame(() => window.scrollTo(0, top));
+  }
+
+  function formRedirectPathname(form) {
+    const redir = form.querySelector('input[name="redirect"]');
+    if (!redir) return "";
+    const raw = String(redir.value || "").trim();
+    if (!raw) return "";
+    try {
+      return new URL(raw, location.origin).pathname;
+    } catch {
+      return "";
+    }
+  }
+
+  function shouldKeepScrollForm(form) {
+    if (!(form instanceof HTMLFormElement)) return false;
+    if (form.classList.contains("js-no-keep-scroll")) return false;
+    if (form.hasAttribute("hx-get") || form.hasAttribute("hx-post")) return false;
+    if (form.classList.contains("js-keep-scroll")) return true;
+    // Creatorr actions: hidden redirect back to this page → restore after reload.
+    const dest = formRedirectPathname(form);
+    return dest !== "" && dest === location.pathname;
   }
 
   function saveSeriesScroll() {
@@ -789,6 +1280,18 @@
       }
     }
     return document.body;
+  }
+
+  /** After /task/{id}/logs HTMX swap, pin the log pane to the newest lines. */
+  function scrollTaskLogsToBottom(root) {
+    if (!root || root.nodeType !== 1) return;
+    const box = root.id === "task-logs" ? root : root.querySelector("#task-logs");
+    if (!box) return;
+    const pre = box.querySelector("pre");
+    if (!pre) return;
+    requestAnimationFrame(() => {
+      pre.scrollTop = pre.scrollHeight;
+    });
   }
 
   const fieldInfoPlaces = ["tooltip-top", "tooltip-bottom", "tooltip-left", "tooltip-right"];
@@ -956,6 +1459,26 @@
     });
   }
 
+  /** Client-side flash toast (same markup as partials/flash_toast). opts: { error, warning }. */
+  window.showFlashToast = function (message, opts) {
+    opts = opts || {};
+    const toast = document.createElement("div");
+    toast.className = "toast toast-top toast-end z-[60]";
+    toast.setAttribute("data-flash-toast", "");
+    const alert = document.createElement("div");
+    alert.setAttribute("role", "status");
+    let kind = "alert-success";
+    if (opts.error) kind = "alert-error";
+    else if (opts.warning) kind = "alert-warning";
+    alert.className = "alert " + kind + " shadow-lg";
+    const span = document.createElement("span");
+    span.textContent = String(message || "");
+    alert.appendChild(span);
+    toast.appendChild(alert);
+    document.body.appendChild(toast);
+    scheduleFlashToasts();
+  };
+
   function initFlashToasts() {
     const el = document.querySelector("[data-flash-toast]");
     if (!el) return;
@@ -1055,23 +1578,59 @@
     document.querySelectorAll("[data-sb-profile]").forEach(syncSponsorBlockCardsGate);
   }
 
-  function syncPlaybackCacheHoursGate() {
-    const toggle = document.querySelector("input.js-playback-cache-toggle");
-    const hours = document.querySelector("input.js-playback-cache-hours");
-    if (!toggle || !hours) return;
-    const on = !!toggle.checked;
-    hours.disabled = !on;
-    const fieldset = hours.closest("fieldset");
-    if (fieldset) fieldset.classList.toggle("opacity-60", !on);
+  const AUDIO_QUALITY_PROFILE_TIP =
+    "Audio always uses the best available quality.";
+
+  /** Disable the quality profile select when delivery_mode=audio; hidden input carries the value instead. */
+  function syncQualityProfileGate(form) {
+    if (!form) return;
+    const fieldset = form.querySelector("[data-quality-profile-fieldset]");
+    if (!fieldset) return;
+    const radio = form.querySelector('input[name="delivery_mode"]:checked');
+    const isAudio = !!radio && radio.value === "audio";
+    const select = fieldset.querySelector("[data-quality-profile-select]");
+    const hidden = fieldset.querySelector("[data-quality-profile-hidden]");
+    const tip = fieldset.querySelector("[data-quality-profile-tip]");
+    if (select) {
+      select.disabled = isAudio || !select.options.length;
+      select.required = !isAudio;
+      select.classList.toggle("validator", !isAudio);
+      if (isAudio) {
+        select.removeAttribute("name");
+      } else {
+        select.setAttribute("name", "quality_profile_id");
+      }
+    }
+    if (hidden) {
+      if (select && select.value) hidden.value = select.value;
+      if (isAudio) {
+        hidden.disabled = false;
+        hidden.setAttribute("name", "quality_profile_id");
+      } else {
+        hidden.disabled = true;
+        hidden.removeAttribute("name");
+      }
+    }
+    if (tip) {
+      if (isAudio) {
+        tip.classList.add("tooltip", "tooltip-top");
+        tip.setAttribute("data-tip", AUDIO_QUALITY_PROFILE_TIP);
+      } else {
+        tip.classList.remove("tooltip", "tooltip-top");
+        tip.removeAttribute("data-tip");
+      }
+    }
   }
 
-  function initPlaybackCacheHoursGate() {
+  function initQualityProfileGate() {
     document.body.addEventListener("change", (ev) => {
       const el = ev.target;
-      if (!el || !el.matches || !el.matches("input.js-playback-cache-toggle")) return;
-      syncPlaybackCacheHoursGate();
+      if (!el || !el.matches || !el.matches('input[name="delivery_mode"]')) return;
+      syncQualityProfileGate(el.closest("form"));
     });
-    syncPlaybackCacheHoursGate();
+    document.querySelectorAll("[data-quality-profile-fieldset]").forEach((fieldset) => {
+      syncQualityProfileGate(fieldset.closest("form"));
+    });
   }
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -1081,6 +1640,13 @@
     refreshBadge();
     refreshNotifyBadge();
     refreshNotifyDropdown();
+    const markAllBtn = document.getElementById("notify-mark-all-read");
+    if (markAllBtn) {
+      markAllBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        markAllNotificationsRead();
+      });
+    }
     document.querySelectorAll("[data-notify-redirect]").forEach((el) => {
       el.value = location.pathname + location.search + location.hash;
     });
@@ -1089,8 +1655,9 @@
     initRangeOutputs();
     initSponsorBlockExclusive();
     initSponsorBlockReencodeGate();
-    initPlaybackCacheHoursGate();
+    initQualityProfileGate();
     syncAllRateLimitJoins();
+    syncAllScanCronJoins();
     document.querySelectorAll("form.js-add-series-form").forEach(syncAddSeriesForm);
     openAddSeriesModal();
     openSeriesMetadataModal();
@@ -1098,7 +1665,7 @@
     setInterval(() => {
       refreshBadge();
       refreshNotifyBadge();
-      if (document.getElementById("tasks-live")) refreshTasksPanel();
+      if (document.getElementById("tasks-live")) refreshTasksPanel(false);
     }, 15000);
   });
 
@@ -1115,6 +1682,7 @@
     const root = htmxSwapRoot(ev);
     createLucideIcons(root);
     formatLocalTimes(root);
+    scrollTaskLogsToBottom(root);
     const y = document.body.dataset.listLiveScrollY;
     if (y != null && root && (root.id === "series-videos-live" || root.id === "series-list-live")) {
       delete document.body.dataset.listLiveScrollY;
@@ -1136,9 +1704,8 @@
     saveKeepScroll();
   });
   document.body.addEventListener("submit", (ev) => {
-    const form = ev.target.closest("form.js-keep-scroll");
-    if (!form) return;
-    if (form.hasAttribute("hx-get") || form.hasAttribute("hx-post")) return;
+    const form = ev.target.closest("form");
+    if (!form || !shouldKeepScrollForm(form)) return;
     saveKeepScroll();
   });
   function openAddSeriesModal() {
@@ -1156,12 +1723,29 @@
 
   function setPanelControls(panel, enabled) {
     if (!panel) return;
-    panel.classList.toggle("hidden", !enabled);
+    // Caller owns panel visibility (.hidden). Only soft-enable/disable controls here.
     panel.querySelectorAll("input, select, textarea").forEach((el) => {
-      if (el.dataset.defaultDisabled == null) {
-        el.dataset.defaultDisabled = el.disabled ? "1" : "0";
+      // Delivery-mode gate owns these; soft panel toggle must not lock them.
+      if (el.hasAttribute("data-quality-profile-hidden") || el.hasAttribute("data-quality-profile-select")) {
+        return;
       }
-      el.disabled = !enabled || el.dataset.defaultDisabled === "1";
+      // Remember HTML-permanent disabled (e.g. a field disabled by server-rendered state)
+      // before we soft-disable for a hidden wizard step.
+      if (el.dataset.permanentlyDisabled == null) {
+        el.dataset.permanentlyDisabled =
+          el.disabled && el.dataset.panelSoftDisabled !== "1" ? "1" : "0";
+      }
+      if (el.dataset.permanentlyDisabled === "1") {
+        el.disabled = true;
+        return;
+      }
+      if (enabled) {
+        el.disabled = false;
+        delete el.dataset.panelSoftDisabled;
+      } else {
+        el.disabled = true;
+        el.dataset.panelSoftDisabled = "1";
+      }
     });
   }
 
@@ -1180,7 +1764,8 @@
           }
         }
       } else {
-        el.value = "";
+        // Restore HTML default (e.g. scan_cron @weekly), do not wipe to empty.
+        el.value = el.defaultValue;
       }
     });
   }
@@ -1195,6 +1780,81 @@
       return [];
     }
   }
+
+  /** daisyUI validator hint sibling (https://daisyui.com/components/validator/). */
+  function controlValidatorHint(el) {
+    if (!el) return null;
+    const labelHost = el.closest("label.input.validator");
+    if (labelHost) {
+      let n = labelHost.nextElementSibling;
+      while (n && n.tagName === "DATALIST") n = n.nextElementSibling;
+      if (n && n.classList.contains("validator-hint")) return n;
+    }
+    const join = el.closest(".join.validator");
+    if (join) {
+      let n = join.nextElementSibling;
+      while (n && n.tagName === "DATALIST") n = n.nextElementSibling;
+      if (n && n.classList.contains("validator-hint")) return n;
+    }
+    let n = el.nextElementSibling;
+    while (n && n.tagName === "DATALIST") n = n.nextElementSibling;
+    if (n && n.classList.contains("validator-hint")) return n;
+    const fs = el.closest("fieldset");
+    if (fs) {
+      const hints = fs.querySelectorAll(":scope > .validator-hint");
+      if (hints.length) return hints[hints.length - 1];
+    }
+    return null;
+  }
+
+  /** Mark control invalid via aria-invalid; daisyUI paints error + shows sibling .validator-hint. */
+  function setControlValidity(el, msg) {
+    if (!el) return;
+    const text = String(msg || "").trim();
+    const invalid = !!text;
+    if (invalid) el.setAttribute("aria-invalid", "true");
+    else el.removeAttribute("aria-invalid");
+    const join = el.closest(".join.validator");
+    if (join) {
+      if (invalid) join.setAttribute("aria-invalid", "true");
+      else join.removeAttribute("aria-invalid");
+    }
+    // label-for-input: paint the label.input host (daisyUI .validator[aria-invalid] → --input-color error).
+    const labelHost = el.closest("label.input.validator");
+    if (labelHost && labelHost !== el) {
+      if (invalid) labelHost.setAttribute("aria-invalid", "true");
+      else labelHost.removeAttribute("aria-invalid");
+    }
+    const hint = controlValidatorHint(el);
+    if (!hint) return;
+    const daisySibling =
+      (labelHost && labelHost.nextElementSibling === hint) ||
+      (el.classList.contains("validator") && el.parentElement === hint.parentElement);
+    if (text) {
+      hint.textContent = text;
+      if (!daisySibling) {
+        hint.classList.remove("hidden");
+        hint.style.visibility = "visible";
+        hint.style.color = "var(--color-error)";
+      }
+    } else if (!daisySibling) {
+      hint.style.visibility = "";
+      hint.style.color = "";
+      hint.classList.add("hidden");
+    }
+  }
+  window.setControlValidity = setControlValidity;
+
+  function clearControlValidity(el) {
+    setControlValidity(el, "");
+  }
+  window.clearControlValidity = clearControlValidity;
+
+  function clearFormControlValidity(root) {
+    if (!root) return;
+    root.querySelectorAll("[aria-invalid]").forEach((el) => el.removeAttribute("aria-invalid"));
+  }
+  window.clearFormControlValidity = clearFormControlValidity;
 
   function addSeriesURLClash(form) {
     if (!form) return false;
@@ -1214,33 +1874,173 @@
   function syncAddSeriesSourceNav(form) {
     const urlEl = form.querySelector("#add-series-url");
     const cont = form.querySelector(".js-add-series-fetch");
-    const help = form.querySelector(".js-add-series-url-help");
-    const dup = form.querySelector(".js-add-series-url-dup");
-    const invalidEl = form.querySelector(".js-add-series-url-invalid");
     if (!urlEl) return;
     const has = String(urlEl.value || "").trim() !== "";
     const invalid = addSeriesURLInvalid(form);
     const clash = !invalid && addSeriesURLClash(form);
     const blocked = form.querySelector("[data-add-series-submit]")?.getAttribute("data-blocked") === "1";
     if (cont) cont.disabled = blocked || !has || clash || invalid || cont.dataset.busy === "1";
-    if (dup) dup.classList.toggle("hidden", !clash);
-    if (invalidEl) invalidEl.classList.toggle("hidden", !invalid);
-    if (help) help.classList.toggle("hidden", clash || invalid);
-    urlEl.classList.toggle("input-error", clash || invalid);
+    if (invalid) {
+      setControlValidity(urlEl, "Enter a valid http(s) URL with a host.");
+    } else if (clash) {
+      setControlValidity(urlEl, "This URL is already a source on another series.");
+    } else {
+      clearControlValidity(urlEl);
+    }
   }
 
-  function setAddSeriesFetchErr(form, msg) {
+  function setAddSeriesAlert(form, msg) {
     const errEl = form.querySelector(".js-add-series-fetch-err");
     if (!errEl) return;
     const span = errEl.querySelector("span") || errEl;
-    if (msg) {
-      span.textContent = msg;
-      errEl.classList.remove("hidden");
-    } else {
-      span.textContent = "";
-      errEl.classList.add("hidden");
-    }
+    span.textContent = String(msg || "").replace(/^conflict:\s*/i, "").trim();
+    // Visibility is owned by syncAddSeriesForm (needs step + message).
   }
+
+  /** Route create/fetch errors to daisyUI validators when the message maps to a field. */
+  function setAddSeriesFetchErr(form, msg) {
+    if (!form) return;
+    clearFormControlValidity(form);
+    const text = String(msg || "").replace(/^conflict:\s*/i, "").trim();
+    if (!text) {
+      setAddSeriesAlert(form, "");
+      return;
+    }
+    const lower = text.toLowerCase();
+    let field = null;
+    if (/\btitle\b/.test(lower) && /required|already exists|same root/.test(lower)) {
+      field = form.querySelector("#add-series-title");
+    } else if (/source url|url already|valid http|with a host|already used by series/.test(lower)) {
+      field = form.querySelector("#add-series-url");
+    } else if (/\broot\b/.test(lower)) {
+      field = form.querySelector('select[name="root_id"]');
+    } else if (/quality|profile/.test(lower)) {
+      field = form.querySelector("[data-quality-profile-select]") || form.querySelector('select[name="quality_profile_id"]');
+    }
+    // yt-dlp / prefetch failures stay in the alert (not URL field validators).
+    if (field) {
+      if (field.id === "add-series-url") {
+        form.dataset.addSeriesStep = "source";
+      } else {
+        form.dataset.addSeriesStep = "series";
+      }
+      setControlValidity(field, text);
+      setAddSeriesAlert(form, "");
+      try {
+        field.focus();
+        if (typeof field.select === "function") field.select();
+      } catch (_) {}
+      return;
+    }
+    setAddSeriesAlert(form, text);
+  }
+  window.setAddSeriesFetchErr = setAddSeriesFetchErr;
+
+  /** Snapshot form as urlencoded body (matches server ParseForm / tests). Skips disabled controls. */
+  function serializeAddSeriesForm(form) {
+    const params = new URLSearchParams();
+    form.querySelectorAll("input, select, textarea").forEach((el) => {
+      if (!el.name || el.disabled || el.type === "submit" || el.type === "button" || el.type === "file" || el.type === "reset") {
+        return;
+      }
+      if (el.type === "checkbox") {
+        if (el.checked) params.append(el.name, el.value || "1");
+        return;
+      }
+      if (el.type === "radio") {
+        if (!el.checked) return;
+        params.append(el.name, el.value);
+        return;
+      }
+      params.append(el.name, el.value);
+    });
+    // Title must always win over any earlier empty same-name control.
+    const titleEl = form.querySelector("#add-series-title") || form.querySelector('input[name="title"]');
+    if (titleEl) params.set("title", String(titleEl.value || ""));
+    // Manual path: drop empty source_url so the handler takes the manual branch cleanly.
+    if ((form.dataset.addSeriesMode || "") !== "url") {
+      const su = String(params.get("source_url") || "").trim();
+      if (!su) params.delete("source_url");
+    }
+    return params;
+  }
+
+  // AJAX create: keep modal + draft on error so the operator can fix the title.
+  document.body.addEventListener("submit", async (ev) => {
+    const form = ev.target.closest("form.js-add-series-form");
+    if (!form) return;
+    ev.preventDefault();
+    const submitBtn = form.querySelector("[data-add-series-submit]");
+    if (submitBtn) submitBtn.disabled = true;
+    setAddSeriesFetchErr(form, "");
+    // Enable series controls before read so soft-disable cannot drop title.
+    const seriesPanel = form.querySelector('[data-add-series-step="series"]');
+    if (seriesPanel) setPanelControls(seriesPanel, true);
+    syncQualityProfileGate(form);
+    const titleEl = form.querySelector("#add-series-title") || form.querySelector('input[name="title"]');
+    const titleVal = String((titleEl && titleEl.value) || "").trim();
+    if (!titleVal) {
+      const mode = form.dataset.addSeriesMode || "";
+      setAddSeriesFetchErr(
+        form,
+        mode === "manual"
+          ? "title is required when creating manually"
+          : "title is required - fetch metadata again or enter a title"
+      );
+      form.dataset.addSeriesStep = "series";
+      syncAddSeriesForm(form);
+      return;
+    }
+    const body = serializeAddSeriesForm(form);
+    // Belt: ensure title is present after snapshot (defends against empty append races).
+    body.set("title", titleVal);
+    syncAddSeriesForm(form);
+    try {
+      const res = await fetch("/actions/add-series", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        },
+        body: body.toString(),
+        credentials: "same-origin",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = (data && (data.error || data.message)) || ("Create series failed (" + res.status + ")");
+        setAddSeriesFetchErr(form, msg);
+        if (!form.dataset.addSeriesStep || form.dataset.addSeriesStep === "fetching") {
+          form.dataset.addSeriesStep = "series";
+        }
+        syncAddSeriesForm(form);
+        return;
+      }
+      if (!data || data.id == null) {
+        setAddSeriesFetchErr(form, "Create series failed: invalid response");
+        form.dataset.addSeriesStep = "series";
+        syncAddSeriesForm(form);
+        return;
+      }
+      if (form.dataset.importMatchLock === "1") {
+        form.dispatchEvent(new CustomEvent("creatorr:series-created", {
+          bubbles: true,
+          detail: { id: data.id, title: data.title || "", warning: data.warning || "" },
+        }));
+        return;
+      }
+      if (data.warning) {
+        location.assign("/series/" + data.id + "?err=" + encodeURIComponent(data.warning));
+        return;
+      }
+      location.assign("/series/" + data.id);
+    } catch (e) {
+      setAddSeriesFetchErr(form, e && e.message ? e.message : "Create series failed");
+      form.dataset.addSeriesStep = "series";
+      syncAddSeriesForm(form);
+    } finally {
+      syncAddSeriesForm(form);
+    }
+  });
 
   // Steps: "" (choice) | "source" | "fetching" | "series". Mode: "url" | "manual".
   function syncAddSeriesForm(form) {
@@ -1272,10 +2072,10 @@
         li.classList.toggle("step-primary", showSteps && i >= 0 && i <= cur);
       });
     }
-    // Keep alert under steps; only show on source step when it has text.
+    // Keep alert under steps; show on source or series when it has text (title conflicts stay editable).
     if (errEl) {
-      const hasMsg = !!(errEl.querySelector("span") || errEl).textContent;
-      errEl.classList.toggle("hidden", !(mode === "url" && step === "source" && hasMsg));
+      const hasMsg = !!(errEl.querySelector("span") || errEl).textContent.trim();
+      errEl.classList.toggle("hidden", !hasMsg || step === "" || step === "fetching");
     }
     if (source) {
       // Keep source fields enabled on later URL steps so they still submit; only hide.
@@ -1289,7 +2089,10 @@
     if (series) {
       const showSeries = step === "series";
       series.classList.toggle("hidden", !showSeries);
-      setPanelControls(series, showSeries);
+      // Keep series fields enabled for the whole URL/manual flow (hide-only when off-step).
+      // Soft-disable made title look filled while submit omitted it (browser skips disabled).
+      setPanelControls(series, mode === "manual" || mode === "url");
+      syncQualityProfileGate(form);
     }
     if (titleInfo) {
       titleInfo.textContent = mode === "manual"
@@ -1306,7 +2109,68 @@
       submit.disabled = blocked || !onSeries;
     }
     if (step === "source") syncAddSeriesSourceNav(form);
+    syncImportAddSeriesIgnored(form);
   }
+
+  /** On 'Import', force discovered status to 'Ignored' + disable join (tooltip); hidden keeps value. */
+  function syncImportAddSeriesIgnored(form) {
+    if (!form) return;
+    const join = form.querySelector("[data-index-as-ignored-join]");
+    if (!join) return;
+    const radios = join.querySelectorAll('input[type="radio"][name="index_as_ignored"]');
+    if (!radios.length) return;
+    const lock =
+      form.dataset.importMatchLock === "1" ||
+      location.pathname === "/import" ||
+      location.pathname.endsWith("/import");
+    const tip =
+      "Required on 'Import' so new videos are indexed for matching without downloading.";
+    let tipWrap = join.parentElement;
+    if (tipWrap && !tipWrap.classList.contains("tooltip")) tipWrap = null;
+    let hidden = form.querySelector('input[type="hidden"][name="index_as_ignored"][data-import-force]');
+
+    if (lock) {
+      radios.forEach((r) => {
+        r.checked = r.value === "1";
+        r.disabled = true;
+      });
+      if (!hidden) {
+        hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.name = "index_as_ignored";
+        hidden.value = "1";
+        hidden.dataset.importForce = "1";
+        join.insertAdjacentElement("beforebegin", hidden);
+      } else {
+        hidden.value = "1";
+      }
+      join.classList.add("opacity-60", "pointer-events-none");
+      if (!tipWrap) {
+        tipWrap = document.createElement("span");
+        tipWrap.className = "tooltip tooltip-top block w-full";
+        join.parentNode.insertBefore(tipWrap, join);
+        tipWrap.appendChild(join);
+      }
+      tipWrap.setAttribute("data-tip", tip);
+      return;
+    }
+
+    if (hidden) hidden.remove();
+    radios.forEach((r) => {
+      r.disabled = false;
+    });
+    join.classList.remove("opacity-60", "pointer-events-none");
+    if (tipWrap) {
+      tipWrap.removeAttribute("data-tip");
+      const parent = tipWrap.parentNode;
+      if (parent) {
+        parent.insertBefore(join, tipWrap);
+        tipWrap.remove();
+      }
+    }
+  }
+
+  window.syncAddSeriesForm = syncAddSeriesForm;
 
   document.body.addEventListener("click", (ev) => {
     const pick = ev.target.closest(".js-add-series-pick");
@@ -1324,6 +2188,7 @@
     setAddSeriesFetchErr(form, "");
     form.dataset.addSeriesMode = mode;
     form.dataset.addSeriesStep = mode === "url" ? "source" : "series";
+    syncAllScanCronJoins(form);
     syncAddSeriesForm(form);
     if (mode === "url") form.querySelector("#add-series-url")?.focus();
     else form.querySelector("#add-series-title")?.focus();
@@ -1497,15 +2362,19 @@
     modal.querySelectorAll("form").forEach((form) => {
       form.reset();
       resetArtSlots(form);
+      resetCredentialsPasswordUI(form);
       delete form.dataset.addSeriesMode;
       delete form.dataset.addSeriesStep;
+      delete form.dataset.importMatchLock;
       if (form.classList.contains("js-add-series-form")) setAddSeriesFetchErr(form, "");
+      clearFormControlValidity(form);
       form.querySelectorAll("[data-user-edited]").forEach((el) => {
         el.dataset.userEdited = "";
         el.disabled = false;
         el.removeAttribute("aria-busy");
       });
       form.querySelectorAll("input.preset-fill-input").forEach(syncPresetChips);
+      syncAllScanCronJoins(form);
       syncSourceURLForm(form);
       syncAddSeriesForm(form);
     });
@@ -1559,6 +2428,55 @@
     if (wrap) wrap.classList.add("hidden");
   }
 
+  function syncScanCronJoin(join) {
+    if (!join) return;
+    const input = join.querySelector("[data-cron-input]");
+    const regular = join.querySelector("[data-cron-regular]");
+    if (!(input instanceof HTMLInputElement) || !(regular instanceof HTMLInputElement)) return;
+    const cronPh = input.dataset.cronPlaceholder || "* * * * *";
+    const cronName = input.dataset.cronName || "scan_cron";
+    let hidden = join.querySelector("[data-cron-submit]");
+    if (!regular.checked) {
+      const cur = input.value.trim();
+      if (cur && cur !== "never") input.dataset.prevCron = input.value;
+      input.value = "never";
+      input.disabled = true;
+      input.removeAttribute("name");
+      input.removeAttribute("required");
+      input.placeholder = cronPh;
+      input.classList.add("opacity-60");
+      if (!hidden) {
+        hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.setAttribute("data-cron-submit", "");
+        join.insertBefore(hidden, input);
+      }
+      hidden.name = cronName;
+      hidden.value = "";
+    } else {
+      input.disabled = false;
+      input.name = cronName;
+      input.placeholder = cronPh;
+      input.classList.remove("opacity-60");
+      if (hidden) hidden.remove();
+      if (!input.value.trim() || input.value.trim() === "never") {
+        input.value = input.dataset.prevCron || "";
+      }
+    }
+  }
+
+  function syncAllScanCronJoins(root) {
+    (root || document).querySelectorAll("[data-cron-join]").forEach((join) => {
+      const input = join.querySelector("[data-cron-input]");
+      const regular = join.querySelector("[data-cron-regular]");
+      if (!(input instanceof HTMLInputElement) || !(regular instanceof HTMLInputElement)) return;
+      // After form.reset(), HTML may restore name/value/disabled; derive from cron text.
+      const v = input.value.trim();
+      regular.checked = !!v && v !== "never";
+      syncScanCronJoin(join);
+    });
+  }
+
   function syncRateLimitJoin(join) {
     if (!join) return;
     const unit = join.querySelector("[data-rate-unit]");
@@ -1566,7 +2484,8 @@
     if (!unit || !num) return;
     const off = unit.value === "off";
     const inherit = unit.value === "";
-    num.readOnly = off;
+    num.disabled = off;
+    num.readOnly = false;
     if (off) {
       num.value = "";
       num.removeAttribute("required");
@@ -1585,8 +2504,83 @@
     // no-op: cron fields use datalist; chips removed
   }
 
+  function syncCredentialsPasswordValidity(form) {
+    if (!form) return "";
+    const wrap = form.querySelector(".js-credentials-override");
+    if (!wrap) return "";
+    const user = wrap.querySelector('input[name="username"]');
+    const pass = wrap.querySelector('input[name="password"]');
+    if (!user || !pass) return "";
+    const keep = wrap.querySelector("[data-password-keep]");
+    const keeping = !!(keep && keep.value === "1" && pass.disabled);
+    const userSet = user.value.trim() !== "";
+    const passSet = String(pass.value || "").trim() !== "";
+    clearControlValidity(pass);
+    if (userSet && !keeping && !passSet) {
+      const msg = "Password required when username is set.";
+      setControlValidity(pass, msg);
+      return msg;
+    }
+    return "";
+  }
+
+  function setCredentialsPasswordMode(wrap, editing) {
+    if (!wrap) return;
+    const keep = wrap.querySelector("[data-password-keep]");
+    const btn = wrap.querySelector("[data-credentials-reset-password]");
+    const stored = wrap.querySelector("[data-credentials-password-stored]");
+    const edit = wrap.querySelector("[data-credentials-password-edit]");
+    const pass = edit && edit.querySelector('input[name="password"]');
+    if (!keep || !btn || !stored || !edit || !pass) return;
+    if (editing) {
+      keep.value = "0";
+      stored.hidden = true;
+      edit.hidden = false;
+      pass.disabled = false;
+      clearControlValidity(pass);
+      pass.focus();
+    } else {
+      keep.value = "1";
+      stored.hidden = false;
+      edit.hidden = true;
+      pass.value = "";
+      pass.disabled = true;
+      clearControlValidity(pass);
+    }
+  }
+
+  function resetCredentialsPasswordUI(form) {
+    if (!form) return;
+    form.querySelectorAll(".js-credentials-override").forEach((wrap) => {
+      setCredentialsPasswordMode(wrap, false);
+    });
+  }
+
+  document.body.addEventListener("input", (ev) => {
+    const input = ev.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    if (input.name !== "username" && input.name !== "password") return;
+    const credWrap = input.closest(".js-credentials-override");
+    if (!credWrap) return;
+    if (input.name === "username") {
+      const credInherit = credWrap.querySelector("[data-credentials-inherit]");
+      if (credInherit && input.value.trim() !== "") credInherit.value = "0";
+    }
+    // Clear prior Save error while editing; re-validate only on submit.
+    const pass = credWrap.querySelector('input[name="password"]');
+    if (pass) clearControlValidity(pass);
+  });
+
   // Preset chips fill the linked text field (legacy).
   document.body.addEventListener("click", (ev) => {
+    const resetPassBtn = ev.target.closest("[data-credentials-reset-password]");
+    if (resetPassBtn) {
+      ev.preventDefault();
+      const wrap = resetPassBtn.closest(".js-credentials-override");
+      if (!wrap) return;
+      setCredentialsPasswordMode(wrap, true);
+      return;
+    }
     const artClearBtn = ev.target.closest("[data-art-clear-btn]");
     if (artClearBtn) {
       ev.preventDefault();
@@ -1603,6 +2597,8 @@
         inputs.forEach((input) => {
           if (input.hasAttribute("data-rate-unit") && join) {
             input.value = join.getAttribute("data-default-unit") || "M";
+          } else if (input.hasAttribute("data-override-reset")) {
+            input.value = input.getAttribute("data-override-reset") || "";
           } else {
             input.value = "";
           }
@@ -1633,12 +2629,25 @@
 
   document.body.addEventListener("input", (ev) => {
     const el = ev.target;
-    if (!(el instanceof HTMLInputElement)) return;
+    if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement) && !(el instanceof HTMLSelectElement)) {
+      return;
+    }
     if (el.id === "add-series-url") {
       const form = el.closest("form.js-add-series-form");
       if (form) syncAddSeriesSourceNav(form);
+    } else if (el.getAttribute("aria-invalid") || el.closest(".join.validator")?.hasAttribute("aria-invalid")) {
+      // Clear server/client field errors as the operator edits (URL sync re-applies when still bad).
+      clearControlValidity(el);
     }
-    if (el.classList.contains("preset-fill-input")) syncPresetChips(el);
+    if (el instanceof HTMLInputElement && el.classList.contains("preset-fill-input")) syncPresetChips(el);
+    if (el instanceof HTMLInputElement && el.hasAttribute("data-cron-input")) {
+      const join = el.closest("[data-cron-join]");
+      const regular = join && join.querySelector("[data-cron-regular]");
+      if (regular instanceof HTMLInputElement && el.value.trim() && el.value.trim() !== "never") {
+        regular.checked = true;
+        syncScanCronJoin(join);
+      }
+    }
     const rateJoin = el.closest("[data-rate-limit-join]");
     if (rateJoin && el.hasAttribute("data-rate-value")) {
       rateJoin.classList.remove("opacity-70");
@@ -1647,7 +2656,20 @@
 
   document.body.addEventListener("change", (ev) => {
     const el = ev.target;
-    if (!(el instanceof HTMLSelectElement) || !el.hasAttribute("data-rate-unit")) return;
+    if (el instanceof HTMLSelectElement && (el.getAttribute("aria-invalid") || el.classList.contains("validator"))) {
+      clearControlValidity(el);
+    }
+  });
+  document.body.addEventListener("change", (ev) => {
+    const el = ev.target;
+    if (el instanceof HTMLInputElement && el.hasAttribute("data-cron-regular")) {
+      const join = el.closest("[data-cron-join]");
+      if (join) syncScanCronJoin(join);
+      return;
+    }
+    if (!(el instanceof HTMLSelectElement) || !el.hasAttribute("data-rate-unit")) {
+      return;
+    }
     const join = el.closest("[data-rate-limit-join]");
     if (!join) return;
     if (el.value !== "") join.classList.remove("opacity-70");
@@ -1665,34 +2687,6 @@
     } else {
       toggle.form.submit();
     }
-  });
-
-  function lastPathSegment(path) {
-    let p = String(path || "").replace(/\\/g, "/").replace(/\/+$/, "");
-    if (!p) return "";
-    const i = p.lastIndexOf("/");
-    return i >= 0 ? p.slice(i + 1) : p;
-  }
-
-  function autofillNameFromPath(pathInput) {
-    const nameSel = pathInput.getAttribute("data-autofill-name");
-    if (!nameSel) return;
-    const nameEl = document.querySelector(nameSel);
-    if (!nameEl || nameEl.dataset.userEdited === "1") return;
-    const seg = lastPathSegment(pathInput.value);
-    if (!seg) return;
-    nameEl.value = seg;
-  }
-
-  document.body.addEventListener("input", (ev) => {
-    const el = ev.target;
-    if (!(el instanceof HTMLInputElement)) return;
-    if (el.hasAttribute("data-autofill-name")) autofillNameFromPath(el);
-  });
-  document.body.addEventListener("change", (ev) => {
-    const el = ev.target;
-    if (!(el instanceof HTMLInputElement)) return;
-    if (el.hasAttribute("data-autofill-name")) autofillNameFromPath(el);
   });
 
   // Approximate Go normalizeSourceURL: trim, lower host, strip leading www.
@@ -1739,9 +2733,6 @@
     if (!form || !form.classList.contains("js-source-url-form")) return;
     const input = form.querySelector(".js-source-url");
     const submit = form.querySelector(".js-source-url-submit");
-    const help = form.querySelector(".js-source-url-help");
-    const dup = form.querySelector(".js-source-url-dup");
-    const invalidEl = form.querySelector(".js-source-url-invalid");
     if (!input || !submit) return;
     const raw = String(input.value || "").trim();
     const cur = normalizeSourceURLClient(form.getAttribute("data-current-url") || "");
@@ -1750,10 +2741,13 @@
     const existing = existingSourceURLs();
     const clash = !invalid && typed !== "" && existing.some((u) => u === typed && u !== cur);
     submit.disabled = clash || invalid;
-    if (dup) dup.classList.toggle("hidden", !clash);
-    if (invalidEl) invalidEl.classList.toggle("hidden", !invalid);
-    if (help) help.classList.toggle("hidden", clash || invalid);
-    input.classList.toggle("input-error", clash || invalid);
+    if (invalid) {
+      setControlValidity(input, "Enter a valid http(s) URL with a host.");
+    } else if (clash) {
+      setControlValidity(input, "This URL is already a source on this series.");
+    } else {
+      clearControlValidity(input);
+    }
   }
 
   document.body.addEventListener("input", (ev) => {
@@ -1767,6 +2761,83 @@
     syncSourceURLForm(form);
     const submit = form.querySelector(".js-source-url-submit");
     if (submit && submit.disabled) ev.preventDefault();
+  });
+
+  // Match settings.ValidateOverrideDomain / NormalizeDomain (client-side for Add override modal).
+  function normalizeOverrideDomainClient(raw) {
+    let s = String(raw || "").trim().toLowerCase();
+    if (s.startsWith("www.")) s = s.slice(4);
+    return s;
+  }
+
+  function overrideDomainValidationMessage(raw) {
+    const domain = normalizeOverrideDomainClient(raw);
+    if (!domain) return "Domain is required.";
+    if (domain === "default" || domain === "unknown" || domain === "system") {
+      return "Reserved domain name.";
+    }
+    if (/[:/\\@,#?&!\"'$;%^*()\[\]{}|=+ ]/.test(domain) || domain.includes(",")) {
+      return "Enter a valid hostname (e.g. example.com).";
+    }
+    if (!domain.includes(".")) {
+      return "Enter a valid hostname (e.g. example.com).";
+    }
+    if (domain.length > 253) {
+      return "Enter a valid hostname (e.g. example.com).";
+    }
+    const labels = domain.split(".");
+    for (const lab of labels) {
+      if (!lab || lab.length > 63) {
+        return "Enter a valid hostname (e.g. example.com).";
+      }
+      if (lab[0] === "-" || lab[lab.length - 1] === "-") {
+        return "Enter a valid hostname (e.g. example.com).";
+      }
+      if (!/^[a-z0-9-]+$/.test(lab)) {
+        return "Enter a valid hostname (e.g. example.com).";
+      }
+    }
+    return "";
+  }
+
+  function syncDomainOverrideForm(form) {
+    if (!form || !form.classList.contains("js-domain-override-form")) return;
+    const input = form.querySelector(".js-domain-override-domain");
+    if (!input) return;
+    const msg = overrideDomainValidationMessage(input.value);
+    if (msg) setControlValidity(input, msg);
+    else clearControlValidity(input);
+    return msg;
+  }
+
+  document.body.addEventListener("input", (ev) => {
+    const input = ev.target.closest(".js-domain-override-domain");
+    if (!input) return;
+    syncDomainOverrideForm(input.closest("form"));
+  });
+  document.body.addEventListener("submit", (ev) => {
+    const form = ev.target.closest(".js-domain-override-form");
+    if (!form) return;
+    const domainMsg = syncDomainOverrideForm(form);
+    if (domainMsg) {
+      ev.preventDefault();
+      const input = form.querySelector(".js-domain-override-domain");
+      try {
+        if (input) {
+          input.focus();
+          if (typeof input.select === "function") input.select();
+        }
+      } catch (_) {}
+      return;
+    }
+    const credMsg = syncCredentialsPasswordValidity(form);
+    if (credMsg) {
+      ev.preventDefault();
+      const pass = form.querySelector('.js-credentials-override input[name="password"]');
+      try {
+        if (pass && !pass.disabled) pass.focus();
+      } catch (_) {}
+    }
   });
 
   document.body.addEventListener("change", (ev) => {
@@ -1813,6 +2884,7 @@
 
   function moveListRow(row, dir) {
     if (!row || !row.parentElement) return;
+    if (row.hasAttribute("data-string-list-managed-row")) return;
     if (dir < 0) {
       const prev = row.previousElementSibling;
       if (prev) row.parentElement.insertBefore(row, prev);
@@ -1895,12 +2967,54 @@
     return true;
   }
 
-  function stringListRowHTML(editor, value) {
+  function managedListValues(editor) {
+    if (!editor) return [];
+    const raw = editor.getAttribute("data-string-list-managed") || "";
+    if (!raw) return [];
+    return raw.split("|").map((s) => s.trim()).filter(Boolean);
+  }
+
+  function isManagedListValue(editor, value) {
+    const fold = String(value || "").trim().toLowerCase();
+    if (!fold) return false;
+    return managedListValues(editor).some((m) => m.toLowerCase() === fold);
+  }
+
+  function stringListRowHTML(editor, value, managed) {
     const name = editor.getAttribute("data-item-name") || "item";
     const singular = editor.getAttribute("data-item-singular") || name;
     const unordered = editor.hasAttribute("data-string-list-unordered");
     const esc = (s) =>
       String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    if (managed) {
+      if (unordered) {
+        return (
+          '<span class="badge badge-lg gap-1 pr-0.5 max-w-full" data-string-list-row data-string-list-managed-row>' +
+          '<input type="hidden" name="' +
+          esc(name) +
+          '" value="' +
+          esc(value) +
+          '" />' +
+          '<span class="tooltip tooltip-top max-w-48" data-tip="Managed by Creatorr - this value is locked here and cannot be edited">' +
+          '<span class="block truncate text-base-content/50">' +
+          esc(value) +
+          "</span></span></span>"
+        );
+      }
+      return (
+        '<div class="flex gap-2 items-center" data-string-list-row data-string-list-managed-row>' +
+        '<input type="hidden" name="' +
+        esc(name) +
+        '" value="' +
+        esc(value) +
+        '" />' +
+        '<span class="tabular-nums text-xs opacity-60 w-4 shrink-0 text-right" data-list-ord aria-hidden="true"></span>' +
+        '<span class="tooltip tooltip-top grow min-w-0" data-tip="Managed by Creatorr - this value is locked here and cannot be edited">' +
+        '<span class="block truncate text-sm text-base-content/50">' +
+        esc(value) +
+        "</span></span></div>"
+      );
+    }
     if (unordered) {
       return (
         '<span class="badge badge-lg gap-1 pr-0.5 max-w-full" data-string-list-row>' +
@@ -1986,7 +3100,12 @@
       input.focus();
       return false;
     }
-    list.insertAdjacentHTML("beforeend", stringListRowHTML(editor, item));
+    if (isManagedListValue(editor, item)) {
+      input.value = "";
+      input.focus();
+      return false;
+    }
+    list.insertAdjacentHTML("beforeend", stringListRowHTML(editor, item, false));
     createLucideIcons(list.lastElementChild);
     syncStringListEmptyLabel(editor);
     input.value = "";
@@ -2044,6 +3163,7 @@
     if (listRm) {
       ev.preventDefault();
       const row = listRm.closest("[data-string-list-row]");
+      if (row && row.hasAttribute("data-string-list-managed-row")) return;
       const editor = listRm.closest("[data-string-list-editor]");
       if (row) row.remove();
       syncStringListEmptyLabel(editor);

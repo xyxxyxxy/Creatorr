@@ -1,44 +1,12 @@
 {{define "video_delivery_actions"}}
-{{/* Expects VideoID, SeriesID, Status, DomainActive, DomainDisabledTitle, IsStream, optional DeliveryQueued, Redirect, BtnClass, FormClass, PrimaryClass, NeutralClass, Icons, LiveSwap.
-     Refresh stream uses NeutralClass (btn-neutral).
+{{/* Expects VideoID, SeriesID, Status, DomainActive, DomainDisabledTitle, optional DeliveryQueued, Redirect, BtnClass, FormClass, PrimaryClass, Icons, LiveSwap.
      Tooltip only for icon buttons, or when disabled (domain / already queued) - labeled text buttons do not tip-repeat their own label. */}}
 {{$primary := "btn btn-primary"}}{{if .PrimaryClass}}{{$primary = .PrimaryClass}}{{end}}
-{{$neutral := "btn btn-neutral"}}{{if .NeutralClass}}{{$neutral = .NeutralClass}}{{end}}
 {{$formClass := ""}}{{if .FormClass}}{{$formClass = .FormClass}}{{end}}
 {{$icon := "size-4"}}{{if .Icons}}{{$icon = "size-5"}}{{end}}
 {{$live := .LiveSwap}}
-{{$queuedTitle := "Download or prepare-stream task already queued for this video"}}
-{{if .IsStream}}
-  {{if eq .Status "streamable"}}
-  {{$tip := ""}}
-  {{if not .DomainActive}}{{$tip = .DomainDisabledTitle}}
-  {{else if .DeliveryQueued}}{{$tip = $queuedTitle}}
-  {{else if .Icons}}{{$tip = "Refresh stream"}}
-  {{end}}
-  <form method="post" action="/actions/prepare-stream"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/prepare-stream" hx-target="#series-videos-live" hx-swap="outerHTML"{{end}}>
-    <input type="hidden" name="video_id" value="{{.VideoID}}" />
-    <input type="hidden" name="series_id" value="{{.SeriesID}}" />
-    {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
-    <button type="submit" class="{{$neutral}}{{if $tip}} tooltip tooltip-top{{end}}" aria-label="Refresh stream" {{if or (not .DomainActive) .DeliveryQueued}}disabled{{end}}{{if $tip}} data-tip="{{$tip}}"{{end}}>
-      {{if .Icons}}<i data-lucide="refresh-cw" class="{{$icon}}"></i>{{else}}Refresh stream{{end}}
-    </button>
-  </form>
-  {{else if or (eq .Status "wanted") (eq .Status "wanted_source_error") (eq .Status "wanted_download_error") (eq .Status "deleted") (eq .Status "missing")}}
-  {{$tip := ""}}
-  {{if not .DomainActive}}{{$tip = .DomainDisabledTitle}}
-  {{else if .DeliveryQueued}}{{$tip = $queuedTitle}}
-  {{else if .Icons}}{{$tip = "Prepare stream"}}
-  {{end}}
-  <form method="post" action="/actions/prepare-stream"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/prepare-stream" hx-target="#series-videos-live" hx-swap="outerHTML"{{end}}>
-    <input type="hidden" name="video_id" value="{{.VideoID}}" />
-    <input type="hidden" name="series_id" value="{{.SeriesID}}" />
-    {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
-    <button type="submit" class="{{$primary}}{{if $tip}} tooltip tooltip-top{{end}}" aria-label="Prepare stream" {{if or (not .DomainActive) .DeliveryQueued}}disabled{{end}}{{if $tip}} data-tip="{{$tip}}"{{end}}>
-      {{if .Icons}}<i data-lucide="radio" class="{{$icon}}"></i>{{else}}Prepare stream{{end}}
-    </button>
-  </form>
-  {{end}}
-{{else if or (eq .Status "wanted") (eq .Status "wanted_source_error") (eq .Status "wanted_download_error") (eq .Status "verify_failed") (eq .Status "deleted") (eq .Status "missing")}}
+{{$queuedTitle := "Download task already queued for this video"}}
+{{if or (eq .Status "wanted") (eq .Status "wanted_source_error") (eq .Status "wanted_download_error") (eq .Status "verify_failed") (eq .Status "deleted") (eq .Status "missing")}}
 {{$tip := ""}}
 {{if not .DomainActive}}{{$tip = .DomainDisabledTitle}}
 {{else if .DeliveryQueued}}{{$tip = $queuedTitle}}

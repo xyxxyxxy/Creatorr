@@ -30,7 +30,7 @@
              autocomplete="url"
              {{if not .Disabled}}required{{end}}
              {{if .Disabled}}disabled{{end}} />
-      <button type="submit" class="btn btn-outline join-item shrink-0" {{if .Disabled}}disabled{{end}}>
+      <button type="submit" class="btn btn-soft join-item shrink-0" {{if .Disabled}}disabled{{end}}>
         {{if .Disabled}}<span class="loading loading-spinner loading-sm"></span>{{end}}
         Fetch
       </button>

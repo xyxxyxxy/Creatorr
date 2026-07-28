@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
-	"github.com/go-chi/chi/v5"
 )
 
 type seriesVideoRow struct {
@@ -22,7 +22,6 @@ type seriesVideoRow struct {
 	Deleting            bool
 	SizeLabel           string
 	ResolutionLabel     string
-	StreamTypeLabel     string
 	DurationLabel       string
 	MediaTypeLabel      string
 	ThumbURL            string
@@ -81,7 +80,7 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 					} else {
 						dAct, _ = domains.IsActive(h.Queue.DB, host)
 						if !dAct {
-							disTitle = "Domain " + host + " is inactive. Activate it under Settings → Queue."
+							disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
 						}
 						domainCache[host] = struct {
 							active bool
@@ -98,13 +97,12 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 		}
 		videos = append(videos, seriesVideoRow{
 			Video:               v,
-			TaskInd:             h.streamIndicator(v.ID, best, v.Status, v.StreamKind()),
+			TaskInd:             h.videoIndicator(v.ID, best, v.Status),
 			DownloadRunning:     dlRunning,
 			DeliveryQueued:      videoDeliveryQueued(tasks),
 			Deleting:            taskIsFileDelete(best),
 			SizeLabel:           sizeLabel,
 			ResolutionLabel:     h.Library.ResolveResolutionLabel(v.ID, v.Width, v.Height, jsonPaths[v.ID]),
-			StreamTypeLabel:     library.StreamTypeListLabel(v.StreamKind(), v.StreamBeginningCached),
 			DurationLabel:       formatDurationClock(h.Library.ResolveDurationSeconds(v.ID, v.DurationSeconds, jsonPaths[v.ID])),
 			MediaTypeLabel:      mediaTypeLabel,
 			ThumbURL:            thumbURL,
@@ -117,7 +115,6 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 
 type seriesVideosLiveData struct {
 	SeriesID    int64
-	IsStream    bool
 	Videos      []seriesVideoRow
 	VideosPage  PageInfo
 	VideoFilter struct {
@@ -152,7 +149,7 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 		dAct, _ := domains.IsActive(h.Queue.DB, host)
 		disTitle := ""
 		if !dAct {
-			disTitle = "Domain " + host + " is inactive. Activate it under Settings → Queue."
+			disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
 		}
 		domainBySource[src.ID] = struct {
 			active bool
@@ -176,6 +173,23 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 	videoFilter.AriaLabel = "Video filters"
 	videoFilter.LiveTarget = "series-videos-live"
 	videoFilter.FormAction = fmt.Sprintf("/series/%d", id)
+	years, hasUnknown, _ := h.Library.DistinctVideoYears(id)
+	yearOpts := make([]listFilterOpt, 0, len(years)+1)
+	for _, y := range years {
+		ys := strconv.Itoa(y)
+		yearOpts = append(yearOpts, listFilterOpt{
+			Value:    ys,
+			Label:    ys,
+			Selected: filter.Year == y,
+		})
+	}
+	if hasUnknown {
+		yearOpts = append(yearOpts, listFilterOpt{
+			Value:    "unknown",
+			Label:    "Unknown",
+			Selected: filter.Year == library.VideoYearUnknown,
+		})
+	}
 	statuses, _ := h.Library.DistinctVideoStatuses(id)
 	sel := ""
 	if len(filter.Statuses) == 1 {
@@ -189,9 +203,6 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 			Selected: st == sel,
 		})
 	}
-	videoFilter.Selects = append(videoFilter.Selects, listFilterSelect{
-		Name: "status", AriaLabel: "Status", EmptyLabel: "All statuses", Options: statusOpts,
-	})
 	srcOpts := make([]listFilterOpt, 0, len(ser.Sources))
 	for _, src := range ser.Sources {
 		srcOpts = append(srcOpts, listFilterOpt{
@@ -200,13 +211,14 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 			Selected: filter.SourceID == src.ID,
 		})
 	}
-	videoFilter.Selects = append(videoFilter.Selects, listFilterSelect{
-		Name: "source", AriaLabel: "Source", EmptyLabel: "All sources", Options: srcOpts,
-	})
+	videoFilter.Selects = append(videoFilter.Selects,
+		listFilterSelect{Name: "source", AriaLabel: "Source", EmptyLabel: "All sources", Options: srcOpts},
+		listFilterSelect{Name: "status", AriaLabel: "Status", EmptyLabel: "All statuses", Options: statusOpts},
+		listFilterSelect{Name: "year", AriaLabel: "Year", EmptyLabel: "All years", Options: yearOpts},
+	)
 
 	return seriesVideosLiveData{
 		SeriesID:     id,
-		IsStream:     ser.IsStream(),
 		Videos:       videos,
 		VideosPage:   videosPageInfo,
 		VideoFilter:  videoFilter,
@@ -231,12 +243,19 @@ func (h *Handler) seriesVideosLive(w http.ResponseWriter, r *http.Request) {
 	render(w, "series_videos_live", data)
 }
 
-// parseSeriesVideoListFilter reads ?q= (title), ?status=…, ?source=<id>, and optional ?from=&to= (YYYY-MM-DD UTC).
+// parseSeriesVideoListFilter reads ?q= (title), ?year=, ?status=…, ?source=<id>, and optional ?from=&to= (YYYY-MM-DD UTC).
 func parseSeriesVideoListFilter(r *http.Request, sources []library.Source) library.VideoListFilter {
 	f := library.VideoListFilter{
 		Title:   strings.TrimSpace(r.URL.Query().Get("q")),
 		FromDay: parseFilterDay(r.URL.Query().Get("from")),
 		ToDay:   parseFilterDay(r.URL.Query().Get("to")),
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("year")); raw != "" {
+		if strings.EqualFold(raw, "unknown") {
+			f.Year = library.VideoYearUnknown
+		} else if y, err := strconv.Atoi(raw); err == nil && y >= 1900 && y <= 2100 {
+			f.Year = y
+		}
 	}
 	seen := map[string]struct{}{}
 	for _, raw := range r.URL.Query()["status"] {
@@ -282,6 +301,11 @@ func seriesVideoFilterQuery(filter library.VideoListFilter, page int) string {
 	q := url.Values{}
 	if t := strings.TrimSpace(filter.Title); t != "" {
 		q.Set("q", t)
+	}
+	if filter.Year == library.VideoYearUnknown {
+		q.Set("year", "unknown")
+	} else if filter.Year > 0 {
+		q.Set("year", strconv.Itoa(filter.Year))
 	}
 	for _, st := range filter.Statuses {
 		q.Add("status", st)

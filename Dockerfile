@@ -14,11 +14,13 @@ COPY internal ./internal
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/creatorr ./cmd/creatorr
 
 # Fetch arch-specific sidecars; unzip/curl stay out of the final image.
+# BGUTIL_POT_VERSION must match the creatorr-po-token Compose image tag (e.g. 1.3.1-deno).
 FROM debian:bookworm-slim AS tools
 ARG TARGETARCH
+ARG BGUTIL_POT_VERSION=1.3.1
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl unzip \
-  && mkdir -p /out \
+  && mkdir -p /out /out/yt-dlp-plugins/bgutil \
   && case "$TARGETARCH" in \
        amd64) YTDLP=yt-dlp_linux; DENO=deno-x86_64-unknown-linux-gnu.zip ;; \
        arm64) YTDLP=yt-dlp_linux_aarch64; DENO=deno-aarch64-unknown-linux-gnu.zip ;; \
@@ -31,6 +33,9 @@ RUN apt-get update \
        "https://github.com/denoland/deno/releases/latest/download/${DENO}" \
   && unzip -j -d /out /tmp/deno.zip deno \
   && chmod a+rx /out/deno \
+  && curl -fsSL -o /tmp/bgutil-pot.zip \
+       "https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases/download/${BGUTIL_POT_VERSION}/bgutil-ytdlp-pot-provider.zip" \
+  && unzip -q -d /out/yt-dlp-plugins/bgutil /tmp/bgutil-pot.zip \
   && rm -rf /var/lib/apt/lists/* /tmp/*
 
 FROM debian:bookworm-slim AS runtime
@@ -49,11 +54,13 @@ RUN apt-get update \
   && groupadd --gid 1000 creatorr \
   && useradd --uid 1000 --gid 1000 --home-dir /app --no-create-home --shell /usr/sbin/nologin creatorr \
   && mkdir -p /data /cache /media/library /media/import /yt-dlp-plugins \
+       /usr/local/share/yt-dlp-plugins \
   && chown -R creatorr:creatorr /data /cache /media /yt-dlp-plugins
 
 COPY --from=build /out/creatorr /usr/local/bin/creatorr
 COPY --from=tools /out/yt-dlp /usr/local/bin/yt-dlp
 COPY --from=tools /out/deno /usr/local/bin/deno
+COPY --from=tools /out/yt-dlp-plugins/bgutil /usr/local/share/yt-dlp-plugins/bgutil
 
 LABEL org.opencontainers.image.title="Creatorr" \
       org.opencontainers.image.description="Sonarr-shaped creator VOD daemon" \

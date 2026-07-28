@@ -1,5 +1,6 @@
+{{/* list_panel: optional pipeline = extra Tailwind classes on the section (e.g. "w-full max-w-5xl") */}}
 {{define "list_panel"}}
-<section class="list-panel card bg-base-100 border border-base-300 mb-4">
+<section class="list-panel card bg-base-100 border border-base-300 mb-4{{with .}} {{.}}{{end}}">
   <div class="card-body gap-3">
 {{end}}
 
@@ -8,7 +9,7 @@
 </section>
 {{end}}
 
-{{/* list_header: title, help?, icon?, level ("page"|"section"), id?, add_href?, add_label?, add_modal?, add_modal2?, add_label2? */}}
+{{/* list_header: title, help?, help2?, icon?, level ("page"|"section"), id?, add_href?, add_label?, add_modal?, add_modal2?, add_label2? */}}
 {{define "list_header"}}
 <div class="list-header flex flex-wrap items-start justify-between gap-3"{{with .id}} id="{{.}}"{{end}}>
   <div class="min-w-0 flex-1">
@@ -24,6 +25,7 @@
     </h2>
     {{end}}
     {{with .help}}<p class="text-sm opacity-60 mt-0.5">{{.}}</p>{{end}}
+    {{with .help2}}<p class="text-sm opacity-60 mt-0.5">{{.}}</p>{{end}}
   </div>
   <div class="list-actions flex flex-wrap gap-2 shrink-0 items-center">
     {{if .add_modal2}}

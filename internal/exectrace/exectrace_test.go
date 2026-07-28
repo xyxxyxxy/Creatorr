@@ -47,21 +47,32 @@ func TestRecordWithRecorder(t *testing.T) {
 
 func TestFormatPretty(t *testing.T) {
 	got := FormatPretty("/usr/local/bin/yt-dlp", "--plugin-dirs", "/data/p", "--no-mtime", "-f", "best", "https://example.com/v")
-	want := "/usr/local/bin/yt-dlp\n  --plugin-dirs /data/p\n  --no-mtime -f best https://example.com/v"
+	want := "/usr/local/bin/yt-dlp\n  --plugin-dirs /data/p\n  --no-mtime\n  -f best https://example.com/v"
 	if got != want {
 		t.Fatalf("FormatPretty = %q, want %q", got, want)
+	}
+	got = FormatPretty("ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "in.mkv", "out.mkv")
+	want = "ffmpeg\n  -hide_banner\n  -loglevel error\n  -i in.mkv out.mkv"
+	if got != want {
+		t.Fatalf("FormatPretty short = %q, want %q", got, want)
 	}
 }
 
 func TestPretty(t *testing.T) {
 	in := `/usr/local/bin/yt-dlp --plugin-dirs /data/p --no-mtime -f "bv*" https://example.com/v`
-	want := "/usr/local/bin/yt-dlp\n  --plugin-dirs /data/p\n  --no-mtime -f \"bv*\" https://example.com/v"
+	want := "/usr/local/bin/yt-dlp\n  --plugin-dirs /data/p\n  --no-mtime\n  -f \"bv*\" https://example.com/v"
 	if got := Pretty(in); got != want {
 		t.Fatalf("Pretty = %q, want %q", got, want)
 	}
+	in = `ffmpeg -hide_banner -loglevel error -user_agent "Mozilla/5.0 (x)" -i url out.mkv`
+	want = "ffmpeg\n  -hide_banner\n  -loglevel error\n  -user_agent \"Mozilla/5.0 (x)\"\n  -i url out.mkv"
+	if got := Pretty(in); got != want {
+		t.Fatalf("Pretty short = %q, want %q", got, want)
+	}
 	// Do not split inside double quotes.
-	in = `yt-dlp -f "a --b" url`
-	if got := Pretty(in); got != in {
-		t.Fatalf("Pretty quoted = %q", got)
+	in = `yt-dlp -f "a --b -c" url`
+	want = "yt-dlp\n  -f \"a --b -c\" url"
+	if got := Pretty(in); got != want {
+		t.Fatalf("Pretty quoted = %q, want %q", got, want)
 	}
 }

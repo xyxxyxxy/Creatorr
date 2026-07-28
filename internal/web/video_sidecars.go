@@ -11,8 +11,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/go-chi/chi/v5"
+	"github.com/xyxxyxxy/Creatorr/internal/library"
 )
 
 const sidecarViewMaxBytes = 2 << 20 // 2 MiB text preview
@@ -28,6 +28,7 @@ type videoFileView struct {
 	SizeLabel string
 	Missing   bool
 	ViewHref  string // file detail page
+	CanDelete bool   // registered sub/thumb/other
 }
 
 func videoFileViews(lib *library.Store, seriesID, videoID int64, files []library.VideoFile) []videoFileView {
@@ -47,8 +48,9 @@ func videoFileViews(lib *library.Store, seriesID, videoID int64, files []library
 		}
 		if f.ID > 0 {
 			v.ViewHref = fmt.Sprintf("/series/%d/videos/%d/files/%d", seriesID, videoID, f.ID)
+			v.CanDelete = library.DeletableSidecarKind(f.Kind)
 		}
-		if f.SizeBytes.Valid {
+		if f.SizeBytes.Valid && f.SizeBytes.Int64 >= 0 {
 			v.SizeLabel = library.FormatBytes(f.SizeBytes.Int64)
 		} else if st, err := os.Stat(f.Path); err == nil && !st.IsDir() {
 			v.SizeLabel = library.FormatBytes(st.Size())
@@ -83,7 +85,7 @@ func videoSidecarViews(lib *library.Store, seriesID, videoID int64) []videoFileV
 	return videoFileViews(lib, seriesID, videoID, files)
 }
 
-// videoAllFileViews returns media rows first (video, then strm), then sidecars.
+// videoAllFileViews returns media rows first, then sidecars.
 func videoAllFileViews(lib *library.Store, seriesID, videoID int64) []videoFileView {
 	media := videoMediaViews(lib, seriesID, videoID)
 	sides := videoSidecarViews(lib, seriesID, videoID)
@@ -111,8 +113,6 @@ func sidecarKindLabel(kind string) string {
 		return "Thumbnail"
 	case "sub":
 		return "Subtitle"
-	case "strm":
-		return "Stream link"
 	case "sponsorblock":
 		return "SponsorBlock"
 	default:
@@ -123,6 +123,7 @@ func sidecarKindLabel(kind string) string {
 func sidecarKindIcon(kind string) string {
 	switch kind {
 	case "video":
+		// Packed media file (not the episode itself - episodes use EpisodeLucideIcon).
 		return "film"
 	case "nfo":
 		return "file-text"
@@ -132,8 +133,6 @@ func sidecarKindIcon(kind string) string {
 		return "image"
 	case "sub":
 		return "captions"
-	case "strm":
-		return "radio"
 	case "sponsorblock":
 		return "scissors"
 	default:
@@ -193,6 +192,7 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		Path       string
 		SizeLabel  string
 		Missing    bool
+		CanDelete  bool
 		IsImage    bool
 		IsVideo    bool
 		IsText     bool
@@ -203,7 +203,7 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		Truncated  bool
 		RawHref    string
 	}{
-		pageBase:  newPage(name, "series", nil),
+		pageBase:  newPage(name, "series", flashFromQuery(r)),
 		Series:    ser,
 		Video:     v,
 		FileID:    fid,
@@ -214,6 +214,7 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		Path:      f.Path,
 		SizeLabel: sizeLabel,
 		Missing:   missing,
+		CanDelete: library.DeletableSidecarKind(f.Kind),
 		IsImage:   sidecarIsImage(f.Kind, f.Path),
 		IsVideo:   sidecarIsVideo(f.Kind, f.Path),
 		IsText:    sidecarIsText(f.Kind, f.Path),
@@ -222,7 +223,7 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		Crumbs: []breadcrumb{
 			crumb("/series", "Series", "tv"),
 			crumb(fmt.Sprintf("/series/%d", ser.ID), ser.Title, "clapperboard"),
-			crumb(fmt.Sprintf("/series/%d/videos/%d", ser.ID, v.ID), v.Title, "film"),
+			crumb(fmt.Sprintf("/series/%d/videos/%d", ser.ID, v.ID), v.Title, EpisodeLucideIcon),
 			crumb("", name, sidecarKindIcon(f.Kind)),
 		},
 	}
@@ -309,11 +310,11 @@ func sidecarIsText(kind, path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch {
 	case strings.HasSuffix(base, ".info.json"), strings.HasSuffix(base, ".sponsorblock.json"), ext == ".json",
-		ext == ".nfo", ext == ".strm",
+		ext == ".nfo",
 		ext == ".srt", ext == ".vtt", ext == ".ass", ext == ".ssa", ext == ".sub",
 		ext == ".txt", ext == ".xml":
 		return true
-	case kind == "nfo", kind == "json", kind == "sub", kind == "strm", kind == "sponsorblock":
+	case kind == "nfo", kind == "json", kind == "sub", kind == "sponsorblock":
 		return true
 	default:
 		return false
@@ -344,7 +345,7 @@ func sidecarViewContentType(path string) string {
 	switch {
 	case strings.HasSuffix(base, ".info.json"), ext == ".json":
 		return "application/json; charset=utf-8"
-	case ext == ".nfo", ext == ".strm", ext == ".srt", ext == ".vtt", ext == ".ass", ext == ".ssa", ext == ".sub":
+	case ext == ".nfo", ext == ".srt", ext == ".vtt", ext == ".ass", ext == ".ssa", ext == ".sub":
 		return "text/plain; charset=utf-8"
 	case ext == ".mp4", ext == ".m4v":
 		return "video/mp4"

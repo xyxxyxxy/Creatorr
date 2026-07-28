@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xyxxyxxy/Creatorr/internal/cookies"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 type taskView struct {
@@ -24,39 +24,53 @@ type taskView struct {
 	VideoTitle  string
 	Message     string
 	Progress    *float64
+	LanePaused  bool // domain soft-pause: pending bars use warning
 }
 
 type laneView struct {
 	Domain              string
 	Paused              bool
 	CanPause            bool // false for system / reserved lanes
-	Tasks               []taskView
 	Page                PageInfo
 	PendingCount        int
 	DownloadCount       int
 	ShowCancelPending   bool
 	ShowCooldown        bool
-	CooldownEndsAt      string // RFC3339Nano for JS tick
-	CooldownMin         int
-	CooldownSec         int
-	RateLimit           string  // effective yt-dlp --limit-rate display
+	ShowBusy            bool // running >= max parallel (not paused / cooling)
+	ShowActive          bool // running > 0 and below max parallel (not paused / cooling)
+	RunningCount        int
+	CooldownEndsAt      string  // RFC3339Nano for JS tick
+	CooldownTotalSec    int     // configured task_cooldown_seconds (progress max)
+	CooldownRemSec      int     // remaining seconds at render
+	TaskCooldownSeconds int     // effective cooldown setting (host lanes)
+	MaxDownloadQueue    int     // effective max download queue (host lanes)
+	RateLimit           string  // effective yt-dlp --limit-rate display (download)
 	SleepRequests       float64 // effective yt-dlp --sleep-requests
+	MaxParallelTasks    int     // effective max parallel (system = 1)
+	UseFlareSolverr     bool    // effective Use FlareSolverr
 	HasCookies          bool
+	CookiesFromHost     bool // host jar (not Domain defaults fallback)
 	CookiesTip          string
+	HasCredentials      bool
+	CredentialsFromHost bool
+	CredentialsTip      string
+	FlareWarm           bool
+	FlareTip            string
 	HasOverrideRow      bool
-	CooldownOverride     string
+	CooldownOverride    string
 	QueueOverride       string
 	ParallelOverride    string
 	RateOverride        string
 	SleepOverride       string
-	FlareOverride       string
+	FlareOverride       string // default|on|off (empty = no row / inherit)
 	CookieContent       string
-	DefaultCooldown      int
+	DefaultCooldown     int
 	DefaultQueue        int
 	DefaultParallel     int
 	DefaultRate         string
 	DefaultSleep        float64
 	DefaultFlare        bool
+	Tasks               []taskView // pending + running (ListActive order)
 }
 
 func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
@@ -95,24 +109,56 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		lv = &laneView{
-			Domain:           domain,
-			Paused:           paused,
-			CanPause:         canPause,
-			DefaultCooldown:  defLim.TaskCooldownSeconds,
-			DefaultQueue:     defLim.MaxDownloadQueue,
-			DefaultParallel:  defLim.MaxParallelTasks,
-			DefaultRate:      defLim.DownloadRateLimit,
-			DefaultSleep:     defLim.SleepRequests,
-			DefaultFlare:     defLim.UseFlareSolverr,
+			Domain:          domain,
+			Paused:          paused,
+			CanPause:        canPause,
+			DefaultCooldown: defLim.TaskCooldownSeconds,
+			DefaultQueue:    defLim.MaxDownloadQueue,
+			DefaultParallel: defLim.MaxParallelTasks,
+			DefaultRate:     defLim.DownloadRateLimit,
+			DefaultSleep:    defLim.SleepRequests,
+			DefaultFlare:    defLim.UseFlareSolverr,
 		}
-		if domain != queue.SystemDomain {
+		if domain == queue.SystemDomain {
+			lv.MaxParallelTasks = 1
+		} else {
+			// Effective Domain defaults ∪ host overrides (LimitsForDomain).
+			lv.RateLimit = defLim.DownloadRateLimit
+			lv.SleepRequests = defLim.SleepRequests
+			lv.MaxParallelTasks = defLim.MaxParallelTasks
+			lv.MaxDownloadQueue = defLim.MaxDownloadQueue
+			lv.TaskCooldownSeconds = defLim.TaskCooldownSeconds
+			lv.UseFlareSolverr = defLim.UseFlareSolverr
 			if lim, err := settings.LimitsForDomain(h.Queue.DB, domain); err == nil {
 				lv.RateLimit = lim.DownloadRateLimit
 				lv.SleepRequests = lim.SleepRequests
+				lv.MaxParallelTasks = lim.MaxParallelTasks
+				lv.MaxDownloadQueue = lim.MaxDownloadQueue
+				lv.TaskCooldownSeconds = lim.TaskCooldownSeconds
+				lv.UseFlareSolverr = lim.UseFlareSolverr
 			}
-			if ok, tip, err := cookies.Applies(h.Queue.DB, domain); err == nil && ok {
+			if lv.UseFlareSolverr {
+				lv.FlareTip = "FlareSolverr on (host Domain override)"
+				if ytdlp.HasFlareSession(domain) {
+					lv.FlareWarm = true
+					lv.FlareTip = "FlareSolverr session warm"
+				}
+			} else {
+				lv.FlareTip = "FlareSolverr off (host Domain override)"
+			}
+			if ok, _, err := domains.CookiesApply(h.Queue.DB, domain); err == nil && ok {
 				lv.HasCookies = true
-				lv.CookiesTip = tip
+				lv.CookiesFromHost = true
+				lv.CookiesTip = "Cookies set (host jar)"
+			} else {
+				lv.CookiesTip = "No cookies (host Domain override)"
+			}
+			if creds, err := settings.CredentialsForDomain(h.Queue.DB, domain); err == nil && strings.TrimSpace(creds.Username) != "" {
+				lv.HasCredentials = true
+				lv.CredentialsFromHost = true
+				lv.CredentialsTip = "Credentials set (host override)"
+			} else {
+				lv.CredentialsTip = "No credentials (host Domain override)"
 			}
 			if meta, ok := knownMeta[domain]; ok {
 				lv.HasOverrideRow = true
@@ -137,7 +183,7 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 					lv.SleepOverride = strconv.FormatFloat(meta.SleepRequests.Float64, 'f', -1, 64)
 				}
 			}
-			if c, err := cookies.Get(h.Queue.DB, domain); err == nil {
+			if c, err := domains.GetCookies(h.Queue.DB, domain); err == nil {
 				lv.CookieContent = c
 			}
 		}
@@ -160,10 +206,18 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 			ensureLane(host)
 		}
 	}
+	// Soft-paused hosts always get a lane (auto-pause from failed prefetch before any
+	// series/source exists would otherwise leave the nav badge with no Resume target).
+	if pausedHosts, err := domains.ListPaused(h.Queue.DB); err == nil {
+		for _, host := range pausedHosts {
+			ensureLane(host)
+		}
+	}
 	for _, t := range tasks {
 		lv := ensureLane(t.Domain)
 		tv := taskView{
 			ID: t.ID, Position: t.QueuePos, Status: t.Status, Kind: t.Kind, Message: t.Message,
+			LanePaused: lv.Paused,
 		}
 		if t.SeriesID.Valid {
 			tv.SeriesID = t.SeriesID.Int64
@@ -194,7 +248,10 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 		if t.Status == queue.StatusPending {
 			lv.PendingCount++
 		}
-		if t.Kind == queue.KindDownload || t.Kind == queue.KindCacheBeginning {
+		if t.Status == queue.StatusRunning {
+			lv.RunningCount++
+		}
+		if t.Kind == queue.KindDownload {
 			lv.DownloadCount++
 		}
 	}
@@ -222,13 +279,22 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 				if rem < 1 {
 					rem = 1
 				}
+				total := lv.TaskCooldownSeconds
+				if total < 1 {
+					total = rem
+				}
+				if rem > total {
+					total = rem
+				}
 				lv.ShowCooldown = true
 				lv.CooldownEndsAt = until.UTC().Format(time.RFC3339Nano)
-				lv.CooldownMin = rem / 60
-				if lv.CooldownMin > 999 {
-					lv.CooldownMin = 999
-				}
-				lv.CooldownSec = rem % 60
+				lv.CooldownTotalSec = total
+				lv.CooldownRemSec = rem
+			}
+			if !lv.Paused && !lv.ShowCooldown && lv.MaxParallelTasks > 0 && lv.RunningCount >= lv.MaxParallelTasks {
+				lv.ShowBusy = true
+			} else if !lv.Paused && !lv.ShowCooldown && lv.RunningCount > 0 {
+				lv.ShowActive = true
 			}
 		}
 		pageTasks, pageInfo := SlicePage(r, "page", lv.Tasks)
@@ -236,7 +302,7 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 		lv.Page = pageInfo
 		lanes = append(lanes, *lv)
 	}
-	flareOK, _ := settings.FlareSolverrConfigured(h.Queue.DB)
+	flareOK := settings.FlareSolverrConfigured()
 
 	render(w, "tasks", struct {
 		pageBase
@@ -258,13 +324,6 @@ func (h *Handler) actionCancelTask(w http.ResponseWriter, r *http.Request) {
 		redir = "/tasks"
 	}
 	http.Redirect(w, r, redir, http.StatusSeeOther)
-}
-
-func (h *Handler) actionBumpTask(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	_ = h.Queue.Bump(id)
-	http.Redirect(w, r, "/tasks", http.StatusSeeOther)
 }
 
 func (h *Handler) actionCancelDomainTasks(w http.ResponseWriter, r *http.Request) {

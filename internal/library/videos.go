@@ -22,9 +22,7 @@ const videoDownloadOrderOldest = `(v.upload_date IS NULL OR v.upload_date = '') 
 // videoSelectCols is the shared SELECT list for scanVideo (order must match Scan).
 const videoSelectCols = `id, series_id, source_id, remote_id, title, upload_date, source_url,
 		       status, season, episode, COALESCE(description,''), thumbnail_url,
-		       COALESCE(media_type,''), duration_seconds, width, height, fps, stream_urls_kind, stream_beginning_cached,
-		       stream_playback_cached_seconds, stream_playback_cache_complete,
-		       stream_playback_cache_written_at, stream_playback_cache_last_access,
+		       COALESCE(media_type,''), duration_seconds, width, height, fps,
 		       download_format_selector, download_remux_container, tool, import_src, acquired_at, sidecars_acquired_at,
 		       COALESCE(sorttitle,''), COALESCE(originaltitle,''), COALESCE(studio,''),
 		       COALESCE(genres,'[]'), COALESCE(tags,'[]'),
@@ -33,61 +31,60 @@ const videoSelectCols = `id, series_id, source_id, remote_id, title, upload_date
 
 // Video is an indexed instance within a series.
 type Video struct {
-	ID                       int64
-	SeriesID                 int64
-	SourceID                 sql.NullInt64
-	RemoteID                 string
-	Title                    string
-	UploadDate               sql.NullString
-	SourceURL                sql.NullString
-	Status                   string
-	Season                   sql.NullInt64
-	Episode                  sql.NullInt64
-	Description              string // plot in episode NFO / metadata UI
-	ThumbnailURL             sql.NullString
-	MediaType                string // yt-dlp media_type; empty = missing
-	DurationSeconds          sql.NullInt64
-	Width                    sql.NullInt64
-	Height                   sql.NullInt64
-	FPS                      sql.NullFloat64
-	StreamURLsKind                 sql.NullString
-	StreamBeginningCached          bool
-	StreamPlaybackCachedSeconds    float64
-	StreamPlaybackCacheComplete    bool
-	StreamPlaybackCacheWrittenAt   sql.NullString
-	StreamPlaybackCacheLastAccess  sql.NullString
-	DownloadFormatSelector         sql.NullString
-	DownloadRemuxContainer   sql.NullString
-	Tool                     sql.NullString
-	ImportSrc                sql.NullString
-	AcquiredAt               sql.NullString
-	SidecarsAcquiredAt       sql.NullString
-	SortTitle                string
-	OriginalTitle            string
-	Studio                   string
-	Genres                   []string
-	Tags                     []string
-	UniqueIDType             string
-	UniqueIDValue            string
-	Actors                   []SeriesActor
-	Tagline                  string
-	Country                  string
-	MPAA                     string
+	ID                            int64
+	SeriesID                      int64
+	SourceID                      sql.NullInt64
+	RemoteID                      string
+	Title                         string
+	UploadDate                    sql.NullString
+	SourceURL                     sql.NullString
+	Status                        string
+	Season                        sql.NullInt64
+	Episode                       sql.NullInt64
+	Description                   string // plot in episode NFO / metadata UI
+	ThumbnailURL                  sql.NullString
+	MediaType                     string // yt-dlp media_type; empty = missing
+	DurationSeconds               sql.NullInt64
+	Width                         sql.NullInt64
+	Height                        sql.NullInt64
+	FPS                           sql.NullFloat64
+	DownloadFormatSelector        sql.NullString
+	DownloadRemuxContainer        sql.NullString
+	Tool                          sql.NullString
+	ImportSrc                     sql.NullString
+	AcquiredAt                    sql.NullString
+	SidecarsAcquiredAt            sql.NullString
+	SortTitle                     string
+	OriginalTitle                 string
+	Studio                        string
+	Genres                        []string
+	Tags                          []string
+	UniqueIDType                  string
+	UniqueIDValue                 string
+	Actors                        []SeriesActor
+	Tagline                       string
+	Country                       string
+	MPAA                          string
 }
 
-// VideoListFilter scopes series video lists by title, status, source, media type, and upload calendar day (UTC).
+// VideoListFilter scopes series video lists by title, status, source, media type,
+// upload calendar year, and upload calendar day (UTC).
 type VideoListFilter struct {
 	Title     string   // case-insensitive substring; empty = any title
 	Statuses  []string // empty = all statuses
 	SourceID  int64    // 0 = all sources
 	MediaType string   // non-empty exact match; empty query = all
+	Year      int      // UTC calendar year of upload_date; 0 = any; VideoYearUnknown = undated
 	FromDay   string   // YYYY-MM-DD inclusive; empty = no lower bound
 	ToDay     string   // YYYY-MM-DD inclusive; empty = no upper bound
 }
 
+// VideoYearUnknown selects videos with missing/empty upload_date (?year=unknown).
+const VideoYearUnknown = -1
+
 // Active reports whether any filter constraint is set.
 func (f VideoListFilter) Active() bool {
-	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID > 0 || strings.TrimSpace(f.MediaType) != "" || f.FromDay != "" || f.ToDay != ""
+	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID > 0 || strings.TrimSpace(f.MediaType) != "" || f.Year != 0 || f.FromDay != "" || f.ToDay != ""
 }
 
 func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter) {
@@ -109,6 +106,15 @@ func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter
 		b.WriteString(` AND media_type = ? AND media_type != ''`)
 		*args = append(*args, mt)
 	}
+	switch {
+	case f.Year == VideoYearUnknown:
+		b.WriteString(` AND (upload_date IS NULL OR trim(upload_date) = '')`)
+	case f.Year > 0:
+		// UTC calendar year of upload_date (same as year-season / {year}).
+		b.WriteString(` AND upload_date IS NOT NULL AND trim(upload_date) != ''`)
+		b.WriteString(` AND CAST(strftime('%Y', upload_date) AS INTEGER) = ?`)
+		*args = append(*args, f.Year)
+	}
 	if f.FromDay == "" && f.ToDay == "" {
 		return
 	}
@@ -128,6 +134,62 @@ func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter
 func likeContainsPattern(s string) string {
 	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 	return `%` + replacer.Replace(s) + `%`
+}
+
+// ListRecentVideos returns newest packed library videos (downloaded)
+// across all series, ordered by acquired_at then id (highest first).
+func (s *Store) ListRecentVideos(limit int) ([]Video, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.DB.SQL.Query(`
+		SELECT `+videoSelectCols+`
+		FROM videos
+		WHERE status = 'downloaded'
+		ORDER BY (acquired_at IS NULL OR acquired_at = ''), acquired_at DESC, id DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Video
+	for rows.Next() {
+		v, err := scanVideo(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// SeriesTitles returns id → title for the given series ids (missing ids omitted).
+func (s *Store) SeriesTitles(ids []int64) (map[int64]string, error) {
+	out := map[int64]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.DB.SQL.Query(`
+		SELECT id, title FROM series WHERE id IN (`+sqlIntPlaceholders(len(ids))+`)
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var title string
+		if err := rows.Scan(&id, &title); err != nil {
+			return nil, err
+		}
+		out[id] = title
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) ListVideos(seriesID int64) ([]Video, error) {
@@ -166,7 +228,7 @@ func (s *Store) ListVideosPageFiltered(seriesID int64, filter VideoListFilter, l
 	}
 	var b strings.Builder
 	b.WriteString(`
-		SELECT `+videoSelectCols+`
+		SELECT ` + videoSelectCols + `
 		FROM videos WHERE series_id = ?`)
 	args := []any{seriesID}
 	appendVideoListFilterSQL(&b, &args, filter)
@@ -342,6 +404,42 @@ func (s *Store) DistinctVideoStatuses(seriesID int64) ([]string, error) {
 	return out, rows.Err()
 }
 
+// DistinctVideoYears returns UTC calendar years present on a series upload_date
+// (newest first) and whether any video has a missing/empty upload_date.
+func (s *Store) DistinctVideoYears(seriesID int64) (years []int, unknown bool, err error) {
+	var nUnknown int
+	err = s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM videos
+		WHERE series_id = ?
+		  AND (upload_date IS NULL OR trim(upload_date) = '')
+	`, seriesID).Scan(&nUnknown)
+	if err != nil {
+		return nil, false, err
+	}
+	unknown = nUnknown > 0
+	rows, err := s.DB.SQL.Query(`
+		SELECT DISTINCT CAST(strftime('%Y', upload_date) AS INTEGER) AS y
+		FROM videos
+		WHERE series_id = ?
+		  AND upload_date IS NOT NULL AND trim(upload_date) != ''
+		ORDER BY y DESC
+	`, seriesID)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var y int
+		if err := rows.Scan(&y); err != nil {
+			return nil, false, err
+		}
+		if y > 0 {
+			years = append(years, y)
+		}
+	}
+	return years, unknown, rows.Err()
+}
+
 // CountVideosBySource returns video counts keyed by source_id for a series.
 func (s *Store) CountVideosBySource(seriesID int64) (map[int64]int, error) {
 	rows, err := s.DB.SQL.Query(`
@@ -384,22 +482,17 @@ func scanVideo(scanner interface {
 	Scan(dest ...any) error
 }) (Video, error) {
 	var v Video
-	var beginning, playbackComplete int
 	var genresRaw, tagsRaw, actorsRaw string
 	err := scanner.Scan(
 		&v.ID, &v.SeriesID, &v.SourceID, &v.RemoteID, &v.Title,
 		&v.UploadDate, &v.SourceURL, &v.Status, &v.Season, &v.Episode,
 		&v.Description, &v.ThumbnailURL, &v.MediaType,
-		&v.DurationSeconds, &v.Width, &v.Height, &v.FPS, &v.StreamURLsKind, &beginning,
-		&v.StreamPlaybackCachedSeconds, &playbackComplete,
-		&v.StreamPlaybackCacheWrittenAt, &v.StreamPlaybackCacheLastAccess,
+		&v.DurationSeconds, &v.Width, &v.Height, &v.FPS,
 		&v.DownloadFormatSelector, &v.DownloadRemuxContainer, &v.Tool, &v.ImportSrc, &v.AcquiredAt, &v.SidecarsAcquiredAt,
 		&v.SortTitle, &v.OriginalTitle, &v.Studio,
 		&genresRaw, &tagsRaw, &v.UniqueIDType, &v.UniqueIDValue, &actorsRaw,
 		&v.Tagline, &v.Country, &v.MPAA,
 	)
-	v.StreamBeginningCached = beginning != 0
-	v.StreamPlaybackCacheComplete = playbackComplete != 0
 	v.Genres = decodeStringSlice(genresRaw)
 	v.Tags = decodeStringSlice(tagsRaw)
 	v.Actors = decodeActors(actorsRaw)
@@ -463,7 +556,7 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 		}
 	}
 	switch cur.Status {
-	case "ignored", "deleted", "missing", "wanted_download_error", "wanted_source_error", "streamable", "verify_failed":
+	case "ignored", "deleted", "missing", "wanted_download_error", "wanted_source_error", "verify_failed":
 		_, _ = s.DB.SQL.Exec(`UPDATE videos SET status = 'wanted' WHERE id = ?`, videoID)
 	}
 	params := enqueueDownloadParams(videoID, cur.SeriesID, domain)
@@ -486,14 +579,14 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 // IgnoreVideo marks a video ignored (will not auto-download).
 // Pending and running download tasks for the video are cancelled.
 // Returns cancelled download tasks so the caller can write Activity rows.
-// Streamable and downloaded videos cannot be ignored - use DeleteVideo.
+// Downloaded videos cannot be ignored - use DeleteVideo.
 func (s *Store) IgnoreVideo(videoID int64) ([]queue.Task, error) {
 	cur, err := s.GetVideo(videoID)
 	if err != nil {
 		return nil, err
 	}
 	switch cur.Status {
-	case "streamable", "downloaded", "verify_failed":
+	case "downloaded", "verify_failed":
 		return nil, fmt.Errorf("cannot ignore %s video; delete library files instead", cur.Status)
 	}
 	_, err = s.DB.SQL.Exec(`UPDATE videos SET status = 'ignored' WHERE id = ?`, videoID)
@@ -510,7 +603,18 @@ func (s *Store) IgnoreVideo(videoID int64) ([]queue.Task, error) {
 	return cancelled, nil
 }
 
-// MarkIgnoredMediaType sets status ignored after a media_type exclude match (download or pack_stream).
+// RecordLiveBroadcastSkipped appends video_history when download soft-skips
+// a currently live broadcast. Status is unchanged (stays wanted for later retry).
+func (s *Store) RecordLiveBroadcastSkipped(videoID, taskID int64) error {
+	if s == nil || videoID <= 0 || taskID <= 0 {
+		return nil
+	}
+	return s.AddVideoHistory(videoID, "live_skipped", "Skipped (currently live)", map[string]any{
+		"reason": "is_live",
+	}, taskID)
+}
+
+// MarkIgnoredMediaType sets status ignored after a media_type exclude match (download).
 // Writes video history; cancels other pending downloads for the video.
 func (s *Store) MarkIgnoredMediaType(videoID, taskID int64, mediaType string) error {
 	cur, err := s.GetVideo(videoID)
@@ -518,7 +622,7 @@ func (s *Store) MarkIgnoredMediaType(videoID, taskID int64, mediaType string) er
 		return err
 	}
 	switch cur.Status {
-	case "streamable", "downloaded":
+	case "downloaded":
 		return fmt.Errorf("cannot ignore %s video for media_type", cur.Status)
 	}
 	mediaType = NormalizeMediaType(mediaType)
@@ -572,14 +676,14 @@ func (s *Store) ListSeriesMediaTypes(seriesID int64) ([]string, error) {
 }
 
 // DeleteVideo cancels download tasks and enqueues a delete_files for worker-owned removal.
-// Allowed for streamable, downloaded, missing. Returns cancelled pending download tasks.
+// Allowed for downloaded, missing. Returns cancelled pending download tasks.
 func (s *Store) DeleteVideo(videoID int64) ([]queue.Task, error) {
 	cur, err := s.GetVideo(videoID)
 	if err != nil {
 		return nil, err
 	}
 	switch cur.Status {
-	case "streamable", "downloaded", "missing":
+	case "downloaded", "missing":
 	default:
 		return nil, fmt.Errorf("cannot delete video with status %s", cur.Status)
 	}

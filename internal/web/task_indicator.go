@@ -12,14 +12,12 @@ import (
 
 // taskIndicatorView is data for partials/task_indicator.html.
 type taskIndicatorView struct {
-	ID             string
-	Status         string // pending | running | ""
-	Progress       *float64
-	Title          string
-	OOB            bool
-	VideoStatus    string // when set (video list), idle shows status icon; busy replaces it
-	BeginningReady bool   // streamable + pipe beginning on disk
-	CDNDirect      bool   // streamable + CDN HLS/progressive (no beginning needed)
+	ID          string
+	Status      string // pending | running | ""
+	Progress    *float64
+	Title       string
+	OOB         bool
+	VideoStatus string // when set (video list), idle shows status icon; busy replaces it
 }
 
 func indicatorFromTask(id string, t *queue.Task, title string) taskIndicatorView {
@@ -42,19 +40,8 @@ func indicatorFromTask(id string, t *queue.Task, title string) taskIndicatorView
 }
 
 // videoStatusIndicator builds a list-cell indicator: status icon, or list-ordered/spinner/radial when busy.
-func videoStatusIndicator(videoID int64, t *queue.Task, videoStatus string, beginningReady, cdnDirect bool) taskIndicatorView {
+func videoStatusIndicator(videoID int64, t *queue.Task, videoStatus string) taskIndicatorView {
 	label := videoStatusLabel(videoStatus)
-	if videoStatus == "streamable" {
-		switch {
-		case beginningReady:
-			label = "streamable - beginning cached for instant play"
-			cdnDirect = false
-		case cdnDirect:
-			label = "streamable - CDN direct stream, no cache needed"
-		default:
-			label = "streamable - play via proxy; first play may be slow"
-		}
-	}
 	title := ""
 	if t != nil && t.Kind == queue.KindDeleteFiles {
 		if t.Status == queue.StatusRunning {
@@ -65,8 +52,6 @@ func videoStatusIndicator(videoID int64, t *queue.Task, videoStatus string, begi
 	}
 	v := indicatorFromTask(videoIndicatorID(videoID), t, title)
 	v.VideoStatus = videoStatus
-	v.BeginningReady = beginningReady && videoStatus == "streamable"
-	v.CDNDirect = cdnDirect && videoStatus == "streamable" && !v.BeginningReady
 	if v.Status == "" {
 		v.Title = label
 	} else if title != "" {
@@ -99,8 +84,6 @@ func videoStatusLabel(status string) string {
 		return "deleted"
 	case "ignored":
 		return "ignored"
-	case "streamable":
-		return "streamable"
 	default:
 		return status
 	}
@@ -294,9 +277,9 @@ func videoIndicatorID(videoID int64) string {
 
 // seriesStatusView drives partials/series_status_indicator.html and series_monitor_indicator.html.
 type seriesStatusView struct {
-	Kind     string // wanted_source_error | wanted_download_error | verify_failed | scan_error | incomplete | running | pending | monitored | unmonitored
-	Title    string
-	Progress *float64
+	Kind  string // wanted_source_error | wanted_download_error | verify_failed | scan_error | incomplete | monitored | unmonitored
+	Title string
+	Count int // video error count for health badge; 0 = icon only
 }
 
 // buildSeriesMonitorStatus is left of series list title: always monitored | unmonitored.
@@ -307,45 +290,41 @@ func buildSeriesMonitorStatus(monitored bool) seriesStatusView {
 	return seriesStatusView{Kind: "unmonitored", Title: "Unmonitored"}
 }
 
-// buildSeriesHealthStatus is list health+busy (no monitor). ok false = idle healthy.
-func buildSeriesHealthStatus(errs library.SeriesVideoErrorFlags, warn library.SeriesWarnLevel, best *queue.Task) (seriesStatusView, bool) {
+func seriesHealthTitle(label string, count int) string {
+	if count > 0 {
+		return fmt.Sprintf("%s (%d)", label, count)
+	}
+	return label
+}
+
+// buildSeriesHealthStatus is poster health badge only (errors/warnings; no task busy). ok false = idle healthy.
+func buildSeriesHealthStatus(errs library.SeriesVideoErrorFlags, warn library.SeriesWarnLevel) (seriesStatusView, bool) {
 	if errs.HasSourceError {
-		return seriesStatusView{Kind: "wanted_source_error", Title: "Source error"}, true
+		return seriesStatusView{
+			Kind:  "wanted_source_error",
+			Title: seriesHealthTitle("Source error", errs.SourceErrorCount),
+			Count: errs.SourceErrorCount,
+		}, true
 	}
 	if errs.HasDownloadError {
-		return seriesStatusView{Kind: "wanted_download_error", Title: "Download error"}, true
+		return seriesStatusView{
+			Kind:  "wanted_download_error",
+			Title: seriesHealthTitle("Download error", errs.DownloadErrorCount),
+			Count: errs.DownloadErrorCount,
+		}, true
 	}
 	if errs.HasVerifyFailed {
-		return seriesStatusView{Kind: "verify_failed", Title: "Verify failed"}, true
+		return seriesStatusView{
+			Kind:  "verify_failed",
+			Title: seriesHealthTitle("Verify failed", errs.VerifyFailedCount),
+			Count: errs.VerifyFailedCount,
+		}, true
 	}
 	if warn == library.SeriesWarnError {
 		return seriesStatusView{Kind: "scan_error", Title: "Source scan error"}, true
 	}
 	if warn == library.SeriesWarnIncomplete {
 		return seriesStatusView{Kind: "incomplete", Title: "Full scan incomplete and no scan schedule"}, true
-	}
-	if best != nil {
-		title := best.Kind + " · " + best.Status
-		if best.Kind == queue.KindDeleteFiles {
-			if best.Status == queue.StatusRunning {
-				title = "Deleting…"
-			} else {
-				title = "Queued for deletion"
-			}
-		} else if best.Message != "" {
-			title = best.Message
-		}
-		if best.Status == queue.StatusRunning {
-			v := seriesStatusView{Kind: "running", Title: title}
-			if best.Progress.Valid {
-				p := best.Progress.Float64
-				v.Progress = &p
-			}
-			return v, true
-		}
-		if best.Status == queue.StatusPending {
-			return seriesStatusView{Kind: "pending", Title: title}, true
-		}
 	}
 	return seriesStatusView{}, false
 }
@@ -367,6 +346,7 @@ type sourceStatusParams struct {
 	Best                *queue.Task
 	HasError            bool
 	ErrMsg              string
+	ErrCode             string
 	Stalled             bool
 	SeriesMonitored     bool
 	DomainActive        bool
@@ -454,7 +434,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 	}
 	cutoffTip := ""
 	if src.ScanCutoff.Valid {
-		cutoffTip = "cutoff " + src.ScanCutoff.String + " (older not indexed)"
+		cutoffTip = "cutoff " + src.ScanCutoff.String + " (older days not indexed)"
 	}
 	lastTip := ""
 	if p.HasScanned && p.Summary != "" {
@@ -495,10 +475,11 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 		if v.Label == "" {
 			v.Label = "error"
 		}
-		v.Title = joinStatusTip(p.ErrMsg, scheduleTip, cutoffTip, lastTip)
-		if v.Title == "" {
-			v.Title = "Scan error"
+		errTip := strings.TrimSpace(p.ErrCode)
+		if errTip == "" {
+			errTip = "Scan error"
 		}
+		v.Title = joinStatusTip(errTip, scheduleTip, cutoffTip, lastTip)
 		if p.HistoryID > 0 {
 			v.Href = fmt.Sprintf("/task/%d", p.HistoryID)
 		}
@@ -518,7 +499,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 			v.Label = "pending"
 			line2 = p.DomainDisabledTitle
 			if line2 == "" {
-				line2 = "Domain is inactive - activate it under Settings → Queue, then use Full scan"
+				line2 = "Domain is inactive - activate it under 'Settings → Queue / Domains', then use 'Full scan'"
 			}
 		} else {
 			v.Label = "incomplete"
@@ -640,12 +621,6 @@ func formatNextScanIn(now, next time.Time) string {
 	return "Next scan in " + span
 }
 
-func (h *Handler) beginningReady(videoID int64, status string) bool {
-	return status == "streamable" && h.Library != nil && h.Library.HasBeginning(videoID)
-}
-
-func (h *Handler) streamIndicator(videoID int64, t *queue.Task, status, streamKind string) taskIndicatorView {
-	begin := h.beginningReady(videoID, status)
-	cdn := status == "streamable" && library.StreamCDNDirect(streamKind)
-	return videoStatusIndicator(videoID, t, status, begin, cdn)
+func (h *Handler) videoIndicator(videoID int64, t *queue.Task, status string) taskIndicatorView {
+	return videoStatusIndicator(videoID, t, status)
 }

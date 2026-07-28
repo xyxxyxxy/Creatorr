@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 // RefreshListed updates an existing indexed video from a listing.
@@ -29,27 +31,25 @@ func (s *Store) RefreshListed(seriesID int64, li ListedVideo, taskID int64) (vid
 		return 0, false, err
 	}
 
-	var uploadVal, thumb, src any
+	var uploadVal, src any
 	if upload != "" {
 		uploadVal = upload
-	}
-	if li.ThumbnailURL != "" {
-		thumb = li.ThumbnailURL
 	}
 	if li.SourceID > 0 {
 		src = li.SourceID
 	}
+	// Soft-fill title/description/thumbnail_url only when empty (never clobber first-seen / operator).
 	_, err = s.DB.SQL.Exec(`
 		UPDATE videos SET
-		  title = COALESCE(NULLIF(?, ''), title),
+		  title = COALESCE(NULLIF(title, ''), ?),
 		  source_url = COALESCE(NULLIF(?, ''), source_url),
-		  description = COALESCE(NULLIF(?, ''), description),
-		  thumbnail_url = COALESCE(?, thumbnail_url),
+		  description = COALESCE(NULLIF(description, ''), ?),
+		  thumbnail_url = COALESCE(NULLIF(thumbnail_url, ''), ?),
 		  upload_date = COALESCE(?, upload_date),
 		  media_type = CASE WHEN ? != '' THEN ? ELSE media_type END,
 		  source_id = COALESCE(source_id, ?)
 		WHERE id = ?
-	`, li.Title, li.WebpageURL, li.Description, thumb, uploadVal,
+	`, li.Title, li.WebpageURL, li.Description, li.ThumbnailURL, uploadVal,
 		NormalizeMediaType(li.MediaType), NormalizeMediaType(li.MediaType),
 		src, existingID)
 	if err != nil {
@@ -80,6 +80,66 @@ func (s *Store) RefreshListed(seriesID int64, li ListedVideo, taskID int64) (vid
 	}
 
 	return existingID, true, nil
+}
+
+// SoftFillVideoFromEntry soft-fills empty Creatorr-owned columns from a yt-dlp resolve entry.
+// Never clobbers non-empty title/plot/thumb/source_url/upload_date (media_type updates when extract non-empty).
+// When upload_date is filled for the first time, reindexes that UTC day and renames packed peers.
+func (s *Store) SoftFillVideoFromEntry(videoID int64, e ytdlp.Entry, taskID int64) error {
+	v, err := s.GetVideo(videoID)
+	if err != nil {
+		return err
+	}
+	li := EntryFromYtDlp(e, 0)
+	upload := NormalizeUploadTime(li.UploadDate)
+	if upload == "" {
+		upload = sidecarUploadTime(li.UploadDate)
+	}
+
+	var prevUpload sql.NullString
+	if err := s.DB.SQL.QueryRow(`SELECT upload_date FROM videos WHERE id = ?`, videoID).Scan(&prevUpload); err != nil {
+		return err
+	}
+
+	var uploadVal any
+	if upload != "" {
+		uploadVal = upload
+	}
+	_, err = s.DB.SQL.Exec(`
+		UPDATE videos SET
+		  title = COALESCE(NULLIF(title, ''), ?),
+		  source_url = COALESCE(NULLIF(source_url, ''), NULLIF(?, '')),
+		  description = COALESCE(NULLIF(description, ''), ?),
+		  thumbnail_url = COALESCE(NULLIF(thumbnail_url, ''), ?),
+		  upload_date = COALESCE(upload_date, ?),
+		  media_type = CASE WHEN ? != '' THEN ? ELSE media_type END
+		WHERE id = ?
+	`, strings.TrimSpace(li.Title), strings.TrimSpace(li.WebpageURL), li.Description, strings.TrimSpace(li.ThumbnailURL),
+		uploadVal, NormalizeMediaType(li.MediaType), NormalizeMediaType(li.MediaType), videoID)
+	if err != nil {
+		return err
+	}
+	if li.DurationSeconds > 0 {
+		_ = s.SetDurationSecondsIfEmpty(videoID, int(li.DurationSeconds+0.5))
+	}
+	_, _ = s.SoftFillVideoGenresFromCategories(videoID, e.Categories)
+
+	prevDay := ""
+	if prevUpload.Valid {
+		prevDay = UploadCalendarDate(prevUpload.String)
+	}
+	// Soft-fill never overwrites an existing date; only reindex when we actually filled one.
+	if prevDay == "" && upload != "" {
+		newDay := UploadCalendarDate(upload)
+		if newDay != "" {
+			changed, rerr := s.ReindexSeriesUTCDay(v.SeriesID, newDay)
+			if rerr != nil {
+				return rerr
+			}
+			_ = s.repackEpisodeNumberChanges(changed, taskID)
+		}
+	}
+	return nil
 }
 
 // EnqueueMetadataRescanSeries queues a series-scoped metadata rescan (existing videos only).
@@ -182,7 +242,7 @@ func (s *Store) EnqueueRefreshSidecarsVideo(videoID int64) (int64, error) {
 	if _, ok, err := s.HasPackAnchor(videoID); err != nil {
 		return 0, err
 	} else if !ok {
-		return 0, fmt.Errorf("%w: no packed video or .strm on disk", ErrInvalid)
+		return 0, fmt.Errorf("%w: no packed media on disk", ErrInvalid)
 	}
 	domain := "unknown"
 	if v.SourceURL.Valid {

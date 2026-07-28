@@ -1,0 +1,9 @@
+{{define "settings_maintenance"}}
+{{template "head" .}}
+{{template "settings_nav" .}}
+{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
+
+{{template "maintenance_live" .}}
+
+{{template "foot" .}}
+{{end}}

@@ -1,8 +1,8 @@
 package ytdlp
 
 // ProgressMapper maps yt-dlp per-format 0..1 fractions into a monotonic
-// overall [Lo, Hi] span. Separate video/audio (and similar) downloads each
-// report 0→100%; without mapping the task bar resets mid-download.
+// overall [Lo, Hi] span. Unused by archive download (that path uses
+// StepProgress for labeled per-step bars); kept for other multi-phase callers.
 type ProgressMapper struct {
 	Lo, Hi float64
 
@@ -26,7 +26,7 @@ func (m *ProgressMapper) Map(raw float64) float64 {
 	if !m.init {
 		m.init = true
 		m.last = raw
-		m.out = m.Lo + (m.Hi-m.Lo)*raw
+		m.out = m.mapSlots(raw)
 		return m.out
 	}
 	// New format file: percent drops sharply after a high watermark.
@@ -34,8 +34,7 @@ func (m *ProgressMapper) Map(raw float64) float64 {
 		m.parts++
 	}
 	m.last = raw
-	slots := float64(m.parts + 1)
-	v := m.Lo + (m.Hi-m.Lo)*((float64(m.parts)+raw)/slots)
+	v := m.mapSlots(raw)
 	if v < m.out {
 		v = m.out
 	}
@@ -44,6 +43,17 @@ func (m *ProgressMapper) Map(raw float64) float64 {
 	}
 	m.out = v
 	return v
+}
+
+// mapSlots maps raw into [Lo, Hi] given completed format count.
+// While still on the first format, reserve an extra slot so 100% of stream A
+// does not fill [Lo, Hi] before stream B (separate video/audio) starts at 0%.
+func (m *ProgressMapper) mapSlots(raw float64) float64 {
+	slots := float64(m.parts + 1)
+	if m.parts == 0 {
+		slots = 2
+	}
+	return m.Lo + (m.Hi-m.Lo)*((float64(m.parts)+raw)/slots)
 }
 
 // Finish returns Hi (call when the download phase completed successfully).

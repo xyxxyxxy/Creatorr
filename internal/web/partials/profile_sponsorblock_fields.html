@@ -14,7 +14,7 @@
       <span class="text-xs font-normal opacity-60">Uses SponsorBlock data from <a class="link" href="https://sponsor.ajay.app/" target="_blank" rel="noopener noreferrer">sponsor.ajay.app</a></span>
     </span>
   </legend>
-  <p class="label whitespace-normal"><span>Mark adds chapter markers; remove cuts those spans from archive downloads and skips them during stream play. The same category cannot be in both lists (<a class="link" href="https://wiki.sponsor.ajay.app/w/Community#Media" target="_blank" rel="noopener noreferrer">category guide</a>).</span></p>
+  <p class="label whitespace-normal"><span>Mark adds chapter markers; remove cuts those spans from archive downloads. The same category cannot be in both lists (<a class="link" href="https://wiki.sponsor.ajay.app/w/Community#Media" target="_blank" rel="noopener noreferrer">category guide</a>).</span></p>
   <p class="label whitespace-normal">yt-dlp chapters are added by default. SponsorBlock mark chapters are added on top of those.</p>
 
   <div class="flex w-full gap-4 items-start">
@@ -40,7 +40,7 @@
     <div class="flex-1 min-w-0">
       <div class="mb-1 inline-flex items-center gap-1">
         <h3 class="font-semibold m-0 text-inherit">Remove (cut)</h3>
-        {{template "field_info" (dict "Info" "Cut these categories from downloads and skip them during stream play.")}}
+        {{template "field_info" (dict "Info" "Cut these categories from downloads.")}}
       </div>
       <div class="flex flex-col gap-1">
         {{template "sb_cat_cb" (dict "Name" "sponsorblock_remove" "Side" "remove" "Cat" "sponsor" "Selected" $remove)}}
@@ -58,19 +58,13 @@
 
   <fieldset class="fieldset gap-2">
     <legend class="fieldset-legend"><h3 class="font-semibold m-0 text-inherit">Encoding</h3></legend>
-    <p>By default, cuts are only spliced at keyframes, so cut points are often early or late. Re-encode will cut at exact timestamps without needing keyframes. Because re-encode is heavy on the host, Creatorr schedules it as a separate task on the system queue.</p>
-    <p>Applies to downloads only. Streams do not re-encode, so high accuracy cuts and info cards are not available.</p>
+    <p>By default, cuts are only spliced at keyframes, so cut points are often early or late. Re-encode will cut at exact timestamps without needing keyframes. Because re-encode is heavy on the host, it is scheduled as a separate low priority system task.</p>
     <label class="label cursor-pointer gap-2 justify-start">
       <input type="hidden" name="sponsorblock_reencode_cut" value="0" />
       <input type="checkbox" class="checkbox checkbox-sm" name="sponsorblock_reencode_cut" value="1"
         {{if $reenc}}checked{{end}} data-sb-reencode />
-      <span class="label-text inline-flex items-center gap-1">
-        Re-encode on cut for higher accuracy
-        {{template "field_info" (dict "Info" "Targets similar bitrate and file size as the source when possible.")}}
-      </span>
+      <span class="label-text">Re-encode on cut for higher accuracy</span>
     </label>
-
-    <p>When a section is cut, Creatorr can insert a short info card (~2s) naming the removed category and the duration skipped.</p>
     <span class="inline-flex w-fit max-w-full{{if not $reenc}} tooltip tooltip-top{{end}}"
           {{if not $reenc}}data-tip="Requires re-encode to be enabled"{{end}}
           data-sb-cards-wrap>
@@ -81,6 +75,7 @@
         <span class="label-text">Insert info cards on cut</span>
       </label>
     </span>
+    <p>When a section is cut, Creatorr can insert a short info card (~2s) naming the removed category and the duration skipped.</p>
     <div>
       <p class="text-xs opacity-60 mb-1">Example</p>
       <div class="aspect-video w-full max-w-sm rounded-box bg-black text-white flex items-center justify-center text-center px-6" role="img" aria-label="Example info card: SponsorBlock, skipped 1 min 4 sec of Sponsor">

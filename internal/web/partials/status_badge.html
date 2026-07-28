@@ -41,12 +41,8 @@
   <i data-lucide="circle-x" class="size-4"></i>
 </span>
 {{else if eq . "verify_failed"}}
-<span class="inline-flex tooltip tooltip-top text-warning" data-tip="Post-pack media verify failed - file kept; Want or Download now" aria-label="Verify failed">
+<span class="inline-flex tooltip tooltip-top text-warning" data-tip="Post-pack media verify failed - file kept; use 'Want' or 'Download now'" aria-label="Verify failed">
   <i data-lucide="badge-alert" class="size-4"></i>
-</span>
-{{else if eq . "streamable"}}
-<span class="inline-flex tooltip tooltip-top text-info" data-tip="Stream files ready - play via Creatorr proxy" aria-label="streamable">
-  <i data-lucide="radio" class="size-4"></i>
 </span>
 {{else if eq . "downloaded"}}
 <span class="inline-flex tooltip tooltip-top text-success" data-tip="downloaded" aria-label="downloaded">

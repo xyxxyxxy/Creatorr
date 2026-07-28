@@ -16,29 +16,20 @@ const (
 	SourceKindFeed   = "feed"
 	SourceKindSingle = "single"
 
-	DeliveryDownload = "download"
-	DeliveryStream   = "stream"
+	DeliveryVideo = "video"
+	DeliveryAudio = "audio"
+
+	// AudioFormatSelector is the yt-dlp format ladder for audio-delivery series.
+	// Overrides the quality profile's format_selector, which targets video containers.
+	AudioFormatSelector = "ba/bestaudio/b"
 )
 
-// NormalizeDeliveryMode returns download or stream.
+// NormalizeDeliveryMode returns video or audio.
 func NormalizeDeliveryMode(m string) string {
-	if strings.EqualFold(strings.TrimSpace(m), DeliveryStream) {
-		return DeliveryStream
+	if strings.EqualFold(strings.TrimSpace(m), DeliveryAudio) {
+		return DeliveryAudio
 	}
-	return DeliveryDownload
-}
-
-// validateDeliveryMode checks stream mode prerequisites (public base URL).
-// yt-dlp always supports stream; seriesID is unused but kept for call-site stability.
-func (s *Store) validateDeliveryMode(mode string, seriesID int64) error {
-	_ = seriesID
-	if mode != DeliveryStream {
-		return nil
-	}
-	if strings.TrimSpace(s.EffectivePublicBaseURL()) == "" {
-		return fmt.Errorf("%w: external Creatorr URL required for stream delivery", ErrInvalid)
-	}
-	return nil
+	return DeliveryVideo
 }
 
 // NormalizeSourceKind returns feed or single.
@@ -81,63 +72,29 @@ type Series struct {
 	RootID             int64
 	QualityProfileID   int64
 	Monitored          bool
-	DeliveryMode       string // download | stream
+	DeliveryMode       string // video | audio
 	AddedAt            string
 	Meta               SeriesMeta
 	RootName           string
 	QualityProfileName string
 	VideoCount         int64
-	DownloadedCount    int64 // ready: status downloaded, streamable, or verify_failed
+	DownloadedCount    int64 // ready: status downloaded or verify_failed
 	WantedCount        int64
-	// StreamOptimizedCount: streamable with beginning cached or CDN hls/progressive.
-	StreamOptimizedCount int64
-	// StreamColdCount: streamable pipe/unknown without beginning.
-	StreamColdCount int64
-	SourceCount     int64
-	Sources         []Source
-	Videos          []Video
+	SourceCount        int64
+	Sources            []Source
+	Videos             []Video
 	AutoIgnoreMediaTypes []string // excluded yt-dlp media_type values; empty = all active
 }
 
-// IsStream reports delivery_mode=stream.
-func (ser Series) IsStream() bool {
-	return ser.DeliveryMode == DeliveryStream
+// IsAudio reports delivery_mode=audio.
+func (ser Series) IsAudio() bool {
+	return ser.DeliveryMode == DeliveryAudio
 }
 
-// ProgressTotal is downloaded/streamable + wanted (list progress denominator).
+// ProgressTotal is downloaded + wanted (list progress denominator).
 func (ser Series) ProgressTotal() int64 {
 	return ser.DownloadedCount + ser.WantedCount
 }
-
-// StreamOptimizedPct is optimized streamables as % of ProgressTotal (bar segment).
-func (ser Series) StreamOptimizedPct() float64 {
-	t := ser.ProgressTotal()
-	if t <= 0 {
-		return 0
-	}
-	return 100 * float64(ser.StreamOptimizedCount) / float64(t)
-}
-
-// StreamColdPct is cold streamables as % of ProgressTotal (bar segment).
-func (ser Series) StreamColdPct() float64 {
-	t := ser.ProgressTotal()
-	if t <= 0 {
-		return 0
-	}
-	return 100 * float64(ser.StreamColdCount) / float64(t)
-}
-
-// sqlStreamOptimizedCount counts streamable videos that are beginning-cached or CDN-direct.
-const sqlStreamOptimizedCount = `(SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status = 'streamable'
-		 AND (
-		   v.stream_beginning_cached = 1
-		   OR lower(coalesce(v.stream_urls_kind, '')) IN ('hls', 'progressive')
-		 ))`
-
-// sqlStreamColdCount counts streamable videos still waiting on a beginning (or unknown kind).
-const sqlStreamColdCount = `(SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status = 'streamable'
-		 AND v.stream_beginning_cached != 1
-		 AND lower(coalesce(v.stream_urls_kind, '')) NOT IN ('hls', 'progressive'))`
 
 // CreateSeriesParams creates a series and optional first source.
 type CreateSeriesParams struct {
@@ -152,31 +109,31 @@ type CreateSeriesParams struct {
 	IndexAsIgnored   bool
 	TitleRegexpInclude string
 	TitleRegexpExclude string
-	AutoIgnoreMediaTypes []string // series-level exclude; applied on create + download + pack_stream
+	AutoIgnoreMediaTypes []string // series-level exclude; applied on create + download
 	SourceLabel      string
 }
 
-// SeriesListFilter scopes the series admin list (title, root, quality, monitored).
+// SeriesListFilter scopes the series admin list (title, root, quality, delivery, monitored).
 type SeriesListFilter struct {
 	Title            string // case-insensitive substring; empty = any
 	RootID           int64  // 0 = any
 	QualityProfileID int64  // 0 = any
+	DeliveryMode     string // video|audio; empty = any
 	Monitored        *bool  // nil = any
 }
 
 // Active reports whether any series list filter constraint is set.
 func (f SeriesListFilter) Active() bool {
-	return strings.TrimSpace(f.Title) != "" || f.RootID > 0 || f.QualityProfileID > 0 || f.Monitored != nil
+	return strings.TrimSpace(f.Title) != "" || f.RootID > 0 || f.QualityProfileID > 0 ||
+		f.DeliveryMode == DeliveryVideo || f.DeliveryMode == DeliveryAudio || f.Monitored != nil
 }
 
 const seriesListSelectCols = `s.id, s.title, s.root_id, s.quality_profile_id, s.monitored, s.delivery_mode, s.added_at,
 		       COALESCE(s.auto_ignore_media_types,'[]'),
 		       r.name, q.name,
 		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id),
-		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('downloaded', 'streamable', 'verify_failed')),
+		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('downloaded', 'verify_failed')),
 		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status = 'wanted'),
-		       ` + sqlStreamOptimizedCount + `,
-		       ` + sqlStreamColdCount + `,
 		       (SELECT COUNT(*) FROM sources f WHERE f.series_id = s.id)`
 
 func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilter) {
@@ -191,6 +148,10 @@ func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilt
 	if f.QualityProfileID > 0 {
 		b.WriteString(` AND s.quality_profile_id = ?`)
 		*args = append(*args, f.QualityProfileID)
+	}
+	if f.DeliveryMode == DeliveryVideo || f.DeliveryMode == DeliveryAudio {
+		b.WriteString(` AND s.delivery_mode = ?`)
+		*args = append(*args, f.DeliveryMode)
 	}
 	if f.Monitored != nil {
 		b.WriteString(` AND s.monitored = ?`)
@@ -211,7 +172,7 @@ func scanSeriesListRow(rows *sql.Rows) (Series, error) {
 		&mediaTypeExclude,
 		&ser.RootName, &ser.QualityProfileName,
 		&ser.VideoCount, &ser.DownloadedCount, &ser.WantedCount,
-		&ser.StreamOptimizedCount, &ser.StreamColdCount, &ser.SourceCount,
+		&ser.SourceCount,
 	); err != nil {
 		return Series{}, err
 	}
@@ -296,10 +257,8 @@ func (s *Store) GetSeries(id int64, withVideos bool) (*Series, error) {
 		       COALESCE(s.auto_ignore_media_types,'[]'),
 		       r.name, q.name,
 		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id),
-		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('downloaded', 'streamable', 'verify_failed')),
+		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('downloaded', 'verify_failed')),
 		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status = 'wanted'),
-		       `+sqlStreamOptimizedCount+`,
-		       `+sqlStreamColdCount+`,
 		       (SELECT COUNT(*) FROM sources f WHERE f.series_id = s.id)
 		FROM series s
 		JOIN root_folders r ON r.id = s.root_id
@@ -312,7 +271,7 @@ func (s *Store) GetSeries(id int64, withVideos bool) (*Series, error) {
 		&mediaTypeExclude,
 		&ser.RootName, &ser.QualityProfileName,
 		&ser.VideoCount, &ser.DownloadedCount, &ser.WantedCount,
-		&ser.StreamOptimizedCount, &ser.StreamColdCount, &ser.SourceCount,
+		&ser.SourceCount,
 	)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -378,9 +337,6 @@ func (s *Store) CreateSeries(p CreateSeriesParams) (*Series, error) {
 		mon = 1
 	}
 	mode := NormalizeDeliveryMode(p.DeliveryMode)
-	if err := s.validateDeliveryMode(mode, 0); err != nil {
-		return nil, err
-	}
 	res, err := s.DB.SQL.Exec(`
 		INSERT INTO series (title, root_id, quality_profile_id, monitored, delivery_mode, added_at, auto_ignore_media_types)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -506,11 +462,6 @@ func (s *Store) UpdateSeries(id int64, p UpdateSeriesParams) (*Series, error) {
 	}
 	if p.DeliveryMode != nil {
 		mode = NormalizeDeliveryMode(*p.DeliveryMode)
-		if mode != cur.DeliveryMode {
-			if err := s.validateDeliveryMode(mode, id); err != nil {
-				return nil, err
-			}
-		}
 	}
 	if p.AutoIgnoreMediaTypes != nil {
 		mediaTypeExclude = NormalizeAutoIgnoreMediaTypes(*p.AutoIgnoreMediaTypes)
@@ -816,15 +767,8 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 	return s.GetSource(seriesID, id)
 }
 
-// insertSource writes a sources row. Legacy DBs still require handler_id NOT NULL;
-// fresh schema omits that column - fill yt-dlp only when the column exists.
+// insertSource writes a sources row.
 func (s *Store) insertSource(seriesID int64, url string, label any, kind, scanCron string, indexAsIgnored int, titleInclude, titleExclude, cutoff any) (sql.Result, error) {
-	if s.sourceHasHandlerID() {
-		return s.DB.SQL.Exec(`
-			INSERT INTO sources (series_id, url, handler_id, label, kind, scan_cron, index_as_ignored, title_regexp_include, title_regexp_exclude, scan_cutoff)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, seriesID, url, "yt-dlp", label, kind, scanCron, indexAsIgnored, titleInclude, titleExclude, cutoff)
-	}
 	return s.DB.SQL.Exec(`
 		INSERT INTO sources (series_id, url, label, kind, scan_cron, index_as_ignored, title_regexp_include, title_regexp_exclude, scan_cutoff)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

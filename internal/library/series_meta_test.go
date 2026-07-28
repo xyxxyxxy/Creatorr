@@ -58,6 +58,24 @@ func TestWriteSeriesNFOEnded(t *testing.T) {
 	}
 }
 
+func TestFormatSeriesNFOOmitsRedundantTitles(t *testing.T) {
+	s := string(FormatSeriesNFO(SeriesNFO{
+		Title: "Same Title", SortTitle: "Same Title", OriginalTitle: "Same Title",
+	}))
+	if strings.Contains(s, "<sorttitle>") || strings.Contains(s, "<originaltitle>") {
+		t.Fatalf("equal sort/original should omit:\n%s", s)
+	}
+	s2 := string(FormatSeriesNFO(SeriesNFO{
+		Title: "Same Title", SortTitle: "  Same Title  ", OriginalTitle: "Other",
+	}))
+	if strings.Contains(s2, "<sorttitle>") {
+		t.Fatalf("trimmed equal sorttitle should omit:\n%s", s2)
+	}
+	if !strings.Contains(s2, "<originaltitle>Other</originaltitle>") {
+		t.Fatalf("distinct originaltitle should remain:\n%s", s2)
+	}
+}
+
 func TestBuildPrefetchDraftPlaylistNoArt(t *testing.T) {
 	info := map[string]any{
 		"extractor_key": "generic:playlist",
@@ -71,8 +89,11 @@ func TestBuildPrefetchDraftPlaylistNoArt(t *testing.T) {
 	if !d.PlaylistOnly {
 		t.Fatal("expected playlist only")
 	}
-	if d.Plot != "Desc" || d.OriginalTitle != "My Playlist" {
+	if d.Plot != "Desc" || d.Title != "My Playlist" {
 		t.Fatalf("draft=%+v", d)
+	}
+	if d.OriginalTitle != "" || d.SortTitle != "" {
+		t.Fatalf("prefetch must not set sort/original when equal to title: %+v", d)
 	}
 	if len(d.ArtFiles) != 0 {
 		t.Fatalf("playlist should skip art: %+v", d.ArtFiles)
@@ -82,9 +103,31 @@ func TestBuildPrefetchDraftPlaylistNoArt(t *testing.T) {
 	}
 }
 
+func TestBuildPrefetchDraftStudioNotActors(t *testing.T) {
+	d := BuildPrefetchDraftFromInfo(map[string]any{
+		"extractor_key": "Youtube",
+		"title":         "Channel Videos",
+		"uploader":      "iFixit",
+		"channel":       "iFixit",
+		"channel_id":    "UCexample",
+	}, "")
+	if d.Studio != "" {
+		t.Fatalf("studio must not be prefilled from uploader: %q", d.Studio)
+	}
+	if len(d.Actors) != 0 {
+		t.Fatalf("prefetch must not auto-fill actors from channel: %+v", d.Actors)
+	}
+}
+
 func TestSeriesTitleFromDraft(t *testing.T) {
+	if got := SeriesTitleFromDraft(PrefetchDraft{Title: "Show"}); got != "Show" {
+		t.Fatalf("title=%q", got)
+	}
 	if got := SeriesTitleFromDraft(PrefetchDraft{Studio: "Creator"}); got != "Creator" {
 		t.Fatalf("studio fallback=%q", got)
+	}
+	if got := SeriesTitleFromDraft(PrefetchDraft{OriginalTitle: "Legacy"}); got != "Legacy" {
+		t.Fatalf("legacy originaltitle=%q", got)
 	}
 	if got := SeriesTitleFromDraft(PrefetchDraft{}); got != "" {
 		t.Fatalf("empty=%q", got)
@@ -101,8 +144,8 @@ func TestWriteAddSeriesDraftPersistsArt(t *testing.T) {
 	}
 	const token = "abcd1234abcd1234abcd1234abcd1234"
 	if err := s.WriteAddSeriesDraft(token, PrefetchDraft{
-		OriginalTitle: "Channel",
-		ArtFiles:      map[string]string{ArtPoster: poster},
+		Title:    "Channel",
+		ArtFiles: map[string]string{ArtPoster: poster},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -183,8 +226,8 @@ func TestWriteAddSeriesDraftSkipsMissingArt(t *testing.T) {
 	s := &Store{CacheDir: t.TempDir()}
 	const token = "deadbeefdeadbeefdeadbeefdeadbeef"
 	if err := s.WriteAddSeriesDraft(token, PrefetchDraft{
-		OriginalTitle: "Channel",
-		ArtFiles:      map[string]string{ArtPoster: filepath.Join(t.TempDir(), "gone.jpg")},
+		Title:    "Channel",
+		ArtFiles: map[string]string{ArtPoster: filepath.Join(t.TempDir(), "gone.jpg")},
 	}); err != nil {
 		t.Fatal(err)
 	}

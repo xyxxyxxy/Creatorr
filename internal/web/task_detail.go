@@ -9,8 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/go-chi/chi/v5"
+	"github.com/xyxxyxxy/Creatorr/internal/domains"
+	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 // detailVideoRef is one video id from task detail JSON.
@@ -28,6 +30,77 @@ type detailVideoRef struct {
 type detailSkippedTitle struct {
 	RemoteID string
 	Title    string
+}
+
+// potDetailView is PO token state from task detail JSON for the Details table.
+type potDetailView struct {
+	State  string
+	Label  string
+	Detail string
+	Fetch  string
+}
+
+func parsePOTDetail(detail string) *potDetailView {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return nil
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(detail), &raw); err != nil {
+		return nil
+	}
+	potRaw, ok := raw[ytdlp.DetailKeyPOToken]
+	if !ok || potRaw == nil {
+		return nil
+	}
+	b, err := json.Marshal(potRaw)
+	if err != nil {
+		return nil
+	}
+	var pot struct {
+		State  string `json:"state"`
+		Detail string `json:"detail"`
+		Fetch  string `json:"fetch"`
+	}
+	if err := json.Unmarshal(b, &pot); err != nil || pot.State == "" {
+		return nil
+	}
+	label := pot.State
+	switch pot.State {
+	case "issued":
+		label = "Issued"
+	case "failed":
+		label = "Failed"
+	case "skipped":
+		label = "Skipped"
+	case "off":
+		label = "Off"
+	}
+	return &potDetailView{State: pot.State, Label: label, Detail: pot.Detail, Fetch: pot.Fetch}
+}
+
+func parseDomainAccessDetail(detail string) *domains.DomainAccessSnapshot {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return nil
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(detail), &raw); err != nil {
+		return nil
+	}
+	accRaw, ok := raw[domains.DetailKeyDomainAccess]
+	if !ok || accRaw == nil {
+		return nil
+	}
+	b, err := json.Marshal(accRaw)
+	if err != nil {
+		return nil
+	}
+	var snap domains.DomainAccessSnapshot
+	if err := json.Unmarshal(b, &snap); err != nil {
+		return nil
+	}
+	return &snap
 }
 
 // detailField is one top-level key from task detail JSON.
@@ -186,6 +259,12 @@ func (h *Handler) taskDetailFields(detail string) []detailField {
 	for _, k := range keys {
 		v := raw[k]
 		switch k {
+		case ytdlp.DetailKeyPOToken:
+			// Shown as dedicated Details row (PO token).
+			continue
+		case domains.DetailKeyDomainAccess:
+			// Shown as dedicated Details row (Domain access chips).
+			continue
 		case "ignored_media_type_ids", "ignored_index_as_ignored_ids":
 			if ids, ok := jsonNumberIDs(v); ok {
 				out = append(out, detailField{Key: k, Text: strconv.Itoa(len(ids))})
@@ -248,7 +327,7 @@ type taskDetailHistRow struct {
 
 // mergeVideoHistoryDetailFields appends per-event video lists from video_history
 // (same shape as discover created_ids). Skips event keys already present in fields.
-// Cancelled rows use detail.kind as the list key when set (pack_stream, download, …).
+// Cancelled rows use detail.kind as the list key when set (e.g. download).
 func mergeVideoHistoryDetailFields(fields []detailField, rows []taskDetailHistRow) []detailField {
 	if len(rows) == 0 {
 		return fields
@@ -383,6 +462,8 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 	payload := t.Payload
 	payloadMuted := isEmptyJSONPayload(payload)
 	detailFields := mergeVideoHistoryDetailFields(h.taskDetailFields(t.Detail), histRows)
+	pot := parsePOTDetail(t.Detail)
+	domainAccess := parseDomainAccessDetail(t.Detail)
 
 	var progress *float64
 	if t.Progress.Valid {
@@ -407,6 +488,8 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		Payload      string
 		PayloadMuted bool
 		DetailFields []detailField
+		POT          *potDetailView
+		DomainAccess *domains.DomainAccessSnapshot
 		Commands     []string
 		CreatedAt    string
 		CreatedAgo   string
@@ -429,6 +512,8 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		Payload:      payload,
 		PayloadMuted: payloadMuted,
 		DetailFields: detailFields,
+		POT:          pot,
+		DomainAccess: domainAccess,
 		Commands:     commands,
 		CreatedAt:    createdAt,
 		CreatedAgo:   createdAgo,

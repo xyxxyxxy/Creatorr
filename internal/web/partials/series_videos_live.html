@@ -1,7 +1,7 @@
 {{define "series_videos_live"}}
 <div id="series-videos-live" {{if .OOB}}hx-swap-oob="true"{{end}}>
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Videos" "help" "Indexed from scans. Open a video for details.")}}
+{{template "list_header" (dict "level" "section" "title" "Videos" "icon" "square-play" "help" "Indexed from scans. Open a video for details.")}}
 {{template "list_filters" (dict
   "Query" .VideoFilter.Query
   "QueryPlaceholder" .VideoFilter.QueryPlaceholder
@@ -26,7 +26,6 @@
     "UploadDate" .UploadDate
     "SizeLabel" .SizeLabel
     "ResolutionLabel" .ResolutionLabel
-    "StreamTypeLabel" .StreamTypeLabel
     "DurationLabel" .DurationLabel
     "MediaTypeLabel" .MediaTypeLabel
     "ThumbURL" .ThumbURL
@@ -37,7 +36,6 @@
     "DomainActive" .DomainActive
     "DomainDisabledTitle" .DomainDisabledTitle
     "SeriesID" $.SeriesID
-    "IsStream" $.IsStream
     "KeepScroll" true
     "LiveSwap" true
     "FormClass" "inline"
@@ -54,12 +52,12 @@
 <div class="modal">
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Ignore video</h3>
-    <p class="text-sm mb-4">A download or pack stream task is in progress for <strong>{{.Title}}</strong>. Ignore and cancel it?</p>
+    <p class="text-sm mb-4">A download task is in progress for <strong>{{.Title}}</strong>. Ignore and cancel it?</p>
     <form method="post" action="/actions/ignore-video" class="inline" hx-post="/actions/ignore-video" hx-target="#series-videos-live" hx-swap="outerHTML">
       <input type="hidden" name="video_id" value="{{.ID}}" />
       <input type="hidden" name="series_id" value="{{$.SeriesID}}" />
       <div class="modal-action">
-        <label for="modal-ignore-video-{{.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-ignore-video-{{.ID}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-warning">Ignore and cancel task</button>
       </div>
     </form>

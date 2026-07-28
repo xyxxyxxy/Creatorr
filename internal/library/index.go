@@ -82,9 +82,10 @@ func ParseCutoffDate(raw string) (time.Time, bool) {
 	return t, true
 }
 
-// BeforeOrOnCutoff reports whether upload falls on or before the cutoff calendar day (UTC).
-// cutoff is YYYY-MM-DD from the UI date picker; upload must be RFC3339.
-func BeforeOrOnCutoff(upload, cutoff string) bool {
+// BeforeCutoff reports whether upload falls strictly before the cutoff calendar day (UTC).
+// Cutoff day itself is indexed; older days are not. cutoff is YYYY-MM-DD from the UI
+// date picker; upload must be RFC3339.
+func BeforeCutoff(upload, cutoff string) bool {
 	if cutoff == "" || upload == "" {
 		return false
 	}
@@ -95,7 +96,7 @@ func BeforeOrOnCutoff(upload, cutoff string) bool {
 	}
 	uy, um, ud := u.UTC().Date()
 	cy, cm, cd := c.UTC().Date()
-	return !time.Date(uy, um, ud, 0, 0, 0, 0, time.UTC).After(time.Date(cy, cm, cd, 0, 0, 0, 0, time.UTC))
+	return time.Date(uy, um, ud, 0, 0, 0, 0, time.UTC).Before(time.Date(cy, cm, cd, 0, 0, 0, 0, time.UTC))
 }
 
 // CutoffExpanded reports whether the new cutoff reaches further into the past
@@ -125,7 +126,7 @@ func CutoffExpanded(oldCutoff, newCutoff string) bool {
 // UpsertListed inserts or updates a video from a scan listing (index-only).
 // taskID links episode repack history when season/episode shift; list-pass
 // discover/update facts live on source_history, not video_history.
-// Callers must not pass videos on/before source scan cutoff - the scanner stops there.
+// Callers must not pass videos older than source scan cutoff - the scanner stops there.
 func (s *Store) UpsertListed(seriesID int64, li ListedVideo, taskID int64) (UpsertResult, error) {
 	var out UpsertResult
 	if li.RemoteID == "" {
@@ -212,11 +213,13 @@ func (s *Store) UpsertListed(seriesID int64, li ListedVideo, taskID int64) (Upse
 
 	out.VideoID = existingID
 	out.Status = existingStatus
+	// Soft-fill title/description/thumbnail_url only when empty (never clobber first-seen / operator).
 	_, err = s.DB.SQL.Exec(`
-		UPDATE videos SET title = ?,
+		UPDATE videos SET
+		  title = COALESCE(NULLIF(title, ''), ?),
 		  source_url = COALESCE(NULLIF(?, ''), source_url),
-		  description = COALESCE(NULLIF(?, ''), description),
-		  thumbnail_url = COALESCE(NULLIF(?, ''), thumbnail_url),
+		  description = COALESCE(NULLIF(description, ''), ?),
+		  thumbnail_url = COALESCE(NULLIF(thumbnail_url, ''), ?),
 		  media_type = CASE WHEN ? != '' THEN ? ELSE media_type END,
 		  source_id = COALESCE(source_id, ?)
 		WHERE id = ?
@@ -232,19 +235,9 @@ func (s *Store) UpsertListed(seriesID int64, li ListedVideo, taskID int64) (Upse
 	return out, nil
 }
 
-// insertListedVideo writes a new videos row. Legacy DBs still require handler_id NOT NULL;
-// fresh schema omits that column - fill yt-dlp only when the column exists.
+// insertListedVideo writes a new videos row.
 func (s *Store) insertListedVideo(seriesID int64, src any, li ListedVideo, uploadVal any, status string, season, episode, thumb any) (sql.Result, error) {
 	mt := NormalizeMediaType(li.MediaType)
-	if s.videoHasHandlerID() {
-		return s.DB.SQL.Exec(`
-			INSERT INTO videos (
-			  series_id, source_id, handler_id, remote_id, title, upload_date,
-			  source_url, status, season, episode, description, thumbnail_url, media_type
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, seriesID, src, "yt-dlp", li.RemoteID, li.Title, uploadVal, nullEmpty(li.WebpageURL),
-			status, season, episode, li.Description, thumb, mt)
-	}
 	return s.DB.SQL.Exec(`
 		INSERT INTO videos (
 		  series_id, source_id, remote_id, title, upload_date,
@@ -321,6 +314,7 @@ type DownloadContext struct {
 	FormatSelector string
 	URL            string
 	Profile        QualityProfile
+	DeliveryMode   string
 }
 
 // PrepareDownload loads series/root/profile for a video id.
@@ -329,14 +323,14 @@ func (s *Store) PrepareDownload(videoID int64) (*DownloadContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	var title, rootPath string
+	var title, rootPath, deliveryMode string
 	var profileID int64
 	err = s.DB.SQL.QueryRow(`
-		SELECT s.title, r.path, s.quality_profile_id
+		SELECT s.title, r.path, s.quality_profile_id, s.delivery_mode
 		FROM series s
 		JOIN root_folders r ON r.id = s.root_id
 		WHERE s.id = ?
-	`, v.SeriesID).Scan(&title, &rootPath, &profileID)
+	`, v.SeriesID).Scan(&title, &rootPath, &profileID, &deliveryMode)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -358,6 +352,7 @@ func (s *Store) PrepareDownload(videoID int64) (*DownloadContext, error) {
 		FormatSelector: prof.FormatSelector,
 		URL:            url,
 		Profile:        *prof,
+		DeliveryMode:   NormalizeDeliveryMode(deliveryMode),
 	}, nil
 }
 
@@ -380,26 +375,9 @@ func (s *Store) HasVideoFile(videoID int64) (string, bool, error) {
 	return "", false, rows.Err()
 }
 
-// HasPackAnchor returns the on-disk path of packed media (kind=video preferred, else strm).
+// HasPackAnchor returns the on-disk path of packed media (kind=video).
 func (s *Store) HasPackAnchor(videoID int64) (string, bool, error) {
-	if p, ok, err := s.HasVideoFile(videoID); err != nil || ok {
-		return p, ok, err
-	}
-	rows, err := s.DB.SQL.Query(`SELECT path FROM files WHERE video_id = ? AND kind = 'strm' ORDER BY id`, videoID)
-	if err != nil {
-		return "", false, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var p string
-		if err := rows.Scan(&p); err != nil {
-			return "", false, err
-		}
-		if fileExists(p) {
-			return p, true, nil
-		}
-	}
-	return "", false, rows.Err()
+	return s.HasVideoFile(videoID)
 }
 
 // CompleteDownload records installed files and marks video downloaded.
@@ -442,7 +420,7 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Remove prior strm (and other) artifacts from disk before replacing rows.
+	// Remove prior pack artifacts from disk before replacing rows.
 	oldRows, _ := tx.Query(`SELECT path FROM files WHERE video_id = ?`, videoID)
 	if oldRows != nil {
 		var oldPaths []string
@@ -458,7 +436,7 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		}
 	}
 
-	if _, err := tx.Exec(`DELETE FROM files WHERE video_id = ? AND kind IN ('video','nfo','json','thumb','strm','sub','sponsorblock')`, videoID); err != nil {
+	if _, err := tx.Exec(`DELETE FROM files WHERE video_id = ? AND kind IN ('video','nfo','json','thumb','sub','sponsorblock')`, videoID); err != nil {
 		return err
 	}
 	for kind, path := range map[string]string{"video": mediaPath, "nfo": nfoPath, "json": infoPath, "thumb": thumbPath} {

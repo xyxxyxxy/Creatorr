@@ -1,0 +1,33 @@
+{{define "theme_picker"}}
+{{/*
+  Browser-local daisyUI theme picker (Settings → General).
+  Radios use name theme-picker; app.js persists to localStorage creatorr-theme.
+*/}}
+{{$groups := dict
+  "Dark" (list "dark" "synthwave" "forest" "black" "dracula" "coffee" "dim" "sunset" "abyss")
+  "Light" (list "cupcake" "emerald" "corporate" "garden" "fantasy" "autumn")
+  "Special" (list "cyberpunk" "valentine" "halloween" "aqua")
+}}
+{{$order := list "Dark" "Light" "Special"}}
+<div class="grid gap-4 sm:grid-cols-3 w-full" id="theme-picker">
+  {{range $order}}
+  {{$label := .}}
+  {{$themes := index $groups $label}}
+  <fieldset class="fieldset bg-base-200 border border-base-300 rounded-box p-4 gap-2 min-w-0">
+    <legend class="fieldset-legend">{{$label}}</legend>
+    <div class="flex flex-col gap-1">
+      {{range $themes}}
+      <input
+        type="radio"
+        name="theme-picker"
+        class="theme-controller btn btn-sm btn-block btn-ghost justify-start"
+        aria-label="{{.}}"
+        value="{{.}}"
+        autocomplete="off"
+      />
+      {{end}}
+    </div>
+  </fieldset>
+  {{end}}
+</div>
+{{end}}

@@ -1,15 +1,12 @@
 {{define "delivery_mode_field"}}
 {{/*
-  Delivery method: large joined Download | Stream buttons (series-list icons download / radio).
-  Expects: Value (download|stream), CanStream bool.
-  Optional: StreamDisabledReason, Info, Help (alias→Info), Hint.
-  Requirements (e.g. CREATORR_PUBLIC_BASE_URL) live on the disabled Stream tip only.
+  Delivery method: large joined Video | Audio buttons (series-list icons film / headphones).
+  Expects: Value (video|audio).
+  Optional: Info, Help (alias→Info), Hint.
 */}}
-{{$val := .Value}}{{if not $val}}{{$val = "download"}}{{end}}
-{{$streamDisabled := and (not .CanStream) (ne $val "stream")}}
-{{$tip := .StreamDisabledReason}}{{if not $tip}}{{$tip = "Set External Creatorr URL to enable streaming capabilities of Creatorr."}}{{end}}
+{{$val := .Value}}{{if not $val}}{{$val = "video"}}{{end}}
 {{$info := .Info}}{{if not $info}}{{$info = .Help}}{{end}}
-{{if not $info}}{{$info = "Download stores media on disk. Stream writes .strm + NFO and plays through Creatorr."}}{{end}}
+{{if not $info}}{{$info = "Audio downloads podcast-like VOD audio extracted from the source videos, not music or albums. Video downloads the full video file."}}{{end}}
 <div class="w-full">
   <div class="flex items-center gap-1 mb-2">
     <span class="text-sm font-medium">Delivery method</span>
@@ -17,25 +14,15 @@
   </div>
   <div class="join delivery-mode-join w-full" role="group" aria-label="Delivery method">
     <label class="btn btn-lg join-item flex-1 h-auto min-h-14 py-3 gap-2">
-      <input type="radio" name="delivery_mode" value="download" class="sr-only" {{if eq $val "download"}}checked{{end}} />
-      <i data-lucide="download" class="size-5 shrink-0" aria-hidden="true"></i>
-      <span>Download</span>
+      <input type="radio" name="delivery_mode" value="video" class="sr-only" {{if eq $val "video"}}checked{{end}} />
+      <i data-lucide="film" class="size-5 shrink-0" aria-hidden="true"></i>
+      <span>Video</span>
     </label>
-    {{if $streamDisabled}}
-    <span class="tooltip tooltip-top join-item flex-1 flex min-w-0" data-tip="{{$tip}}">
-      <label class="btn btn-lg flex-1 h-auto min-h-14 py-3 gap-2 opacity-50 cursor-not-allowed w-full rounded-none">
-        <input type="radio" name="delivery_mode" value="stream" class="sr-only" disabled tabindex="-1" />
-        <i data-lucide="radio" class="size-5 shrink-0" aria-hidden="true"></i>
-        <span>Stream</span>
-      </label>
-    </span>
-    {{else}}
     <label class="btn btn-lg join-item flex-1 h-auto min-h-14 py-3 gap-2">
-      <input type="radio" name="delivery_mode" value="stream" class="sr-only" {{if eq $val "stream"}}checked{{end}} />
-      <i data-lucide="radio" class="size-5 shrink-0" aria-hidden="true"></i>
-      <span>Stream</span>
+      <input type="radio" name="delivery_mode" value="audio" class="sr-only" {{if eq $val "audio"}}checked{{end}} />
+      <i data-lucide="headphones" class="size-5 shrink-0" aria-hidden="true"></i>
+      <span>Audio</span>
     </label>
-    {{end}}
   </div>
   {{if .Hint}}
   <p class="label whitespace-normal mt-1">{{.Hint}}</p>

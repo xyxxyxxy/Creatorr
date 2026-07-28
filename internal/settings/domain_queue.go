@@ -70,11 +70,11 @@ func IsReservedDomain(domain string) bool {
 // DomainLimits is queue/yt-dlp knobs (global default or effective resolved values).
 type DomainLimits struct {
 	TaskCooldownSeconds int
-	MaxDownloadQueue    int // pending+running download-family on this domain
-	MaxParallelTasks    int // concurrent running non-interactive tasks on this domain
-	DownloadRateLimit   string  // yt-dlp --limit-rate; "off"/"0"/"none" = unlimited
-	SleepRequests       float64 // yt-dlp --sleep-requests + --sleep-subtitles + --sleep-interval; 0 = off
-	UseFlareSolverr     bool    // pass Settings flare_solverr_url to yt-dlp
+	MaxDownloadQueue    int     // pending+running download-family on this domain
+	MaxParallelTasks    int     // concurrent running non-interactive tasks on this domain
+	DownloadRateLimit   string  // yt-dlp --limit-rate for archive/scan (not interactive prefetch); "off"/"0"/"none" = unlimited
+	SleepRequests       float64 // yt-dlp --sleep-requests + --sleep-subtitles + --sleep-interval; 0 = off; not interactive prefetch
+	UseFlareSolverr     bool    // pre-solve via CREATORR_FLARESOLVERR_URL when effective
 }
 
 func defaultDomainLimits() DomainLimits {
@@ -138,8 +138,9 @@ func EnsureDefaultDomain(database *db.DB) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := database.SQL.Exec(`
 		INSERT INTO domains (domain, active, task_cooldown_seconds, max_download_queue,
-			max_parallel_tasks, download_rate_limit, sleep_requests, use_flaresolverr, updated_at)
-		VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)
+			max_parallel_tasks, download_rate_limit, sleep_requests, use_flaresolverr,
+			cookies, username, password, updated_at)
+		VALUES (?, 1, ?, ?, ?, ?, ?, ?, NULL, '', '', ?)
 		ON CONFLICT(domain) DO NOTHING
 	`, DomainDefault, d.TaskCooldownSeconds, d.MaxDownloadQueue, d.MaxParallelTasks,
 		d.DownloadRateLimit, d.SleepRequests, 0, now)
@@ -170,6 +171,18 @@ func scanDomainLimits(delay, maxQ, maxP sql.NullInt64, rate sql.NullString, slee
 		out.UseFlareSolverr = flare.Int64 != 0
 	}
 	return normalizeLimits(out)
+}
+
+func applyRateOverride(out *string, rate sql.NullString) {
+	if !rate.Valid {
+		return
+	}
+	s := strings.TrimSpace(rate.String)
+	if s == "" {
+		*out = "off"
+	} else {
+		*out = s
+	}
 }
 
 // DefaultLimits returns limits from domains row domain=default (always non-NULL after seed).
@@ -226,14 +239,7 @@ func LimitsForDomain(database *db.DB, domain string) (DomainLimits, error) {
 	if maxP.Valid && maxP.Int64 >= 1 {
 		out.MaxParallelTasks = int(maxP.Int64)
 	}
-	if rate.Valid {
-		s := strings.TrimSpace(rate.String)
-		if s == "" {
-			out.DownloadRateLimit = "off"
-		} else {
-			out.DownloadRateLimit = s
-		}
-	}
+	applyRateOverride(&out.DownloadRateLimit, rate)
 	if sleep.Valid && sleep.Float64 >= 0 {
 		out.SleepRequests = sleep.Float64
 	}
@@ -243,30 +249,22 @@ func LimitsForDomain(database *db.DB, domain string) (DomainLimits, error) {
 	return normalizeLimits(out), nil
 }
 
-// FlareSolverrConfigured reports whether Settings flare_solverr_url is non-empty.
-func FlareSolverrConfigured(database *db.DB) (bool, error) {
-	u, err := Get(database, KeyFlareSolverrURL)
-	if err != nil {
-		return false, err
-	}
-	return strings.TrimSpace(u) != "", nil
+// FlareSolverrConfigured reports whether CREATORR_FLARESOLVERR_URL is non-empty.
+func FlareSolverrConfigured() bool {
+	return FlareSolverrURL() != ""
 }
 
 // RequireFlareSolverrConfigured errors when Use FlareSolverr would be turned on
-// without a Settings URL.
-func RequireFlareSolverrConfigured(database *db.DB) error {
-	ok, err := FlareSolverrConfigured(database)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return fmt.Errorf("set FlareSolverr URL in Settings → General first")
+// without CREATORR_FLARESOLVERR_URL.
+func RequireFlareSolverrConfigured() error {
+	if !FlareSolverrConfigured() {
+		return fmt.Errorf("set CREATORR_FLARESOLVERR_URL first")
 	}
 	return nil
 }
 
 // ClearUseFlareSolverr turns off Domain defaults Use FlareSolverr and clears host
-// On overrides (NULL inherit). Call when flare_solverr_url is emptied.
+// On overrides (NULL inherit). Call when the FlareSolverr env URL is emptied.
 func ClearUseFlareSolverr(database *db.DB) error {
 	if err := EnsureDefaultDomain(database); err != nil {
 		return err
@@ -305,7 +303,7 @@ func SetDomainDefault(database *db.DB, delay, maxQueue, maxParallel int, rate, s
 		return fmt.Errorf("invalid sleep_requests")
 	}
 	if useFlare {
-		if err := RequireFlareSolverrConfigured(database); err != nil {
+		if err := RequireFlareSolverrConfigured(); err != nil {
 			return err
 		}
 	}

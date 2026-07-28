@@ -9,6 +9,34 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
+func TestListProfilesAlphabetical(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "p.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	lib := library.NewStore(d, queue.NewStore(d))
+
+	for _, name := range []string{"zebra", "Alpha", "best", "1080p"} {
+		if _, err := lib.CreateProfile(name, "bv*+ba"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := lib.ListProfiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"1080p", "Alpha", "best", "zebra"}
+	if len(list) != len(want) {
+		t.Fatalf("len=%d want %d", len(list), len(want))
+	}
+	for i := range want {
+		if list[i].Name != want[i] {
+			t.Fatalf("list[%d]=%q want %q", i, list[i].Name, want[i])
+		}
+	}
+}
+
 func TestProfileInfoCardsRequireReencode(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "p.db"))
 	if err != nil {

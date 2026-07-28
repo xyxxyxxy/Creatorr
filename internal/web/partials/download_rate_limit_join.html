@@ -2,35 +2,48 @@
 {{/*
   daisyUI join: number + unit select for yt-dlp --limit-rate.
   Expects: Value (full stored string, e.g. 10M or off).
-  Optional: Required (domain defaults), Override (empty = inherit Domain defaults),
-            DefaultRate (Domain defaults rate; override inherit shows its number placeholder + unit),
-            Placeholder (number placeholder; defaults to DefaultRate number),
-            ShowClear (join override_clear_btn after unit).
+  Optional: Name (form prefix; default download_rate_limit → Name_value / Name_unit),
+            Required (domain defaults), Override (empty = inherit Domain defaults),
+            DefaultRate (Domain defaults rate; override inherit shows default: N or default: Unlimited),
+            Placeholder (number placeholder; override default = "default: …" from DefaultRate),
+            ShowClear (join override_clear_btn after unit),
+            HideG (omit G/s unless the current value is already G).
 */}}
+{{$name := .Name}}{{if not $name}}{{$name = "download_rate_limit"}}{{end}}
 {{$stored := rateLimitParts .Value}}
 {{$def := rateLimitParts .DefaultRate}}
-{{$inherit := and .Override (eq .Value "")}}
+{{/* Empty/missing Value (nil or "") with no unit = inherit Domain defaults. */}}
+{{$inherit := and .Override (eq $stored.Value "") (eq $stored.Unit "")}}
 {{$unit := $stored.Unit}}{{if $inherit}}{{$unit = $def.Unit}}{{end}}
-{{$ph := .Placeholder}}{{if not $ph}}{{$ph = $def.Value}}{{end}}
+{{if not $unit}}{{$unit = "M"}}{{end}}
+{{$ph := .Placeholder}}
+{{if not $ph}}
+  {{if .Override}}
+    {{if eq $def.Unit "off"}}{{$ph = "default: Unlimited"}}
+    {{else if $def.Value}}{{$ph = printf "default: %s" $def.Value}}{{end}}
+  {{else}}{{$ph = $def.Value}}{{end}}
+{{end}}
 {{$off := eq $unit "off"}}
 <div class="join w-full{{if $inherit}} opacity-70{{end}}"
      data-rate-limit-join{{if .Required}} data-rate-required{{end}}
-     {{if .Override}}data-default-unit="{{$def.Unit}}" data-default-value="{{$def.Value}}"{{end}}>
-  <input type="number" name="download_rate_limit_value" min="0" step="any"
+     {{if .Override}}data-default-unit="{{if $def.Unit}}{{$def.Unit}}{{else}}M{{end}}" data-default-value="{{$def.Value}}"{{end}}>
+  <input type="number" name="{{$name}}_value" min="0" step="any"
          class="input join-item grow min-w-0"
          value="{{$stored.Value}}"
          data-rate-value
          {{if .Override}}data-override-clear{{end}}
          {{if $ph}}placeholder="{{$ph}}"{{end}}
          {{if and .Required (not $off)}}required{{end}}
-         {{if $off}}readonly{{end}} />
-  <select name="download_rate_limit_unit" class="select join-item w-auto shrink-0"
+         {{if $off}}disabled{{end}} />
+  <select name="{{$name}}_unit" class="select join-item w-auto shrink-0"
           data-rate-unit
           {{if .Override}}data-override-clear{{end}}
           {{if .Required}}required{{end}}>
     <option value="K" {{if eq $unit "K"}}selected{{end}}>K/s</option>
     <option value="M" {{if eq $unit "M"}}selected{{end}}>M/s</option>
+    {{if or (not .HideG) (eq $unit "G")}}
     <option value="G" {{if eq $unit "G"}}selected{{end}}>G/s</option>
+    {{end}}
     <option value="off" {{if eq $unit "off"}}selected{{end}}>Unlimited</option>
   </select>
   {{if .ShowClear}}{{template "override_clear_btn"}}{{end}}

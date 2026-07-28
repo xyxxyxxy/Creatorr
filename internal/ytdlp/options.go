@@ -6,6 +6,8 @@ package ytdlp
 type options struct {
 	url              string
 	cookies          string
+	username         string
+	password         string
 	outdir           string
 	format           string
 	flaresolverr     string
@@ -14,16 +16,13 @@ type options struct {
 	subLangs         []string
 	subAuto          bool
 	playlistEnd      int
-	hlsDir           string
-	hlsStartSec      float64
-	hlsStartNumber   int
-	videoURL         string
-	audioURL         string
-	videoHeadersJSON string
-	audioHeadersJSON string
 	matchFilter      string
 
-	ytdlpPath  string
-	ffmpegPath string
-	pluginDirs string
+	ytdlpPath        string
+	ffmpegPath       string
+	pluginDirs       string
+	systemPluginDirs string
+
+	potProviderURL string
+	potFetch       string // youtube:fetch_pot value (auto|always|never)
 }

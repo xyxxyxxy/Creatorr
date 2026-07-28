@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/api/gen"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
@@ -188,6 +189,53 @@ func (s *Server) CreateSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, mapSeries(s.Library, *ser, false, nil))
+}
+
+func (s *Server) CreateSeriesVideo(w http.ResponseWriter, r *http.Request, id gen.SeriesId) {
+	var body gen.CreateVideoRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, apperrors.CodeInternal, "invalid JSON", err.Error())
+		return
+	}
+	draftToken := ""
+	if body.DraftToken != nil {
+		draftToken = strings.TrimSpace(*body.DraftToken)
+	}
+	title := ""
+	if body.Title != nil {
+		title = strings.TrimSpace(*body.Title)
+	}
+	upload := ""
+	if body.UploadDate != nil {
+		upload = strings.TrimSpace(*body.UploadDate)
+	}
+	var (
+		v   *library.Video
+		err error
+	)
+	if draftToken != "" {
+		v, err = s.Library.CreateIndexedVideoFromAddDraft(int64(id), draftToken, title, upload)
+		if err == nil {
+			_ = s.Library.ClearAddVideoDraft(draftToken)
+		}
+	} else {
+		remoteID := ""
+		if body.RemoteId != nil {
+			remoteID = strings.TrimSpace(*body.RemoteId)
+		}
+		v, err = s.Library.CreateIndexedVideo(library.CreateIndexedVideoParams{
+			SeriesID:   int64(id),
+			Title:      title,
+			RemoteID:   remoteID,
+			UploadDate: upload,
+		})
+	}
+	if err != nil {
+		writeLibraryErr(w, err, "create video failed")
+		return
+	}
+	sizes, _ := s.Library.VideoSizeBytesMap([]int64{v.ID})
+	writeJSON(w, http.StatusCreated, mapVideoWithSize(*v, sizes))
 }
 
 func (s *Server) GetSeries(w http.ResponseWriter, r *http.Request, id gen.SeriesId) {

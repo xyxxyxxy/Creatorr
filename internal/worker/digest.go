@@ -34,12 +34,7 @@ func (r *Runner) digest() *digestState {
 }
 
 func mediaKind(kind string) bool {
-	switch kind {
-	case queue.KindDownload, queue.KindPackStream, queue.KindCacheBeginning:
-		return true
-	default:
-		return false
-	}
+	return kind == queue.KindDownload
 }
 
 func (r *Runner) noteDigestSuccess(task *queue.Task) {
@@ -65,18 +60,8 @@ func (r *Runner) noteDigestSuccess(task *queue.Task) {
 	if videoTitle != "" {
 		it.Title = videoTitle
 	}
-	switch task.Kind {
-	case queue.KindDownload:
+	if task.Kind == queue.KindDownload {
 		it.Kind = "archive"
-		it.Beginning = false
-	case queue.KindPackStream:
-		if it.Kind == "" {
-			it.Kind = "stream"
-		}
-		// Keep Beginning if cache_beginning already completed out of order.
-	case queue.KindCacheBeginning:
-		it.Kind = "stream"
-		it.Beginning = true
 	}
 	d.items[vid] = it
 }

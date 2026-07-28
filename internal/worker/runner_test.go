@@ -2,6 +2,7 @@ package worker_test
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -437,6 +438,124 @@ func TestRunnerMediaTypeExcludedMarksIgnored(t *testing.T) {
 		}
 		if status == queue.StatusFailed {
 			t.Fatal("media type exclude must finish done, not failed")
+		}
+		time.Sleep(30 * time.Millisecond)
+	}
+	t.Fatal("timeout")
+}
+
+func TestRunnerLiveBroadcastSkippedStaysWanted(t *testing.T) {
+	var notified atomic.Bool
+	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
+		notified.Store(true)
+		return nil
+	})
+	defer notify.SetSendFnForTest(old)
+
+	d, err := db.Open(filepath.Join(t.TempDir(), "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	_ = settings.SeedDefaults(d)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{
+		notify.EventYtDlpFailed,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	lib := &library.Store{DB: d, Queue: queue.NewStore(d)}
+	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, err := lib.CreateProfile("default", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Live", SourceURL: "https://example.com/live", RootID: root.ID, QualityProfileID: prof.ID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = lib.Queue.CancelAll()
+	res, err := d.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, source_url, status)
+		VALUES (?, 'vid-live', 'On air', 'https://example.com/v/live', 'wanted')
+	`, ser.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	videoID, _ := res.LastInsertId()
+
+	store := lib.Queue
+	id, err := store.Enqueue(queue.EnqueueParams{
+		Kind: queue.KindDownload, Domain: "example.com", SeriesID: ser.ID, VideoID: videoID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handlers := worker.StubHandlers()
+	handlers[queue.KindDownload] = func(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) error {
+		return apperrors.New(apperrors.CodeLiveBroadcastSkipped, "currently live")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go (&worker.Runner{
+		Queue:    store,
+		Library:  lib,
+		Handlers: handlers,
+		Interval: 20 * time.Millisecond,
+	}).Run(ctx)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var status, code, message string
+		err := d.SQL.QueryRow(`SELECT status, COALESCE(error_code,''), COALESCE(message,'') FROM tasks WHERE id = ?`, id).Scan(&status, &code, &message)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if status == queue.StatusDone {
+			v, err := lib.GetVideo(videoID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if v.Status != "wanted" {
+				t.Fatalf("status=%q want wanted", v.Status)
+			}
+			if code != apperrors.CodeLiveBroadcastSkipped {
+				t.Fatalf("task code=%q", code)
+			}
+			if message != "Skipped (currently live)" {
+				t.Fatalf("message=%q", message)
+			}
+			var histN int
+			_ = d.SQL.QueryRow(`SELECT COUNT(*) FROM video_history WHERE video_id = ? AND event = 'live_skipped'`, videoID).Scan(&histN)
+			if histN != 1 {
+				t.Fatalf("live_skipped history count=%d", histN)
+			}
+			var nEvent string
+			var nTask sql.NullInt64
+			err = d.SQL.QueryRow(`
+				SELECT event, task_id FROM notifications WHERE event = ? ORDER BY id DESC LIMIT 1
+			`, notify.EventLiveSkipped).Scan(&nEvent, &nTask)
+			if err != nil {
+				t.Fatalf("live_skipped notification: %v", err)
+			}
+			if !nTask.Valid || nTask.Int64 != id {
+				t.Fatalf("notification task_id=%v want %d", nTask, id)
+			}
+			if notified.Load() {
+				t.Fatal("must not ytdlp_failed-notify on live skip")
+			}
+			return
+		}
+		if status == queue.StatusFailed {
+			t.Fatal("live skip must finish done, not failed")
 		}
 		time.Sleep(30 * time.Millisecond)
 	}

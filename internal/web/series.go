@@ -13,50 +13,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xyxxyxxy/Creatorr/internal/cookies"
+	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
-	"github.com/go-chi/chi/v5"
 )
-
-func (h *Handler) canStream() bool {
-	ok, _ := h.streamGate()
-	return ok
-}
-
-// streamGate reports whether Stream delivery may be chosen, plus a UI tooltip reason when not.
-// yt-dlp is boot-enforced; gate is External Creatorr URL only.
-func (h *Handler) streamGate() (ok bool, reason string) {
-	base := ""
-	if h.Queue != nil && h.Queue.DB != nil {
-		base, _ = settings.ExternalBaseURL(h.Queue.DB)
-	}
-	if base == "" && h.Library != nil {
-		base = h.Library.EffectivePublicBaseURL()
-	}
-	if strings.TrimSpace(base) == "" {
-		return false, "Set External Creatorr URL to enable streaming capabilities of Creatorr."
-	}
-	return true, ""
-}
 
 func videoTaskRunning(tasks []queue.Task) bool {
 	for _, t := range tasks {
-		if (t.Kind == queue.KindDownload || t.Kind == queue.KindCacheBeginning || t.Kind == queue.KindPackStream || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify || t.Kind == queue.KindStreamPlay) && t.Status == queue.StatusRunning {
+		if (t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify) && t.Status == queue.StatusRunning {
 			return true
 		}
 	}
 	return false
 }
 
-// videoDeliveryQueued is true when a download, cache_beginning, pack_stream, sponsorblock_cut, media_verify, or stream_play task is pending or running.
+// videoDeliveryQueued is true when a download, sponsorblock_cut, or media_verify task is pending or running.
 func videoDeliveryQueued(tasks []queue.Task) bool {
 	for _, t := range tasks {
-		if t.Kind == queue.KindDownload || t.Kind == queue.KindCacheBeginning || t.Kind == queue.KindPackStream || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify || t.Kind == queue.KindStreamPlay {
+		if t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify {
 			return true
 		}
 	}
@@ -64,7 +42,7 @@ func videoDeliveryQueued(tasks []queue.Task) bool {
 }
 
 func deliveryTaskActive(t *queue.Task) bool {
-	return t != nil && (t.Kind == queue.KindDownload || t.Kind == queue.KindCacheBeginning || t.Kind == queue.KindPackStream || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify || t.Kind == queue.KindStreamPlay)
+	return t != nil && (t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify)
 }
 
 func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
@@ -76,27 +54,22 @@ func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
 	allSourceURLs, _ := h.Library.ListAllSourceURLs()
-	canStream, streamReason := h.streamGate()
 	render(w, "series_list", struct {
 		pageBase
-		Live                 seriesListLiveData
-		Roots                []library.RootFolder
-		Profiles             []library.QualityProfile
-		ScanCronDescriptors      []string
-		AutoIgnoreMediaTypeOptions  []string
-		AllSourceURLs            []string
-		CanStream                bool
-		StreamDisabledReason     string
+		Live                       seriesListLiveData
+		Roots                      []library.RootFolder
+		Profiles                   []library.QualityProfile
+		ScanCronDescriptors        []string
+		AutoIgnoreMediaTypeOptions []string
+		AllSourceURLs              []string
 	}{
-		pageBase:                 newPage("Series", "series", flashFromQuery(r)),
-		Live:                     live,
-		Roots:                    roots,
-		Profiles:                 profiles,
-		ScanCronDescriptors:      scanCronDescriptors(),
-		AutoIgnoreMediaTypeOptions:  autoIgnoreMediaTypeOptions(h),
-		AllSourceURLs:            allSourceURLs,
-		CanStream:                canStream,
-		StreamDisabledReason:     streamReason,
+		pageBase:                   newPage("Series", "series", flashFromQuery(r)),
+		Live:                       live,
+		Roots:                      roots,
+		Profiles:                   profiles,
+		ScanCronDescriptors:        scanCronDescriptors(),
+		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
+		AllSourceURLs:              allSourceURLs,
 	})
 }
 
@@ -127,7 +100,7 @@ func (h *Handler) actionProbeSourceTitle(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	defer os.RemoveAll(tmp)
-	jar, err := cookies.TempJarForURL(h.Library.DB, tmp, url)
+	jar, err := domains.TempJarForURL(h.Library.DB, tmp, url)
 	if err != nil {
 		slog.Warn("probe source title cookies", "url", url, "err", err)
 		jar = ""
@@ -138,8 +111,13 @@ func (h *Handler) actionProbeSourceTitle(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	authUser, authPass := "", ""
+	if creds, err := settings.CredentialsForURL(h.Library.DB, url); err == nil {
+		authUser, authPass = creds.Username, creds.Password
+	}
 	e, err := h.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
-		URL: url, CookiesPath: jar, FlareSolverrURL: flare,
+		URL: url, CookiesPath: jar, Username: authUser, Password: authPass,
+		FlareSolverrURL: flare,
 	})
 	if err != nil {
 		slog.Warn("probe source title failed", "url", url, "err", err)
@@ -176,7 +154,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !canScan {
-			blocked = "All source domains are inactive. Activate under Settings → Queue."
+			blocked = "All source domains are inactive. Activate under 'Settings → Queue / Domains'."
 		}
 	}
 	type sourceRow struct {
@@ -217,15 +195,15 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		dAct, _ := domains.IsActive(h.Queue.DB, host)
 		disTitle := ""
 		if !dAct {
-			disTitle = "Domain " + host + " is inactive. Activate it under Settings → Queue."
+			disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
 		}
 		best := pickBestTask(bySource[src.ID])
 		retryable, _ := h.Library.SourceHasRetryableVideos(src.ID)
-		summary, lastAt, errMsg, _, taskID, hasScanned, hasError := sourceStatusFields(h.Library, src.ID, now)
+		summary, lastAt, errMsg, errCode, taskID, hasScanned, hasError := sourceStatusFields(h.Library, src.ID, now)
 		tipAt, _ := h.Library.LatestTipScannedAt(src.ID)
 		cronLabel := cronexpr.DescribeScan(src.ScanCron)
 		statusInd := buildSourceStatus(sourceStatusParams{
-			Src: src, Best: best, HasError: hasError, ErrMsg: errMsg, Stalled: stalled,
+			Src: src, Best: best, HasError: hasError, ErrMsg: errMsg, ErrCode: errCode, Stalled: stalled,
 			SeriesMonitored: ser.Monitored, DomainActive: dAct, DomainDisabledTitle: disTitle,
 			ScanCronLabel: cronLabel, Summary: summary, HasScanned: hasScanned, HistoryID: taskID,
 			Now: now, LastTipScannedAt: tipAt,
@@ -262,7 +240,6 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
-	canStream, streamReason := h.streamGate()
 	folderRenameBusy, _ := h.Library.SeriesHasBusyMediaTasks(id)
 	metaForm := seriesMetadataView{
 		Series:      ser,
@@ -296,50 +273,49 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	metaForm = h.withMetaSuggestions(metaForm)
 	metaFiles := seriesMetaFileViews(h.Library, ser)
+	videoTotal, _ := h.Library.CountVideos(id)
 	render(w, "series_detail", struct {
 		pageBase
-		Series               *library.Series
-		Sources              []sourceRow
-		SourcesPage          PageInfo
-		SourceURLs           []string
-		VideosLive           seriesVideosLiveData
-		MetaFiles            []seriesMetaFileView
-		CanScan              bool
-		ScanBlocked          string
-		SeriesInd            taskIndicatorView
-		HasMonitoredSource   bool
-		TaskIndicatorsPath   string
-		ScanCronDescriptors      []string
-		AutoIgnoreMediaTypeOptions  []string
-		Roots                    []library.RootFolder
-		Profiles                 []library.QualityProfile
-		CanStream                bool
-		StreamDisabledReason     string
-		FolderRenameBusy         bool
-		MetaForm                 seriesMetadataView
-		Deleting                 bool
+		Series                     *library.Series
+		Sources                    []sourceRow
+		SourcesPage                PageInfo
+		SourceURLs                 []string
+		VideosLive                 seriesVideosLiveData
+		HasVideos                  bool
+		MetaFiles                  []seriesMetaFileView
+		CanScan                    bool
+		ScanBlocked                string
+		SeriesInd                  taskIndicatorView
+		HasMonitoredSource         bool
+		TaskIndicatorsPath         string
+		ScanCronDescriptors        []string
+		AutoIgnoreMediaTypeOptions []string
+		Roots                      []library.RootFolder
+		Profiles                   []library.QualityProfile
+		FolderRenameBusy           bool
+		MetaForm                   seriesMetadataView
+		Deleting                   bool
 	}{
-		pageBase:                 newPage(ser.Title, "series", flashFromQuery(r)),
-		Series:                   ser,
-		Sources:                  pageSrc,
-		SourcesPage:              sourcesPage,
-		SourceURLs:               sourceURLs,
-		VideosLive:               videosLive,
-		MetaFiles:                metaFiles,
-		CanScan:                  canScan && !seriesDeleting,
-		ScanBlocked:              blocked,
-		SeriesInd:                seriesInd,
-		HasMonitoredSource:       ser.Monitored,
-		TaskIndicatorsPath:       indicatorsQ,
-		ScanCronDescriptors:      scanCronDescriptors(),
-		AutoIgnoreMediaTypeOptions:  autoIgnoreMediaTypeOptions(h),
-		Roots:                    roots,
-		Profiles:                 profiles,
-		CanStream:                canStream,
-		StreamDisabledReason:     streamReason,
-		FolderRenameBusy:         folderRenameBusy,
-		MetaForm:                 metaForm,
-		Deleting:             seriesDeleting,
+		pageBase:                   newPage(ser.Title, "series", flashFromQuery(r)),
+		Series:                     ser,
+		Sources:                    pageSrc,
+		SourcesPage:                sourcesPage,
+		SourceURLs:                 sourceURLs,
+		VideosLive:                 videosLive,
+		HasVideos:                  videoTotal > 0,
+		MetaFiles:                  metaFiles,
+		CanScan:                    canScan && !seriesDeleting,
+		ScanBlocked:                blocked,
+		SeriesInd:                  seriesInd,
+		HasMonitoredSource:         ser.Monitored,
+		TaskIndicatorsPath:         indicatorsQ,
+		ScanCronDescriptors:        scanCronDescriptors(),
+		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
+		Roots:                      roots,
+		Profiles:                   profiles,
+		FolderRenameBusy:           folderRenameBusy,
+		MetaForm:                   metaForm,
+		Deleting:                   seriesDeleting,
 	})
 }
 
@@ -373,12 +349,10 @@ func (h *Handler) seriesTaskIndicators(w http.ResponseWriter, r *http.Request) {
 	inds = append(inds, si)
 	for vid := range vidIDs {
 		st := ""
-		kind := ""
 		if v, err := h.Library.GetVideo(vid); err == nil && v != nil {
 			st = v.Status
-			kind = v.StreamKind()
 		}
-		v := h.streamIndicator(vid, pickBestTask(byVideo[vid]), st, kind)
+		v := h.videoIndicator(vid, pickBestTask(byVideo[vid]), st)
 		v.OOB = true
 		inds = append(inds, v)
 	}
@@ -409,13 +383,13 @@ func (h *Handler) seriesTaskIndicators(w http.ResponseWriter, r *http.Request) {
 		dAct, _ := domains.IsActive(h.Queue.DB, host)
 		disTitle := ""
 		if !dAct {
-			disTitle = "Domain " + host + " is inactive. Activate it under Settings → Queue."
+			disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
 		}
-		summary, lastAt, errMsg, _, taskID, hasScanned, hasError := sourceStatusFields(h.Library, src.ID, now)
+		summary, lastAt, errMsg, errCode, taskID, hasScanned, hasError := sourceStatusFields(h.Library, src.ID, now)
 		tipAt, _ := h.Library.LatestTipScannedAt(src.ID)
 		cronLabel := cronexpr.DescribeScan(src.ScanCron)
 		statusInd := buildSourceStatus(sourceStatusParams{
-			Src: src, Best: pickBestTask(bySource[src.ID]), HasError: hasError, ErrMsg: errMsg, Stalled: stalled,
+			Src: src, Best: pickBestTask(bySource[src.ID]), HasError: hasError, ErrMsg: errMsg, ErrCode: errCode, Stalled: stalled,
 			SeriesMonitored: ser.Monitored, DomainActive: dAct, DomainDisabledTitle: disTitle,
 			ScanCronLabel: cronLabel, Summary: summary, HasScanned: hasScanned, HistoryID: taskID,
 			Now: now, LastTipScannedAt: tipAt,
@@ -440,12 +414,10 @@ func (h *Handler) videoTaskIndicator(w http.ResponseWriter, r *http.Request) {
 	vid, _ := strconv.ParseInt(chi.URLParam(r, "vid"), 10, 64)
 	t, _ := h.Queue.ActiveTaskForVideo(vid)
 	st := ""
-	kind := ""
 	if v, err := h.Library.GetVideo(vid); err == nil && v != nil {
 		st = v.Status
-		kind = v.StreamKind()
 	}
-	v := h.streamIndicator(vid, t, st, kind)
+	v := h.videoIndicator(vid, t, st)
 	v.OOB = true
 	render(w, "task_indicator", v)
 }
@@ -468,7 +440,7 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 	dAct, _ := domains.IsActive(h.Queue.DB, host)
 	disTitle := ""
 	if !dAct {
-		disTitle = "Domain " + host + " is inactive. Activate it under Settings → Queue."
+		disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
 	}
 	retryable, _ := h.Library.SourceHasRetryableVideos(src.ID)
 	videoTotal, _ := h.Library.CountVideosForSource(src.ID)
@@ -661,6 +633,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 			errorHistoryID = v.HistoryID
 		}
 	}
+	histGroups := groupVideoHistoryByTask(histViews)
 	t, _ := h.Queue.ActiveTaskForVideo(vid)
 	dlRunning := deliveryTaskActive(t) && t.Status == queue.StatusRunning
 	deliveryQueued := deliveryTaskActive(t)
@@ -684,7 +657,9 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 				case queue.StatusDone:
 					if d, err := h.Library.ReadVideoPrefetchDraft(vid, tid); err == nil {
 						metaForm.PrefetchDraft = d
-						metaForm.Video = applyVideoPrefetchDraft(video, d)
+						metaForm.Video = applyVideoPrefetchDraft(video, d, h.Library)
+						h.applyVideoMetadataManagedLists(&metaForm, d.Genres)
+						metaForm.PrefetchArt = videoPrefetchArtFromDraft(d)
 						metaForm.FetchURL = queue.URLFromPayload(task.Payload)
 					}
 				case queue.StatusFailed, queue.StatusCancelled:
@@ -702,7 +677,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 			host := queue.DomainFromURL(src.URL)
 			dAct, _ = domains.IsActive(h.Queue.DB, host)
 			if !dAct {
-				disTitle = "Domain " + host + " is inactive. Activate it under Settings → Queue."
+				disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
 			}
 		}
 	}
@@ -713,7 +688,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		SizeLabel           string
 		Files               []videoFileView
 		DetailRows          []videoDetailRow
-		History             []videoHistoryView
+		History             []videoHistoryGroup
 		HistoryPage         PageInfo
 		ErrorHistoryID      int64
 		TaskInd             taskIndicatorView
@@ -721,7 +696,6 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		DeliveryQueued      bool
 		DomainActive        bool
 		DomainDisabledTitle string
-		IsStream            bool
 		Deleting            bool
 		HasPackAnchor       bool
 		MetaForm            videoMetadataView
@@ -732,15 +706,14 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		SizeLabel:           sizeLabel,
 		Files:               fileRows,
 		DetailRows:          detailRows,
-		History:             histViews,
+		History:             histGroups,
 		HistoryPage:         histPageInfo,
 		ErrorHistoryID:      errorHistoryID,
-		TaskInd:             h.streamIndicator(vid, t, video.Status, video.StreamKind()),
+		TaskInd:             h.videoIndicator(vid, t, video.Status),
 		DownloadRunning:     dlRunning,
 		DeliveryQueued:      deliveryQueued,
 		DomainActive:        dAct,
 		DomainDisabledTitle: disTitle,
-		IsStream:            ser.IsStream(),
 		Deleting:            deleting,
 		HasPackAnchor:       metaForm.HasPackAnchor,
 		MetaForm:            metaForm,
@@ -868,18 +841,156 @@ func (h *Handler) addSeriesPrefetchStatus(w http.ResponseWriter, r *http.Request
 	}
 }
 
+func (h *Handler) actionFetchAddVideo(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	sourceURL := strings.TrimSpace(r.FormValue("url"))
+	if sourceURL == "" {
+		sourceURL = strings.TrimSpace(r.FormValue("source_url"))
+	}
+	seriesID, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
+	writeJSON := func(status int, v any) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(v)
+	}
+	if sourceURL == "" {
+		writeJSON(http.StatusBadRequest, map[string]string{"error": "URL is required"})
+		return
+	}
+	if h.Queue == nil {
+		writeJSON(http.StatusServiceUnavailable, map[string]string{"error": "queue is not available"})
+		return
+	}
+	token, err := newAddSeriesDraftToken()
+	if err != nil {
+		writeJSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	tid, err := h.Library.EnqueueAddVideoPrefetch(sourceURL, token, seriesID)
+	if err != nil {
+		writeJSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(http.StatusOK, map[string]any{"task_id": tid, "draft_token": token})
+}
+
+func (h *Handler) addVideoPrefetchStatus(w http.ResponseWriter, r *http.Request) {
+	tid, _ := strconv.ParseInt(chi.URLParam(r, "tid"), 10, 64)
+	writeJSON := func(status int, v any) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(v)
+	}
+	task, err := h.Queue.GetTask(tid)
+	if err != nil || task == nil {
+		writeJSON(http.StatusNotFound, map[string]string{"error": "task not found"})
+		return
+	}
+	if task.Kind != queue.KindPrefetchAddVideo {
+		writeJSON(http.StatusNotFound, map[string]string{"error": "task not found"})
+		return
+	}
+	token := queue.DraftTokenFromPayload(task.Payload)
+	out := map[string]any{
+		"status":      task.Status,
+		"task_id":     tid,
+		"draft_token": token,
+	}
+	switch task.Status {
+	case queue.StatusPending, queue.StatusRunning:
+		writeJSON(http.StatusOK, out)
+		return
+	case queue.StatusFailed, queue.StatusCancelled:
+		msg := task.ErrorMessage
+		if msg == "" {
+			msg = "Prefetch failed"
+		}
+		if token != "" {
+			if d, err := h.Library.ReadAddVideoDraft(token); err == nil && strings.TrimSpace(d.Error) != "" {
+				msg = d.Error
+			}
+		}
+		out["error"] = msg
+		writeJSON(http.StatusOK, out)
+		return
+	case queue.StatusDone:
+		if token == "" {
+			out["error"] = "draft token missing"
+			writeJSON(http.StatusOK, out)
+			return
+		}
+		draft, err := h.Library.ReadAddVideoDraft(token)
+		if err != nil {
+			out["error"] = "draft not found"
+			writeJSON(http.StatusOK, out)
+			return
+		}
+		if strings.TrimSpace(draft.Error) != "" {
+			out["error"] = draft.Error
+			writeJSON(http.StatusOK, out)
+			return
+		}
+		if strings.TrimSpace(draft.Title) == "" {
+			out["error"] = "could not determine video title from URL"
+			writeJSON(http.StatusOK, out)
+			return
+		}
+		if strings.TrimSpace(draft.UploadDate) == "" {
+			out["error"] = "could not determine upload date from URL"
+			writeJSON(http.StatusOK, out)
+			return
+		}
+		out["title"] = draft.Title
+		out["remote_id"] = draft.RemoteID
+		out["upload_date"] = draft.UploadDate
+		out["source_url"] = draft.SourceURL
+		writeJSON(http.StatusOK, out)
+		return
+	default:
+		out["error"] = "unexpected task status"
+		writeJSON(http.StatusOK, out)
+	}
+}
+
 func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
-	rootID, _ := strconv.ParseInt(r.FormValue("root_id"), 10, 64)
-	qpID, _ := strconv.ParseInt(r.FormValue("quality_profile_id"), 10, 64)
-	sourceURL := strings.TrimSpace(r.FormValue("source_url"))
-	title := strings.TrimSpace(r.FormValue("title"))
-	delivery := r.FormValue("delivery_mode")
-	draftToken := strings.TrimSpace(r.FormValue("draft_token"))
+	rootID, _ := strconv.ParseInt(r.PostFormValue("root_id"), 10, 64)
+	qpID, _ := strconv.ParseInt(r.PostFormValue("quality_profile_id"), 10, 64)
+	sourceURL := strings.TrimSpace(r.PostFormValue("source_url"))
+	title := strings.TrimSpace(r.PostFormValue("title"))
+	delivery := r.PostFormValue("delivery_mode")
+	draftToken := strings.TrimSpace(r.PostFormValue("draft_token"))
 	// Monitored defaults on at create; toggle only from series list.
+	wantJSON := strings.Contains(r.Header.Get("Accept"), "application/json") ||
+		r.FormValue("response") == "json" ||
+		r.URL.Query().Get("response") == "json"
 
+	writeJSON := func(status int, v any) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(v)
+	}
 	redirErr := func(msg string) {
+		if wantJSON {
+			writeJSON(http.StatusBadRequest, map[string]string{"error": msg})
+			return
+		}
 		http.Redirect(w, r, "/?err="+urlQuery(msg)+"&add=1", http.StatusSeeOther)
+	}
+	doneOK := func(ser *library.Series, warn string) {
+		if wantJSON {
+			out := map[string]any{"id": ser.ID, "title": ser.Title}
+			if warn != "" {
+				out["warning"] = warn
+			}
+			writeJSON(http.StatusCreated, out)
+			return
+		}
+		if warn != "" {
+			http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", ser.ID, urlQuery(warn)), http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("/series/%d", ser.ID), http.StatusSeeOther)
 	}
 
 	if sourceURL != "" {
@@ -905,24 +1016,25 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 		scanCron := sched
 
 		ser, err := h.Library.CreateSeries(library.CreateSeriesParams{
-			Title:            title,
-			SourceURL:        sourceURL,
-			RootID:           rootID,
-			QualityProfileID: qpID,
-			Monitored:        true,
-			DeliveryMode:     delivery,
-			ScanCutoff:       clampPastDate(strings.TrimSpace(r.FormValue("scan_cutoff"))),
-			ScanCron:         scanCron,
-			IndexAsIgnored:   r.FormValue("index_as_ignored") == "1",
-			TitleRegexpInclude: strings.TrimSpace(r.FormValue("title_regexp_include")),
-			TitleRegexpExclude: strings.TrimSpace(r.FormValue("title_regexp_exclude")),
+			Title:                title,
+			SourceURL:            sourceURL,
+			RootID:               rootID,
+			QualityProfileID:     qpID,
+			Monitored:            true,
+			DeliveryMode:         delivery,
+			ScanCutoff:           clampPastDate(strings.TrimSpace(r.FormValue("scan_cutoff"))),
+			ScanCron:             scanCron,
+			IndexAsIgnored:       r.FormValue("index_as_ignored") == "1",
+			TitleRegexpInclude:   strings.TrimSpace(r.FormValue("title_regexp_include")),
+			TitleRegexpExclude:   strings.TrimSpace(r.FormValue("title_regexp_exclude")),
 			AutoIgnoreMediaTypes: library.NormalizeAutoIgnoreMediaTypes(r.Form["auto_ignore_media_types"]),
-			SourceLabel:      strings.TrimSpace(r.FormValue("source_label")),
+			SourceLabel:          strings.TrimSpace(r.FormValue("source_label")),
 		})
 		if err != nil {
 			redirErr(err.Error())
 			return
 		}
+		warn := ""
 		if draft.Plot != "" || draft.Studio != "" || draft.OriginalTitle != "" || len(draft.ArtFiles) > 0 ||
 			draft.UniqueIDValue != "" || len(draft.Actors) > 0 {
 			if err := h.Library.SaveSeriesMetadata(ser.ID, library.SaveSeriesMetadataParams{
@@ -936,17 +1048,13 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 				ArtSrc:        draft.ArtFiles,
 			}); err != nil {
 				slog.Warn("add series metadata save", "series_id", ser.ID, "err", err)
-				if draftToken != "" {
-					_ = h.Library.ClearAddSeriesDraft(draftToken)
-				}
-				http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", ser.ID, urlQuery("series created but metadata save failed: "+err.Error())), http.StatusSeeOther)
-				return
+				warn = "series created but metadata save failed: " + err.Error()
 			}
 		}
 		if draftToken != "" {
 			_ = h.Library.ClearAddSeriesDraft(draftToken)
 		}
-		http.Redirect(w, r, fmt.Sprintf("/series/%d", ser.ID), http.StatusSeeOther)
+		doneOK(ser, warn)
 		return
 	}
 
@@ -955,18 +1063,18 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ser, err := h.Library.CreateSeries(library.CreateSeriesParams{
-		Title:            title,
-		RootID:           rootID,
-		QualityProfileID: qpID,
-		Monitored:        true,
-		DeliveryMode:     delivery,
+		Title:                title,
+		RootID:               rootID,
+		QualityProfileID:     qpID,
+		Monitored:            true,
+		DeliveryMode:         delivery,
 		AutoIgnoreMediaTypes: library.NormalizeAutoIgnoreMediaTypes(r.Form["auto_ignore_media_types"]),
 	})
 	if err != nil {
 		redirErr(err.Error())
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/series/%d", ser.ID), http.StatusSeeOther)
+	doneOK(ser, "")
 }
 
 func (h *Handler) actionUpdateSeries(w http.ResponseWriter, r *http.Request) {
@@ -986,10 +1094,10 @@ func (h *Handler) actionUpdateSeries(w http.ResponseWriter, r *http.Request) {
 	dm := library.NormalizeDeliveryMode(r.FormValue("delivery_mode"))
 	ex := library.NormalizeAutoIgnoreMediaTypes(r.Form["auto_ignore_media_types"])
 	_, err := h.Library.UpdateSeries(sid, library.UpdateSeriesParams{
-		Title:            &title,
-		RootID:           &rootID,
-		QualityProfileID: &qpID,
-		DeliveryMode:     &dm,
+		Title:                &title,
+		RootID:               &rootID,
+		QualityProfileID:     &qpID,
+		DeliveryMode:         &dm,
 		AutoIgnoreMediaTypes: &ex,
 	})
 	if err != nil {
@@ -1050,9 +1158,9 @@ func (h *Handler) actionUpdateSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := library.UpdateSourceParams{
-		Label:         &label,
-		ScanCutoff: &cutoff,
-		ClearCutoff:   cutoff == "",
+		Label:       &label,
+		ScanCutoff:  &cutoff,
+		ClearCutoff: cutoff == "",
 	}
 	if !cur.IsSingle() {
 		if _, ok := r.Form["scan_cron"]; ok {
@@ -1326,25 +1434,6 @@ func (h *Handler) actionDownloadVideo(w http.ResponseWriter, r *http.Request) {
 	h.finishVideoAction(w, r, sid, redir, err)
 }
 
-func (h *Handler) actionPrepareStream(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	redir := r.FormValue("redirect")
-	if redir == "" {
-		redir = fmt.Sprintf("/series/%d", sid)
-	}
-	if err := h.errIfVideoDeleting(vid); err != nil {
-		h.finishVideoAction(w, r, sid, redir, err)
-		return
-	}
-	_, err := h.Library.EnqueuePackStream(vid, true)
-	if err == nil {
-		redir = appendQuery(redir, "ok=prepare-stream")
-	}
-	h.finishVideoAction(w, r, sid, redir, err)
-}
-
 func (h *Handler) actionRetrySourceErrors(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
@@ -1392,4 +1481,21 @@ func (h *Handler) actionDeleteVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.finishVideoAction(w, r, sid, appendQuery(redir, "ok=delete-queued"), nil)
+}
+
+func (h *Handler) actionDeleteVideoSidecar(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
+	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
+	fid, _ := strconv.ParseInt(r.FormValue("file_id"), 10, 64)
+	redir := strings.TrimSpace(r.FormValue("redirect"))
+	if redir == "" {
+		redir = fmt.Sprintf("/series/%d/videos/%d", sid, vid)
+	}
+	err := h.Library.DeleteVideoSidecar(vid, fid)
+	if err != nil {
+		h.finishVideoAction(w, r, sid, redir, err)
+		return
+	}
+	h.finishVideoAction(w, r, sid, appendQuery(redir, "ok=sidecar-deleted"), nil)
 }

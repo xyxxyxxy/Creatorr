@@ -20,13 +20,27 @@
     "Info" "Not stored - fills the form for review. Defaults to this video URL. May use another host for the same video."
   )}}
 
-  <form method="post" action="/actions/save-video-metadata" class="space-y-3" {{if .PrefetchPending}}aria-busy="true"{{end}}>
+  <form method="post" action="/actions/save-video-metadata" enctype="multipart/form-data" class="space-y-3" {{if .PrefetchPending}}aria-busy="true"{{end}}>
     <input type="hidden" name="series_id" value="{{.Series.ID}}" />
     <input type="hidden" name="video_id" value="{{.Video.ID}}" />
     {{if .PrefetchTaskID}}<input type="hidden" name="prefetch_task_id" value="{{.PrefetchTaskID}}" />{{end}}
     <fieldset class="space-y-3 border-0 p-0 m-0 min-w-0" {{if .PrefetchPending}}disabled{{end}}>
 
-    {{template "form_row" (dict "Name" "title" "Label" "Title" "Value" .Video.Title "Required" true)}}
+    <div class="grid gap-3 sm:grid-cols-2 items-end">
+      {{template "form_row" (dict "Name" "title" "Label" "Title" "Value" .Video.Title "Required" true)}}
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">
+          <span class="inline-flex items-center gap-1">
+            Upload date
+            {{template "field_info" (dict "Info" "UTC. Date is essential for episode numbering. Time helps order episodes released on the same day.")}}
+          </span>
+        </legend>
+        <div class="join w-full">
+          <input type="date" name="upload_date" class="input join-item grow min-w-[10rem]" value="{{.UploadDateDay}}" aria-label="Upload date" />
+          <input type="time" name="upload_time" class="input join-item w-28 shrink-0" value="{{.UploadDateTime}}" aria-label="Upload time (UTC, optional)" />
+        </div>
+      </fieldset>
+    </div>
     {{template "form_row" (dict "Type" "textarea" "Name" "plot" "Label" "Plot" "Value" .Video.Description)}}
     <div class="grid gap-3 sm:grid-cols-2">
       {{template "form_row" (dict "Name" "sorttitle" "Label" "Sort title" "Value" .Video.SortTitle)}}
@@ -46,7 +60,9 @@
         "Label" "Genres"
         "Name" "genre"
         "Singular" "genre"
-        "Items" .Video.Genres
+        "Items" .OperatorGenreItems
+        "ManagedItems" .ManagedGenreItems
+        "ManagedPipe" .ManagedGenrePipe
         "Options" .Suggestions.Genres
         "ListID" "video-meta-dl-genres"
         "Placeholder" "Add a genre"
@@ -56,7 +72,9 @@
         "Label" "Tags"
         "Name" "tag"
         "Singular" "tag"
-        "Items" .Video.Tags
+        "Items" .OperatorTagItems
+        "ManagedItems" .ManagedTagItems
+        "ManagedPipe" .ManagedTagPipe
         "Options" .Suggestions.Tags
         "ListID" "video-meta-dl-tags"
         "Placeholder" "Add a tag"
@@ -64,15 +82,38 @@
       )}}
     </div>
 
+    <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
+      <legend class="fieldset-legend text-base">Images</legend>
+      {{if .HasPackAnchor}}
+      <div class="grid gap-3 sm:grid-cols-2">
+        {{template "metadata_art_slot" (dict
+          "Role" "thumb"
+          "Label" "Thumbnail"
+          "SeriesID" .Series.ID
+          "VideoID" .Video.ID
+          "HasFile" .HasThumb
+          "ArtVersion" .ThumbMtime
+          "PrefetchPath" (index .PrefetchArt "thumb")
+          "PrefetchTaskID" .PrefetchTaskID
+          "Info" "Episode thumbnail beside packed media (stem-thumb.jpg). Save installs or clears it; Refresh sidecars re-fetches from the source."
+        )}}
+      </div>
+      {{else}}
+      <p class="text-sm opacity-70">Download the video first to edit the episode thumbnail.</p>
+      {{end}}
+    </fieldset>
+
     <p class="text-sm opacity-70">
-      Save rewrites the episode <code class="text-xs">.nfo</code> beside packed media or <code class="text-xs">.strm</code>.
-      Files are not renamed - run <strong>Apply episode format</strong> under Settings → Library → Maintenance for that.
-      Use <strong>Refresh sidecars</strong> on the video page for thumb / subs.
+      Save rewrites the episode <code class="text-xs">.nfo</code> beside packed media
+      and applies thumbnail changes.
+      Changing Upload date reindexes season/episode and renames packed files when the path changes.
+      Title alone does not rename - run 'Apply episode format' under 'Settings → Maintenance' for that.
+      Use <strong>Refresh sidecars</strong> on the video page to re-fetch thumb / subs from the source.
     </p>
     </fieldset>
 
     <div class="modal-action">
-      <label for="modal-edit-video-metadata" class="btn btn-ghost modal-cancel">Cancel</label>
+      <label for="modal-edit-video-metadata" class="btn modal-cancel">Cancel</label>
       <button type="submit" class="btn btn-primary" {{if .PrefetchPending}}disabled{{end}}>Save</button>
     </div>
   </form>

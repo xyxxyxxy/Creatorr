@@ -2,18 +2,17 @@
 {{/*
   Netscape cookie jar textarea for Domains modals.
   Optional: Label, Value, Info, Hint, EmptyHelp (alias→Hint for empty jar),
-  ShowGuide (bool - cookies.txt how-to; omit/false to hide, e.g. override modal).
+  ShowGuide (bool - cookies.txt how-to; show on Domain override Access).
 */}}
 {{$label := .Label}}{{if not $label}}{{$label = "Cookies (Netscape jar)"}}{{end}}
 {{$hint := .Hint}}{{if not $hint}}{{$hint = .EmptyHelp}}{{end}}
-{{$info := .Info}}{{if not $info}}{{$info = "Paste a Netscape cookies.txt export for this hostname (or Default). Host jar wins over Default."}}{{end}}
 <div class="w-full">
   {{template "field_input" (dict
     "Name" "cookies"
     "Label" $label
     "Type" "textarea"
     "Value" .Value
-    "Info" $info
+    "Info" .Info
     "Hint" $hint
     "Mono" true
     "InputClass" "h-28"

@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
-	"github.com/go-chi/chi/v5"
 )
 
 func (h *Handler) seriesArtFlags(ser *library.Series) library.SeriesArtFlags {
@@ -81,7 +81,7 @@ func (h *Handler) actionSaveSeriesMetadata(w http.ResponseWriter, r *http.Reques
 			artClear[role] = true
 			continue
 		}
-		if pref := strings.TrimSpace(r.FormValue("prefetch_"+role)); pref != "" && fileExistsWeb(pref) {
+		if pref := strings.TrimSpace(r.FormValue("prefetch_" + role)); pref != "" && fileExistsWeb(pref) {
 			artSrc[role] = pref
 		}
 	}

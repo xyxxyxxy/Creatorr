@@ -1,14 +1,23 @@
 {{define "metadata_art_slot"}}
 {{/*
-  Art upload slot with optional preview (saved series art, prefetch, or local file pick).
+  Art upload slot with optional preview (saved series art / video thumb, prefetch, or local file pick).
   Clear saved art: X sets clear_{Role}=1 and hides the preview wrap (do not hide the X alone).
   Expects: Role, Label, Info|Help, HasFile, SeriesID, ArtVersion (optional), PrefetchPath (optional), PrefetchTaskID (optional)
+  Optional VideoID: preview URLs use video thumb / video-meta prefetch routes instead of series art.
 */}}
 {{$preview := ""}}
 {{if .PrefetchPath}}
-  {{$preview = printf "/series/%d/metadata/prefetch/%d/art/%s" .SeriesID .PrefetchTaskID .Role}}
+  {{if .VideoID}}
+    {{$preview = printf "/series/%d/videos/%d/metadata/prefetch/%d/art/%s" .SeriesID .VideoID .PrefetchTaskID .Role}}
+  {{else}}
+    {{$preview = printf "/series/%d/metadata/prefetch/%d/art/%s" .SeriesID .PrefetchTaskID .Role}}
+  {{end}}
 {{else if .HasFile}}
-  {{$preview = printf "/series/%d/art/%s?v=%d" .SeriesID .Role .ArtVersion}}
+  {{if .VideoID}}
+    {{$preview = printf "/series/%d/videos/%d/thumb?v=%d" .SeriesID .VideoID .ArtVersion}}
+  {{else}}
+    {{$preview = printf "/series/%d/art/%s?v=%d" .SeriesID .Role .ArtVersion}}
+  {{end}}
 {{end}}
 {{$info := .Info}}{{if not $info}}{{$info = .Help}}{{end}}
 {{$canClear := and .HasFile (not .PrefetchPath)}}

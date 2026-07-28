@@ -23,7 +23,7 @@
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <button type="submit" class="btn btn-outline tooltip tooltip-top" {{if or .ScanActive (not .Series.Monitored) (not .DomainActive)}}disabled{{end}} data-tip="{{if .ScanActive}}Scan already queued or running{{else if and (not .DomainActive) .DomainDisabledTitle}}{{.DomainDisabledTitle}}{{else if not .Series.Monitored}}Turn on series monitored for Scan.{{else}}Scan for new videos{{end}}">Scan</button>
+      <button type="submit" class="btn btn-outline tooltip tooltip-top" {{if or .ScanActive (not .DomainActive)}}disabled{{end}} data-tip="{{if .ScanActive}}'Scan' already queued or running{{else if and (not .DomainActive) .DomainDisabledTitle}}{{.DomainDisabledTitle}}{{else}}Scan for new videos{{end}}">Scan</button>
     </form>
     {{end}}
     {{if .HasRetryable}}
@@ -33,10 +33,10 @@
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <button type="submit" class="btn btn-outline tooltip tooltip-top" {{if or .ScanActive (not .DomainActive)}}disabled{{end}} data-tip="{{if .ScanActive}}Scan already queued or running{{else if and (not .DomainActive) .DomainDisabledTitle}}{{.DomainDisabledTitle}}{{else if .Source.FullScanDone}}Start full scan. Keeps videos; adds new findings.{{else}}Start full scan{{end}}">Full scan</button>
+      <button type="submit" class="btn btn-outline tooltip tooltip-top" {{if or .ScanActive (not .DomainActive)}}disabled{{end}} data-tip="{{if .ScanActive}}'Full scan' already queued or running{{else if and (not .DomainActive) .DomainDisabledTitle}}{{.DomainDisabledTitle}}{{else if .Source.FullScanDone}}Start 'Full scan'. Keeps videos; adds new findings.{{else}}Start 'Full scan'{{end}}">Full scan</button>
     </form>
     <label for="modal-edit-source" class="btn btn-outline">Edit</label>
-    <label for="modal-delete-source" class="btn btn-ghost text-error">Delete</label>
+    <label for="modal-delete-source" class="btn btn-soft btn-error">Delete</label>
   </div>
 </div>
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
@@ -71,7 +71,7 @@
   {{else}}
   {{template "detail_row" (dict "Label" "Title exclude" "TdClass" "font-mono text-xs break-all")}}
   {{end}}
-  <tr><th class="w-40">Mark new videos as ignored</th><td>{{if .Source.IndexAsIgnored}}yes - new videos stay ignored until manually set to wanted{{else}}no{{end}}</td></tr>
+  <tr><th class="w-40">Discovered video status</th><td>{{if .Source.IndexAsIgnored}}Ignored - new videos stay ignored until manually set to wanted{{else}}Wanted{{end}}</td></tr>
   {{end}}
   {{if .HasScanned}}
   <tr><th class="w-40">Last scanned</th><td class="text-xs">{{if .LastHistoryID}}<a class="link link-hover tooltip tooltip-top" href="/task/{{.LastHistoryID}}" data-tip="{{.LastScannedAt}}">{{.StatusSummary}}</a>{{else}}<span class="tooltip tooltip-top" data-tip="{{.LastScannedAt}}">{{.StatusSummary}}</span>{{end}}</td></tr>
@@ -127,10 +127,9 @@
           {{end}}
     </span>
   </legend>
-  <input name="url" class="input w-full js-source-url" required value="{{.Source.URL}}" />
+  <input name="url" class="input w-full js-source-url validator" required value="{{.Source.URL}}" />
+  <p class="validator-hint hidden">Enter a valid http(s) URL with a host.</p>
 </fieldset>
-      <p class="label whitespace-normal text-error hidden js-source-url-dup">This URL is already a source on this series.</p>
-      <p class="label whitespace-normal text-error hidden js-source-url-invalid">Enter a valid http(s) URL with a host.</p>
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Name (optional)</legend>
         <input name="label" class="input w-full" value="{{if .Source.Label.Valid}}{{.Source.Label.String}}{{end}}" />
@@ -144,10 +143,11 @@
       )}}
       {{end}}
       {{if ne .Source.Kind "single"}}
-      {{template "checkbox_field" (dict "Name" "index_as_ignored" "Label" "Mark new videos as ignored" "Checked" .Source.IndexAsIgnored "Info" "Ignored videos are indexed and need to be marked as wanted before they are downloaded.")}}
       {{$cutoff := ""}}{{if .Source.ScanCutoff.Valid}}{{$cutoff = .Source.ScanCutoff.String}}{{end}}
       {{template "source_filter_fields" (dict
         "Cutoff" $cutoff
+        "CutoffID" "edit-source-scan-cutoff"
+        "IndexAsIgnored" .Source.IndexAsIgnored
         "TitleRegexpInclude" .Source.TitleRegexpInclude
         "TitleRegexpIncludeID" "edit-source-title-include"
         "TitleRegexpExclude" .Source.TitleRegexpExclude
@@ -155,7 +155,7 @@
       )}}
       {{end}}
       <div class="modal-action">
-        <label for="modal-edit-source" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-edit-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary js-source-url-submit">Save</button>
       </div>
     </form>
@@ -168,13 +168,13 @@
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Delete source</h3>
     <p class="text-sm mb-2">Removes this source and <strong>all of its indexed videos</strong> ({{.VideoCount}}) including library files on disk. Related scan/download tasks are cancelled.</p>
-    <p class="text-sm opacity-70 mb-4">To keep videos and only stop scanning, set Scan to Never or deactivate the domain under Settings → Queue.</p>
+    <p class="text-sm opacity-70 mb-4">To keep videos and only stop scanning, edit this source and turn off 'enabled' on 'Scan schedule'.</p>
     <form method="post" action="/actions/delete-source" class="space-y-3 js-confirm-submit">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       {{template "checkbox_field" (dict "Name" "confirm_delete" "Label" "Yes, I want to delete this source, including all related video files" "InputClass" "js-confirm-submit-check")}}
       <div class="modal-action">
-        <label for="modal-delete-source" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-delete-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-error" disabled>Delete source and videos</button>
       </div>
     </form>
@@ -193,7 +193,7 @@
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
       <div class="modal-action">
-        <label for="modal-retry-source" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-retry-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary">Retry</button>
       </div>
     </form>

@@ -14,7 +14,7 @@ func TestHistoryBreadcrumbs(t *testing.T) {
 	}
 
 	got = historyBreadcrumbs(ser, nil, vid, "download")
-	if len(got) != 4 || got[0].Href != "/series" || got[2].Href != "/series/1/videos/3" || got[2].Icon != "film" {
+	if len(got) != 4 || got[0].Href != "/series" || got[2].Href != "/series/1/videos/3" || got[2].Icon != EpisodeLucideIcon {
 		t.Fatalf("video path: %+v", got)
 	}
 
@@ -25,7 +25,7 @@ func TestHistoryBreadcrumbs(t *testing.T) {
 
 	// Video wins over source when both present.
 	got = historyBreadcrumbs(ser, src, vid, "download")
-	if len(got) != 4 || got[2].Icon != "film" {
+	if len(got) != 4 || got[2].Icon != EpisodeLucideIcon {
 		t.Fatalf("video preferred: %+v", got)
 	}
 }

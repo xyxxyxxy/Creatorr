@@ -17,7 +17,7 @@
         "Label" .Label
         "Type" "select"
         "Value" .Value
-        "Info" .Help
+        "Hint" .Help
         "Options" .Options
       )}}
       {{else}}
@@ -33,103 +33,92 @@
   <form method="post" action="/actions/save-domain-default" class="card-body gap-3">
     <input type="hidden" name="redirect" value="/settings/queue" />
     <h2 class="text-lg font-semibold">Domain defaults</h2>
-    <p class="text-sm opacity-60">Per-hostname queue depth and concurrency. Overrides below replace these for individual domains. Stored as domains row <code class="text-xs">default</code> (limits required; cookies optional).</p>
-    <div class="grid gap-3 md:grid-cols-2">
-      <p class="md:col-span-2 text-sm font-medium">Concurrency</p>
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Task cooldown
-            {{template "field_info" (dict "Info" "Pause after a task starts before another may start on this domain (still applies when several run in parallel).")}}
-          </span>
-        </legend>
-        <div class="join w-full">
-          <input type="number" min="0" name="task_cooldown_seconds" class="input join-item grow min-w-0" value="{{.DefaultLimits.TaskCooldownSeconds}}" required />
-          <span class="btn join-item no-animation pointer-events-none">seconds</span>
+    <p class="text-sm opacity-60">Per-hostname queue depth and concurrency. Overrides below replace these for individual domains.</p>
+    <div class="grid gap-3">
+      <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
+        <legend class="fieldset-legend">Queue</legend>
+        <div class="grid gap-3">
+          <div class="grid gap-3 md:grid-cols-2">
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Max download queue</legend>
+              <input type="number" min="1" name="max_download_queue" class="input w-full" value="{{.DefaultLimits.MaxDownloadQueue}}" required />
+              <p class="label whitespace-normal">Maximum number of download tasks to be queued for the given domain. 'Download now' user action bypasses this limit.</p>
+            </fieldset>
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Max parallel tasks</legend>
+              <input type="number" min="1" name="max_parallel_tasks" class="input w-full" value="{{.DefaultLimits.MaxParallelTasks}}" required />
+              <p class="label whitespace-normal">How many tasks may run at once on this domain. Cannot exceed 'Max download queue'.</p>
+            </fieldset>
+          </div>
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Task cooldown</legend>
+            <div class="join w-full">
+              <input type="number" min="0" name="task_cooldown_seconds" class="input join-item grow min-w-0" value="{{.DefaultLimits.TaskCooldownSeconds}}" required />
+              <span class="btn join-item no-animation pointer-events-none">seconds</span>
+            </div>
+            <p class="label whitespace-normal">Pause after a task starts before another may start (still applies when several run in parallel).</p>
+          </fieldset>
         </div>
-        <p class="label whitespace-normal">0 = no pause.</p>
       </fieldset>
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Max download queue
-            {{template "field_info" (dict "Info" "Maximum number of download tasks to be queued for the given domain. \"Download now\" user action bypasses this limit.")}}
-          </span>
-        </legend>
-        <input type="number" min="1" name="max_download_queue" class="input w-full" value="{{.DefaultLimits.MaxDownloadQueue}}" required />
-        <p class="label whitespace-normal">Per domain — not shared across hosts.</p>
-      </fieldset>
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Max parallel tasks
-            {{template "field_info" (dict "Info" "How many tasks may run at once on this hostname. Cannot exceed Max download queue.")}}
-          </span>
-        </legend>
-        <input type="number" min="1" name="max_parallel_tasks" class="input w-full" value="{{.DefaultLimits.MaxParallelTasks}}" required />
-        <p class="label whitespace-normal">1 = one task at a time (default).</p>
-      </fieldset>
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Download rate limit
-            {{template "field_info" (dict "Info" "Maximum download rate within the given domain (yt-dlp --limit-rate). Unlimited skips the flag.")}}
-          </span>
-        </legend>
-        {{template "download_rate_limit_join" (dict "Value" .DefaultLimits.DownloadRateLimit "Required" true)}}
-      </fieldset>
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Sleep between requests
-            {{template "field_info" (dict "Info" "Seconds yt-dlp waits between HTTP requests (metadata, media fragments, and subtitles) to avoid rate limits. Same value for --sleep-requests, --sleep-subtitles, and --sleep-interval.")}}
-          </span>
-        </legend>
-        <div class="join w-full">
-          <input type="number" min="0" step="any" name="sleep_requests" class="input join-item grow min-w-0" value="{{.DefaultLimits.SleepRequests}}" required />
-          <span class="btn join-item no-animation pointer-events-none">seconds</span>
+      <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
+        <legend class="fieldset-legend">yt-dlp throttling</legend>
+        <div class="grid gap-3 md:grid-cols-2">
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Download rate limit</legend>
+            {{template "download_rate_limit_join" (dict "Value" .DefaultLimits.DownloadRateLimit "Required" true)}}
+            <p class="label whitespace-normal">Maximum download rate (yt-dlp --limit-rate).</p>
+          </fieldset>
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Sleep between requests</legend>
+            <div class="join w-full">
+              <input type="number" min="0" step="any" name="sleep_requests" class="input join-item grow min-w-0" value="{{.DefaultLimits.SleepRequests}}" required />
+              <span class="btn join-item no-animation pointer-events-none">seconds</span>
+            </div>
+            <p class="label whitespace-normal">Seconds yt-dlp waits between HTTP requests (metadata, media fragments, and subtitles) to avoid rate limits. Same value for --sleep-requests, --sleep-subtitles, and --sleep-interval.</p>
+          </fieldset>
         </div>
-        <p class="label whitespace-normal">0 = off.</p>
       </fieldset>
-      <div class="md:col-span-2 space-y-3">
-        <p class="label whitespace-normal">FlareSolverr and cookies can be set on Domain defaults, but prefer a Domain override per hostname for FlareSolverr. Keep cookies per host too so expired sessions are easier to replace individually.</p>
-        {{template "checkbox_field" (dict
-          "Name" "use_flaresolverr"
-          "Label" "Use FlareSolverr"
-          "Checked" (and .DefaultLimits.UseFlareSolverr .FlareConfigured)
-          "Disabled" (not .FlareConfigured)
-          "DisabledTitle" "Set FlareSolverr URL in Settings → General first."
-          "Info" "Pass Settings → General FlareSolverr URL to yt-dlp for hosts that inherit this default."
-        )}}
-        {{template "cookie_jar_field" (dict
-          "Value" .DefaultCookies
-          "EmptyHelp" "Optional fallback jar for every hostname with no jar of its own. Empty = clear default cookies."
-          "ShowGuide" true
-        )}}
-      </div>
+      <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
+        <legend class="fieldset-legend">Access</legend>
+        <div role="alert" class="alert alert-info text-sm">
+          <span>FlareSolverr, cookies, and membership credentials are set on a 'Domain override' per domain. Use overrides to separate sessions and replace expired cookies individually.</span>
+        </div>
+      </fieldset>
     </div>
     <div class="card-actions"><button type="submit" class="btn btn-primary">Save</button></div>
   </form>
 </section>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Domain overrides" "help" "Optional per-host overrides. Hosts are not created when you add a source - add an override here or via Edit on Tasks. Empty fields inherit Domain defaults. Delete removes the override row." "add_modal" "modal-add-domain-override" "add_label" "Add override")}}
+{{template "list_header" (dict "level" "section" "title" "Domain overrides" "help" "Per-host limit and Access overrides. Empty limit fields inherit 'Domain defaults'." "add_modal" "modal-add-domain-override" "add_label" "Add override")}}
 {{if not .DomainOverrides}}
 {{template "list_empty" "No domain overrides yet."}}
 {{else}}
 {{template "list_table"}}
-<thead><tr><th>Domain</th><th>Cooldown</th><th>Queue</th><th>Tasks</th><th>Rate</th><th>Sleep</th><th>Flare</th><th>Cookies</th><th></th></tr></thead>
+<thead><tr>
+  <th>Domain</th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Max download tasks" aria-label="Max download tasks"><i data-lucide="list" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Max parallel tasks" aria-label="Max parallel tasks"><i data-lucide="layers-2" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Cooldown" aria-label="Cooldown"><i data-lucide="timer" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Rate limit" aria-label="Rate limit"><i data-lucide="download" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Sleep between requests" aria-label="Sleep between requests"><i data-lucide="snail" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Cookies" aria-label="Cookies"><i data-lucide="cookie" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Flare" aria-label="Flare"><i data-lucide="flame" class="size-4"></i></span></th>
+  <th><span class="tooltip tooltip-top inline-flex" data-tip="Credentials" aria-label="Credentials"><i data-lucide="key-round" class="size-4"></i></span></th>
+  <th></th>
+</tr></thead>
 <tbody>
   {{range .DomainOverrides}}
   <tr>
     <td class="font-mono">{{.Domain}}</td>
-    <td>{{if .CooldownOverride}}{{.CooldownOverride}}{{else}}{{template "muted" "default"}}{{end}}</td>
-    <td>{{if .QueueOverride}}{{.QueueOverride}}{{else}}{{template "muted" "default"}}{{end}}</td>
-    <td>{{if .ParallelOverride}}{{.ParallelOverride}}{{else}}{{template "muted" "default"}}{{end}}</td>
-    <td>{{if .RateOverride}}<span class="font-mono text-xs">{{.RateOverride}}</span>{{else}}{{template "muted" "default"}}{{end}}</td>
-    <td>{{if .SleepOverride}}{{.SleepOverride}}{{else}}{{template "muted" "default"}}{{end}}</td>
-    <td>{{if eq .FlareOverride "on"}}<span class="badge badge-info badge-sm">on</span>{{else if eq .FlareOverride "off"}}{{template "muted" "off"}}{{else}}{{template "muted" "default"}}{{end}}</td>
-    <td>{{if .HasCookies}}<span class="badge badge-success badge-sm">set</span>{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .QueueOverride}}{{.QueueOverride}}{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .ParallelOverride}}{{.ParallelOverride}}{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .CooldownOverride}}{{.CooldownOverride}}{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .RateOverride}}<span class="font-mono text-xs">{{.RateOverride}}</span>{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .SleepOverride}}{{.SleepOverride}}{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .HasCookies}}<span class="tooltip tooltip-top inline-flex" data-tip="Set" aria-label="Cookies set"><i data-lucide="cookie" class="size-4 text-amber-800"></i></span>{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if eq .FlareOverride "on"}}<span class="tooltip tooltip-top inline-flex" data-tip="On" aria-label="FlareSolverr on"><i data-lucide="flame" class="size-4 text-error"></i></span>{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .HasCredentials}}<span class="tooltip tooltip-top inline-flex" data-tip="Set" aria-label="Credentials set"><i data-lucide="key-round" class="size-4 text-primary"></i></span>{{else}}{{template "empty_value"}}{{end}}</td>
     <td class="whitespace-nowrap">
       <label for="modal-edit-domain-{{.Domain}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
         <i data-lucide="pencil" class="size-3.5"></i>
@@ -151,11 +140,13 @@
 {{$defs := .DefaultLimits}}
 {{$redir := "/settings/queue"}}
 {{$flareOK := .FlareConfigured}}
+{{$datalist := .DomainDatalist}}
 {{range .DomainOverrides}}
 {{template "domain_override_modal" (dict
   "Mode" "edit"
   "Redirect" $redir
   "Domain" .Domain
+  "DomainDatalist" $datalist
   "CooldownOverride" .CooldownOverride
   "QueueOverride" .QueueOverride
   "ParallelOverride" .ParallelOverride
@@ -163,13 +154,16 @@
   "SleepOverride" .SleepOverride
   "FlareOverride" .FlareOverride
   "CookieContent" .CookieContent
+  "CredentialsUsername" .CredentialsUsername
+  "CredentialsInherit" .CredentialsInherit
+  "CredentialsHasStoredPassword" .CredentialsHasStoredPassword
+  "DefaultUsername" ""
   "HasRow" .HasRow
   "DefaultCooldown" $defs.TaskCooldownSeconds
   "DefaultQueue" $defs.MaxDownloadQueue
   "DefaultParallel" $defs.MaxParallelTasks
   "DefaultRate" $defs.DownloadRateLimit
   "DefaultSleep" $defs.SleepRequests
-  "DefaultFlare" $defs.UseFlareSolverr
   "FlareConfigured" $flareOK
 )}}
 {{if .HasRow}}
@@ -177,12 +171,12 @@
 <div class="modal">
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Delete override - {{.Domain}}</h3>
-    <p class="text-sm mb-4">Removes this host’s domains row and cookie jar. Limits fall back to Domain defaults. Sources are unchanged.</p>
+    <p class="text-sm mb-4">Removes this host’s domains row and cookie jar. Limits fall back to 'Domain defaults'. Sources are unchanged.</p>
     <form method="post" action="/actions/delete-domain-override">
       <input type="hidden" name="redirect" value="{{$redir}}" />
       <input type="hidden" name="domain" value="{{.Domain}}" />
       <div class="modal-action">
-        <label for="modal-delete-domain-{{.Domain}}" class="btn btn-ghost modal-cancel">Keep</label>
+        <label for="modal-delete-domain-{{.Domain}}" class="btn modal-cancel">Keep</label>
         <button type="submit" class="btn btn-error">Delete</button>
       </div>
     </form>
@@ -201,7 +195,7 @@
   "DefaultParallel" .DefaultLimits.MaxParallelTasks
   "DefaultRate" .DefaultLimits.DownloadRateLimit
   "DefaultSleep" .DefaultLimits.SleepRequests
-  "DefaultFlare" .DefaultLimits.UseFlareSolverr
+  "DefaultUsername" ""
   "FlareConfigured" .FlareConfigured
 )}}
 

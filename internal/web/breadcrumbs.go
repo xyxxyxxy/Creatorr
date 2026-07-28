@@ -88,7 +88,7 @@ func taskBreadcrumbs(series *seriesLink, source *sourceLink, video *videoLink, k
 		if sid == 0 {
 			sid = series.ID
 		}
-		out = append(out, crumb(fmt.Sprintf("/series/%d/videos/%d", sid, video.ID), video.Title, "film"))
+		out = append(out, crumb(fmt.Sprintf("/series/%d/videos/%d", sid, video.ID), video.Title, EpisodeLucideIcon))
 	} else if source != nil {
 		out = append(out, crumb(fmt.Sprintf("/series/%d/sources/%d", series.ID, source.ID), source.Title, "rss"))
 	}

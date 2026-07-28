@@ -10,11 +10,13 @@ import (
 	"time"
 
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
+	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/events"
 	"github.com/xyxxyxxy/Creatorr/internal/exectrace"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 // Runner claims and executes tasks from the domain queue.
@@ -93,6 +95,13 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 	sid, vid := taskIDs(task)
 	r.Queue.Logs.Append(task.ID, "Running")
 	r.Events.TaskUpdated(task.ID, task.Kind, task.Domain, queue.StatusRunning, "Running", sid, vid, nil)
+	if snap, err := domains.SnapshotDomainAccess(r.Queue.DB, task.Domain); err != nil {
+		log.Warn("domain-access snapshot", "task", task.ID, "err", err)
+	} else if snap != nil {
+		if err := r.Queue.MergeDetailJSON(task.ID, map[string]any{domains.DetailKeyDomainAccess: snap}); err != nil {
+			log.Warn("domain-access persist", "task", task.ID, "err", err)
+		}
+	}
 
 	handler := r.Handlers[task.Kind]
 	progress := func(msg string, pct *float64) {
@@ -111,10 +120,27 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 		}
 		r.Queue.Logs.Append(task.ID, "$ "+line)
 	})
+	persistPOT := func(st ytdlp.POTStatus) {
+		if st.State == "" {
+			return
+		}
+		if err := r.Queue.MergeDetailJSON(task.ID, map[string]any{ytdlp.DetailKeyPOToken: st}); err != nil {
+			log.Warn("persist pot status", "task", task.ID, "err", err)
+		}
+	}
+	taskCtx = ytdlp.ContextWithPOTTracker(taskCtx,
+		func(detail string) {
+			if err := notify.POTProvider(context.WithoutCancel(taskCtx), r.Queue.DB, task.ID, task.Domain, detail); err != nil {
+				log.Warn("notify pot_provider", "task", task.ID, "err", err)
+			}
+		},
+		persistPOT,
+	)
 	r.Queue.RegisterRunning(task.ID, cancel)
 	defer func() {
 		cancel()
 		r.Queue.UnregisterRunning(task.ID)
+		r.releaseFlareIfIdle(task.Domain)
 	}()
 
 	var runErr error
@@ -122,6 +148,9 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 		runErr = fmt.Errorf("%w: %s", errUnknownKind, task.Kind)
 	} else {
 		runErr = handler(taskCtx, task, progress)
+	}
+	if st := ytdlp.POTStatusFromContext(taskCtx); st.State != "" {
+		persistPOT(st)
 	}
 
 	st, _ := r.Queue.TaskStatus(task.ID)
@@ -152,6 +181,32 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 
 	if runErr != nil {
 		code, msg := classify(runErr)
+		if code == apperrors.CodeLiveBroadcastSkipped &&
+			task.Kind == queue.KindDownload &&
+			task.VideoID.Valid && r.Library != nil {
+			doneMsg := "Skipped (currently live)"
+			_ = r.Queue.Finish(task.ID, queue.StatusDone, doneMsg, code, runErr.Error())
+			_ = r.Queue.SetDetail(task.ID, runErr.Error())
+			if err := r.Library.RecordLiveBroadcastSkipped(task.VideoID.Int64, task.ID); err != nil {
+				log.Warn("record live_skipped", "video", task.VideoID.Int64, "err", err)
+			}
+			seriesTitle, videoTitle := "", ""
+			if v, err := r.Library.GetVideo(task.VideoID.Int64); err == nil && v != nil {
+				videoTitle = v.Title
+				if ser, err := r.Library.GetSeries(v.SeriesID, false); err == nil && ser != nil {
+					seriesTitle = ser.Title
+				}
+			}
+			if err := notify.LiveSkipped(ctx, r.Queue.DB, task.ID, seriesTitle, videoTitle); err != nil {
+				log.Warn("live_skipped notify", "task", task.ID, "err", err)
+			}
+			r.Events.TaskDone(task.ID, task.Kind, task.Domain, doneMsg, sid, vid)
+			if mediaKind(task.Kind) {
+				r.maybeScheduleDigest(ctx, log)
+			}
+			log.Info("task done (live broadcast skipped)", "id", task.ID, "kind", task.Kind)
+			return
+		}
 		if code == apperrors.CodeMediaTypeExcluded && task.Kind == queue.KindDownload && task.VideoID.Valid && r.Library != nil {
 			doneMsg := "Ignored (excluded media type)"
 			_ = r.Queue.Finish(task.ID, queue.StatusDone, doneMsg, code, runErr.Error())
@@ -222,7 +277,7 @@ func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task 
 	switch code {
 	case apperrors.CodeCookieInvalid, apperrors.CodeRateLimited,
 		apperrors.CodeRemuxFailed, apperrors.CodePackFailed, apperrors.CodeMediaVerifyFailed,
-		apperrors.CodeMediaTypeExcluded:
+		apperrors.CodeMediaTypeExcluded, apperrors.CodeLiveBroadcastSkipped:
 		// keep classified code (do not re-detect remux/pack/verify into pause)
 	default:
 		if d := apperrors.DetectPauseCode(runErr.Error()); d != "" {
@@ -230,6 +285,21 @@ func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task 
 		}
 	}
 	notify.SoftPauseAndAlert(ctx, r.Queue.DB, log, task.ID, task.Domain, code, runErr.Error())
+}
+
+func (r *Runner) releaseFlareIfIdle(domain string) {
+	if r == nil || r.Queue == nil {
+		return
+	}
+	domain = strings.TrimSpace(domain)
+	if domain == "" || domain == "unknown" || domain == queue.SystemDomain {
+		return
+	}
+	busy, err := r.Queue.HasPendingOrRunningDomain(domain)
+	if err != nil || busy {
+		return
+	}
+	ytdlp.ReleaseFlareSession(context.Background(), domain)
 }
 
 var errUnknownKind = errors.New("unknown task kind")
@@ -266,25 +336,21 @@ func StubHandlers() map[string]TaskHandler {
 		}
 	}
 	return map[string]TaskHandler{
-		queue.KindScan:                stub(queue.KindScan),
-		queue.KindDownload:            stub(queue.KindDownload),
-		queue.KindCacheBeginning:      stub(queue.KindCacheBeginning),
-		queue.KindPackStream:          stub(queue.KindPackStream),
-		queue.KindRescanMetadata:      stub(queue.KindRescanMetadata),
-		queue.KindRefreshSidecars:     stub(queue.KindRefreshSidecars),
-		queue.KindImport:              stub(queue.KindImport),
-		queue.KindPrefetchSeriesMeta:  stub(queue.KindPrefetchSeriesMeta),
-		queue.KindPrefetchVideoMeta:   stub(queue.KindPrefetchVideoMeta),
-		queue.KindPrefetchAddSeries:   stub(queue.KindPrefetchAddSeries),
-		queue.KindSyncFiles:           stub(queue.KindSyncFiles),
-		queue.KindRetentionDelete:     stub(queue.KindRetentionDelete),
-		queue.KindRenameEpisodes:      stub(queue.KindRenameEpisodes),
-		queue.KindRegenerateNFO:       stub(queue.KindRegenerateNFO),
-		queue.KindRegenerateStrm:      stub(queue.KindRegenerateStrm),
-		queue.KindClearBeginningCache: stub(queue.KindClearBeginningCache),
-		queue.KindClearPlaybackCache:  stub(queue.KindClearPlaybackCache),
-		queue.KindDeleteFiles:         stub(queue.KindDeleteFiles),
-		queue.KindSponsorblockCut:     stub(queue.KindSponsorblockCut),
-		queue.KindMediaVerify:         stub(queue.KindMediaVerify),
+		queue.KindScan:               stub(queue.KindScan),
+		queue.KindDownload:           stub(queue.KindDownload),
+		queue.KindRescanMetadata:     stub(queue.KindRescanMetadata),
+		queue.KindRefreshSidecars:    stub(queue.KindRefreshSidecars),
+		queue.KindImport:             stub(queue.KindImport),
+		queue.KindPrefetchSeriesMeta: stub(queue.KindPrefetchSeriesMeta),
+		queue.KindPrefetchVideoMeta:  stub(queue.KindPrefetchVideoMeta),
+		queue.KindPrefetchAddSeries:  stub(queue.KindPrefetchAddSeries),
+		queue.KindPrefetchAddVideo:   stub(queue.KindPrefetchAddVideo),
+		queue.KindSyncFiles:          stub(queue.KindSyncFiles),
+		queue.KindRetentionDelete:    stub(queue.KindRetentionDelete),
+		queue.KindRenameEpisodes:     stub(queue.KindRenameEpisodes),
+		queue.KindRegenerateNFO:      stub(queue.KindRegenerateNFO),
+		queue.KindDeleteFiles:        stub(queue.KindDeleteFiles),
+		queue.KindSponsorblockCut:    stub(queue.KindSponsorblockCut),
+		queue.KindMediaVerify:        stub(queue.KindMediaVerify),
 	}
 }

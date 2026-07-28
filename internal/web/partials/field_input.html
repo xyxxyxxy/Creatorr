@@ -9,9 +9,13 @@
             ID, Class, InputClass, Mono, Min, Step, Max, Disabled, DisabledTitle, Readonly, ListID, Autocomplete,
             Unit (suffix after range value, e.g. "s"), ZeroLabel (range readout when value is 0),
             JoinPrefix (non-editable daisyUI join label before the text control, e.g. "Series/"),
-            JoinSuffix (non-editable daisyUI join label after the text control, e.g. ".ext").
+            JoinSuffix (non-editable daisyUI join label after the text control, e.g. ".ext"),
+            Validator (bool: daisyUI validator + hint; https://daisyui.com/components/validator/),
+            ValidatorHint (default hint text; server/JS may replace via setControlValidity).
   NoPlaceholder: omit placeholder (legend already names the field).
-  Disabled: control muted; tooltip uses DisabledTitle (else Hint). Hidden input keeps Name/Value in the form.
+  Disabled: tip wrap (DisabledTitle, else Hint); mute legend label / hint / range readout only
+            (never fieldset or tip host - docs/ui.md Tooltips). Control mute = daisyUI :disabled.
+  Hidden input keeps Name/Value in the form.
 */}}
 {{$ph := .Placeholder}}{{if and (not .NoPlaceholder) (not $ph)}}{{$ph = .Label}}{{end}}
 {{$type := .Type}}{{if not $type}}{{$type = "text"}}{{end}}
@@ -21,10 +25,14 @@
 {{$joinPrefix := .JoinPrefix}}
 {{$joinSuffix := .JoinSuffix}}
 {{$join := or $joinPrefix $joinSuffix}}
-<fieldset class="fieldset {{.Class}}{{if .Disabled}} opacity-60{{end}}">
+{{$validator := .Validator}}
+{{$vHint := .ValidatorHint}}{{if and $validator (not $vHint)}}{{$vHint = "Invalid value"}}{{end}}
+{{$vClass := ""}}{{if and $validator (not .Disabled)}}{{$vClass = " validator"}}{{end}}
+{{$mute := false}}{{if .Disabled}}{{$mute = true}}{{end}}
+<fieldset class="fieldset {{.Class}}">
   <legend class="fieldset-legend">
     <span class="inline-flex items-center gap-1">
-      {{.Label}}
+      <span{{if $mute}} class="opacity-60"{{end}}>{{.Label}}</span>
       {{if .Info}}{{template "field_info" (dict "Info" .Info)}}{{end}}
     </span>
   </legend>
@@ -41,9 +49,10 @@
   </span>
   {{else}}
   <textarea name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
-            class="textarea w-full {{if .Mono}}font-mono{{end}} {{.InputClass}}"
+            class="textarea w-full{{$vClass}} {{if .Mono}}font-mono{{end}} {{.InputClass}}"
             {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
             {{if .Required}}required{{end}}>{{.Value}}</textarea>
+  {{if $validator}}<p class="validator-hint hidden">{{$vHint}}</p>{{end}}
   {{end}}
   {{else if eq $type "select"}}
   {{if .Disabled}}
@@ -58,12 +67,13 @@
   </span>
   {{else}}
   <select name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
-          class="select w-full {{.InputClass}}"
+          class="select w-full{{$vClass}} {{.InputClass}}"
           {{if .Required}}required{{end}}>
     {{range .Options}}
     <option value="{{.Value}}" {{if eq .Value $sel}}selected{{end}}>{{.Label}}</option>
     {{end}}
   </select>
+  {{if $validator}}<p class="validator-hint hidden">{{$vHint}}</p>{{end}}
   {{end}}
   {{else if eq $type "date"}}
   {{if .Disabled}}
@@ -76,10 +86,11 @@
   </span>
   {{else}}
   <input type="date" name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
-         class="input w-full {{.InputClass}}"
+         class="input w-full{{$vClass}} {{.InputClass}}"
          {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
          value="{{.Value}}" {{if .Max}}max="{{.Max}}"{{end}}
          {{if .Required}}required{{end}} />
+  {{if $validator}}<p class="validator-hint hidden">{{$vHint}}</p>{{end}}
   {{end}}
   {{else if $range}}
   {{$unit := .Unit}}{{if not $unit}}{{$unit = ""}}{{end}}
@@ -97,7 +108,7 @@
     </span>
     {{else}}
     <input type="range" name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
-           class="range {{.InputClass}}"
+           class="range{{$vClass}} {{.InputClass}}"
            value="{{.Value}}"
            {{if .Min}}min="{{.Min}}"{{else}}min="0"{{end}}
            {{if .Max}}max="{{.Max}}"{{end}}
@@ -107,8 +118,9 @@
            {{if .ZeroLabel}}data-range-zero="{{.ZeroLabel}}"{{end}}
            {{if .Required}}required{{end}} />
     {{end}}
-    <span id="{{$outID}}" class="label tabular-nums min-w-10 justify-end">{{if and .ZeroLabel (eq .Value "0")}}{{.ZeroLabel}}{{else}}{{.Value}}{{$unit}}{{end}}</span>
+    <span id="{{$outID}}" class="label tabular-nums min-w-10 justify-end{{if $mute}} opacity-60{{end}}">{{if and .ZeroLabel (eq .Value "0")}}{{.ZeroLabel}}{{else}}{{.Value}}{{$unit}}{{end}}</span>
   </div>
+  {{if and $validator (not .Disabled)}}<p class="validator-hint hidden">{{$vHint}}</p>{{end}}
   {{else}}
   {{if $join}}
   {{if .Disabled}}
@@ -124,7 +136,7 @@
     </div>
   </span>
   {{else}}
-  <div class="join w-full">
+  <div class="join w-full{{$vClass}}">
     {{if $joinPrefix}}<span class="btn join-item no-animation pointer-events-none font-mono">{{$joinPrefix}}</span>{{end}}
     <input type="{{$type}}" name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
            class="input join-item grow min-w-0 {{if .Mono}}font-mono{{end}} {{.InputClass}}"
@@ -136,6 +148,7 @@
            {{if .Required}}required{{end}} {{if .Readonly}}readonly{{end}} />
     {{if $joinSuffix}}<span class="btn join-item no-animation pointer-events-none font-mono">{{$joinSuffix}}</span>{{end}}
   </div>
+  {{if $validator}}<p class="validator-hint hidden">{{$vHint}}</p>{{end}}
   {{end}}
   {{else if .Disabled}}
   <span class="tooltip tooltip-top block w-full" {{if $disabledTip}}data-tip="{{$disabledTip}}"{{end}}>
@@ -147,13 +160,14 @@
   </span>
   {{else}}
   <input type="{{$type}}" name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
-         class="input w-full {{if .Mono}}font-mono{{end}} {{.InputClass}}"
+         class="input w-full{{$vClass}} {{if .Mono}}font-mono{{end}} {{.InputClass}}"
          {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
          value="{{.Value}}"
          {{if .Min}}min="{{.Min}}"{{end}} {{if .Step}}step="{{.Step}}"{{end}} {{if .Max}}max="{{.Max}}"{{end}}
          {{if .ListID}}list="{{.ListID}}"{{end}}
          {{if .Autocomplete}}autocomplete="{{.Autocomplete}}"{{else if .ListID}}autocomplete="off"{{end}}
          {{if .Required}}required{{end}} {{if .Readonly}}readonly{{end}} />
+  {{if $validator}}<p class="validator-hint hidden">{{$vHint}}</p>{{end}}
   {{end}}
   {{end}}
   {{if .ListID}}
@@ -163,8 +177,8 @@
     {{end}}
   </datalist>
   {{end}}
-  {{if and .Hint (not .Disabled)}}
-  <p class="label whitespace-normal">{{.Hint}}</p>
+  {{if .Hint}}
+  <p class="label whitespace-pre-line{{if $mute}} opacity-60{{end}}">{{.Hint}}</p>
   {{end}}
 </fieldset>
 {{end}}

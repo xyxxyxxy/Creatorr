@@ -144,7 +144,7 @@ const profileSelectCols = `id, name, format_selector, maturity_redownload_hours,
 func (s *Store) ListProfiles() ([]QualityProfile, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT ` + profileSelectCols + `
-		FROM quality_profiles ORDER BY id
+		FROM quality_profiles ORDER BY name COLLATE NOCASE, id
 	`)
 	if err != nil {
 		return nil, err

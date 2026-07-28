@@ -12,14 +12,9 @@
   <legend class="fieldset-legend text-base">
     <h2 class="text-base font-semibold m-0">Maturity</h2>
   </legend>
-  <p class="label whitespace-normal">Right after upload, sites often offer only early low quality, and sidecars (especially community subtitles) may appear much later. Maturity waits a delay after the upload date, then once re-fetches media (download or stream re-pack) and/or NFO/thumb/subs when the video was first acquired before that deadline.</p>
+  <p class="label whitespace-normal">Right after upload, sites often offer only early low quality, and sidecars (especially community subtitles) may appear much later. Maturity waits a delay after the upload date, then once re-downloads media and/or NFO/thumb/subs when the video was first acquired before that deadline.</p>
   <fieldset class="fieldset">
-    <legend class="fieldset-legend">
-      <span class="inline-flex items-center gap-1">
-        <h3 class="font-semibold m-0 text-inherit">Media</h3>
-        {{template "field_info" (dict "Info" "Higher delays mean more videos still count as young at first download, so more complete re-downloads (or stream re-packs) later.")}}
-      </span>
-    </legend>
+    <legend class="fieldset-legend"><h3 class="font-semibold m-0 text-inherit">Media</h3></legend>
     <div class="flex items-center gap-3 w-full">
       <input type="range" name="maturity_media_preset" id="{{$mOut}}-range"
              class="range flex-1 min-w-0"
@@ -43,6 +38,7 @@
              data-range-zero="off" />
       <span id="{{$sOut}}" class="tabular-nums text-sm whitespace-nowrap shrink-0 min-w-44">{{if eq $sIdx 1}}1 week{{$after}}{{else if eq $sIdx 2}}2 weeks{{$after}}{{else if eq $sIdx 3}}1 month{{$after}}{{else if eq $sIdx 4}}3 months{{$after}}{{else if eq $sIdx 5}}6 months{{$after}}{{else if eq $sIdx 6}}1 year{{$after}}{{else}}off{{end}}</span>
     </div>
+    <p class="label whitespace-normal">Higher delays mean more videos still count as young at first download, so more re-downloads later.</p>
   </fieldset>
 </fieldset>
 {{end}}

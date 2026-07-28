@@ -1,5 +1,6 @@
 {{define "history_range_filters"}}
 {{/* Shared History From/To (UTC datetime-local). Dot: From, To, Hidden []{Name,Value}. Full page GET. */}}
+{{$hasRange := or .From .To}}
 <form method="get" action="/history" class="join w-full mb-0 js-keep-scroll js-list-filters" aria-label="History time range">
   {{range .Hidden}}
   <input type="hidden" name="{{.Name}}" value="{{.Value}}" />
@@ -12,5 +13,12 @@
     <span class="label">To</span>
     <input type="datetime-local" name="to" value="{{.To}}" aria-label="To (UTC)" />
   </label>
+  <span class="tooltip tooltip-top join-item" data-tip="Clear time range">
+    <a class="btn btn-square join-item{{if not $hasRange}} btn-disabled pointer-events-none{{end}}"
+       href="/history{{if .Hidden}}?{{range $i, $h := .Hidden}}{{if $i}}&{{end}}{{urlquery $h.Name}}={{urlquery $h.Value}}{{end}}{{end}}"
+       aria-label="Clear time range"{{if not $hasRange}} aria-disabled="true" tabindex="-1"{{end}}>
+      <i data-lucide="rotate-ccw" class="size-4"></i>
+    </a>
+  </span>
 </form>
 {{end}}

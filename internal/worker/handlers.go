@@ -8,9 +8,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/xyxxyxxy/Creatorr/internal/cookies"
+	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
 	"github.com/xyxxyxxy/Creatorr/internal/events"
@@ -39,21 +38,17 @@ func DefaultHandlers(d Deps) map[string]TaskHandler {
 	}
 	out[queue.KindScan] = ScanHandler(d)
 	out[queue.KindDownload] = DownloadHandler(d)
-	out[queue.KindCacheBeginning] = CacheBeginningHandler(d)
-	out[queue.KindPackStream] = PackStreamHandler(d)
 	out[queue.KindRescanMetadata] = RescanMetadataHandler(d)
 	out[queue.KindRefreshSidecars] = RefreshSidecarsHandler(d)
 	out[queue.KindImport] = ImportHandler(d)
 	out[queue.KindPrefetchSeriesMeta] = PrefetchSeriesMetaHandler(d)
 	out[queue.KindPrefetchVideoMeta] = PrefetchVideoMetaHandler(d)
 	out[queue.KindPrefetchAddSeries] = PrefetchAddSeriesHandler(d)
+	out[queue.KindPrefetchAddVideo] = PrefetchAddVideoHandler(d)
 	out[queue.KindSyncFiles] = SyncFilesHandler(d)
 	out[queue.KindRetentionDelete] = RetentionDeleteHandler(d)
 	out[queue.KindRenameEpisodes] = RenameEpisodesHandler(d)
 	out[queue.KindRegenerateNFO] = RegenerateNFOHandler(d)
-	out[queue.KindRegenerateStrm] = RegenerateStrmHandler(d)
-	out[queue.KindClearBeginningCache] = ClearBeginningCacheHandler(d)
-	out[queue.KindClearPlaybackCache] = ClearPlaybackCacheHandler(d)
 	out[queue.KindDeleteFiles] = DeleteFilesHandler(d)
 	out[queue.KindSponsorblockCut] = SponsorblockCutHandler(d)
 	out[queue.KindMediaVerify] = MediaVerifyHandler(d)
@@ -72,42 +67,6 @@ func RegenerateNFOHandler(d Deps) TaskHandler {
 	}
 }
 
-// RegenerateStrmHandler rewrites .strm URL lines (resumable).
-func RegenerateStrmHandler(d Deps) TaskHandler {
-	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
-		rewrote, skipped, failed, err := d.Library.StrmRegeneratePass(ctx, t, progress)
-		if err != nil {
-			return err
-		}
-		d.Library.RecordStrmRegenerateActivity(t.ID, rewrote, skipped, failed)
-		return nil
-	}
-}
-
-// ClearBeginningCacheHandler wipes download-beginning caches.
-func ClearBeginningCacheHandler(d Deps) TaskHandler {
-	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
-		cleared, err := d.Library.ClearBeginningCachePass(ctx, t, progress)
-		if err != nil {
-			return err
-		}
-		d.Library.RecordClearBeginningCacheActivity(t.ID, cleared)
-		return nil
-	}
-}
-
-// ClearPlaybackCacheHandler wipes progressive on-play stream caches.
-func ClearPlaybackCacheHandler(d Deps) TaskHandler {
-	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
-		cleared, err := d.Library.ClearPlaybackCachePass(ctx, t, progress)
-		if err != nil {
-			return err
-		}
-		d.Library.RecordClearPlaybackCacheActivity(t.ID, cleared)
-		return nil
-	}
-}
-
 // DeleteFilesHandler removes on-disk library files then MarkDeleted / DELETE series.
 func DeleteFilesHandler(d Deps) TaskHandler {
 	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
@@ -122,10 +81,68 @@ func DeleteFilesHandler(d Deps) TaskHandler {
 // SyncFilesHandler runs FileSyncPass on the system lane.
 func SyncFilesHandler(d Deps) TaskHandler {
 	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
-		_ = ctx
-		_, err := d.Library.FileSyncPass(t.ID, progress)
-		return err
+		if d.Library == nil {
+			return apperrors.New(apperrors.CodeInternal, "sync files deps missing")
+		}
+		res, err := d.Library.FileSyncPass(t.ID, progress)
+		if err != nil {
+			return err
+		}
+		if len(res.MissingIDs) == 0 && len(res.ExternallyChangedIDs) == 0 &&
+			len(res.SidecarMissing) == 0 && len(res.SidecarChanged) == 0 {
+			return nil
+		}
+		missing := fileSyncIssueItems(d.Library, res.MissingIDs)
+		missing = append(missing, fileSyncSidecarIssueItems(d.Library, res.SidecarMissing)...)
+		changed := fileSyncIssueItems(d.Library, res.ExternallyChangedIDs)
+		changed = append(changed, fileSyncSidecarIssueItems(d.Library, res.SidecarChanged)...)
+		_ = notify.FileSyncIssues(ctx, d.Library.DB, t.ID, missing, changed)
+		return nil
 	}
+}
+
+func fileSyncIssueItems(lib *library.Store, ids []int64) []notify.FileSyncIssueItem {
+	out := make([]notify.FileSyncIssueItem, 0, len(ids))
+	for _, id := range ids {
+		it := notify.FileSyncIssueItem{}
+		v, err := lib.GetVideo(id)
+		if err == nil && v != nil {
+			it.Title = v.Title
+			if ser, serr := lib.GetSeries(v.SeriesID, false); serr == nil && ser != nil {
+				it.Series = ser.Title
+			}
+		}
+		out = append(out, it)
+	}
+	return out
+}
+
+func fileSyncSidecarIssueItems(lib *library.Store, issues []library.FileSyncSidecarIssue) []notify.FileSyncIssueItem {
+	out := make([]notify.FileSyncIssueItem, 0, len(issues))
+	for _, si := range issues {
+		it := notify.FileSyncIssueItem{Detail: sidecarIssueDetail(si.Kind, si.Path)}
+		v, err := lib.GetVideo(si.VideoID)
+		if err == nil && v != nil {
+			it.Title = v.Title
+			if ser, serr := lib.GetSeries(v.SeriesID, false); serr == nil && ser != nil {
+				it.Series = ser.Title
+			}
+		}
+		out = append(out, it)
+	}
+	return out
+}
+
+func sidecarIssueDetail(kind, path string) string {
+	kind = strings.TrimSpace(kind)
+	base := filepath.Base(strings.TrimSpace(path))
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		return kind
+	}
+	if kind == "" {
+		return base
+	}
+	return kind + ": " + base
 }
 
 // RetentionDeleteHandler runs RetentionPurgePass on the system lane.
@@ -154,554 +171,6 @@ func RenameEpisodesHandler(d Deps) TaskHandler {
 	}
 }
 
-// PackStreamHandler writes .strm + NFO for stream proxy delivery.
-func PackStreamHandler(d Deps) TaskHandler {
-	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
-		if d.Library == nil {
-			return apperrors.New(apperrors.CodeInternal, "pack stream deps missing")
-		}
-		if !t.VideoID.Valid {
-			return apperrors.New(apperrors.CodePackFailed, "pack stream task missing video_id")
-		}
-		videoID := t.VideoID.Int64
-		progress("Resolving stream…", nil)
-		resolved, err := resolveStreamForPack(ctx, d, videoID)
-		runtimeSec := 0
-		if err == nil {
-			runtimeSec = resolved.RuntimeSec
-			ignored, ierr := ApplyPackStreamAutoIgnore(d.Library, resolved.SeriesID, videoID, t.ID, resolved.MediaType)
-			if ierr != nil {
-				return ierr
-			}
-			if ignored {
-				msg := "Ignored (auto-ignore media type: " + library.NormalizeMediaType(resolved.MediaType) + ")"
-				progress(msg, nil)
-				if d.Library.Queue != nil {
-					_ = d.Library.Queue.UpdateProgress(t.ID, msg, nil)
-				}
-				// No pack_stream files, no cache_beginning.
-				return nil
-			}
-			_ = d.Library.SetStreamMeta(videoID, resolved.Kind, runtimeSec, 0, 0, 0)
-			if runtimeSec > 0 {
-				_ = d.Library.SetDurationSeconds(videoID, runtimeSec)
-			}
-		}
-		progress("Writing stream files…", nil)
-		var subSrcs []string
-		subOpts, _ := settings.GetSubtitleOpts(d.Library.DB)
-		if len(subOpts.Langs) > 0 {
-			progress("Fetching subtitles…", nil)
-			fetched, cleanup, ferr := fetchPackStreamSubs(ctx, d, videoID, t.Domain)
-			if cleanup != nil {
-				defer cleanup()
-			}
-			if ferr == nil {
-				subSrcs = fetched
-			}
-		}
-		sbWarn := ""
-		var streamPlan sponsorblock.AppliedCutPlan
-		dlctx, _ := d.Library.PrepareDownload(videoID)
-		if dlctx != nil && len(sponsorblock.NormalizeCategoryList(dlctx.Profile.SponsorBlockRemove)) > 0 {
-			progress("SponsorBlock…", nil)
-			plan, warn, _ := sponsorblock.BuildStreamPlan(ctx, dlctx.URL, dlctx.Video.RemoteID, dlctx.Profile.SponsorBlockConfig(), float64(runtimeSec))
-			sbWarn = warn
-			streamPlan = plan
-			if plan.HasCuts() {
-				playDur := sponsorblock.PlaybackDuration(float64(runtimeSec), plan)
-				if playDur > 0 {
-					runtimeSec = int(playDur + 0.5)
-				}
-				sponsorblock.RemapSubtitleFiles(subSrcs, plan.Cuts(), plan.CardDurationSec, plan.InfoCards)
-			}
-		}
-		if err := d.Library.PackStreamForVideo(videoID, t.ID, runtimeSec, subSrcs); err != nil {
-			return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "pack stream failed"), err.Error())
-		}
-		if strm, ok, _ := d.Library.HasPackAnchor(videoID); ok {
-			if streamPlan.HasCuts() {
-				if pp, err := sponsorblock.WritePlan(strm, streamPlan); err == nil {
-					_ = d.Library.RegisterFileKind(videoID, pp, "sponsorblock")
-				}
-			} else {
-				// Clear stale play-skip sidecar when remove empty / no cuts.
-				old := sponsorblock.PlanPath(strm)
-				_ = os.Remove(old)
-				_, _ = d.Library.DB.SQL.Exec(`DELETE FROM files WHERE video_id = ? AND kind = 'sponsorblock'`, videoID)
-			}
-		}
-		if library.TaskPayloadMaturity(t.Payload) {
-			_ = d.Library.AddVideoHistory(videoID, "maturity_repacked", "Maturity stream re-pack", map[string]any{}, t.ID)
-		}
-		if _, err := d.Library.EnqueueCacheBeginning(videoID); err != nil {
-			_ = err
-		}
-		if sbWarn != "" {
-			progress(sbWarn, nil)
-			if d.Library.Queue != nil {
-				_ = d.Library.Queue.UpdateProgress(t.ID, sbWarn, nil)
-			}
-		} else {
-			progress("Done", nil)
-		}
-		return nil
-	}
-}
-
-// ApplyPackStreamAutoIgnore marks the video ignored when media_type is listed on the series.
-// Empty media_type never auto-ignores. Returns ignored=true when pack + beginning must not run.
-func ApplyPackStreamAutoIgnore(lib *library.Store, seriesID, videoID, taskID int64, mediaType string) (ignored bool, err error) {
-	if lib == nil {
-		return false, nil
-	}
-	mt := library.NormalizeMediaType(mediaType)
-	if mt == "" {
-		return false, nil
-	}
-	_ = lib.SetMediaType(videoID, mt)
-	exclude, xerr := lib.SeriesAutoIgnoreMediaTypes(seriesID)
-	if xerr != nil || !library.MediaTypeExcluded(exclude, mt) {
-		return false, nil
-	}
-	if err := lib.MarkIgnoredMediaType(videoID, taskID, mt); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-// CacheBeginningHandler caches the first N seconds of a streamable video under CacheDir.
-func CacheBeginningHandler(d Deps) TaskHandler {
-	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
-		if d.Library == nil {
-			return apperrors.New(apperrors.CodeInternal, "download beginning deps missing")
-		}
-		if !t.VideoID.Valid {
-			return apperrors.New(apperrors.CodeDownloadFailed, "download beginning task missing video_id")
-		}
-		videoID := t.VideoID.Int64
-		wantSec, err := settings.CacheBeginningSeconds(d.Library.DB)
-		if err != nil {
-			return err
-		}
-		if wantSec <= 0 {
-			progress("Disabled", ptrFloat(1))
-			return nil
-		}
-		cur, err := d.Library.GetVideo(videoID)
-		if err != nil {
-			return err
-		}
-		if cur.Status != "streamable" {
-			return apperrors.New(apperrors.CodeDownloadFailed, "video not streamable")
-		}
-		dlctx, err := d.Library.PrepareDownload(videoID)
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(dlctx.URL) == "" {
-			return apperrors.New(apperrors.CodeDownloadFailed, "video has no source_url")
-		}
-		if d.YtDlp == nil {
-			return apperrors.New(apperrors.CodeInternal, "yt-dlp client missing")
-		}
-		tmpRoot := d.TmpRoot
-		if tmpRoot == "" {
-			tmpRoot = os.TempDir()
-		}
-		work, err := os.MkdirTemp(tmpRoot, "creatorr-begin-*")
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(work)
-		progress("Resolving cookies…", ptrFloat(0.05))
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, dlctx.URL)
-		if err != nil {
-			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
-		}
-		flare, err := domains.FlareSolverrURL(d.Library.DB, t.Domain)
-		if err != nil {
-			return err
-		}
-		progress("Resolving stream URLs…", ptrFloat(0.15))
-		urls, err := d.YtDlp.FetchUrls(ctx, ytdlp.UrlsOpts{
-			URL:             dlctx.URL,
-			FormatSelector:  dlctx.FormatSelector,
-			CookiesPath:     jar,
-			FlareSolverrURL: flare,
-		})
-		if err != nil {
-			return err
-		}
-		if urls.Kind != ytdlp.UrlsKindPipe {
-			// Soft skip: beginning cache is for pipe mux only (CDN HLS/progressive skip beginning).
-			_ = d.Library.SetStreamURLsKind(videoID, urls.Kind)
-			progress("Skipped (CDN direct - no beginning needed)", ptrFloat(1))
-			return nil
-		}
-		_ = d.Library.SetStreamURLsKind(videoID, ytdlp.UrlsKindPipe)
-
-		sourceDur := urls.DurationSeconds
-		if sourceDur <= 0 && cur.DurationSeconds.Valid {
-			sourceDur = float64(cur.DurationSeconds.Int64)
-		}
-		plan, hasPlan := sponsorblock.AppliedCutPlan{}, false
-		if strm, ok, _ := d.Library.HasPackAnchor(videoID); ok {
-			if p, found, _ := sponsorblock.ReadPlan(strm); found && p.HasCuts() {
-				plan, hasPlan = p, true
-			}
-		}
-
-		hlsDir := filepath.Join(work, "hls")
-		if err := os.MkdirAll(hlsDir, 0o755); err != nil {
-			return err
-		}
-		progress("Muxing beginning…", ptrFloat(0.25))
-
-		var got float64
-		handoffSrc := float64(wantSec)
-		if hasPlan {
-			windows := sponsorblock.TipSourceWindows(float64(wantSec), sourceDur, plan)
-			var keepWins []sponsorblock.PlayPiece
-			for _, w := range windows {
-				if w.Kind == "keep" && w.PlayDur > 0.05 {
-					keepWins = append(keepWins, w)
-				}
-			}
-			if len(keepWins) == 0 {
-				progress("Skipped (beginning window empty after SponsorBlock)", ptrFloat(1))
-				return nil
-			}
-			segNum := 0
-			var playlist strings.Builder
-			playlist.WriteString("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n")
-			for wi, win := range keepWins {
-				partDir := filepath.Join(work, fmt.Sprintf("hls-part-%d", wi))
-				_ = os.MkdirAll(partDir, 0o755)
-				muxCtx, cancel := context.WithCancel(ctx)
-				opts := ytdlp.StreamOptsFromUrls(ytdlp.StreamOpts{
-					URL: dlctx.URL, FormatSelector: dlctx.FormatSelector,
-					CookiesPath: jar, FlareSolverrURL: flare, HLSDir: partDir,
-					HLSStartSec: win.Start, HLSMaxSec: win.End - win.Start,
-				}, urls)
-				done, err := d.YtDlp.StartHLSStream(muxCtx, opts)
-				if err != nil {
-					cancel()
-					return apperrors.WithDetail(apperrors.New(apperrors.CodeDownloadFailed, "hls start failed"), err.Error())
-				}
-				deadline := time.Now().Add(3 * time.Minute)
-				wantPart := win.PlayDur
-				for {
-					sum := playlistEXTINFSum(filepath.Join(partDir, "index.m3u8"))
-					if sum >= wantPart*0.85 {
-						break
-					}
-					select {
-					case <-done:
-						sum = playlistEXTINFSum(filepath.Join(partDir, "index.m3u8"))
-						if sum >= wantPart*0.4 {
-							goto partDone
-						}
-						cancel()
-						return apperrors.New(apperrors.CodeDownloadFailed, "hls beginning part ended early")
-					case <-time.After(200 * time.Millisecond):
-						if time.Now().After(deadline) {
-							cancel()
-							return apperrors.New(apperrors.CodeDownloadFailed, "timeout waiting for beginning part")
-						}
-					case <-ctx.Done():
-						cancel()
-						return ctx.Err()
-					}
-				}
-			partDone:
-				cancel()
-				select {
-				case <-done:
-				case <-time.After(2 * time.Second):
-				}
-				n, partSum, err := appendBeginningSegments(partDir, hlsDir, &playlist, &segNum)
-				_ = n
-				if err != nil {
-					return err
-				}
-				got += partSum
-				progress(fmt.Sprintf("Muxing beginning… %.0fs", got), ptrFloat(0.25+0.6*got/float64(wantSec)))
-				if got >= float64(wantSec)*0.95 {
-					break
-				}
-			}
-			playlist.WriteString("#EXT-X-ENDLIST\n")
-			if err := os.WriteFile(filepath.Join(hlsDir, "index.m3u8"), []byte(playlist.String()), 0o644); err != nil {
-				return err
-			}
-			handoffSrc = sponsorblock.SourceOffsetForPlay(got, sourceDur, plan)
-		} else {
-			muxCtx, cancel := context.WithCancel(ctx)
-			defer cancel()
-			opts := ytdlp.StreamOptsFromUrls(ytdlp.StreamOpts{
-				URL: dlctx.URL, FormatSelector: dlctx.FormatSelector,
-				CookiesPath: jar, FlareSolverrURL: flare, HLSDir: hlsDir,
-				HLSMaxSec: float64(wantSec) + 2,
-			}, urls)
-			done, err := d.YtDlp.StartHLSStream(muxCtx, opts)
-			if err != nil {
-				return apperrors.WithDetail(apperrors.New(apperrors.CodeDownloadFailed, "hls start failed"), err.Error())
-			}
-			deadline := time.Now().Add(3 * time.Minute)
-			enough := false
-			for !enough {
-				if err := ctx.Err(); err != nil {
-					cancel()
-					return err
-				}
-				got = playlistEXTINFSum(filepath.Join(hlsDir, "index.m3u8"))
-				if got >= float64(wantSec) {
-					enough = true
-					break
-				}
-				select {
-				case err := <-done:
-					got = playlistEXTINFSum(filepath.Join(hlsDir, "index.m3u8"))
-					if got >= float64(wantSec)*0.5 {
-						enough = true
-						break
-					}
-					if err != nil {
-						return apperrors.WithDetail(apperrors.New(apperrors.CodeDownloadFailed, "hls ended early"), err.Error())
-					}
-					return apperrors.New(apperrors.CodeDownloadFailed, "hls ended before beginning duration")
-				case <-time.After(200 * time.Millisecond):
-					if time.Now().After(deadline) {
-						cancel()
-						return apperrors.New(apperrors.CodeDownloadFailed, "timeout waiting for beginning segments")
-					}
-					frac := got / float64(wantSec)
-					if frac > 0.95 {
-						frac = 0.95
-					}
-					progress(fmt.Sprintf("Muxing beginning… %.0fs", got), ptrFloat(0.25+0.6*frac))
-				}
-			}
-			cancel()
-			select {
-			case <-done:
-			case <-time.After(2 * time.Second):
-			}
-			handoffSrc = got
-		}
-		progress("Persisting beginning…", ptrFloat(0.9))
-		dest := d.Library.BeginningDir(videoID)
-		_ = os.RemoveAll(dest)
-		if err := copyBeginningDir(hlsDir, dest); err != nil {
-			return apperrors.WithDetail(apperrors.New(apperrors.CodeDownloadFailed, "persist beginning failed"), err.Error())
-		}
-		if got <= 0 {
-			got = float64(wantSec)
-		}
-		if err := d.Library.WriteBeginningMetaHandoff(videoID, got, handoffSrc); err != nil {
-			_ = os.RemoveAll(dest)
-			return err
-		}
-		_ = d.Library.AddVideoHistory(videoID, "beginning_cached", "Beginning cached", map[string]any{
-			"duration_seconds": got, "handoff_source_seconds": handoffSrc,
-		}, t.ID)
-		progress("Done", ptrFloat(1))
-		return nil
-	}
-}
-
-func playlistEXTINFSum(path string) float64 {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0
-	}
-	var sum float64
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "#EXTINF:") {
-			continue
-		}
-		rest := strings.TrimPrefix(line, "#EXTINF:")
-		if i := strings.IndexByte(rest, ','); i >= 0 {
-			rest = rest[:i]
-		}
-		f, err := strconv.ParseFloat(strings.TrimSpace(rest), 64)
-		if err == nil {
-			sum += f
-		}
-	}
-	return sum
-}
-
-// appendBeginningSegments copies media segments from partDir into destDir with renumbered names
-// and appends EXTINF lines to playlist. segNum is the next segment index.
-func appendBeginningSegments(partDir, destDir string, playlist *strings.Builder, segNum *int) (int, float64, error) {
-	data, err := os.ReadFile(filepath.Join(partDir, "index.m3u8"))
-	if err != nil {
-		return 0, 0, err
-	}
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return 0, 0, err
-	}
-	var sum float64
-	n := 0
-	lines := strings.Split(string(data), "\n")
-	var pendingDur string
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "#EXTINF:") {
-			pendingDur = trimmed
-			rest := strings.TrimPrefix(trimmed, "#EXTINF:")
-			if i := strings.IndexByte(rest, ','); i >= 0 {
-				rest = rest[:i]
-			}
-			if f, err := strconv.ParseFloat(strings.TrimSpace(rest), 64); err == nil {
-				sum += f
-			}
-			continue
-		}
-		if pendingDur == "" || trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		src := filepath.Join(partDir, trimmed)
-		if !fileExistsLocal(src) {
-			// URI may be absolute path within dir
-			src = filepath.Join(partDir, filepath.Base(trimmed))
-		}
-		ext := filepath.Ext(trimmed)
-		if ext == "" {
-			ext = ".ts"
-		}
-		name := fmt.Sprintf("seg%05d%s", *segNum, ext)
-		*segNum++
-		b, err := os.ReadFile(src)
-		if err != nil {
-			return n, sum, err
-		}
-		if err := os.WriteFile(filepath.Join(destDir, name), b, 0o644); err != nil {
-			return n, sum, err
-		}
-		playlist.WriteString(pendingDur)
-		playlist.WriteByte('\n')
-		playlist.WriteString(name)
-		playlist.WriteByte('\n')
-		pendingDur = ""
-		n++
-	}
-	return n, sum, nil
-}
-
-func fileExistsLocal(p string) bool {
-	st, err := os.Stat(p)
-	return err == nil && !st.IsDir()
-}
-
-func copyBeginningDir(src, dest string) error {
-	if err := os.MkdirAll(dest, 0o755); err != nil {
-		return err
-	}
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		low := strings.ToLower(name)
-		if name == "cookies.txt" {
-			continue
-		}
-		if !strings.HasSuffix(low, ".m3u8") && !strings.HasSuffix(low, ".ts") &&
-			!strings.HasSuffix(low, ".m4s") && !strings.HasSuffix(low, ".mp4") {
-			continue
-		}
-		in, err := os.ReadFile(filepath.Join(src, name))
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(dest, name), in, 0o644); err != nil {
-			return err
-		}
-	}
-	if st, err := os.Stat(filepath.Join(dest, "index.m3u8")); err != nil || st.Size() == 0 {
-		return fmt.Errorf("missing index.m3u8 after copy")
-	}
-	return nil
-}
-
-type packStreamResolve struct {
-	RuntimeSec int
-	MediaType  string
-	SeriesID   int64
-	Kind       string // urls kind; written only after auto-ignore check
-}
-
-func resolveStreamForPack(ctx context.Context, d Deps, videoID int64) (packStreamResolve, error) {
-	var out packStreamResolve
-	dlctx, err := d.Library.PrepareDownload(videoID)
-	if err != nil {
-		return out, err
-	}
-	out.SeriesID = dlctx.Video.SeriesID
-	if strings.TrimSpace(dlctx.URL) == "" {
-		return out, fmt.Errorf("no url")
-	}
-	if d.YtDlp == nil {
-		return out, apperrors.New(apperrors.CodeInternal, "yt-dlp client missing")
-	}
-	tmpRoot := d.TmpRoot
-	if tmpRoot == "" {
-		tmpRoot = os.TempDir()
-	}
-	work, err := os.MkdirTemp(tmpRoot, "creatorr-packstream-*")
-	if err != nil {
-		return out, err
-	}
-	defer os.RemoveAll(work)
-	jar, err := cookies.TempJarForURL(d.Library.DB, work, dlctx.URL)
-	if err != nil {
-		return out, err
-	}
-	flare, err := domains.FlareSolverrURL(d.Library.DB, queue.DomainFromURL(dlctx.URL))
-	if err != nil {
-		return out, err
-	}
-	urls, err := d.YtDlp.FetchUrls(ctx, ytdlp.UrlsOpts{
-		URL:             dlctx.URL,
-		FormatSelector:  dlctx.FormatSelector,
-		CookiesPath:     jar,
-		FlareSolverrURL: flare,
-	})
-	if err != nil {
-		return out, err
-	}
-	out.MediaType = library.NormalizeMediaType(urls.MediaType)
-	kind := strings.TrimSpace(strings.ToLower(urls.Kind))
-	if kind == "" {
-		kind = ytdlp.UrlsKindProgressive
-	}
-	out.Kind = kind
-	if urls.DurationSeconds > 0 {
-		out.RuntimeSec = int(urls.DurationSeconds + 0.5)
-		return out, nil
-	}
-	// Fallback: resolve metadata for duration (and media_type if still unknown).
-	e, err := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
-		URL: dlctx.URL, CookiesPath: jar, FlareSolverrURL: flare,
-	})
-	if err != nil || e.Duration <= 0 {
-		return out, err
-	}
-	if out.MediaType == "" {
-		out.MediaType = library.NormalizeMediaType(e.MediaType)
-	}
-	out.RuntimeSec = int(e.Duration + 0.5)
-	return out, nil
-}
-
 // ImportHandler installs a file from the import inbox into the series library folder,
 // or binds a library orphan in place (no move).
 func ImportHandler(d Deps) TaskHandler {
@@ -718,6 +187,7 @@ func ImportHandler(d Deps) TaskHandler {
 			Mode    string   `json:"mode"`
 			InPlace bool     `json:"in_place"`
 			Verify  bool     `json:"verify"`
+			Replace bool     `json:"replace"`
 		}
 		if err := json.Unmarshal([]byte(t.Payload), &payload); err != nil {
 			return apperrors.New(apperrors.CodeImportFailed, "import task missing path")
@@ -749,22 +219,47 @@ func ImportHandler(d Deps) TaskHandler {
 		if payload.InPlace {
 			inPlace = true
 		}
-		if _, ok, err := d.Library.HasVideoFile(t.VideoID.Int64); err != nil {
+		if path, ok, err := d.Library.HasVideoFile(t.VideoID.Int64); err != nil {
 			return err
-		} else if ok {
+		} else if ok && !payload.Replace {
 			return apperrors.New(apperrors.CodeConflict, "video already has a file on disk")
+		} else if ok && payload.Replace {
+			// Drop existing pack so CompleteImport / PackMedia can install the replacement.
+			progress("Removing existing media…", ptrFloat(0.15))
+			_ = os.Remove(path)
+			oldRows, qerr := d.Library.DB.SQL.Query(`SELECT path FROM files WHERE video_id = ?`, t.VideoID.Int64)
+			if qerr == nil && oldRows != nil {
+				for oldRows.Next() {
+					var p string
+					if oldRows.Scan(&p) == nil && p != "" && p != path && p != abs {
+						_ = os.Remove(p)
+					}
+				}
+				_ = oldRows.Close()
+			}
 		}
 
 		if inPlace {
 			progress("Binding library file…", ptrFloat(0.5))
-			nfoPath, infoPath := library.SidecarPathsBeside(abs)
+			nfoBeside, infoPath := library.SidecarPathsBeside(abs)
 			meta := library.MediaCompleteMeta{
 				Tool:      "import",
 				ImportSrc: abs,
 				InPlace:   true,
 			}
-			if err := d.Library.CompleteImport(t.VideoID.Int64, abs, nfoPath, infoPath, meta, t.ID); err != nil {
+			// Do not register a foreign .nfo as library provenance - apply metadata then regenerate.
+			if err := d.Library.CompleteImport(t.VideoID.Int64, abs, "", infoPath, meta, t.ID); err != nil {
 				return err
+			}
+			if nfoBeside != "" {
+				if err := d.Library.ApplyImportNFO(t.VideoID.Int64, nfoBeside, t.ID); err != nil {
+					return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "apply nfo failed"), err.Error())
+				}
+			} else {
+				_ = d.Library.SoftFillDurationFromMedia(ctx, t.VideoID.Int64, abs)
+				if _, err := d.Library.RewriteVideoNFO(t.VideoID.Int64, 0); err != nil {
+					return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "write nfo failed"), err.Error())
+				}
 			}
 			if payload.Verify {
 				_ = d.Library.CancelMediaVerifyForVideo(t.VideoID.Int64, "Superseded by import")
@@ -813,23 +308,59 @@ func ImportHandler(d Deps) TaskHandler {
 				break
 			}
 		}
+		srcNFO := strings.TrimSuffix(abs, filepath.Ext(abs)) + ".nfo"
+		if _, err := os.Stat(srcNFO); err != nil {
+			srcNFO = ""
+		}
+		if srcNFO != "" {
+			if err := d.Library.ApplyImportNFOMetadata(t.VideoID.Int64, srcNFO); err != nil {
+				return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "apply nfo failed"), err.Error())
+			}
+			if err := d.Library.AddVideoHistory(t.VideoID.Int64, "nfo_applied", "Episode metadata applied from NFO; library NFO regenerated", map[string]any{
+				"source": srcNFO,
+			}, t.ID); err != nil {
+				return err
+			}
+		}
 		progress("Installing to library…", ptrFloat(0.5))
+		dlctx, err = d.Library.PrepareDownload(t.VideoID.Int64)
+		if err != nil {
+			return err
+		}
 		aired := ""
 		if dlctx.Video.UploadDate.Valid {
 			aired = dlctx.Video.UploadDate.String
 		}
+		uidVal := strings.TrimSpace(dlctx.Video.UniqueIDValue)
+		if uidVal == "" {
+			uidVal = dlctx.Video.RemoteID
+		}
+		uidType := strings.TrimSpace(dlctx.Video.UniqueIDType)
+		if uidType == "" {
+			uidType = "yt-dlp"
+		}
 		mediaPath, nfoPath, infoPath, _, _, err := library.PackMedia(
 			abs, dlctx.RootPath,
 			library.EpisodeNFO{
-				SeriesTitle: dlctx.SeriesTitle,
-				Title:       dlctx.Video.Title,
-				Season:      season,
-				Episode:     episode,
-				Plot:        dlctx.Video.Description,
-				Aired:       aired,
-				UniqueID:    dlctx.Video.RemoteID,
-				SourceSite:  "yt-dlp",
-				Domain:      library.NamingDomain(dlctx.URL),
+				SeriesTitle:   dlctx.SeriesTitle,
+				Title:         dlctx.Video.Title,
+				SortTitle:     dlctx.Video.SortTitle,
+				OriginalTitle: dlctx.Video.OriginalTitle,
+				Season:        season,
+				Episode:       episode,
+				Plot:          dlctx.Video.Description,
+				Tagline:       dlctx.Video.Tagline,
+				Studio:        dlctx.Video.Studio,
+				Genres:        dlctx.Video.Genres,
+				Tags:          dlctx.Video.Tags,
+				Actors:        dlctx.Video.Actors,
+				Country:       dlctx.Video.Country,
+				MPAA:          dlctx.Video.MPAA,
+				Aired:         aired,
+				UniqueID:      uidVal,
+				UniqueIDType:  uidType,
+				SourceSite:    uidType,
+				Domain:        library.NamingDomain(dlctx.URL),
 			},
 			library.LoadNamingConfig(d.Library.DB), infoSrc, "", nil,
 		)
@@ -850,6 +381,11 @@ func ImportHandler(d Deps) TaskHandler {
 		}
 		if err := d.Library.CompleteImport(t.VideoID.Int64, mediaPath, nfoPath, infoPath, meta, t.ID); err != nil {
 			return err
+		}
+		// NFO soft-fill already ran above when present; ffprobe when duration still empty.
+		_ = d.Library.SoftFillDurationFromMedia(ctx, t.VideoID.Int64, mediaPath)
+		if _, err := d.Library.RewriteVideoNFO(t.VideoID.Int64, 0); err != nil {
+			return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "write nfo failed"), err.Error())
 		}
 		if payload.Verify {
 			_ = d.Library.CancelMediaVerifyForVideo(t.VideoID.Int64, "Superseded by import")
@@ -907,7 +443,7 @@ func ScanHandler(d Deps) TaskHandler {
 		}
 		defer os.RemoveAll(work)
 
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, src.URL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, src.URL)
 		if err != nil {
 			mode := library.SourceHistModeScan
 			if !src.FullScanDone {
@@ -989,7 +525,7 @@ func ScanHandler(d Deps) TaskHandler {
 			nEntries := len(entries)
 			for i, e := range entries {
 				upload := library.NormalizeUploadTime(e.UploadDate)
-				if library.BeforeOrOnCutoff(upload, cutoff) {
+				if library.BeforeCutoff(upload, cutoff) {
 					hitCutoff = true
 					break // discard this and older; do not index
 				}
@@ -1012,7 +548,7 @@ func ScanHandler(d Deps) TaskHandler {
 			nEntries := len(entries)
 			for i, e := range entries {
 				upload := library.NormalizeUploadTime(e.UploadDate)
-				if library.BeforeOrOnCutoff(upload, cutoff) {
+				if library.BeforeCutoff(upload, cutoff) {
 					hitCutoff = true
 					break // past cutoff; nothing newer left in newest-first list
 				}
@@ -1065,7 +601,7 @@ func ScanHandler(d Deps) TaskHandler {
 			scanMsg += fmt.Sprintf(", %d ignored by media type", n)
 		}
 		if n := len(ignoredIndexAsIgnoredIDs); n > 0 {
-			scanMsg += fmt.Sprintf(", %d marked new as ignored", n)
+			scanMsg += fmt.Sprintf(", %d marked as ignored", n)
 		}
 
 		histDetail := map[string]any{
@@ -1084,16 +620,8 @@ func ScanHandler(d Deps) TaskHandler {
 		_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanned, scanMsg, histDetail, t.ID)
 
 		msg := scanMsg
-		if fullScan {
-			msg += " [full]"
-			if hitCutoff {
-				msg += " cutoff reached"
-			}
-		} else {
-			msg += " [scan]"
-			if hitCutoff {
-				msg += " cutoff reached"
-			}
+		if hitCutoff {
+			msg += ", cutoff reached"
 		}
 		detailBytes, _ := json.Marshal(map[string]any{
 			"created":                      created,
@@ -1113,14 +641,6 @@ func ScanHandler(d Deps) TaskHandler {
 		_ = d.Library.Queue.SetDetail(t.ID, string(detailBytes))
 		progress(msg, ptrFloat(1))
 
-		if !fullScan && len(createdIDs) > 0 {
-			if on, err := settings.DownloadNewOnScan(d.Library.DB); err == nil && on {
-				if _, err := d.Library.EnqueueTipScanDownloads(seriesID, createdIDs); err != nil {
-					// Index succeeded; leftover wanted wait for download-wanted cron.
-					_ = err
-				}
-			}
-		}
 		return nil
 	}
 }
@@ -1174,37 +694,38 @@ func DownloadHandler(d Deps) TaskHandler {
 		defer os.RemoveAll(work)
 
 		progress("Resolving cookies…", nil)
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, dlctx.URL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, dlctx.URL)
 		if err != nil {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
+		}
+
+		audioOnly := dlctx.DeliveryMode == library.DeliveryAudio
+		formatSelector := dlctx.FormatSelector
+		if audioOnly {
+			// Audio delivery ignores the quality profile's video format ladder.
+			formatSelector = library.AudioFormatSelector
 		}
 
 		progress("Downloading…", nil)
 		lim, _ := settings.LimitsForDomain(d.Library.DB, t.Domain)
 		subOpts, _ := settings.GetSubtitleOpts(d.Library.DB)
-		matchFilter := ""
+		matchFilter := library.BuildDownloadMatchFilter(nil)
 		if exclude, err := d.Library.SeriesAutoIgnoreMediaTypes(dlctx.Video.SeriesID); err == nil {
-			matchFilter = library.MediaTypeMatchFilter(exclude)
+			matchFilter = library.BuildDownloadMatchFilter(exclude)
 		}
-		dlMap := ytdlp.ProgressMapper{Lo: 0, Hi: 1}
 		media, err := downloadMedia(ctx, d, ytdlp.DownloadOpts{
 			URL:            dlctx.URL,
 			CookiesPath:    jar,
-			FormatSelector: dlctx.FormatSelector,
+			FormatSelector: formatSelector,
 			OutDir:         work,
 			LimitRate:      lim.DownloadRateLimit,
 			SleepRequests:  lim.SleepRequests,
 			MatchFilter:    matchFilter,
 			SubLangs:       subOpts.Langs,
 			SubAuto:        subOpts.Auto,
-			OnProgress: func(msg string, pct *float64) {
-				if pct == nil {
-					progress(msg, nil)
-					return
-				}
-				mapped := dlMap.Map(*pct)
-				progress(msg, &mapped)
-			},
+			// StepProgress (in ytdlp) labels video/audio (1/2) and resets the bar
+			// 0→100% per format on purpose.
+			OnProgress: progress,
 		})
 		if err != nil {
 			return err
@@ -1213,9 +734,11 @@ func DownloadHandler(d Deps) TaskHandler {
 		if st, _ := d.Library.Queue.TaskStatus(t.ID); st == queue.StatusCancelled {
 			return context.Canceled
 		}
-
-		_ = dlMap.Finish()
 		sbCfg := dlctx.Profile.SponsorBlockConfig()
+		if audioOnly {
+			// Info cards are a burned-in video overlay; audio-only media has no video track.
+			sbCfg.InfoCards = false
+		}
 		infoSrc, thumbSrc, subSrcs := library.FindDownloadSidecars(media)
 		subSrcs = library.MarkAutoSubtitleFiles(subSrcs, infoSrc)
 
@@ -1240,7 +763,7 @@ func DownloadHandler(d Deps) TaskHandler {
 			staged.PageURL = dlctx.URL
 			staged.RemoteID = dlctx.Video.RemoteID
 			staged.Maturity = library.TaskPayloadMaturity(t.Payload)
-			staged.FormatSelector = dlctx.FormatSelector
+			staged.FormatSelector = formatSelector
 			staged.SeriesTitle = dlctx.SeriesTitle
 			staged.VideoTitle = dlctx.Video.Title
 			staged.Description = dlctx.Video.Description
@@ -1267,13 +790,19 @@ func DownloadHandler(d Deps) TaskHandler {
 
 		progress("Remuxing…", nil)
 		var remuxed bool
-		media, remuxed, err = library.RemuxIfNeeded(ctx, media)
+		remuxContainer := library.RemuxContainer
+		if audioOnly {
+			remuxContainer = library.RemuxAudioContainer
+			media, remuxed, err = library.RemuxAudioIfNeeded(ctx, media)
+		} else {
+			media, remuxed, err = library.RemuxIfNeeded(ctx, media)
+		}
 		if err != nil {
 			return err
 		}
 		if remuxed {
-			_ = d.Library.AddVideoHistory(t.VideoID.Int64, "remuxed", "Remuxed to "+library.RemuxContainer, map[string]any{
-				"container": library.RemuxContainer,
+			_ = d.Library.AddVideoHistory(t.VideoID.Int64, "remuxed", "Remuxed to "+remuxContainer, map[string]any{
+				"container": remuxContainer,
 				"path":      media,
 			}, t.ID)
 		}
@@ -1302,7 +831,7 @@ func DownloadHandler(d Deps) TaskHandler {
 		}
 
 		progress("Installing to library…", nil)
-		if err := finishArchivePack(d, t, dlctx, media, infoSrc, thumbSrc, subSrcs, remuxed, sbPlanPath, sbWarn, progress); err != nil {
+		if err := finishArchivePack(d, t, dlctx, media, infoSrc, thumbSrc, subSrcs, remuxed, remuxContainer, formatSelector, sbPlanPath, sbWarn, progress); err != nil {
 			return err
 		}
 		return nil
@@ -1316,6 +845,7 @@ func finishArchivePack(
 	media, infoSrc, thumbSrc string,
 	subSrcs []string,
 	remuxed bool,
+	remuxContainer, formatSelector string,
 	sbPlanPath, sbWarn string,
 	progress func(msg string, pct *float64),
 ) error {
@@ -1346,19 +876,31 @@ func finishArchivePack(
 	if dlctx.Video.UploadDate.Valid {
 		aired = dlctx.Video.UploadDate.String
 	}
+	thumbURL := ""
+	if dlctx.Video.ThumbnailURL.Valid {
+		thumbURL = dlctx.Video.ThumbnailURL.String
+	}
+	thumbSrc, cleanupThumb := library.MaterializeThumbSrc(thumbSrc, thumbURL)
+	defer cleanupThumb()
+
+	// Soft-fill empty genres from download-time info.json, then ensure domain tag, then build NFO.
+	_, _ = d.Library.SoftFillVideoGenresFromInfoJSON(t.VideoID.Int64, infoSrc)
+	sourceURL := dlctx.URL
+	if dlctx.Video.SourceURL.Valid && strings.TrimSpace(dlctx.Video.SourceURL.String) != "" {
+		sourceURL = dlctx.Video.SourceURL.String
+	}
+	_, _ = d.Library.EnsureVideoDomainTag(t.VideoID.Int64, sourceURL)
+	v := &dlctx.Video
+	if fresh, gerr := d.Library.GetVideo(t.VideoID.Int64); gerr == nil {
+		v = fresh
+	}
+	runtime := 0
+	if v.DurationSeconds.Valid && v.DurationSeconds.Int64 > 0 {
+		runtime = int(v.DurationSeconds.Int64)
+	}
+	epMeta := library.EpisodeMetaFromVideo(v, dlctx.SeriesTitle, season, episode, aired, runtime)
 	mediaPath, nfoPath, infoPath, thumbPath, subPaths, err := library.PackMedia(
-		media, dlctx.RootPath,
-		library.EpisodeNFO{
-			SeriesTitle: dlctx.SeriesTitle,
-			Title:       dlctx.Video.Title,
-			Season:      season,
-			Episode:     episode,
-			Plot:        dlctx.Video.Description,
-			Aired:       aired,
-			UniqueID:    dlctx.Video.RemoteID,
-			SourceSite:  "yt-dlp",
-			Domain:      library.NamingDomain(dlctx.URL),
-		},
+		media, dlctx.RootPath, epMeta,
 		library.LoadNamingConfig(d.Library.DB), infoSrc, thumbSrc, subSrcs,
 	)
 	if err != nil {
@@ -1366,10 +908,10 @@ func finishArchivePack(
 	}
 	meta := library.MediaCompleteMeta{
 		Tool:                   "yt-dlp",
-		DownloadFormatSelector: dlctx.FormatSelector,
+		DownloadFormatSelector: formatSelector,
 	}
 	if remuxed {
-		meta.DownloadRemuxContainer = library.RemuxContainer
+		meta.DownloadRemuxContainer = remuxContainer
 	}
 	if err := d.Library.CompleteDownload(t.VideoID.Int64, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, t.ID); err != nil {
 		return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "record install failed"), err.Error())
@@ -1439,22 +981,39 @@ func SponsorblockCutHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
+		audioOnly := dlctx.DeliveryMode == library.DeliveryAudio
+		formatSelector := payload.FormatSelector
+		if formatSelector == "" {
+			formatSelector = dlctx.FormatSelector
+		}
 		sbCfg := dlctx.Profile.SponsorBlockConfig()
+		if audioOnly {
+			// Info cards are a burned-in video overlay; audio-only media has no video track.
+			sbCfg.InfoCards = false
+		}
 		media := payload.MediaPath
 		infoSrc := payload.InfoPath
 		thumbSrc := payload.ThumbPath
 		subSrcs := append([]string{}, payload.SubPaths...)
 
 		remuxed := false
+		remuxContainer := library.RemuxContainer
+		if audioOnly {
+			remuxContainer = library.RemuxAudioContainer
+		}
 		if !sbCfg.ReencodeCut {
 			progress("Remuxing…", nil)
-			media, remuxed, err = library.RemuxIfNeeded(ctx, media)
+			if audioOnly {
+				media, remuxed, err = library.RemuxAudioIfNeeded(ctx, media)
+			} else {
+				media, remuxed, err = library.RemuxIfNeeded(ctx, media)
+			}
 			if err != nil {
 				return err
 			}
 			if remuxed {
-				_ = d.Library.AddVideoHistory(videoID, "remuxed", "Remuxed to "+library.RemuxContainer, map[string]any{
-					"container": library.RemuxContainer,
+				_ = d.Library.AddVideoHistory(videoID, "remuxed", "Remuxed to "+remuxContainer, map[string]any{
+					"container": remuxContainer,
 					"path":      media,
 				}, t.ID)
 				infoSrc, thumbSrc, subSrcs = library.FindDownloadSidecars(media)
@@ -1526,7 +1085,7 @@ func SponsorblockCutHandler(d Deps) TaskHandler {
 		}
 
 		progress("Installing to library…", nil)
-		if err := finishArchivePack(d, t, dlctx, media, infoSrc, thumbSrc, subSrcs, remuxed, sbRes.PlanPath, sbRes.Warning, progress); err != nil {
+		if err := finishArchivePack(d, t, dlctx, media, infoSrc, thumbSrc, subSrcs, remuxed, remuxContainer, formatSelector, sbRes.PlanPath, sbRes.Warning, progress); err != nil {
 			return err
 		}
 		d.Library.RemoveSponsorblockCutStaging(videoID)
@@ -1623,7 +1182,7 @@ func RefreshSidecarsHandler(d Deps) TaskHandler {
 		defer os.RemoveAll(work)
 
 		progress("Resolving cookies…", ptrFloat(0.1))
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, url)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, url)
 		if err != nil {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 		}
@@ -1683,7 +1242,7 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 	defer os.RemoveAll(work)
 
 	progress("Fetching metadata…", ptrFloat(0.05))
-	jar, err := cookies.TempJarForURL(d.Library.DB, work, url)
+	jar, err := domains.TempJarForURL(d.Library.DB, work, url)
 	if err != nil {
 		return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 	}
@@ -1692,7 +1251,7 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 		return err
 	}
 	lim, _ := settings.LimitsForDomain(d.Library.DB, t.Domain)
-	e, err := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
+	e, err := resolveEntry(ctx, d, ytdlp.ResolveOpts{
 		URL: url, CookiesPath: jar, FlareSolverrURL: flare,
 		LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 	})
@@ -1785,7 +1344,7 @@ func metadataRescanSeries(ctx context.Context, d Deps, t *queue.Task, progress f
 		}
 		progress(fmt.Sprintf("Listing source %d/%d: %s", i+1, n, label), ptrFloat(float64(i)/float64(n)))
 
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, src.URL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, src.URL)
 		if err != nil {
 			_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, err.Error(), map[string]any{
 				"mode": library.SourceHistModeRescanMetadata,
@@ -1885,19 +1444,18 @@ func PrefetchSeriesMetaHandler(d Deps) TaskHandler {
 		}
 		defer os.RemoveAll(work)
 
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, fetchURL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
 		if err != nil {
 			return err
 		}
 		domain := queue.DomainFromURL(fetchURL)
-		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
 		flare, err := domains.FlareSolverrURL(d.Library.DB, domain)
 		if err != nil {
 			return err
 		}
-		info, err := d.YtDlp.DumpPlaylistInfo(ctx, ytdlp.ListOpts{
+		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
+		info, err := dumpPlaylistInfo(ctx, d, ytdlp.ListOpts{
 			URL: fetchURL, CookiesPath: jar, PlaylistEnd: 1, FlareSolverrURL: flare,
-			LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 		})
 		if err != nil {
 			draft := library.PrefetchDraft{Error: err.Error(), ArtFiles: map[string]string{}}
@@ -1966,21 +1524,20 @@ func PrefetchAddSeriesHandler(d Deps) TaskHandler {
 		}
 		defer os.RemoveAll(work)
 
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, fetchURL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
 		if err != nil {
 			jar = ""
 		}
 		domain := queue.DomainFromURL(fetchURL)
-		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
 		flare, err := domains.FlareSolverrURL(d.Library.DB, domain)
 		if err != nil {
 			draft := library.PrefetchDraft{Error: err.Error(), ArtFiles: map[string]string{}}
 			_ = d.Library.WriteAddSeriesDraft(token, draft)
 			return err
 		}
-		info, err := d.YtDlp.DumpPlaylistInfo(ctx, ytdlp.ListOpts{
+		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
+		info, err := dumpPlaylistInfo(ctx, d, ytdlp.ListOpts{
 			URL: fetchURL, CookiesPath: jar, PlaylistEnd: 1, FlareSolverrURL: flare,
-			LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 		})
 		if err != nil {
 			draft := library.PrefetchDraft{Error: err.Error(), ArtFiles: map[string]string{}}
@@ -1992,6 +1549,68 @@ func PrefetchAddSeriesHandler(d Deps) TaskHandler {
 		_ = os.MkdirAll(artDir, 0o755)
 		draft := library.BuildPrefetchDraftFromInfo(info, artDir)
 		if err := d.Library.WriteAddSeriesDraft(token, draft); err != nil {
+			return err
+		}
+		progress("Done", ptrFloat(1))
+		return nil
+	}
+}
+
+// PrefetchAddVideoHandler resolves a video URL into cache/add-video/{token}/ for Add video.
+func PrefetchAddVideoHandler(d Deps) TaskHandler {
+	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
+		if d.Library == nil || d.YtDlp == nil {
+			return apperrors.New(apperrors.CodeInternal, "add video prefetch deps missing")
+		}
+		var payload struct {
+			URL        string `json:"url"`
+			DraftToken string `json:"draft_token"`
+		}
+		_ = json.Unmarshal([]byte(t.Payload), &payload)
+		fetchURL := strings.TrimSpace(payload.URL)
+		token := strings.TrimSpace(payload.DraftToken)
+		if fetchURL == "" {
+			return apperrors.New(apperrors.CodeInternal, "url required")
+		}
+		if token == "" {
+			return apperrors.New(apperrors.CodeInternal, "draft_token required")
+		}
+		progress("Fetching metadata…", ptrFloat(0.1))
+		tmpRoot := d.TmpRoot
+		if tmpRoot == "" {
+			tmpRoot = os.TempDir()
+		}
+		work, err := os.MkdirTemp(tmpRoot, "creatorr-add-video-*")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(work)
+
+		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
+		if err != nil {
+			draft := library.AddVideoDraft{Error: err.Error()}
+			_ = d.Library.WriteAddVideoDraft(token, draft)
+			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
+		}
+		domain := queue.DomainFromURL(fetchURL)
+		flare, err := domains.FlareSolverrURL(d.Library.DB, domain)
+		if err != nil {
+			draft := library.AddVideoDraft{Error: err.Error()}
+			_ = d.Library.WriteAddVideoDraft(token, draft)
+			return err
+		}
+		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
+		e, err := resolveEntry(ctx, d, ytdlp.ResolveOpts{
+			URL: fetchURL, CookiesPath: jar, FlareSolverrURL: flare,
+		})
+		if err != nil {
+			draft := library.AddVideoDraft{Error: err.Error()}
+			_ = d.Library.WriteAddVideoDraft(token, draft)
+			return err
+		}
+		draft := library.BuildAddVideoDraftFromEntry(e, fetchURL)
+		library.EnsureAddVideoDraftUploadDate(&draft)
+		if err := d.Library.WriteAddVideoDraft(token, draft); err != nil {
 			return err
 		}
 		progress("Done", ptrFloat(1))
@@ -2028,21 +1647,20 @@ func PrefetchVideoMetaHandler(d Deps) TaskHandler {
 		}
 		defer os.RemoveAll(work)
 
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, fetchURL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
 		if err != nil {
 			draft := library.VideoPrefetchDraft{Error: err.Error()}
 			_ = d.Library.WriteVideoPrefetchDraft(videoID, t.ID, draft)
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 		}
 		domain := queue.DomainFromURL(fetchURL)
-		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
 		flare, err := domains.FlareSolverrURL(d.Library.DB, domain)
 		if err != nil {
 			return err
 		}
-		e, err := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
+		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
+		e, err := resolveEntry(ctx, d, ytdlp.ResolveOpts{
 			URL: fetchURL, CookiesPath: jar, FlareSolverrURL: flare,
-			LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 		})
 		if err != nil {
 			draft := library.VideoPrefetchDraft{Error: err.Error()}
@@ -2050,6 +1668,8 @@ func PrefetchVideoMetaHandler(d Deps) TaskHandler {
 			return err
 		}
 		draft := library.BuildVideoPrefetchDraftFromEntry(e)
+		progress("Downloading thumbnail…", ptrFloat(0.7))
+		d.Library.PersistVideoPrefetchThumb(videoID, t.ID, &draft)
 
 		if err := d.Library.WriteVideoPrefetchDraft(videoID, t.ID, draft); err != nil {
 			return err
@@ -2075,8 +1695,10 @@ func listEntries(ctx context.Context, d Deps, url, jar string, playlistEnd int, 
 	if err != nil {
 		return nil, err
 	}
+	user, pass := ytdlpAuth(d.Library.DB, url)
 	return d.YtDlp.List(ctx, ytdlp.ListOpts{
-		URL: url, CookiesPath: jar, PlaylistEnd: playlistEnd, FlareSolverrURL: flare,
+		URL: url, CookiesPath: jar, Username: user, Password: pass,
+		PlaylistEnd: playlistEnd, FlareSolverrURL: flare,
 		LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 	})
 }
@@ -2090,6 +1712,7 @@ func downloadMedia(ctx context.Context, d Deps, opts ytdlp.DownloadOpts) (string
 		return "", err
 	}
 	opts.FlareSolverrURL = flare
+	opts.Username, opts.Password = ytdlpAuth(d.Library.DB, opts.URL)
 	return d.YtDlp.Download(ctx, opts)
 }
 
@@ -2102,49 +1725,44 @@ func fetchSidecars(ctx context.Context, d Deps, opts ytdlp.SidecarsOpts) (infoPa
 		return "", "", nil, err
 	}
 	opts.FlareSolverrURL = flare
+	opts.Username, opts.Password = ytdlpAuth(d.Library.DB, opts.URL)
 	return d.YtDlp.FetchSidecars(ctx, opts)
 }
 
-// fetchPackStreamSubs downloads subtitle sidecars for stream pack. cleanup removes the temp work dir.
-func fetchPackStreamSubs(ctx context.Context, d Deps, videoID int64, domain string) (subPaths []string, cleanup func(), err error) {
-	subOpts, err := settings.GetSubtitleOpts(d.Library.DB)
-	if err != nil || len(subOpts.Langs) == 0 {
-		return nil, nil, err
+func resolveEntry(ctx context.Context, d Deps, opts ytdlp.ResolveOpts) (ytdlp.Entry, error) {
+	if d.YtDlp == nil {
+		return ytdlp.Entry{}, apperrors.New(apperrors.CodeInternal, "yt-dlp client missing")
 	}
-	dlctx, err := d.Library.PrepareDownload(videoID)
+	if strings.TrimSpace(opts.FlareSolverrURL) == "" {
+		flare, err := domains.FlareSolverrURL(d.Library.DB, queue.DomainFromURL(opts.URL))
+		if err != nil {
+			return ytdlp.Entry{}, err
+		}
+		opts.FlareSolverrURL = flare
+	}
+	opts.Username, opts.Password = ytdlpAuth(d.Library.DB, opts.URL)
+	return d.YtDlp.Resolve(ctx, opts)
+}
+
+func dumpPlaylistInfo(ctx context.Context, d Deps, opts ytdlp.ListOpts) (map[string]any, error) {
+	if d.YtDlp == nil {
+		return nil, apperrors.New(apperrors.CodeInternal, "yt-dlp client missing")
+	}
+	if strings.TrimSpace(opts.FlareSolverrURL) == "" {
+		flare, err := domains.FlareSolverrURL(d.Library.DB, queue.DomainFromURL(opts.URL))
+		if err != nil {
+			return nil, err
+		}
+		opts.FlareSolverrURL = flare
+	}
+	opts.Username, opts.Password = ytdlpAuth(d.Library.DB, opts.URL)
+	return d.YtDlp.DumpPlaylistInfo(ctx, opts)
+}
+
+func ytdlpAuth(database *db.DB, rawURL string) (username, password string) {
+	creds, err := settings.CredentialsForURL(database, rawURL)
 	if err != nil {
-		return nil, nil, err
+		return "", ""
 	}
-	if strings.TrimSpace(dlctx.URL) == "" {
-		return nil, nil, fmt.Errorf("no url")
-	}
-	tmpRoot := d.TmpRoot
-	if tmpRoot == "" {
-		tmpRoot = os.TempDir()
-	}
-	work, err := os.MkdirTemp(tmpRoot, "creatorr-packstream-subs-*")
-	if err != nil {
-		return nil, nil, err
-	}
-	cleanup = func() { _ = os.RemoveAll(work) }
-	jar, err := cookies.TempJarForURL(d.Library.DB, work, dlctx.URL)
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-	if domain == "" {
-		domain = queue.DomainFromURL(dlctx.URL)
-	}
-	lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
-	infoPath, _, subPaths, err := fetchSidecars(ctx, d, ytdlp.SidecarsOpts{
-		URL: dlctx.URL, CookiesPath: jar, OutDir: work,
-		LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
-		SubLangs: subOpts.Langs, SubAuto: subOpts.Auto,
-	})
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-	subPaths = library.MarkAutoSubtitleFiles(subPaths, infoPath)
-	return subPaths, cleanup, nil
+	return creds.Username, creds.Password
 }

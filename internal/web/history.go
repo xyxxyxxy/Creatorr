@@ -37,7 +37,10 @@ type notifyHistoryView struct {
 	ExternalOK bool
 	Unread     bool
 	Alert      bool
+	Warning    bool
+	Level      string
 	ReadAt     string
+	ReadAgo    string
 }
 
 type hiddenFilter struct {
@@ -90,12 +93,16 @@ func notificationToView(n notify.Notification, now time.Time) notifyHistoryView 
 		ExternalOK: n.ExternalOK,
 		Unread:     n.Unread(),
 		Alert:      notify.IsAlertEvent(n.Event),
+		Warning:    notify.IsWarningEvent(n.Event),
+		Level:      notify.EventLevel(n.Event),
 	}
 	if n.TaskID.Valid {
 		v.TaskID = n.TaskID.Int64
 	}
 	if n.ReadAt.Valid {
-		v.ReadAt = n.ReadAt.String
+		absRead, agoRead := createdAgoPair(n.ReadAt.String, now)
+		v.ReadAt = absRead
+		v.ReadAgo = agoRead
 	}
 	return v
 }
@@ -108,7 +115,8 @@ func isHistoryStatus(status string) bool {
 // (video download holds, source scan failures).
 func historyEventError(event string) bool {
 	switch event {
-	case "download_failed", "source_failed", "verify_failed",
+	case "download_failed", "source_failed", "verify_failed", "file_externally_changed",
+		"sidecar_externally_changed",
 		"wanted_download_error", "wanted_source_error", // legacy history rows
 		library.SourceHistScanError:
 		return true
@@ -118,7 +126,7 @@ func historyEventError(event string) bool {
 }
 
 // historyEventLabel is the Event column text. Cancelled video rows store
-// event=cancelled with detail.kind (download, pack_stream, …); show that kind.
+// event=cancelled with detail.kind (e.g. download); show that kind.
 // Source cancel rows use detail.mode and show "scan".
 func historyEventLabel(event, detail string) string {
 	event = strings.TrimSpace(event)
@@ -185,8 +193,14 @@ func parseHistoryFilter(r *http.Request) queue.HistoryFilter {
 
 func parseNotifyListFilter(r *http.Request) notify.ListFilter {
 	_, _, fromBound, toBound := parseHistoryTimeRange(r)
+	level := strings.TrimSpace(r.URL.Query().Get("nlevel"))
+	switch level {
+	case notify.LevelInfo, notify.LevelWarning, notify.LevelAlert:
+	default:
+		level = ""
+	}
 	return notify.ListFilter{
-		Event: strings.TrimSpace(r.URL.Query().Get("nevent")),
+		Level: level,
 		From:  fromBound,
 		To:    toBound,
 	}
@@ -252,7 +266,7 @@ func historyFilterActive(f queue.HistoryFilter) bool {
 }
 
 func notifyFilterActive(f notify.ListFilter) bool {
-	return f.Event != "" || f.From != "" || f.To != ""
+	return f.Level != "" || f.From != "" || f.To != ""
 }
 
 func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
@@ -261,6 +275,9 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 	filter := parseHistoryFilter(r)
 	nFilter := parseNotifyListFilter(r)
 	now := time.Now().UTC()
+
+	// Visiting History clears the unread badge (list then renders as read).
+	_, _ = notify.MarkAllRead(h.Queue.DB)
 
 	nTotal, err := notify.CountNotifications(h.Queue.DB, nFilter)
 	if err != nil {
@@ -307,37 +324,33 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 		{Value: queue.StatusFailed, Label: "Failure", Selected: statusSel == queue.StatusFailed},
 		{Value: queue.StatusCancelled, Label: "Cancelled", Selected: statusSel == queue.StatusCancelled},
 	}
-	selects := []listFilterSelect{{
-		Name: "status", AriaLabel: "Status", EmptyLabel: "All statuses", Options: statusOpts,
-	}}
 
 	domains, _ := h.Queue.DistinctHistoryDomains()
 	domainOpts := make([]listFilterOpt, 0, len(domains))
 	for _, d := range domains {
 		domainOpts = append(domainOpts, listFilterOpt{Value: d, Label: d, Selected: filter.Domain == d})
 	}
-	selects = append(selects, listFilterSelect{
-		Name: "domain", AriaLabel: "Domain", EmptyLabel: "All domains", Options: domainOpts,
-	})
 
 	kinds, _ := h.Queue.DistinctHistoryKinds()
 	kindOpts := make([]listFilterOpt, 0, len(kinds))
 	for _, k := range kinds {
 		kindOpts = append(kindOpts, listFilterOpt{Value: k, Label: k, Selected: filter.Kind == k})
 	}
-	selects = append(selects, listFilterSelect{
-		Name: "kind", AriaLabel: "Kind", EmptyLabel: "All kinds", Options: kindOpts,
-	})
 
-	eventOpts := make([]listFilterOpt, 0, len(notify.AllEvents))
-	for _, id := range notify.AllEvents {
-		eventOpts = append(eventOpts, listFilterOpt{
-			Value: id, Label: notify.EventLabels[id], Selected: nFilter.Event == id,
-		})
+	selects := []listFilterSelect{
+		{Name: "domain", AriaLabel: "Domain", EmptyLabel: "All domains", Options: domainOpts},
+		{Name: "kind", AriaLabel: "Kind", EmptyLabel: "All kinds", Options: kindOpts},
+		{Name: "status", AriaLabel: "Status", EmptyLabel: "All statuses", Options: statusOpts},
 	}
-	notifySelects := []listFilterSelect{{
-		Name: "nevent", AriaLabel: "Event", EmptyLabel: "All events", Options: eventOpts,
-	}}
+
+	levelOpts := []listFilterOpt{
+		{Value: notify.LevelInfo, Label: "Info", Selected: nFilter.Level == notify.LevelInfo},
+		{Value: notify.LevelWarning, Label: "Warning", Selected: nFilter.Level == notify.LevelWarning},
+		{Value: notify.LevelAlert, Label: "Alert", Selected: nFilter.Level == notify.LevelAlert},
+	}
+	notifySelects := []listFilterSelect{
+		{Name: "nlevel", AriaLabel: "Type", EmptyLabel: "All types", Options: levelOpts},
+	}
 
 	rangeHidden := []hiddenFilter{}
 	if fromUI != "" {
@@ -362,8 +375,8 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	taskHidden := append([]hiddenFilter{}, rangeHidden...)
-	if nFilter.Event != "" {
-		taskHidden = append(taskHidden, hiddenFilter{Name: "nevent", Value: nFilter.Event})
+	if nFilter.Level != "" {
+		taskHidden = append(taskHidden, hiddenFilter{Name: "nlevel", Value: nFilter.Level})
 	}
 	if nPageInfo.Page > 1 {
 		taskHidden = append(taskHidden, hiddenFilter{Name: "npage", Value: strconv.Itoa(nPageInfo.Page)})
@@ -379,8 +392,8 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 	if filter.Kind != "" {
 		rangeHiddenForTop = append(rangeHiddenForTop, hiddenFilter{Name: "kind", Value: filter.Kind})
 	}
-	if nFilter.Event != "" {
-		rangeHiddenForTop = append(rangeHiddenForTop, hiddenFilter{Name: "nevent", Value: nFilter.Event})
+	if nFilter.Level != "" {
+		rangeHiddenForTop = append(rangeHiddenForTop, hiddenFilter{Name: "nlevel", Value: nFilter.Level})
 	}
 
 	render(w, "history", struct {

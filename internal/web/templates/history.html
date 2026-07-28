@@ -6,7 +6,7 @@
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Notifications" "id" "notifications" "help" "In-app log of every notify event. Alert events stay unread until the detail page is opened, marked read, or delivered via an Apprise channel.")}}
+{{template "list_header" (dict "level" "section" "title" "Notifications" "id" "notifications" "help" "In-app log of every notify event. Opening History marks all unread alerts and warnings as read. Info digests are stored already-read. Apprise delivery also marks matching alerts and warnings read.")}}
 <div id="notification-history-live">
 {{template "list_filters" (dict
   "HideQuery" true
@@ -35,7 +35,7 @@
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Tasks" "help" "Finished tasks (done, failed, cancelled).")}}
+{{template "list_header" (dict "level" "section" "title" "Tasks" "id" "tasks" "help" "Finished tasks (done, failed, cancelled).")}}
 <div id="history-live">
 {{template "list_filters" (dict
   "HideQuery" .HistoryFilter.HideQuery

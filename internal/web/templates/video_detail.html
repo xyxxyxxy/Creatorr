@@ -3,22 +3,22 @@
 {{template "breadcrumbs" (list
   (dict "Href" "/series" "Label" "Series" "Icon" "tv")
   (dict "Href" (printf "/series/%d" .Series.ID) "Label" .Series.Title "Icon" "clapperboard")
-  (dict "Label" .Video.Title "Icon" "film")
+	(dict "Label" .Video.Title "Icon" "square-play")
 )}}
 <div class="navbar bg-base-100 border border-base-300 rounded-box px-3 mb-4 min-h-14 gap-2 flex-wrap">
   <div class="flex-1 min-w-0">
     <h1 class="text-xl font-semibold truncate inline-flex items-center gap-2 max-w-full">
-      <i data-lucide="film" class="size-5 shrink-0"></i>
+      <i data-lucide="square-play" class="size-5 shrink-0"></i>
       <span class="truncate">{{.Video.Title}}</span>
     </h1>
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
     {{if .Deleting}}
     <span class="text-xs opacity-60">Queued for deletion</span>
-    <label for="modal-edit-video-metadata" class="btn btn-outline btn-disabled" aria-disabled="true">Metadata</label>
+    <label for="modal-edit-video-metadata" class="btn btn-outline btn-disabled" aria-disabled="true">Edit metadata</label>
     <button type="button" class="btn btn-outline btn-disabled" aria-disabled="true" disabled>Refresh sidecars</button>
     {{else}}
-    <label for="modal-edit-video-metadata" class="btn btn-outline">Metadata</label>
+    <label for="modal-edit-video-metadata" class="btn btn-outline">Edit metadata</label>
     {{$canRefreshSidecars := and .HasPackAnchor .DomainActive}}
     <form method="post" action="/actions/refresh-sidecars-video" class="inline">
       <input type="hidden" name="video_id" value="{{.Video.ID}}" />
@@ -27,7 +27,7 @@
       {{if $canRefreshSidecars}}
       <button type="submit" class="btn btn-outline">Refresh sidecars</button>
       {{else}}
-      {{$sideTip := "Needs a packed video or .strm on disk"}}
+      {{$sideTip := "Needs packed media on disk"}}
       {{if and .HasPackAnchor (not .DomainActive)}}{{$sideTip = .DomainDisabledTitle}}{{end}}
       <span class="tooltip tooltip-bottom" data-tip="{{$sideTip}}">
         <button type="submit" class="btn btn-outline btn-disabled" disabled aria-label="Refresh sidecars">Refresh sidecars</button>
@@ -41,12 +41,8 @@
       "DomainActive" .DomainActive
       "DomainDisabledTitle" .DomainDisabledTitle
       "DeliveryQueued" .DeliveryQueued
-      "IsStream" .IsStream
-      "CDNDirect" .TaskInd.CDNDirect
-      "BeginningReady" .TaskInd.BeginningReady
       "Redirect" (printf "/series/%d/videos/%d" .Series.ID .Video.ID)
       "BtnClass" "btn btn-outline"
-      "NeutralClass" "btn btn-neutral"
       "PrimaryClass" "btn btn-primary"
     }}
     {{$wantIgnore := dict
@@ -56,10 +52,9 @@
       "DomainActive" .DomainActive
       "DomainDisabledTitle" .DomainDisabledTitle
       "DownloadRunning" .DownloadRunning
-      "IsStream" .IsStream
       "Redirect" (printf "/series/%d/videos/%d" .Series.ID .Video.ID)
       "Class" "btn btn-neutral"
-      "DeleteClass" "btn btn-error"
+      "DeleteClass" "btn btn-soft btn-error"
     }}
     {{template "video_delivery_actions" $delivery}}
     {{template "want_ignore_button" $wantIgnore}}
@@ -72,13 +67,13 @@
 <div class="modal">
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Ignore video</h3>
-    <p class="text-sm mb-4">A download or pack stream task is in progress. Ignore and cancel it?</p>
+    <p class="text-sm mb-4">A download task is in progress. Ignore and cancel it?</p>
     <form method="post" action="/actions/ignore-video">
       <input type="hidden" name="video_id" value="{{.Video.ID}}" />
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="redirect" value="/series/{{.Series.ID}}/videos/{{.Video.ID}}" />
       <div class="modal-action">
-        <label for="modal-ignore-video-{{.Video.ID}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="modal-ignore-video-{{.Video.ID}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-warning">Ignore and cancel task</button>
       </div>
     </form>
@@ -92,7 +87,7 @@
      hx-swap="none"></div>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Details" "help" "Index metadata and Creatorr-owned download/stream state.")}}
+{{template "list_header" (dict "level" "section" "title" "Details" "help" "Index metadata and Creatorr-owned download state.")}}
 {{template "list_table"}}
 <tbody>
   <tr><th class="w-40">Status</th>
@@ -126,24 +121,15 @@
   <tr><th class="w-40">Size</th><td>{{.SizeLabel}}</td></tr>
   {{end}}
   {{if .Video.SourceURL.Valid}}
-  <tr><th class="w-40">Source URL</th><td class="text-xs break-all"><a class="link" href="{{.Video.SourceURL.String}}" target="_blank" rel="noopener">{{displayURL .Video.SourceURL.String}}</a></td></tr>
+  <tr><th class="w-40">Source URL</th><td class="text-xs break-all"><a class="link" href="{{.Video.SourceURL.String}}" target="_blank" rel="noopener">{{.Video.SourceURL.String}}</a></td></tr>
   {{else}}
   {{template "detail_row" (dict "Label" "Source URL" "TdClass" "text-xs break-all")}}
   {{end}}
   {{range .DetailRows}}
   <tr>
     <th class="w-40">{{.Label}}</th>
-    <td class="text-sm break-all{{if and (eq .Value "none") (not .ProgressOn)}} opacity-60{{end}}">
-      {{if .ProgressOn}}
-      <div class="flex flex-col gap-1 max-w-md">
-        <span>{{.Value}}</span>
-        {{if ge .ProgressPct 0}}
-        <progress class="progress progress-primary w-full" value="{{.ProgressPct}}" max="100" aria-label="Stream cache {{.ProgressPct}} percent"></progress>
-        {{else if gt (len .Value) 0}}
-        <progress class="progress progress-primary w-full" aria-label="Stream cache filling"></progress>
-        {{end}}
-      </div>
-      {{else if .IsURL}}<a class="link" href="{{.Value}}" target="_blank" rel="noopener">{{displayURL .Value}}</a>
+    <td class="text-sm break-all">
+      {{if .IsURL}}<a class="link" href="{{.Value}}" target="_blank" rel="noopener">{{displayURL .Value}}</a>
       {{else if .IsPath}}<code class="text-xs">{{.Value}}</code>
       {{else}}{{.Value}}{{end}}
     </td>
@@ -154,24 +140,32 @@
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Video and sidecar files beside the packed media (NFO, info.json, thumbnail, subtitles, SponsorBlock plan, and other stem-matched companions).")}}
+{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Video and sidecar files beside the packed media.")}}
 {{if not .Files}}
 {{template "list_empty" "No files yet."}}
 {{else}}
 {{template "list_table"}}
-<thead><tr><th>Type</th><th>File</th><th>Size</th><th></th></tr></thead>
+<thead><tr><th>Type</th><th>File</th><th>Size</th><th class="w-14"></th></tr></thead>
 <tbody>
   {{range .Files}}
   <tr>
     <td class="whitespace-nowrap">
       <span class="inline-flex items-center gap-1.5">
+        {{if .Missing}}
+        <span class="tooltip tooltip-top inline-flex shrink-0" data-tip="file missing" aria-label="file missing">
+          <i data-lucide="file-exclamation-point" class="size-4 text-warning"></i>
+        </span>
+        {{else}}
         <i data-lucide="{{.Icon}}" class="size-4 shrink-0 opacity-70"></i>
+        {{end}}
         <span>{{.KindLabel}}</span>
       </span>
     </td>
     <td class="text-sm break-all">
       {{if .Missing}}
-      <code class="text-xs opacity-60 tooltip tooltip-top" data-tip="{{.Path}}">{{.Name}}</code>
+      <span class="tooltip tooltip-top inline-flex max-w-full" data-tip="{{.Path}}">
+        <code class="text-xs opacity-60">{{.Name}}</code>
+      </span>
       {{else if .ViewHref}}
       <a class="link link-hover" href="{{.ViewHref}}">
         <code class="text-xs">{{.Name}}</code>
@@ -181,19 +175,28 @@
       {{end}}
     </td>
     <td class="text-xs whitespace-nowrap tabular-nums">{{if eq .SizeLabel "-"}}{{template "empty_value"}}{{else}}{{.SizeLabel}}{{end}}</td>
-    <td class="whitespace-nowrap text-right">
-      {{if .Missing}}<span class="badge badge-warning badge-sm tooltip tooltip-top" data-tip="Path recorded but file not on disk">missing</span>{{end}}
+    <td class="text-right">
+      {{if .CanDelete}}
+      <label for="modal-delete-sidecar-{{.ID}}" class="btn btn-soft btn-error btn-square btn-sm tooltip tooltip-top" data-tip="Delete" aria-label="Delete {{.Name}}">
+        <i data-lucide="trash-2" class="size-4" aria-hidden="true"></i>
+      </label>
+      {{end}}
     </td>
   </tr>
   {{end}}
 </tbody>
 {{template "list_table_end"}}
+{{range .Files}}
+{{if .CanDelete}}
+{{template "delete_sidecar_modal" (dict "FileID" .ID "SeriesID" $.Series.ID "VideoID" $.Video.ID "Name" .Name "KindLabel" .KindLabel)}}
+{{end}}
+{{end}}
 {{end}}
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
 <div id="video-history-live">
-{{template "list_header" (dict "level" "section" "title" "History" "id" "video-history" "help" "Lifecycle events for this video, plus discovery/update projected from source list passes.")}}
+{{template "list_header" (dict "level" "section" "title" "History" "id" "video-history" "help" "Lifecycle events for this video, plus discovery/update projected from source list passes. Stages from the same task (e.g. download / remux / pack) are grouped.")}}
 {{if not .History}}
 {{template "list_empty" "No history yet."}}
 {{else}}
@@ -202,9 +205,22 @@
 <tbody>
   {{range .History}}
   <tr{{if .HistoryID}} class="hover cursor-pointer" onclick="location.href='/task/{{.HistoryID}}'"{{end}}>
-    <td class="text-xs whitespace-nowrap">{{template "rel_time" .}}</td>
-    <td>{{template "history_event" .Event}}</td>
-    <td class="text-sm{{if historyEventError .Event}} text-error{{end}}">{{.Message}}</td>
+    <td class="text-xs whitespace-nowrap align-top">{{template "rel_time" .}}</td>
+    <td class="align-top">{{template "history_event" .Event}}</td>
+    <td class="text-sm align-top{{if .HasError}} text-error{{end}}">
+      {{if .Grouped}}
+      <ul class="list-none space-y-1 m-0 p-0">
+        {{range .Stages}}
+        <li class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span class="font-medium shrink-0">{{template "history_event" .Event}}</span>
+          <span class="opacity-80">{{.Message}}</span>
+        </li>
+        {{end}}
+      </ul>
+      {{else}}
+      {{.Message}}
+      {{end}}
+    </td>
   </tr>
   {{end}}
 </tbody>

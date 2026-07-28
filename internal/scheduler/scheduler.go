@@ -90,12 +90,6 @@ func (s *Scheduler) TickOnce(ctx context.Context, log *slog.Logger) {
 			}
 			s.lastDownload = now
 		}
-		// Same cron: pack .strm for stream-mode series wanted videos.
-		if pn, err := s.Library.EnqueuePackStreamWanted(); err != nil {
-			log.Error("schedule pack stream wanted", "err", err)
-		} else if pn > 0 {
-			log.Info("scheduled pack stream wanted", "enqueued", pn)
-		}
 		if mn, sn, err := s.Library.EnqueueMaturityDue(); err != nil {
 			log.Error("schedule maturity", "err", err)
 		} else if mn > 0 || sn > 0 {

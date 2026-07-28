@@ -1,0 +1,29 @@
+{{define "domain_access_chips"}}
+{{/* Rate / sleep / cookies / Flare / credentials — same icons as Tasks lane (no queue/parallel/cooldown). */}}
+<span class="flex flex-wrap items-center gap-x-4 gap-y-2 font-normal text-sm">
+  {{if .ShowRate}}
+  <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .RateOverride}} text-base-content/50{{end}}" data-tip="Download rate limit · {{if .RateOverride}}Domain override{{else}}default{{end}}" aria-label="Download rate {{.RateLimit}}">
+    <i data-lucide="download" class="size-4 shrink-0"></i>
+    <span class="font-mono tabular-nums">{{.RateLimit}}</span>
+  </span>
+  {{end}}
+  {{if .ShowSleep}}
+  <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .SleepOverride}} text-base-content/50{{end}}" data-tip="Sleep between requests · {{if .SleepOverride}}Domain override{{else}}default{{end}}" aria-label="Sleep {{.SleepRequests}}s">
+    <i data-lucide="snail" class="size-4 shrink-0"></i>
+    <span class="tabular-nums">{{printf "%g" .SleepRequests}}s</span>
+  </span>
+  {{end}}
+  <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .CookiesOverride}} text-base-content/50{{end}}" data-tip="Cookies · {{if .CookiesOverride}}Domain override{{else}}none{{end}}" aria-label="{{if .Cookies}}Cookies yes{{else}}Cookies no{{end}}">
+    <i data-lucide="cookie" class="size-4 shrink-0{{if .CookiesOverride}} text-amber-800{{end}}"></i>
+    <span>{{if .Cookies}}yes{{else}}no{{end}}</span>
+  </span>
+  <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .FlareOverride}} text-base-content/50{{end}}" data-tip="FlareSolverr · {{if .FlareOverride}}Domain override{{else}}off{{end}}" aria-label="FlareSolverr {{if .Flare}}yes{{else}}no{{end}}">
+    <i data-lucide="flame" class="size-4 shrink-0{{if and .Flare .FlareOverride}} text-error{{end}}"></i>
+    <span>{{if .Flare}}yes{{else}}no{{end}}</span>
+  </span>
+  <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .CredentialsOverride}} text-base-content/50{{end}}" data-tip="Credentials · {{if .CredentialsOverride}}Domain override{{else}}none{{end}}" aria-label="{{if .Credentials}}Credentials yes{{else}}Credentials no{{end}}">
+    <i data-lucide="key-round" class="size-4 shrink-0{{if .CredentialsOverride}} text-primary{{end}}"></i>
+    <span>{{if .Credentials}}yes{{else}}no{{end}}</span>
+  </span>
+</span>
+{{end}}

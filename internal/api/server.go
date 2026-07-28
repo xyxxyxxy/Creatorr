@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/xyxxyxxy/Creatorr/internal/api/gen"
-	"github.com/xyxxyxxy/Creatorr/internal/cookies"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
 	"github.com/xyxxyxxy/Creatorr/internal/events"
@@ -107,14 +106,6 @@ func (s *Server) CancelTask(w http.ResponseWriter, r *http.Request, id gen.TaskI
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) BumpTask(w http.ResponseWriter, r *http.Request, id gen.TaskId) {
-	if err := s.Queue.Bump(int64(id)); err != nil {
-		writeErr(w, http.StatusNotFound, apperrors.CodeNotFound, "task not pending", err.Error())
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (s *Server) SetDomainActive(w http.ResponseWriter, r *http.Request, domain gen.Domain) {
 	var body gen.SetActiveRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -208,15 +199,15 @@ func (s *Server) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	s.ListSettings(w, r)
 }
 
-func (s *Server) ListCookies(w http.ResponseWriter, r *http.Request) {
-	list, err := cookies.List(s.Queue.DB)
+func (s *Server) ListDomainCookies(w http.ResponseWriter, r *http.Request) {
+	list, err := domains.ListCookieJars(s.Queue.DB)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "list cookies failed", err.Error())
+		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "list domain cookies failed", err.Error())
 		return
 	}
-	out := make([]gen.Cookie, 0, len(list))
+	out := make([]gen.DomainCookie, 0, len(list))
 	for _, c := range list {
-		out = append(out, gen.Cookie{
+		out = append(out, gen.DomainCookie{
 			Domain:    c.Domain,
 			Content:   c.Content,
 			UpdatedAt: parseTime(c.UpdatedAt),
@@ -225,22 +216,22 @@ func (s *Server) ListCookies(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) UpsertCookie(w http.ResponseWriter, r *http.Request) {
-	var body gen.UpsertCookieRequest
+func (s *Server) SetDomainCookies(w http.ResponseWriter, r *http.Request, domain gen.Domain) {
+	var body gen.SetDomainCookiesRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, http.StatusBadRequest, apperrors.CodeInternal, "invalid JSON", err.Error())
 		return
 	}
-	if err := cookies.Upsert(s.Queue.DB, body.Domain, body.Content); err != nil {
-		writeErr(w, http.StatusBadRequest, apperrors.CodeInternal, "save cookie failed", err.Error())
+	if err := domains.SetCookies(s.Queue.DB, string(domain), body.Content); err != nil {
+		writeErr(w, http.StatusBadRequest, apperrors.CodeInternal, "save domain cookies failed", err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) DeleteCookie(w http.ResponseWriter, r *http.Request, domain gen.Domain) {
-	if err := cookies.Delete(s.Queue.DB, string(domain)); err != nil {
-		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "delete cookie failed", err.Error())
+func (s *Server) ClearDomainCookies(w http.ResponseWriter, r *http.Request, domain gen.Domain) {
+	if err := domains.ClearCookies(s.Queue.DB, string(domain)); err != nil {
+		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "clear domain cookies failed", err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

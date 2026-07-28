@@ -92,11 +92,11 @@ func FormatSeriesNFO(meta SeriesNFO) []byte {
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` + "\n")
 	b.WriteString("<tvshow>\n")
 	b.WriteString("  <title>" + xmlEscape(meta.Title) + "</title>\n")
-	if meta.SortTitle != "" {
-		b.WriteString("  <sorttitle>" + xmlEscape(meta.SortTitle) + "</sorttitle>\n")
+	if st := omitWhenEqualTitle(meta.SortTitle, meta.Title); st != "" {
+		b.WriteString("  <sorttitle>" + xmlEscape(st) + "</sorttitle>\n")
 	}
-	if meta.OriginalTitle != "" {
-		b.WriteString("  <originaltitle>" + xmlEscape(meta.OriginalTitle) + "</originaltitle>\n")
+	if ot := omitWhenEqualTitle(meta.OriginalTitle, meta.Title); ot != "" {
+		b.WriteString("  <originaltitle>" + xmlEscape(ot) + "</originaltitle>\n")
 	}
 	if meta.Plot != "" {
 		b.WriteString("  <plot>" + xmlEscape(meta.Plot) + "</plot>\n")
@@ -472,13 +472,15 @@ func (s *Store) SaveSeriesMetadata(seriesID int64, p SaveSeriesMetadataParams) e
 		return err
 	}
 	uidType, uidVal := coalesceUniqueID(p.UniqueIDType, p.UniqueIDValue, ser.Meta.UniqueIDType, ser.Meta.UniqueIDValue)
+	sortTitle := omitWhenEqualTitle(p.SortTitle, ser.Title)
+	origTitle := omitWhenEqualTitle(p.OriginalTitle, ser.Title)
 	_, err = s.DB.SQL.Exec(`
 		UPDATE series SET
 		  plot = ?, sorttitle = ?, originaltitle = ?, studio = ?,
 		  genres = ?, tags = ?, uniqueid_type = ?, uniqueid_value = ?,
 		  actors = ?, tagline = ?, country = ?, mpaa = ?
 		WHERE id = ?
-	`, strings.TrimSpace(p.Plot), strings.TrimSpace(p.SortTitle), strings.TrimSpace(p.OriginalTitle),
+	`, strings.TrimSpace(p.Plot), sortTitle, origTitle,
 		strings.TrimSpace(p.Studio), encodeStringSlice(p.Genres), encodeStringSlice(p.Tags),
 		uidType, uidVal,
 		encodeActors(p.Actors), strings.TrimSpace(p.Tagline), strings.TrimSpace(p.Country),
@@ -656,8 +658,7 @@ func (s *Store) RecomputeSeriesPremiered(seriesID int64) (changed bool, err erro
 	return true, nil
 }
 
-// SeriesHasBusyMediaTasks reports pending/running download, pack_stream, cache_beginning,
-// sponsorblock_cut, media_verify, or stream_play.
+// SeriesHasBusyMediaTasks reports pending/running download, sponsorblock_cut, or media_verify.
 func (s *Store) SeriesHasBusyMediaTasks(seriesID int64) (bool, error) {
 	if s.Queue == nil {
 		return false, nil
@@ -667,7 +668,7 @@ func (s *Store) SeriesHasBusyMediaTasks(seriesID int64) (bool, error) {
 		SELECT COUNT(*) FROM tasks t
 		LEFT JOIN videos v ON v.id = t.video_id
 		WHERE t.status IN ('pending', 'running')
-		  AND t.kind IN ('download', 'pack_stream', 'cache_beginning', 'sponsorblock_cut', 'media_verify', 'stream_play')
+		  AND t.kind IN ('download', 'sponsorblock_cut', 'media_verify')
 		  AND (t.series_id = ? OR v.series_id = ?)
 	`, seriesID, seriesID).Scan(&n)
 	return n > 0, err
@@ -739,6 +740,7 @@ func downloadURLToCache(rawURL, dest string) error {
 
 // PrefetchDraft is ephemeral form fill data (not persisted on series until Save).
 type PrefetchDraft struct {
+	Title         string            `json:"title"` // display name for Add series; not a tvshow.nfo alt title
 	Plot          string            `json:"plot"`
 	SortTitle     string            `json:"sorttitle"`
 	OriginalTitle string            `json:"originaltitle"`

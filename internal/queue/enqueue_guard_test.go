@@ -73,33 +73,3 @@ func TestEnqueueDownloadQueueCap(t *testing.T) {
 		t.Fatalf("other domain should have its own cap, got %v", err)
 	}
 }
-
-func TestEnqueueCacheBeginningSharesCap(t *testing.T) {
-	d, err := db.Open(filepath.Join(t.TempDir(), "q-begin.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer d.Close()
-	_ = settings.SeedDefaults(d)
-	_ = settings.SetDomainDefault(d, 0, 2, 1, "10M", "0", false)
-	s := queue.NewStore(d)
-	v1 := seedVideo(t, s, "b1")
-	v2 := seedVideo(t, s, "b2")
-	v3 := seedVideo(t, s, "b3")
-	if _, err := s.Enqueue(queue.EnqueueParams{
-		Kind: queue.KindDownload, Domain: "example.com", SeriesID: 1, VideoID: v1,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Enqueue(queue.EnqueueParams{
-		Kind: queue.KindCacheBeginning, Domain: "example.com", SeriesID: 1, VideoID: v2,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	_, err = s.Enqueue(queue.EnqueueParams{
-		Kind: queue.KindCacheBeginning, Domain: "example.com", SeriesID: 1, VideoID: v3,
-	})
-	if !errors.Is(err, queue.ErrQueueFull) {
-		t.Fatalf("want ErrQueueFull, got %v", err)
-	}
-}

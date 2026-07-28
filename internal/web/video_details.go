@@ -6,16 +6,13 @@ import (
 	"time"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 type videoDetailRow struct {
-	Label       string
-	Value       string
-	IsURL       bool
-	IsPath      bool
-	ProgressPct int    // 0–100; -1 = no % (unknown duration); only set for Stream cache
-	ProgressOn  bool   // show daisyUI progress
+	Label  string
+	Value  string
+	IsURL  bool
+	IsPath bool
 }
 
 // videoDetailRows builds labeled rows from dedicated video columns (+ derived import mode).
@@ -40,52 +37,6 @@ func videoDetailRows(store *library.Store, v *library.Video) []videoDetailRow {
 	}
 	if v.FPS.Valid && v.FPS.Float64 > 0 {
 		add("FPS", fmt.Sprintf("%g", v.FPS.Float64), false, false)
-	}
-	if v.StreamURLsKind.Valid {
-		if label := library.StreamTypeLabel(v.StreamURLsKind.String); label != "" {
-			add("Stream kind", label, false, false)
-		} else {
-			add("Stream kind", v.StreamURLsKind.String, false, false)
-		}
-	}
-	if v.Status == "streamable" && !library.StreamCDNDirect(v.StreamKind()) {
-		beginningSec := 0
-		if store != nil {
-			if n, err := settings.CacheBeginningSeconds(store.DB); err == nil {
-				beginningSec = n
-			}
-		}
-		eff := float64(0)
-		if store != nil {
-			eff = store.EffectiveStreamCacheSeconds(v.ID, v.StreamBeginningCached, v.StreamPlaybackCachedSeconds, beginningSec)
-		} else if v.StreamPlaybackCachedSeconds > 0 {
-			eff = v.StreamPlaybackCachedSeconds
-		} else if v.StreamBeginningCached && beginningSec > 0 {
-			eff = float64(beginningSec)
-		}
-		dur := 0.0
-		if v.DurationSeconds.Valid && v.DurationSeconds.Int64 > 0 {
-			dur = float64(v.DurationSeconds.Int64)
-		}
-		pct := library.StreamCachePercent(eff, dur, v.StreamPlaybackCacheComplete)
-		var label string
-		if pct >= 0 {
-			if dur > 0 {
-				label = fmt.Sprintf("%d%% · %s / %s", pct, formatDetailDuration(eff), formatDetailDuration(dur))
-			} else {
-				label = fmt.Sprintf("%d%% · %s", pct, formatDetailDuration(eff))
-			}
-		} else if eff > 0 {
-			label = formatDetailDuration(eff) + " cached"
-		} else {
-			label = "none"
-		}
-		out = append(out, videoDetailRow{
-			Label:       "Stream cache",
-			Value:       label,
-			ProgressOn:  pct >= 0 || eff > 0,
-			ProgressPct: pct,
-		})
 	}
 	if v.DownloadFormatSelector.Valid {
 		add("Download format", v.DownloadFormatSelector.String, false, false)

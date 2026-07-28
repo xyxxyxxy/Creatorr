@@ -35,7 +35,7 @@ type EpisodeNFO struct {
 	UniqueID       string
 	SourceSite     string // legacy fallback when UniqueIDType empty
 	Domain         string // source hostname for {domain}; empty when unknown
-	RuntimeSeconds int    // 0 = omit; Emby/Kodi use this for .strm duration
+	RuntimeSeconds int    // 0 = omit; Emby/Kodi use this for episode duration
 }
 
 // WriteEpisodeNFO writes episodedetails XML at path.
@@ -175,7 +175,7 @@ type SidecarBundle struct {
 
 // RefreshDiskSidecars rewrites NFO/thumb/subs beside an existing packed file.
 // Leaves the media file and info.json untouched (info.json updates only when media changes).
-// No-op (nil) when no video/.strm pack anchor on disk.
+// No-op (nil) when no video pack anchor on disk.
 // Removes prior nfo/thumb/sub files from disk before rewrite (orphan cleanup).
 func (s *Store) RefreshDiskSidecars(videoID int64, bundle SidecarBundle, taskID int64) error {
 	_ = bundle.InfoJSON // never write info.json on independent sidecar refresh
@@ -216,19 +216,20 @@ func (s *Store) RefreshDiskSidecars(videoID int64, bundle SidecarBundle, taskID 
 	stem := strings.TrimSuffix(mediaPath, filepath.Ext(mediaPath))
 	stemBase := filepath.Base(stem)
 	thumbPath := ""
-	if bundle.ThumbSrc != "" && fileExists(bundle.ThumbSrc) {
-		ext := strings.ToLower(filepath.Ext(bundle.ThumbSrc))
+	thumbURL := ""
+	if v.ThumbnailURL.Valid {
+		thumbURL = v.ThumbnailURL.String
+	}
+	thumbSrc, cleanupThumb := MaterializeThumbSrc(bundle.ThumbSrc, thumbURL)
+	defer cleanupThumb()
+	if thumbSrc != "" {
+		ext := strings.ToLower(filepath.Ext(thumbSrc))
 		if ext == "" {
 			ext = ".jpg"
 		}
 		thumbPath = filepath.Join(dir, stemBase+"-thumb"+ext)
-		if err := copyFile(bundle.ThumbSrc, thumbPath); err != nil {
+		if err := copyFile(thumbSrc, thumbPath); err != nil {
 			return fmt.Errorf("copy thumb: %w", err)
-		}
-	} else if v.ThumbnailURL.Valid && v.ThumbnailURL.String != "" {
-		dest := filepath.Join(dir, stemBase+"-thumb.jpg")
-		if err := downloadURLToFile(v.ThumbnailURL.String, dest); err == nil {
-			thumbPath = dest
 		}
 	}
 
@@ -338,7 +339,7 @@ func looksLikeLangTag(tag string) bool {
 	return true
 }
 
-// RewriteVideoNFO rewrites the episode NFO beside an on-disk video or .strm from current DB metadata.
+// RewriteVideoNFO rewrites the episode NFO beside an on-disk video from current DB metadata.
 // Returns changed=false when there is no pack anchor or on-disk bytes already match.
 // When taskID > 0 and bytes change, appends video_history (nfo_regenerated).
 func (s *Store) RewriteVideoNFO(videoID, taskID int64) (changed bool, err error) {
@@ -447,6 +448,11 @@ func (s *Store) episodeNFOBeside(v *Video, mediaPath string) (EpisodeNFO, string
 	return episodeMetaFromVideo(v, seriesTitle, season, episode, aired, runtime), nfoPath, nil
 }
 
+// EpisodeMetaFromVideo builds EpisodeNFO from a video row (shared by pack / rewrite / stream).
+func EpisodeMetaFromVideo(v *Video, seriesTitle string, season, episode int, aired string, runtime int) EpisodeNFO {
+	return episodeMetaFromVideo(v, seriesTitle, season, episode, aired, runtime)
+}
+
 // episodeMetaFromVideo builds EpisodeNFO from a video row (shared by pack / rewrite / stream).
 func episodeMetaFromVideo(v *Video, seriesTitle string, season, episode int, aired string, runtime int) EpisodeNFO {
 	if v == nil {
@@ -487,6 +493,31 @@ func episodeMetaFromVideo(v *Video, seriesTitle string, season, episode int, air
 		Domain:         domain,
 		RuntimeSeconds: runtime,
 	}
+}
+
+// MaterializeThumbSrc returns an on-disk thumbnail path for packing/refresh.
+// Prefer an existing thumbSrc file; otherwise soft-download thumbnailURL to a temp .jpg.
+// Caller must invoke cleanup (no-op when nothing was downloaded). Soft-ok on HTTP failure.
+func MaterializeThumbSrc(thumbSrc, thumbnailURL string) (path string, cleanup func()) {
+	cleanup = func() {}
+	if thumbSrc != "" && fileExists(thumbSrc) {
+		return thumbSrc, cleanup
+	}
+	url := strings.TrimSpace(thumbnailURL)
+	if url == "" {
+		return "", cleanup
+	}
+	tmp, err := os.CreateTemp("", "creatorr-thumb-*.jpg")
+	if err != nil {
+		return "", cleanup
+	}
+	tmpPath := tmp.Name()
+	_ = tmp.Close()
+	if err := downloadURLToFile(url, tmpPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", cleanup
+	}
+	return tmpPath, func() { _ = os.Remove(tmpPath) }
 }
 
 func downloadURLToFile(rawURL, dest string) error {

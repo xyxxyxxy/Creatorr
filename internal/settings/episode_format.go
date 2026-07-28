@@ -9,7 +9,7 @@ import (
 )
 
 // DefaultEpisodeFormat is the relative path stem (no extension) under the series folder.
-const DefaultEpisodeFormat = "S{year}/S{year}E{episode:000000} [{id}]"
+const DefaultEpisodeFormat = "S{year}/S{year}E{episode} [{id}]"
 
 // NormalizeEpisodeFormat trims and applies the default when empty.
 func NormalizeEpisodeFormat(raw string) string {

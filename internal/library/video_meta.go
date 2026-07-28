@@ -1,23 +1,24 @@
 package library
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
+	"github.com/xyxxyxxy/Creatorr/internal/sponsorblock"
 )
 
 // MediaCompleteMeta is Creatorr-owned state written on download/import complete.
 type MediaCompleteMeta struct {
-	Tool                   string  // yt-dlp | import
-	DownloadFormatSelector string  // archive download only
-	DownloadRemuxContainer string  // "mkv" only when remux ran; empty when skipped
-	ImportSrc              string  // original path at import
-	InPlace                bool    // transient: history message only (not a column)
-	DurationSeconds        int     // optional; 0 → try info.json
+	Tool                   string // yt-dlp | import
+	DownloadFormatSelector string // archive download only
+	DownloadRemuxContainer string // "mkv" only when remux ran; empty when skipped
+	ImportSrc              string // original path at import
+	InPlace                bool   // transient: history message only (not a column)
+	DurationSeconds        int    // optional; 0 → try info.json
 	Width                  int
 	Height                 int
 	FPS                    float64
@@ -125,44 +126,28 @@ func (s *Store) SetDurationSecondsIfEmpty(videoID int64, sec int) error {
 	return err
 }
 
-// SetStreamURLsKind stores progressive|pipe|hls (empty clears).
-func (s *Store) SetStreamURLsKind(videoID int64, kind string) error {
-	kind = strings.TrimSpace(strings.ToLower(kind))
-	var v any
-	if kind != "" {
-		v = kind
+// SoftFillDurationFromMedia probes media with ffprobe and soft-fills duration_seconds
+// when the column is still NULL/0. Probe errors are ignored (import must not fail).
+func (s *Store) SoftFillDurationFromMedia(ctx context.Context, videoID int64, mediaPath string) error {
+	mediaPath = strings.TrimSpace(mediaPath)
+	if videoID < 1 || mediaPath == "" || !fileExists(mediaPath) {
+		return nil
 	}
-	_, err := s.DB.SQL.Exec(`UPDATE videos SET stream_urls_kind = ? WHERE id = ?`, v, videoID)
-	return err
-}
-
-// SetStreamBeginningCached sets the stream beginning cache flag.
-func (s *Store) SetStreamBeginningCached(videoID int64, cached bool) error {
-	flag := 0
-	if cached {
-		flag = 1
+	v, err := s.GetVideo(videoID)
+	if err != nil {
+		return err
 	}
-	_, err := s.DB.SQL.Exec(`UPDATE videos SET stream_beginning_cached = ? WHERE id = ?`, flag, videoID)
-	return err
-}
-
-// SetStreamMeta updates stream_urls_kind and optional duration/resolution from urls/resolve.
-func (s *Store) SetStreamMeta(videoID int64, kind string, durationSec, width, height int, fps float64) error {
-	kind = strings.TrimSpace(strings.ToLower(kind))
-	var kindVal any
-	if kind != "" {
-		kindVal = kind
+	if v.DurationSeconds.Valid && v.DurationSeconds.Int64 > 0 {
+		return nil
 	}
-	_, err := s.DB.SQL.Exec(`
-		UPDATE videos SET
-		  stream_urls_kind = COALESCE(?, stream_urls_kind),
-		  duration_seconds = CASE WHEN ? > 0 THEN ? ELSE duration_seconds END,
-		  width = CASE WHEN ? > 0 THEN ? ELSE width END,
-		  height = CASE WHEN ? > 0 THEN ? ELSE height END,
-		  fps = CASE WHEN ? > 0 THEN ? ELSE fps END
-		WHERE id = ?
-	`, kindVal, durationSec, durationSec, width, width, height, height, fps, fps, videoID)
-	return err
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	p, err := sponsorblock.ProbeMedia(ctx, mediaPath)
+	if err != nil || p.Duration <= 0 {
+		return nil
+	}
+	return s.SetDurationSecondsIfEmpty(videoID, int(p.Duration+0.5))
 }
 
 // FillMediaColumnsFromInfoJSON soft-fills NULL duration/width/height/fps and empty media_type from info.json.
@@ -222,57 +207,6 @@ func ResolutionLabelFromCols(width, height sql.NullInt64) string {
 		return ""
 	}
 	return ResolutionLabel(int(width.Int64), int(height.Int64))
-}
-
-// StreamURLsKind returns last known urls kind, or "".
-func (v Video) StreamKind() string {
-	if !v.StreamURLsKind.Valid {
-		return ""
-	}
-	return strings.TrimSpace(strings.ToLower(v.StreamURLsKind.String))
-}
-
-// StreamNeedsBeginning reports whether cache_beginning applies (pipe mux only).
-func StreamNeedsBeginning(kind string) bool {
-	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case ytdlp.UrlsKindHLS, ytdlp.UrlsKindProgressive:
-		return false
-	default:
-		return true
-	}
-}
-
-// StreamCDNDirect reports CDN HLS/progressive - no beginning cache needed.
-func StreamCDNDirect(kind string) bool {
-	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case ytdlp.UrlsKindHLS, ytdlp.UrlsKindProgressive:
-		return true
-	default:
-		return false
-	}
-}
-
-// StreamTypeLabel is a short UI label for stream_urls_kind (empty when unknown).
-func StreamTypeLabel(kind string) string {
-	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case ytdlp.UrlsKindPipe:
-		return "piped"
-	case ytdlp.UrlsKindHLS:
-		return "CDN HLS"
-	case ytdlp.UrlsKindProgressive:
-		return "CDN progressive"
-	default:
-		return ""
-	}
-}
-
-// StreamTypeListLabel is the video-list meta label; pipe + beginning → "piped - beginning cached".
-func StreamTypeListLabel(kind string, beginningCached bool) string {
-	label := StreamTypeLabel(kind)
-	if label == "piped" && beginningCached {
-		return "piped - beginning cached"
-	}
-	return label
 }
 
 // ImportInPlace reports whether import_src sits under a library root (bound in place).
@@ -338,4 +272,3 @@ func ResolutionLabel(width, height int) string {
 func (v Video) ResolutionLabel() string {
 	return ResolutionLabelFromCols(v.Width, v.Height)
 }
-

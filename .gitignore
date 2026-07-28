@@ -12,6 +12,7 @@ docker-compose.override.yml
 
 # Build / caches
 /bin/
+/creatorr
 .gopath/
 node_modules/
 sbom.cdx.json

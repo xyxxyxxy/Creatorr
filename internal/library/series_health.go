@@ -125,9 +125,12 @@ func argsToInt64(args []any) []int64 {
 
 // SeriesVideoErrorFlags reports whether a series has any videos in error statuses.
 type SeriesVideoErrorFlags struct {
-	HasSourceError   bool // wanted_source_error
-	HasDownloadError bool // wanted_download_error
-	HasVerifyFailed  bool // verify_failed
+	HasSourceError     bool // wanted_source_error
+	SourceErrorCount   int
+	HasDownloadError   bool // wanted_download_error
+	DownloadErrorCount int
+	HasVerifyFailed    bool // verify_failed
+	VerifyFailedCount  int
 }
 
 // SeriesVideoErrorFlagsMap returns error flags per series ID (missing keys = no errors).
@@ -147,9 +150,9 @@ func (s *Store) SeriesVideoErrorFlagsMap(seriesIDs []int64) (map[int64]SeriesVid
 	}
 	rows, err := s.DB.SQL.Query(`
 		SELECT series_id,
-		       MAX(CASE WHEN status = 'wanted_source_error' THEN 1 ELSE 0 END),
-		       MAX(CASE WHEN status = 'wanted_download_error' THEN 1 ELSE 0 END),
-		       MAX(CASE WHEN status = 'verify_failed' THEN 1 ELSE 0 END)
+		       SUM(CASE WHEN status = 'wanted_source_error' THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN status = 'wanted_download_error' THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN status = 'verify_failed' THEN 1 ELSE 0 END)
 		FROM videos
 		WHERE series_id IN (`+sqlIntPlaceholders(len(args))+`)
 		  AND status IN ('wanted_source_error', 'wanted_download_error', 'verify_failed')
@@ -166,12 +169,37 @@ func (s *Store) SeriesVideoErrorFlagsMap(seriesIDs []int64) (map[int64]SeriesVid
 			return nil, err
 		}
 		out[seriesID] = SeriesVideoErrorFlags{
-			HasSourceError:   srcErr != 0,
-			HasDownloadError: dlErr != 0,
-			HasVerifyFailed:  verifyErr != 0,
+			HasSourceError:     srcErr > 0,
+			SourceErrorCount:   srcErr,
+			HasDownloadError:   dlErr > 0,
+			DownloadErrorCount: dlErr,
+			HasVerifyFailed:    verifyErr > 0,
+			VerifyFailedCount:  verifyErr,
 		}
 	}
 	return out, rows.Err()
+}
+
+// CountSeriesWithError returns how many series have SeriesWarnError health
+// (video wanted_download_error / wanted_source_error / verify_failed, or a source
+// whose latest scan-related history is scan_error). Incomplete full-scan is excluded.
+func (s *Store) CountSeriesWithError() (int, error) {
+	var n int
+	err := s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM (
+			SELECT series_id FROM videos
+			WHERE status IN ('wanted_download_error', 'wanted_source_error', 'verify_failed')
+			UNION
+			SELECT DISTINCT src.series_id
+			FROM sources src
+			WHERE (
+				SELECT sh.event FROM source_history sh
+				WHERE sh.source_id = src.id AND sh.event IN (?, ?)
+				ORDER BY sh.id DESC LIMIT 1
+			) = ?
+		)
+	`, SourceHistScanned, SourceHistScanError, SourceHistScanError).Scan(&n)
+	return n, err
 }
 
 // SeriesWarnLevel returns the strongest warn level for one series.

@@ -1,7 +1,7 @@
 // Package notify sends operator alerts via Apprise (github.com/unraid/apprise-go)
 // and records them in the in-app notifications table via the fixed Creatorr channel.
 //
-// Channels: virtual creatorr://in-app (all events, read-only) plus notify_channels
+// Channels: virtual creatorr://in-app (all events, read-only) plus notification_channels
 // (Apprise URL + subscribed event ids).
 package notify
 
@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
+	apprise "github.com/unraid/apprise-go"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/events"
-	apprise "github.com/unraid/apprise-go"
 )
 
 // sendFn sends one Apprise notification. Tests override this.
@@ -42,6 +42,7 @@ func publishRead(database *db.DB, id int64) {
 	n, _ := CountUnread(database)
 	eventsHub.NotificationRead(id, n)
 }
+
 // SetSendFnForTest swaps the send implementation; returns the previous one.
 func SetSendFnForTest(fn func(urls []string, title, body string, nt apprise.NotifyType) error) func(urls []string, title, body string, nt apprise.NotifyType) error {
 	prev := sendFn
@@ -74,8 +75,9 @@ func Send(ctx context.Context, urls []string, title, body string) error {
 
 // SendEvent delivers to every channel subscribed to event: in-app inserts a
 // notifications row; Apprise channels call sendFn. taskID is required (>0) for
-// alert events; may be 0 for download_digest (stored NULL). Successful Apprise
-// delivery sets external_ok and marks alert notifications read.
+// unread events (alert + warning); may be 0 for info digests (stored NULL).
+// Info events like live_skipped may still pass task_id so the detail page links the task.
+// Successful Apprise delivery sets external_ok and marks unread notifications read.
 func SendEvent(ctx context.Context, database *db.DB, event, title, body string, taskID int64) error {
 	if database == nil {
 		return nil
@@ -84,7 +86,7 @@ func SendEvent(ctx context.Context, database *db.DB, event, title, body string, 
 	if !validEvent(event) {
 		return fmt.Errorf("unknown notify event %q", event)
 	}
-	if IsAlertEvent(event) && taskID <= 0 {
+	if IsUnreadEvent(event) && taskID <= 0 {
 		return fmt.Errorf("task_id required for notify event %q", event)
 	}
 	if err := ctx.Err(); err != nil {
@@ -93,7 +95,7 @@ func SendEvent(ctx context.Context, database *db.DB, event, title, body string, 
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	readAt := ""
-	if !IsAlertEvent(event) {
+	if !IsUnreadEvent(event) {
 		readAt = now
 	}
 
@@ -135,7 +137,7 @@ func SendEvent(ctx context.Context, database *db.DB, event, title, body string, 
 	}
 	if anyAppriseOK {
 		markRead := ""
-		if IsAlertEvent(event) {
+		if IsUnreadEvent(event) {
 			markRead = now
 		}
 		_ = MarkExternalOK(database, notifID, markRead)
@@ -159,7 +161,7 @@ func DomainAlert(ctx context.Context, database *db.DB, taskID int64, domain, rea
 	if len(detail) > 500 {
 		detail = detail[:500]
 	}
-	title := fmt.Sprintf("Creatorr: domain issue (%s)", domain)
+	title := fmt.Sprintf("Domain issue (%s)", domain)
 	body := fmt.Sprintf("Domain %s reported %s. Videos may be in wanted_download_error / wanted_source_error. Fix cookies or wait, then Retry on the source.\n\n%s", domain, reason, detail)
 	return SendEvent(ctx, database, reason, title, body, taskID)
 }
@@ -169,7 +171,7 @@ func YtDlpFailed(ctx context.Context, database *db.DB, taskID int64, domain, det
 	if len(detail) > 500 {
 		detail = detail[:500]
 	}
-	title := fmt.Sprintf("Creatorr: yt-dlp / site failure (%s)", domain)
+	title := fmt.Sprintf("yt-dlp / site failure (%s)", domain)
 	body := fmt.Sprintf("Domain %s: yt-dlp or related media task failed.\n\n%s", domain, detail)
 	return SendEvent(ctx, database, EventYtDlpFailed, title, body, taskID)
 }
@@ -187,9 +189,24 @@ func VerifyFailed(ctx context.Context, database *db.DB, taskID int64, series, ti
 	if vt == "" {
 		vt = "video"
 	}
-	nTitle := fmt.Sprintf("Creatorr: verify failed (%s)", label)
+	nTitle := fmt.Sprintf("Verify failed (%s)", label)
 	body := fmt.Sprintf("%s: %s failed media verify. File kept; status verify_failed. Re-download to retry.\n\n%s", label, vt, detail)
 	return SendEvent(ctx, database, EventVerifyFailed, nTitle, body, taskID)
+}
+
+// POTProvider notifies that the PO token sidecar/plugin had a problem while
+// yt-dlp continued (warning level; download is not failed for this alone).
+func POTProvider(ctx context.Context, database *db.DB, taskID int64, domain, detail string) error {
+	if len(detail) > 500 {
+		detail = detail[:500]
+	}
+	dom := strings.TrimSpace(domain)
+	if dom == "" {
+		dom = "unknown"
+	}
+	title := fmt.Sprintf("PO token provider (%s)", dom)
+	body := fmt.Sprintf("Domain %s: PO token provider issue while the task continued. Check creatorr-po-token / plugin dirs / CREATORR_POT_PROVIDER_URL.\n\n%s", dom, detail)
+	return SendEvent(ctx, database, EventPOTProvider, title, body, taskID)
 }
 
 // DigestItem is one completed media item in a download_digest.
@@ -198,7 +215,7 @@ type DigestItem struct {
 	Series    string
 	Title     string
 	Kind      string // archive | stream
-	Beginning bool  // stream beginning cached
+	Beginning bool   // stream beginning cached
 }
 
 // DownloadDigest sends the backlog-cleared digest (no task_id).
@@ -206,8 +223,93 @@ func DownloadDigest(ctx context.Context, database *db.DB, items []DigestItem) er
 	if len(items) == 0 {
 		return nil
 	}
-	title := fmt.Sprintf("Creatorr: %d download(s) finished", len(items))
+	title := fmt.Sprintf("%d download(s) finished", len(items))
 	return SendEvent(ctx, database, EventDownloadDigest, title, FormatDigestBody(items), 0)
+}
+
+// LiveSkipped records an info notification when download soft-skips a
+// currently live broadcast. taskID links notification detail → task (video history
+// live_skipped uses the same task_id). Status stays wanted for later retry.
+func LiveSkipped(ctx context.Context, database *db.DB, taskID int64, series, title string) error {
+	label := strings.TrimSpace(series)
+	vid := strings.TrimSpace(title)
+	if vid != "" {
+		if label != "" {
+			label += " / "
+		}
+		label += vid
+	}
+	if label == "" {
+		label = "(unknown)"
+	}
+	nTitle := "Live broadcast skipped"
+	body := label + "\n\nCurrently live; download/pack deferred. Video stays wanted and will retry after the broadcast ends."
+	return SendEvent(ctx, database, EventLiveSkipped, nTitle, body, taskID)
+}
+
+// FileSyncIssueItem is one media or sidecar row in a file_sync_issues digest.
+type FileSyncIssueItem struct {
+	Series string
+	Title  string
+	Detail string // optional; e.g. "nfo: episode.nfo" for sidecars
+}
+
+const fileSyncIssueListCap = 40
+
+// FileSyncIssues sends one alert digest for missing media/sidecars and/or size
+// mismatches found during a sync_files pass. No-op when both slices are empty.
+func FileSyncIssues(ctx context.Context, database *db.DB, taskID int64, missing, changed []FileSyncIssueItem) error {
+	if len(missing) == 0 && len(changed) == 0 {
+		return nil
+	}
+	n := len(missing) + len(changed)
+	title := fmt.Sprintf("%d library file issue(s)", n)
+	return SendEvent(ctx, database, EventFileSyncIssues, title, FormatFileSyncIssuesBody(missing, changed), taskID)
+}
+
+// FormatFileSyncIssuesBody builds the file_sync_issues message body.
+func FormatFileSyncIssuesBody(missing, changed []FileSyncIssueItem) string {
+	var b strings.Builder
+	writeSection := func(heading string, items []FileSyncIssueItem) {
+		if len(items) == 0 {
+			return
+		}
+		fmt.Fprintf(&b, "%s (%d):\n", heading, len(items))
+		shown := items
+		extra := 0
+		if len(shown) > fileSyncIssueListCap {
+			extra = len(shown) - fileSyncIssueListCap
+			shown = shown[:fileSyncIssueListCap]
+		}
+		for _, it := range shown {
+			label := strings.TrimSpace(it.Series)
+			title := strings.TrimSpace(it.Title)
+			if title != "" {
+				if label != "" {
+					label += " / "
+				}
+				label += title
+			}
+			if label == "" {
+				label = "(unknown)"
+			}
+			if d := strings.TrimSpace(it.Detail); d != "" {
+				label += " (" + d + ")"
+			}
+			fmt.Fprintf(&b, "- %s\n", label)
+		}
+		if extra > 0 {
+			fmt.Fprintf(&b, "- +%d more\n", extra)
+		}
+		b.WriteByte('\n')
+	}
+	writeSection("Missing", missing)
+	writeSection("Size changed", changed)
+	body := strings.TrimSpace(b.String())
+	if body != "" {
+		body += "\n\nFiles kept where present. Media size mismatches set status verify_failed; sidecar issues keep video status. Re-download or regenerate manually to replace. No automatic re-download."
+	}
+	return body
 }
 
 // FormatDigestBody builds the download_digest message body.

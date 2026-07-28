@@ -1,29 +1,58 @@
 {{define "preset_fill"}}
 {{/*
-  cron text input with @-descriptor datalist.
+  Cron join: [cron] [input + @… datalist] [☑ enabled].
+  Unchecked = never (disabled field shows "never"; form submits empty).
+  Checked = cron schedule active.
 
   Required: FieldName, FieldID, FieldLabel
   Optional: FieldValue, FieldPlaceholder, FieldInfo, FieldHint, FieldHelp (alias→Info),
-            FieldClass, FieldRequired, CronDescriptors ([]string)
-
-  Free-text cron still allowed; datalist only suggests @hourly/@daily/…
+            FieldClass, FieldRequired, CronDescriptors ([]string),
+            RegularLabel (default "enabled")
 */}}
-{{ $cur := .FieldValue }}
+{{$name := .FieldName}}
+{{$id := .FieldID}}
+{{$cur := .FieldValue}}
 {{$info := .FieldInfo}}{{if not $info}}{{$info = .FieldHelp}}{{end}}
-{{$listID := printf "%s-dl" .FieldID}}
+{{$ph := .FieldPlaceholder}}{{if not $ph}}{{$ph = "* * * * *"}}{{end}}
+{{$regularLabel := .RegularLabel}}{{if not $regularLabel}}{{$regularLabel = "enabled"}}{{end}}
+{{$listID := printf "%s-dl" $id}}
+{{$off := not $cur}}
+{{$inputClass := .FieldClass}}
 <div class="w-full">
-  {{template "field_input" (dict
-    "Name" .FieldName
-    "ID" .FieldID
-    "Label" .FieldLabel
-    "Value" $cur
-    "Placeholder" .FieldPlaceholder
-    "Info" $info
-    "Hint" .FieldHint
-    "Required" .FieldRequired
-    "InputClass" (printf "preset-fill-input %s" .FieldClass)
-    "ListID" $listID
-    "Options" .CronDescriptors
-  )}}
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">
+      <span class="inline-flex items-center gap-1">
+        {{.FieldLabel}}
+        {{if $info}}{{template "field_info" (dict "Info" $info)}}{{end}}
+      </span>
+    </legend>
+    <div class="join w-full" data-cron-join>
+      <span class="btn join-item no-animation pointer-events-none shrink-0">cron</span>
+      {{if $off}}<input type="hidden" name="{{$name}}" value="" data-cron-submit />{{end}}
+      <input type="text" {{if not $off}}name="{{$name}}"{{end}} id="{{$id}}"
+             class="input join-item grow min-w-0 preset-fill-input{{if $inputClass}} {{$inputClass}}{{end}}{{if $off}} opacity-60{{end}}"
+             placeholder="{{$ph}}"
+             value="{{if $off}}never{{else}}{{$cur}}{{end}}"
+             list="{{$listID}}"
+             autocomplete="off"
+             data-cron-input
+             data-cron-name="{{$name}}"
+             data-cron-placeholder="{{$ph}}"
+             {{if .FieldRequired}}{{if not $off}}required{{end}}{{end}}
+             {{if $off}}disabled{{end}} />
+      <label class="btn join-item gap-2 no-animation shrink-0">
+        <input type="checkbox" class="checkbox checkbox-sm" data-cron-regular{{if not $off}} checked{{end}} />
+        <span class="whitespace-nowrap font-normal">{{$regularLabel}}</span>
+      </label>
+    </div>
+    <datalist id="{{$listID}}">
+      {{range .CronDescriptors}}
+      <option value="{{.}}"></option>
+      {{end}}
+    </datalist>
+    {{if .FieldHint}}
+    <p class="label whitespace-pre-line">{{.FieldHint}}</p>
+    {{end}}
+  </fieldset>
 </div>
 {{end}}

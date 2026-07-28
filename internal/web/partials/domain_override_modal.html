@@ -2,125 +2,112 @@
 {{/*
   Shared add/edit domain override modal.
   Mode: "add" | "edit"
-  Expects: Redirect, DefaultCooldown, DefaultRate, DefaultSleep, DefaultFlare, FlareConfigured
-  Edit: Domain, CooldownOverride, RateOverride, SleepOverride, FlareOverride, CookieContent, HasRow
-  Add: DomainDatalist ([]string)
-  FlareConfigured: false disables On (requires Settings → General URL).
+  Expects: Redirect, DomainDatalist, DefaultCooldown, DefaultRate, DefaultSleep, FlareConfigured
+  Edit: Domain (prefill), CooldownOverride, RateOverride, SleepOverride, FlareOverride, CookieContent, HasRow
+  Hostname is always editable. Save upserts the posted hostname only; changing it does not delete or rename the opened row
+  (overrides are soft lookups by hostname - no hard links).
+  FlareConfigured: false disables Use FlareSolverr (needs FlareSolverr URL on Settings → General).
 */}}
 {{$edit := eq .Mode "edit"}}
 {{$id := "modal-add-domain-override"}}
 {{if $edit}}{{$id = printf "modal-edit-domain-%s" .Domain}}{{end}}
-{{$flare := .FlareOverride}}{{if not $flare}}{{$flare = "default"}}{{end}}
+{{$listID := printf "%s-datalist" $id}}
+{{$flareOn := and (eq .FlareOverride "on") .FlareConfigured}}
 {{$flareOK := .FlareConfigured}}
-{{$defFlare := "off"}}{{if and .DefaultFlare $flareOK}}{{$defFlare = "on"}}{{end}}
-{{if and (not $flareOK) (eq $flare "on")}}{{$flare = "off"}}{{end}}
 <input type="checkbox" id="{{$id}}" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box max-w-lg">
-    <h3 class="font-bold text-lg mb-2">{{if $edit}}Edit {{.Domain}}{{else}}Add domain override{{end}}</h3>
-    <form method="post" action="/actions/upsert-domain-override" class="space-y-3">
+  <div class="modal-box max-w-3xl w-11/12">
+    <h3 class="font-bold text-lg mb-2">{{if $edit}}Edit {{.Domain}} domain overrides{{else}}Add domain override{{end}}</h3>
+    <form method="post" action="/actions/upsert-domain-override" class="space-y-3 js-domain-override-form" novalidate>
       <input type="hidden" name="redirect" value="{{.Redirect}}" />
-      {{if $edit}}
-      <input type="hidden" name="domain" value="{{.Domain}}" />
-      {{else}}
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">Domain</legend>
-        <input name="domain" list="domain-override-datalist" class="input w-full font-mono" placeholder="example.com" required autocomplete="off" />
-        <datalist id="domain-override-datalist">
-          {{range .DomainDatalist}}<option value="{{.}}"></option>{{end}}
-        </datalist>
-        <p class="label whitespace-normal">Hostname only. Leading www. is stripped. Suggestions from existing sources.</p>
-      </fieldset>
-      {{end}}
+      <div class="grid gap-3">
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Domain</legend>
+          <input name="domain" id="{{$id}}-domain" list="{{$listID}}"
+                 class="input w-full font-mono validator js-domain-override-domain"
+                 placeholder="example.com" required autocomplete="off"
+                 value="{{.Domain}}" />
+          <datalist id="{{$listID}}">
+            {{range .DomainDatalist}}<option value="{{.}}"></option>{{end}}
+          </datalist>
+          <p class="validator-hint hidden">Enter a valid hostname (e.g. example.com).</p>
+        </fieldset>
 
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Task cooldown
-            {{template "field_info" (dict "Info" "Pause after a task starts on this domain. Empty = use Domain defaults.")}}
-          </span>
-        </legend>
-        <div class="join w-full">
-          <input type="number" min="0" name="task_cooldown_seconds" class="input join-item grow min-w-0{{if not .CooldownOverride}} opacity-70{{end}}" value="{{.CooldownOverride}}" placeholder="default: {{.DefaultCooldown}}" data-override-clear />
-          <span class="btn join-item no-animation pointer-events-none">seconds</span>
-          {{template "override_clear_btn"}}
-        </div>
-      </fieldset>
+        <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
+          <legend class="fieldset-legend">Queue</legend>
+          <div class="grid gap-3">
+            <div class="grid gap-3 md:grid-cols-2">
+              <fieldset class="fieldset">
+                <legend class="fieldset-legend">Max download queue</legend>
+                <div class="join w-full">
+                  <input type="number" min="1" name="max_download_queue" class="input join-item grow min-w-0{{if not .QueueOverride}} opacity-70{{end}}" value="{{.QueueOverride}}" placeholder="default: {{.DefaultQueue}}" data-override-clear />
+                  {{template "override_clear_btn"}}
+                </div>
+              </fieldset>
+              <fieldset class="fieldset">
+                <legend class="fieldset-legend">Max parallel tasks</legend>
+                <div class="join w-full">
+                  <input type="number" min="1" name="max_parallel_tasks" class="input join-item grow min-w-0{{if not .ParallelOverride}} opacity-70{{end}}" value="{{.ParallelOverride}}" placeholder="default: {{.DefaultParallel}}" data-override-clear />
+                  {{template "override_clear_btn"}}
+                </div>
+              </fieldset>
+            </div>
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Task cooldown</legend>
+              <div class="join w-full">
+                <input type="number" min="0" name="task_cooldown_seconds" class="input join-item grow min-w-0{{if not .CooldownOverride}} opacity-70{{end}}" value="{{.CooldownOverride}}" placeholder="default: {{.DefaultCooldown}}" data-override-clear />
+                <span class="btn join-item no-animation pointer-events-none">seconds</span>
+                {{template "override_clear_btn"}}
+              </div>
+            </fieldset>
+          </div>
+        </fieldset>
 
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Max download queue
-            {{template "field_info" (dict "Info" "Maximum number of download tasks to be queued for the given domain. \"Download now\" user action bypasses this limit. Empty = use Domain defaults.")}}
-          </span>
-        </legend>
-        <div class="join w-full">
-          <input type="number" min="1" name="max_download_queue" class="input join-item grow min-w-0{{if not .QueueOverride}} opacity-70{{end}}" value="{{.QueueOverride}}" placeholder="default: {{.DefaultQueue}}" data-override-clear />
-          {{template "override_clear_btn"}}
-        </div>
-      </fieldset>
+        <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
+          <legend class="fieldset-legend">yt-dlp throttling</legend>
+          <div class="grid gap-3 md:grid-cols-2">
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Download rate limit</legend>
+              {{template "download_rate_limit_join" (dict "Value" .RateOverride "Override" true "DefaultRate" .DefaultRate "ShowClear" true)}}
+            </fieldset>
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Sleep between requests</legend>
+              <div class="join w-full">
+                <input type="number" min="0" step="any" name="sleep_requests" class="input join-item grow min-w-0{{if not .SleepOverride}} opacity-70{{end}}" value="{{.SleepOverride}}" placeholder="default: {{.DefaultSleep}}" data-override-clear />
+                <span class="btn join-item no-animation pointer-events-none">seconds</span>
+                {{template "override_clear_btn"}}
+              </div>
+            </fieldset>
+          </div>
+        </fieldset>
 
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Max parallel tasks
-            {{template "field_info" (dict "Info" "How many tasks may run at once on this hostname. Cannot exceed Max download queue. Empty = use Domain defaults.")}}
-          </span>
-        </legend>
-        <div class="join w-full">
-          <input type="number" min="1" name="max_parallel_tasks" class="input join-item grow min-w-0{{if not .ParallelOverride}} opacity-70{{end}}" value="{{.ParallelOverride}}" placeholder="default: {{.DefaultParallel}}" data-override-clear />
-          {{template "override_clear_btn"}}
-        </div>
-      </fieldset>
-
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Download rate limit
-            {{template "field_info" (dict "Info" "Maximum download rate within the given domain (yt-dlp --limit-rate). Default = use Domain defaults.")}}
-          </span>
-        </legend>
-        {{template "download_rate_limit_join" (dict "Value" .RateOverride "Override" true "DefaultRate" .DefaultRate "ShowClear" true)}}
-      </fieldset>
-
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Sleep between requests
-            {{template "field_info" (dict "Info" "Seconds yt-dlp waits between HTTP requests (metadata, media fragments, and subtitles) to avoid rate limits. Same value for --sleep-requests, --sleep-subtitles, and --sleep-interval. Empty = use Domain defaults.")}}
-          </span>
-        </legend>
-        <div class="join w-full">
-          <input type="number" min="0" step="any" name="sleep_requests" class="input join-item grow min-w-0{{if not .SleepOverride}} opacity-70{{end}}" value="{{.SleepOverride}}" placeholder="default: {{.DefaultSleep}}" data-override-clear />
-          <span class="btn join-item no-animation pointer-events-none">seconds</span>
-          {{template "override_clear_btn"}}
-        </div>
-      </fieldset>
-
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Use FlareSolverr
-            {{template "field_info" (dict "Info" "Pass Settings → General FlareSolverr URL to yt-dlp. Default inherits Domain defaults. On requires a URL there.")}}
-          </span>
-        </legend>
-        <select name="use_flaresolverr" class="select w-full{{if eq $flare "default"}} opacity-70{{end}}">
-          <option value="default" {{if eq $flare "default"}}selected{{end}}>Default ({{$defFlare}})</option>
-          <option value="on" {{if eq $flare "on"}}selected{{end}}{{if not $flareOK}} disabled{{end}}>On{{if not $flareOK}} (set URL in General){{end}}</option>
-          <option value="off" {{if eq $flare "off"}}selected{{end}}>Off</option>
-        </select>
-        {{if not $flareOK}}
-        <p class="label whitespace-normal">Set FlareSolverr URL in Settings → General before enabling On.</p>
-        {{end}}
-      </fieldset>
-
-      {{template "cookie_jar_field" (dict
-        "Value" .CookieContent
-        "EmptyHelp" "Host jar only. Empty = clear (falls back to Domain defaults cookies when set)."
-      )}}
+        <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
+          <legend class="fieldset-legend">Access</legend>
+          {{template "cookie_jar_field" (dict
+            "Value" .CookieContent
+            "ShowGuide" true
+          )}}
+          {{template "checkbox_field" (dict
+            "Name" "use_flaresolverr"
+            "Label" "Use FlareSolverr"
+            "Checked" $flareOn
+            "Disabled" (not $flareOK)
+            "DisabledTitle" "Configure FlareSolverr in 'Settings → General' first."
+            "Hint" "Pre-solve CloudFlare challenges for this domain. Configure FlareSolverr under 'Settings → General'."
+          )}}
+          {{template "domain_credentials_field" (dict
+            "Override" true
+            "DefaultUsername" .DefaultUsername
+            "CredentialsUsername" .CredentialsUsername
+            "CredentialsInherit" .CredentialsInherit
+            "CredentialsHasStoredPassword" .CredentialsHasStoredPassword
+            "ShowGuide" true
+          )}}
+        </fieldset>
+      </div>
 
       <div class="modal-action">
-        <label for="{{$id}}" class="btn btn-ghost modal-cancel">Cancel</label>
+        <label for="{{$id}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>

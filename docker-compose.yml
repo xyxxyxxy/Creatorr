@@ -5,8 +5,9 @@ services:
   creatorr:
     image: ghcr.io/xyxxyxxy/creatorr:latest
     container_name: creatorr
-    # Image USER is 1000:1000. Host ./var trees must be writable by uid 1000
-    # (e.g. sudo chown -R 1000:1000 var).
+    depends_on:
+      - creatorr-po-token
+      - creatorr-flaresolverr
     ports:
       - "8787:8787"
     volumes:
@@ -16,24 +17,41 @@ services:
       - ./var/media/import:/media/import
       # Example second library root (add the path in Settings → Library after boot):
       # - ./var/media/other:/media/other
-      # Optional yt-dlp plugins:
+      # Optional yt-dlp plugins (subdir mounts preferred; baked POT plugin is under
+      # /usr/local/share/yt-dlp-plugins/bgutil and is not affected by this mount):
       # - ./var/yt-dlp-plugins:/yt-dlp-plugins:ro
       # Optional custom yt-dlp (replaces image /usr/local/bin/yt-dlp):
       # - /path/to/your/yt-dlp:/usr/local/bin/yt-dlp:ro
     environment:
-      # First-boot seed for Settings external_base_url. Required for streaming
-      # (.strm / proxy URLs); set in .env or later under Settings → Library → Streaming.
-      CREATORR_PUBLIC_BASE_URL: ${CREATORR_PUBLIC_BASE_URL:-}
+      # PO Token provider (creatorr-po-token sidecar). Empty disables Settings pot_fetch.
+      CREATORR_POT_PROVIDER_URL: ${CREATORR_POT_PROVIDER_URL:-http://creatorr-po-token:4416}
+      # FlareSolverr base URL (creatorr-flaresolverr sidecar). Chrome-based; notable RAM.
+      # Empty skips health probe and Use FlareSolverr (flags cleared on boot).
+      CREATORR_FLARESOLVERR_URL: ${CREATORR_FLARESOLVERR_URL:-http://creatorr-flaresolverr:8191}
       # UI cron labels use process local time (fires stay UTC). Override via .env TZ=.
       TZ: ${TZ:-UTC}
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
+    restart: unless-stopped
+
+  # Needed for PO token support (yt-dlp attestation provider).
+  creatorr-po-token:
+    image: brainicism/bgutil-ytdlp-pot-provider:1.3.1-deno
+    container_name: creatorr-po-token
+    init: true
+    restart: unless-stopped
+
+  # CloudFlare challenge solver (optional; enable Use FlareSolverr per host).
+  # Headless Chrome uses notable RAM; do not publish 8191 to the host by default.
+  creatorr-flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:v3.5.0
+    container_name: creatorr-flaresolverr
+    init: true
+    environment:
+      TZ: ${TZ:-UTC}
+      LOG_LEVEL: info
     restart: unless-stopped

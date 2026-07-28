@@ -29,15 +29,14 @@ internal/db/            fresh schema only; no migrateTo* helpers
 internal/domain/        series, source, video types
 internal/library/       series/videos/files, pack, remux, import, NFO
 internal/queue/         per-domain task queue, cooldown, History (finished tasks)
-internal/domains/       known hostnames: active + optional limit overrides; soft pause in domain_runtime
-internal/cookies/       Netscape jar storage per domain
+internal/domains/       known hostnames: active + optional limit overrides; soft pause in domain_runtime; Access cookies/credentials on host rows
 internal/settings/      SQLite settings keys + domain_queue JSON
 internal/scheduler/     cron kicks (scan, download-wanted, file sync, retention purge)
 internal/worker/        background task runner
 internal/events/        SSE hub
 internal/health/        /api/health dependency checks
 internal/ytdlp/         in-tree yt-dlp invoke, image/PATH binary, plugins
-internal/notify/        Apprise (apprise-go) + in-app log (info digests vs unread alerts)
+internal/notify/        Apprise (apprise-go) + in-app log (info digests vs unread alerts/warnings)
 internal/stats/         every-minute change-only sampler + daily library size + chart series for /stats
 internal/web/           HTMX UI (see docs/ui.md)
 internal/errors/        AppError codes + ErrorResponse mapping
@@ -50,7 +49,7 @@ Image sidecars / yt-dlp binary / plugins: [`docs/ytdlp.md`](docs/ytdlp.md). **St
 
 **Naming:** prefer **task** for queued work. **Job** = implicit recurring schedule (no `jobs` table). **History** = finished tasks (`done`/`failed`/`cancelled`). Do not use **poll**; use **scan**. Do not use **Activity** as a product term.
 
-**Glossary:** [`docs/domain-model.md`](docs/domain-model.md). Stream: [`docs/stream-proxy.md`](docs/stream-proxy.md). yt-dlp: [`docs/ytdlp.md`](docs/ytdlp.md). Scan/queue: [`docs/scan-and-queue.md`](docs/scan-and-queue.md). Download/library: [`docs/download-and-library.md`](docs/download-and-library.md). UI: [`docs/ui.md`](docs/ui.md).
+**Glossary:** [`docs/domain-model.md`](docs/domain-model.md). yt-dlp: [`docs/ytdlp.md`](docs/ytdlp.md). Scan/queue: [`docs/scan-and-queue.md`](docs/scan-and-queue.md). Download/library: [`docs/download-and-library.md`](docs/download-and-library.md). UI: [`docs/ui.md`](docs/ui.md).
 
 New domain term → matching docs file (domain-model by default).
 
@@ -70,7 +69,7 @@ New domain term → matching docs file (domain-model by default).
 
 ## Ship
 
-- **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker`, `ytdlp`, `disk`, `flaresolverr` (skipped if unset). Compose healthcheck should use it.
+- **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker`, `ytdlp`, `disk`, `flaresolverr`, `pot_provider` (last two skipped if URL unset). Compose healthcheck should use it.
 - **Tests:** unit (domain/settings), yt-dlp fixtures (no live net), integration (temp SQLite + worker/queue), API httptest + schema. Prefer golden fixtures; add tests for behavior changes.
 - **Branching:** git-flow (`feature/*`, `develop`, `main`).
 - **Commits:** Conventional Commits; one logical step each; subject ≤72 chars; body explains why when not obvious.

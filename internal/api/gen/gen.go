@@ -59,9 +59,19 @@ const (
 const (
 	NotificationEventCookieInvalid  NotificationEvent = "cookie_invalid"
 	NotificationEventDownloadDigest NotificationEvent = "download_digest"
+	NotificationEventFileSyncIssues NotificationEvent = "file_sync_issues"
+	NotificationEventLiveSkipped    NotificationEvent = "live_skipped"
+	NotificationEventPotProvider    NotificationEvent = "pot_provider"
 	NotificationEventRateLimited    NotificationEvent = "rate_limited"
 	NotificationEventVerifyFailed   NotificationEvent = "verify_failed"
 	NotificationEventYtdlpFailed    NotificationEvent = "ytdlp_failed"
+)
+
+// Defines values for NotificationLevel.
+const (
+	NotificationLevelAlert   NotificationLevel = "alert"
+	NotificationLevelInfo    NotificationLevel = "info"
+	NotificationLevelWarning NotificationLevel = "warning"
 )
 
 // Defines values for SourceKind.
@@ -100,19 +110,20 @@ const (
 const (
 	ListNotificationsParamsEventCookieInvalid  ListNotificationsParamsEvent = "cookie_invalid"
 	ListNotificationsParamsEventDownloadDigest ListNotificationsParamsEvent = "download_digest"
+	ListNotificationsParamsEventFileSyncIssues ListNotificationsParamsEvent = "file_sync_issues"
+	ListNotificationsParamsEventLiveSkipped    ListNotificationsParamsEvent = "live_skipped"
+	ListNotificationsParamsEventPotProvider    ListNotificationsParamsEvent = "pot_provider"
 	ListNotificationsParamsEventRateLimited    ListNotificationsParamsEvent = "rate_limited"
 	ListNotificationsParamsEventVerifyFailed   ListNotificationsParamsEvent = "verify_failed"
 	ListNotificationsParamsEventYtdlpFailed    ListNotificationsParamsEvent = "ytdlp_failed"
 )
 
-// Cookie defines model for Cookie.
-type Cookie struct {
-	Content string `json:"content"`
-
-	// Domain Hostname (www. stripped) or `default` for the global fallback jar
-	Domain    string    `json:"domain"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
+// Defines values for ListNotificationsParamsLevel.
+const (
+	ListNotificationsParamsLevelAlert   ListNotificationsParamsLevel = "alert"
+	ListNotificationsParamsLevelInfo    ListNotificationsParamsLevel = "info"
+	ListNotificationsParamsLevelWarning ListNotificationsParamsLevel = "warning"
+)
 
 // CreateQualityProfileRequest defines model for CreateQualityProfileRequest.
 type CreateQualityProfileRequest struct {
@@ -136,7 +147,7 @@ type CreateQualityProfileRequest struct {
 
 // CreateRootRequest defines model for CreateRootRequest.
 type CreateRootRequest struct {
-	// Name Display label; empty uses the last path segment.
+	// Name Optional display label; empty is allowed (not derived from path).
 	Name *string `json:"name,omitempty"`
 
 	// Path Absolute path on disk (relative paths are rejected).
@@ -193,6 +204,30 @@ type CreateSourceRequest struct {
 // CreateSourceRequestKind feed = channel/playlist; single = one video URL (forces monitored, no cutoff)
 type CreateSourceRequestKind string
 
+// CreateVideoRequest defines model for CreateVideoRequest.
+type CreateVideoRequest struct {
+	// DraftToken Token from Add video URL prefetch. When set, remote ID and source URL come from the draft; title and upload_date may override draft values (empty uses draft).
+	DraftToken *string `json:"draft_token,omitempty"`
+
+	// RemoteId Manual path only; empty generates a unique id. Ignored when draft_token is set.
+	RemoteId *string `json:"remote_id,omitempty"`
+
+	// Title Required on manual path; optional override when using draft_token
+	Title *string `json:"title,omitempty"`
+
+	// UploadDate Required on manual path (RFC3339 UTC or YYYY-MM-DD). Optional override when using draft_token.
+	UploadDate *string `json:"upload_date,omitempty"`
+}
+
+// DomainCookie defines model for DomainCookie.
+type DomainCookie struct {
+	Content string `json:"content"`
+
+	// Domain Host override hostname (www. stripped). Not `default`.
+	Domain    string    `json:"domain"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // EnqueueTaskRequest defines model for EnqueueTaskRequest.
 type EnqueueTaskRequest struct {
 	Domain   string  `json:"domain"`
@@ -225,7 +260,7 @@ type HealthCheck struct {
 	// Message Short explanation
 	Message *string `json:"message,omitempty"`
 
-	// Name Check id (db, worker, ytdlp, disk, flaresolverr)
+	// Name Check id (db, worker, ytdlp, disk, flaresolverr, pot_provider)
 	Name   string       `json:"name"`
 	Status HealthStatus `json:"status"`
 }
@@ -265,7 +300,7 @@ type ImportCandidate struct {
 	Ids        []ImportIDHint `json:"ids"`
 	MatchLabel *string        `json:"match_label,omitempty"`
 
-	// MatchType id, title, series_title, or sidecar_stem when suggested
+	// MatchType id, title, series_title (series only; no video), or sidecar_stem when suggested
 	MatchType *string `json:"match_type,omitempty"`
 	Path      string  `json:"path"`
 
@@ -276,13 +311,24 @@ type ImportCandidate struct {
 	// Source inbox = import folder (move on confirm for media); library = under a root (bind in place)
 	Source             ImportCandidateSource `json:"source"`
 	SuggestedHandlerId *string               `json:"suggested_handler_id,omitempty"`
-	SuggestedRemoteId  *string               `json:"suggested_remote_id,omitempty"`
-	SuggestedSeriesId  *int64                `json:"suggested_series_id"`
+
+	// SuggestedRemoteId Prefill remote id for unmatched create (from filename/sidecars, or derived)
+	SuggestedRemoteId *string `json:"suggested_remote_id,omitempty"`
+
+	// SuggestedRemoteIdGenerated True when suggested_remote_id was derived (no id found in filename or sidecars)
+	SuggestedRemoteIdGenerated *bool  `json:"suggested_remote_id_generated,omitempty"`
+	SuggestedSeriesId          *int64 `json:"suggested_series_id"`
 
 	// SuggestedTitle Prefill title for unmatched create
-	SuggestedTitle   *string                 `json:"suggested_title,omitempty"`
-	SuggestedVideoId *int64                  `json:"suggested_video_id"`
-	VideoSuggestions []ImportVideoSuggestion `json:"video_suggestions"`
+	SuggestedTitle *string `json:"suggested_title,omitempty"`
+
+	// SuggestedUploadDate Prefill upload/release date for unmatched create (RFC3339 UTC from sidecar or file mtime)
+	SuggestedUploadDate *string `json:"suggested_upload_date,omitempty"`
+
+	// SuggestedUploadDateFromMtime True when suggested_upload_date came from file mtime (not info.json / NFO)
+	SuggestedUploadDateFromMtime *bool                   `json:"suggested_upload_date_from_mtime,omitempty"`
+	SuggestedVideoId             *int64                  `json:"suggested_video_id"`
+	VideoSuggestions             []ImportVideoSuggestion `json:"video_suggestions"`
 }
 
 // ImportCandidateRole File classification; other is listed for visibility but cannot be imported
@@ -313,6 +359,9 @@ type ImportManualRequest struct {
 	// RemoteId Remote id for new video; defaults from sidecars or import- hash
 	RemoteId *string `json:"remote_id,omitempty"`
 
+	// Replace When true and video_id already has packed media, import deletes the existing library media (and companion sidecars) then packs or binds the new file. Default false (409 Conflict if media already exists). Ignored for create (series_id) and sidecar attach (paths).
+	Replace *bool `json:"replace,omitempty"`
+
 	// SeriesId Series for a new video when unmatched (omit when binding existing)
 	SeriesId *int64 `json:"series_id,omitempty"`
 
@@ -322,7 +371,7 @@ type ImportManualRequest struct {
 	// Title Title for new video; defaults from filename / info.json / NFO
 	Title *string `json:"title,omitempty"`
 
-	// UploadDate RFC3339 UTC preferred; date-only (YYYY-MM-DD / YYYYMMDD) accepted for unmatched import and stored as midnight UTC.
+	// UploadDate Required for unmatched create when not available from path metadata. RFC3339 UTC preferred; date-only (YYYY-MM-DD / YYYYMMDD) accepted and stored as midnight UTC. Server falls back to file mtime when omitted and sidecars lack a date.
 	UploadDate *string `json:"upload_date,omitempty"`
 
 	// Verify When true, after successful import bind/pack enqueue system media_verify (null-decode). Explicit opt-in; ignores profile mature-only gate. Default false.
@@ -335,7 +384,9 @@ type ImportManualRequest struct {
 // ImportScanResponse defines model for ImportScanResponse.
 type ImportScanResponse struct {
 	Candidates []ImportCandidate `json:"candidates"`
-	ImportPath string            `json:"import_path"`
+
+	// ImportPath Absolute path that was scanned (import inbox or the chosen library root)
+	ImportPath string `json:"import_path"`
 }
 
 // ImportSeriesSuggestion defines model for ImportSeriesSuggestion.
@@ -362,18 +413,28 @@ type Notification struct {
 	Event     NotificationEvent `json:"event"`
 
 	// ExternalOk True when any Apprise channel delivery succeeded
-	ExternalOk bool       `json:"external_ok"`
-	Id         int64      `json:"id"`
-	ReadAt     *time.Time `json:"read_at"`
-	TaskId     *int64     `json:"task_id"`
-	Title      string     `json:"title"`
+	ExternalOk bool  `json:"external_ok"`
+	Id         int64 `json:"id"`
 
-	// Unread True for unread alert notifications
+	// Level Presentation level. warning and alert share in-app unread behavior
+	// (badge, mark-read, task_id required); info is stored already-read
+	// (`download_digest` has no task_id; `live_skipped` sets task_id for linking).
+	Level  NotificationLevel `json:"level"`
+	ReadAt *time.Time        `json:"read_at"`
+	TaskId *int64            `json:"task_id"`
+	Title  string            `json:"title"`
+
+	// Unread True for unread alert or warning notifications
 	Unread bool `json:"unread"`
 }
 
 // NotificationEvent defines model for Notification.Event.
 type NotificationEvent string
+
+// NotificationLevel Presentation level. warning and alert share in-app unread behavior
+// (badge, mark-read, task_id required); info is stored already-read
+// (`download_digest` has no task_id; `live_skipped` sets task_id for linking).
+type NotificationLevel string
 
 // NotificationUnreadCount defines model for NotificationUnreadCount.
 type NotificationUnreadCount struct {
@@ -423,7 +484,7 @@ type RootFolder struct {
 type Series struct {
 	AddedAt time.Time `json:"added_at"`
 
-	// AutoIgnoreMediaTypes yt-dlp media_type values to auto-ignore (e.g. short, livestream). Empty = none. Missing media_type is never auto-ignored. Applied at index create when type is known, at download via --match-filters, and at stream pack_stream from the urls extract (indexed, then marked ignored; no cache_beginning).
+	// AutoIgnoreMediaTypes yt-dlp media_type values to auto-ignore (e.g. short, livestream). Empty = none. Missing media_type is never auto-ignored. Applied at index create when type is known, and at download via --match-filters (indexed, then marked ignored).
 	AutoIgnoreMediaTypes *[]string `json:"auto_ignore_media_types,omitempty"`
 	DownloadedCount      *int64    `json:"downloaded_count,omitempty"`
 	Id                   int64     `json:"id"`
@@ -448,6 +509,12 @@ type Series struct {
 type SetActiveRequest struct {
 	// Active Domain active flag; when false, queue tasks for this hostname do not run and pending+running tasks for the host are cancelled
 	Active bool `json:"active"`
+}
+
+// SetDomainCookiesRequest defines model for SetDomainCookiesRequest.
+type SetDomainCookiesRequest struct {
+	// Content Netscape jar text; empty clears the jar
+	Content string `json:"content"`
 }
 
 // SetPausedRequest defines model for SetPausedRequest.
@@ -574,14 +641,6 @@ type UpdateSourceRequest struct {
 	TitleRegexpInclude *string `json:"title_regexp_include"`
 }
 
-// UpsertCookieRequest defines model for UpsertCookieRequest.
-type UpsertCookieRequest struct {
-	Content string `json:"content"`
-
-	// Domain Hostname or `default` for the global fallback jar
-	Domain string `json:"domain"`
-}
-
 // Video defines model for Video.
 type Video struct {
 	Description *string `json:"description,omitempty"`
@@ -604,7 +663,7 @@ type Video struct {
 	// SourceUrl Video page URL (watch/clip); never the feed channel/playlist URL
 	SourceUrl *string `json:"source_url"`
 
-	// Status wanted, wanted_source_error, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored, streamable
+	// Status wanted, wanted_source_error, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored
 	Status       string  `json:"status"`
 	ThumbnailUrl *string `json:"thumbnail_url"`
 	Title        string  `json:"title"`
@@ -648,9 +707,18 @@ type ListHistoryParams struct {
 // ListHistoryParamsStatus defines parameters for ListHistory.
 type ListHistoryParamsStatus string
 
+// ScanImportParams defines parameters for ScanImport.
+type ScanImportParams struct {
+	// RootId When set, scan only this library root for untracked files. When omitted, scan the import inbox only.
+	RootId *int64 `form:"root_id,omitempty" json:"root_id,omitempty"`
+}
+
 // ListNotificationsParams defines parameters for ListNotifications.
 type ListNotificationsParams struct {
-	Event      *ListNotificationsParamsEvent `form:"event,omitempty" json:"event,omitempty"`
+	Event *ListNotificationsParamsEvent `form:"event,omitempty" json:"event,omitempty"`
+
+	// Level Filter by presentation level (info / warning / alert)
+	Level      *ListNotificationsParamsLevel `form:"level,omitempty" json:"level,omitempty"`
 	UnreadOnly *bool                         `form:"unread_only,omitempty" json:"unread_only,omitempty"`
 	Limit      *int                          `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset     *int                          `form:"offset,omitempty" json:"offset,omitempty"`
@@ -659,11 +727,14 @@ type ListNotificationsParams struct {
 // ListNotificationsParamsEvent defines parameters for ListNotifications.
 type ListNotificationsParamsEvent string
 
-// UpsertCookieJSONRequestBody defines body for UpsertCookie for application/json ContentType.
-type UpsertCookieJSONRequestBody = UpsertCookieRequest
+// ListNotificationsParamsLevel defines parameters for ListNotifications.
+type ListNotificationsParamsLevel string
 
 // SetDomainActiveJSONRequestBody defines body for SetDomainActive for application/json ContentType.
 type SetDomainActiveJSONRequestBody = SetActiveRequest
+
+// SetDomainCookiesJSONRequestBody defines body for SetDomainCookies for application/json ContentType.
+type SetDomainCookiesJSONRequestBody = SetDomainCookiesRequest
 
 // SetDomainPausedJSONRequestBody defines body for SetDomainPaused for application/json ContentType.
 type SetDomainPausedJSONRequestBody = SetPausedRequest
@@ -692,6 +763,9 @@ type AddSourceJSONRequestBody = CreateSourceRequest
 // UpdateSourceJSONRequestBody defines body for UpdateSource for application/json ContentType.
 type UpdateSourceJSONRequestBody = UpdateSourceRequest
 
+// CreateSeriesVideoJSONRequestBody defines body for CreateSeriesVideo for application/json ContentType.
+type CreateSeriesVideoJSONRequestBody = CreateVideoRequest
+
 // UpdateSettingsJSONRequestBody defines body for UpdateSettings for application/json ContentType.
 type UpdateSettingsJSONRequestBody = UpdateSettingsRequest
 
@@ -700,21 +774,21 @@ type EnqueueTaskJSONRequestBody = EnqueueTaskRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// List per-domain Netscape cookie jars
-	// (GET /api/cookies)
-	ListCookies(w http.ResponseWriter, r *http.Request)
-	// Create or replace cookies for a domain
-	// (PUT /api/cookies)
-	UpsertCookie(w http.ResponseWriter, r *http.Request)
-	// Delete cookies for a domain
-	// (DELETE /api/cookies/{domain})
-	DeleteCookie(w http.ResponseWriter, r *http.Request, domain Domain)
+	// List Netscape cookie jars on host domain overrides
+	// (GET /api/domains/cookies)
+	ListDomainCookies(w http.ResponseWriter, r *http.Request)
 	// List soft-paused hostname queue lanes
 	// (GET /api/domains/paused)
 	ListPausedDomains(w http.ResponseWriter, r *http.Request)
 	// Set whether a domain is active (inactive domains do not run queue tasks; deactivating cancels pending and running tasks for that host)
 	// (PUT /api/domains/{domain}/active)
 	SetDomainActive(w http.ResponseWriter, r *http.Request, domain Domain)
+	// Clear the Netscape jar on a host domain override
+	// (DELETE /api/domains/{domain}/cookies)
+	ClearDomainCookies(w http.ResponseWriter, r *http.Request, domain Domain)
+	// Create or replace the Netscape jar on a host domain override
+	// (PUT /api/domains/{domain}/cookies)
+	SetDomainCookies(w http.ResponseWriter, r *http.Request, domain Domain)
 	// Soft-pause or resume a domain queue lane (ClaimNext blocked; interactive metadata prefetch still runs; pending stay queued; running continue; does not create a domains override row)
 	// (PUT /api/domains/{domain}/paused)
 	SetDomainPaused(w http.ResponseWriter, r *http.Request, domain Domain)
@@ -727,9 +801,9 @@ type ServerInterface interface {
 	// Confirm bind or create unmatched video - enqueue import task
 	// (POST /api/import/manual)
 	ImportManual(w http.ResponseWriter, r *http.Request)
-	// Scan import inbox and library orphans; return match suggestions (never auto-binds)
+	// Scan import inbox or one library root for untracked files
 	// (POST /api/import/scan)
-	ScanImport(w http.ResponseWriter, r *http.Request)
+	ScanImport(w http.ResponseWriter, r *http.Request, params ScanImportParams)
 	// In-app notification log
 	// (GET /api/notifications)
 	ListNotifications(w http.ResponseWriter, r *http.Request, params ListNotificationsParams)
@@ -790,6 +864,9 @@ type ServerInterface interface {
 	// Update a source
 	// (PATCH /api/series/{id}/sources/{sourceId})
 	UpdateSource(w http.ResponseWriter, r *http.Request, id SeriesId, sourceId SourceId)
+	// Create an indexed ignored video under a series
+	// (POST /api/series/{id}/videos)
+	CreateSeriesVideo(w http.ResponseWriter, r *http.Request, id SeriesId)
 	// List editable settings with help text
 	// (GET /api/settings)
 	ListSettings(w http.ResponseWriter, r *http.Request)
@@ -805,9 +882,6 @@ type ServerInterface interface {
 	// Cancel all pending tasks
 	// (POST /api/tasks/cancel-all)
 	CancelAllTasks(w http.ResponseWriter, r *http.Request)
-	// Raise priority of a pending task
-	// (POST /api/tasks/{id}/bump)
-	BumpTask(w http.ResponseWriter, r *http.Request, id TaskId)
 	// Cancel a pending or running task
 	// (POST /api/tasks/{id}/cancel)
 	CancelTask(w http.ResponseWriter, r *http.Request, id TaskId)
@@ -826,21 +900,9 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
-// List per-domain Netscape cookie jars
-// (GET /api/cookies)
-func (_ Unimplemented) ListCookies(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// Create or replace cookies for a domain
-// (PUT /api/cookies)
-func (_ Unimplemented) UpsertCookie(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// Delete cookies for a domain
-// (DELETE /api/cookies/{domain})
-func (_ Unimplemented) DeleteCookie(w http.ResponseWriter, r *http.Request, domain Domain) {
+// List Netscape cookie jars on host domain overrides
+// (GET /api/domains/cookies)
+func (_ Unimplemented) ListDomainCookies(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -853,6 +915,18 @@ func (_ Unimplemented) ListPausedDomains(w http.ResponseWriter, r *http.Request)
 // Set whether a domain is active (inactive domains do not run queue tasks; deactivating cancels pending and running tasks for that host)
 // (PUT /api/domains/{domain}/active)
 func (_ Unimplemented) SetDomainActive(w http.ResponseWriter, r *http.Request, domain Domain) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Clear the Netscape jar on a host domain override
+// (DELETE /api/domains/{domain}/cookies)
+func (_ Unimplemented) ClearDomainCookies(w http.ResponseWriter, r *http.Request, domain Domain) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create or replace the Netscape jar on a host domain override
+// (PUT /api/domains/{domain}/cookies)
+func (_ Unimplemented) SetDomainCookies(w http.ResponseWriter, r *http.Request, domain Domain) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -880,9 +954,9 @@ func (_ Unimplemented) ImportManual(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Scan import inbox and library orphans; return match suggestions (never auto-binds)
+// Scan import inbox or one library root for untracked files
 // (POST /api/import/scan)
-func (_ Unimplemented) ScanImport(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) ScanImport(w http.ResponseWriter, r *http.Request, params ScanImportParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1006,6 +1080,12 @@ func (_ Unimplemented) UpdateSource(w http.ResponseWriter, r *http.Request, id S
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Create an indexed ignored video under a series
+// (POST /api/series/{id}/videos)
+func (_ Unimplemented) CreateSeriesVideo(w http.ResponseWriter, r *http.Request, id SeriesId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // List editable settings with help text
 // (GET /api/settings)
 func (_ Unimplemented) ListSettings(w http.ResponseWriter, r *http.Request) {
@@ -1033,12 +1113,6 @@ func (_ Unimplemented) EnqueueTask(w http.ResponseWriter, r *http.Request) {
 // Cancel all pending tasks
 // (POST /api/tasks/cancel-all)
 func (_ Unimplemented) CancelAllTasks(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// Raise priority of a pending task
-// (POST /api/tasks/{id}/bump)
-func (_ Unimplemented) BumpTask(w http.ResponseWriter, r *http.Request, id TaskId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1075,50 +1149,11 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// ListCookies operation middleware
-func (siw *ServerInterfaceWrapper) ListCookies(w http.ResponseWriter, r *http.Request) {
+// ListDomainCookies operation middleware
+func (siw *ServerInterfaceWrapper) ListDomainCookies(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListCookies(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpsertCookie operation middleware
-func (siw *ServerInterfaceWrapper) UpsertCookie(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpsertCookie(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteCookie operation middleware
-func (siw *ServerInterfaceWrapper) DeleteCookie(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "domain" -------------
-	var domain Domain
-
-	err = runtime.BindStyledParameterWithOptions("simple", "domain", chi.URLParam(r, "domain"), &domain, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domain", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteCookie(w, r, domain)
+		siw.Handler.ListDomainCookies(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1158,6 +1193,56 @@ func (siw *ServerInterfaceWrapper) SetDomainActive(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SetDomainActive(w, r, domain)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ClearDomainCookies operation middleware
+func (siw *ServerInterfaceWrapper) ClearDomainCookies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "domain" -------------
+	var domain Domain
+
+	err = runtime.BindStyledParameterWithOptions("simple", "domain", chi.URLParam(r, "domain"), &domain, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domain", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ClearDomainCookies(w, r, domain)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetDomainCookies operation middleware
+func (siw *ServerInterfaceWrapper) SetDomainCookies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "domain" -------------
+	var domain Domain
+
+	err = runtime.BindStyledParameterWithOptions("simple", "domain", chi.URLParam(r, "domain"), &domain, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domain", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetDomainCookies(w, r, domain)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1266,8 +1351,21 @@ func (siw *ServerInterfaceWrapper) ImportManual(w http.ResponseWriter, r *http.R
 // ScanImport operation middleware
 func (siw *ServerInterfaceWrapper) ScanImport(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ScanImportParams
+
+	// ------------- Optional query parameter "root_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "root_id", r.URL.Query(), &params.RootId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "root_id", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ScanImport(w, r)
+		siw.Handler.ScanImport(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1290,6 +1388,14 @@ func (siw *ServerInterfaceWrapper) ListNotifications(w http.ResponseWriter, r *h
 	err = runtime.BindQueryParameter("form", true, false, "event", r.URL.Query(), &params.Event)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "event", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "level" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "level", r.URL.Query(), &params.Level)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "level", Err: err})
 		return
 	}
 
@@ -1733,6 +1839,31 @@ func (siw *ServerInterfaceWrapper) UpdateSource(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// CreateSeriesVideo operation middleware
+func (siw *ServerInterfaceWrapper) CreateSeriesVideo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id SeriesId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSeriesVideo(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListSettings operation middleware
 func (siw *ServerInterfaceWrapper) ListSettings(w http.ResponseWriter, r *http.Request) {
 
@@ -1794,31 +1925,6 @@ func (siw *ServerInterfaceWrapper) CancelAllTasks(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CancelAllTasks(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// BumpTask operation middleware
-func (siw *ServerInterfaceWrapper) BumpTask(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "id" -------------
-	var id TaskId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.BumpTask(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2042,19 +2148,19 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/api/cookies", wrapper.ListCookies)
-	})
-	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/api/cookies", wrapper.UpsertCookie)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/api/cookies/{domain}", wrapper.DeleteCookie)
+		r.Get(options.BaseURL+"/api/domains/cookies", wrapper.ListDomainCookies)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/domains/paused", wrapper.ListPausedDomains)
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/api/domains/{domain}/active", wrapper.SetDomainActive)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/domains/{domain}/cookies", wrapper.ClearDomainCookies)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/domains/{domain}/cookies", wrapper.SetDomainCookies)
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/api/domains/{domain}/paused", wrapper.SetDomainPaused)
@@ -2132,6 +2238,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Patch(options.BaseURL+"/api/series/{id}/sources/{sourceId}", wrapper.UpdateSource)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/series/{id}/videos", wrapper.CreateSeriesVideo)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/settings", wrapper.ListSettings)
 	})
 	r.Group(func(r chi.Router) {
@@ -2145,9 +2254,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/tasks/cancel-all", wrapper.CancelAllTasks)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/api/tasks/{id}/bump", wrapper.BumpTask)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/tasks/{id}/cancel", wrapper.CancelTask)
@@ -2168,128 +2274,143 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -40,4 +40,7 @@ func TestRemuxIfNeededRecordsCommand(t *testing.T) {
 	if !strings.HasPrefix(lines[0], "ffmpeg ") || !strings.Contains(lines[0], path) {
 		t.Fatalf("line=%q", lines[0])
 	}
+	if !strings.Contains(lines[0], "-map 0:V") || !strings.Contains(lines[0], "-dn") {
+		t.Fatalf("want video/audio map and -dn, got %q", lines[0])
+	}
 }

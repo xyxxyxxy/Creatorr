@@ -18,9 +18,7 @@ func TestScopedLimitUpdatesLeaveOtherColumns(t *testing.T) {
 	if err := settings.SeedDefaults(d); err != nil {
 		t.Fatal(err)
 	}
-	if err := settings.Set(d, settings.KeyFlareSolverrURL, "http://flaresolverr.example.com"); err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv(settings.EnvFlareSolverrURL, "http://flaresolverr.example.com")
 
 	if err := domains.UpdateHostOverrides(d, "example.com", "60", "", "", "5M", "2", "on"); err != nil {
 		t.Fatal(err)
@@ -31,6 +29,17 @@ func TestScopedLimitUpdatesLeaveOtherColumns(t *testing.T) {
 	}
 	if lim.TaskCooldownSeconds != 60 || lim.DownloadRateLimit != "5M" || lim.SleepRequests != 2 {
 		t.Fatalf("after upsert: %+v", lim)
+	}
+
+	if err := domains.UpdateHostOverrides(d, "example.com", "60", "", "", "5M", "3", "on"); err != nil {
+		t.Fatal(err)
+	}
+	lim, err = settings.LimitsForDomain(d, "example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lim.DownloadRateLimit != "5M" || lim.SleepRequests != 3 || lim.TaskCooldownSeconds != 60 {
+		t.Fatalf("after second upsert: %+v", lim)
 	}
 
 	if err := domains.UpdateHostOverrides(d, "example.com", "90", "", "", "", "", "on"); err != nil {

@@ -1,92 +1,163 @@
 {{define "tasks"}}
 {{template "head" .}}
 {{template "list_panel"}}
-<div class="list-header flex flex-wrap items-start justify-between gap-3">
-  <div class="min-w-0 flex-1">
-    <h1 class="text-2xl font-semibold inline-flex items-center gap-2">
-      <i data-lucide="{{.Icon}}" class="size-6 shrink-0"></i>
-      <span>Tasks</span>
-    </h1>
-    <p class="text-sm opacity-60 mt-0.5">All open tasks, separated by the queue they belong to.</p>
-  </div>
-</div>
+{{template "list_header" (dict
+  "level" "page"
+  "title" "Tasks"
+  "icon" .Icon
+  "help" "All open tasks, separated by the queue they belong to."
+  "help2" "Pausing a domain stops pending tasks from getting started. Some interactive tasks, like fetching metadata for a form, will still start immediately on paused domains."
+)}}
 {{template "list_panel_end"}}
-<div class="alert alert-info text-sm mb-4">
-  <span>
-    Soft <strong>Pause</strong> on a host blocks new ClaimNext work (scan, download, pack stream, cache beginning, …); pending stay queued and running tasks finish.
-    <strong>Interactive</strong> work still runs while paused (domain must stay <strong>active</strong>): UI metadata prefetch (series / video / add-series) ignores busy/cooldown; <code>stream_play</code> occupancy (live or cache playback) also starts while paused but <strong>occupies</strong> the parallel slot so ClaimNext waits.
-  </span>
-</div>
 <div id="tasks-live">
   {{range .Lanes}}
   {{template "list_panel"}}
-  <div class="list-header flex flex-wrap items-start justify-between gap-3">
-    <div class="min-w-0 flex-1">
-      <h2 class="text-lg font-semibold font-mono inline-flex flex-wrap items-center gap-2">
-        {{.Domain}}
-        {{if .Paused}}
-        <span class="badge badge-warning badge-sm">paused</span>
-        {{end}}
-        {{if .RateLimit}}
-        <span class="badge badge-ghost badge-sm font-mono tooltip" data-tip="Download rate limit">{{.RateLimit}}</span>
-        {{end}}
-        {{if ne .Domain "system"}}
-        <span class="badge badge-ghost badge-sm tabular-nums tooltip" data-tip="Sleep between requests">sleep {{.SleepRequests}}s</span>
-        {{else}}
-        <span class="badge badge-ghost badge-sm tooltip" data-tip="Maintenance and SponsorBlock cuts run one at a time">one at a time</span>
-        {{end}}
-        {{if .HasCookies}}
-        <span class="inline-flex items-center tooltip" data-tip="{{.CookiesTip}}" aria-label="{{.CookiesTip}}">
-          <i data-lucide="cookie" class="size-4 opacity-70"></i>
+  <div class="list-header">
+    <div class="min-w-0 w-full">
+      <h2 class="text-lg font-semibold flex flex-col items-stretch gap-1 w-full">
+        <span class="flex flex-wrap items-center gap-2 w-full">
+          <span class="inline-flex flex-wrap items-center gap-2 min-w-0{{if .Paused}} text-warning{{end}}">
+            {{.Domain}}
+          </span>
+          <span class="list-actions flex flex-wrap gap-2 shrink-0 items-center ml-auto">
+            {{if ne .Domain "system"}}
+            <span class="inline-flex items-center gap-2 shrink-0 font-normal text-sm">
+            <span class="inline-flex items-center gap-2 h-5" data-domain-cooldown{{if .Paused}} data-paused{{end}}{{if .ShowBusy}} data-slots-full{{else if .ShowActive}} data-lane-active{{end}}{{if and (not .Paused) .ShowCooldown}} data-ends-at="{{.CooldownEndsAt}}" data-total-sec="{{.CooldownTotalSec}}"{{end}} aria-label="{{if .Paused}}Paused{{else if .ShowCooldown}}Waiting {{.CooldownRemSec}}s before the next task on this lane{{else if .ShowBusy}}Maximum of parallel tasks reached{{else if .ShowActive}}Running with free parallel slots{{else}}Idle{{end}}">
+              {{if .Paused}}
+              <span data-cd-label class="shrink-0 leading-none text-warning">Paused</span>
+              <progress data-cd-bar class="progress progress-warning w-24 sm:w-32 h-2 shrink-0" value="100" max="100" aria-hidden="true"></progress>
+              {{else if .ShowCooldown}}
+              <span class="tooltip tooltip-top" data-tip="Waiting {{.CooldownRemSec}}s before the next task on this lane">
+                <span data-cd-label class="shrink-0 leading-none">Cooldown</span>
+              </span>
+              <progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="{{.CooldownRemSec}}" max="{{.CooldownTotalSec}}" aria-hidden="true"></progress>
+              {{else if .ShowBusy}}
+              <span class="tooltip tooltip-top" data-tip="Maximum of parallel tasks reached">
+                <span data-cd-label class="shrink-0 leading-none">Busy</span>
+              </span>
+              <progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" max="100" aria-hidden="true"></progress>
+              {{else if .ShowActive}}
+              <span class="tooltip tooltip-top" data-tip="Running with free parallel slots">
+                <span data-cd-label class="shrink-0 leading-none">Active</span>
+              </span>
+              <progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" max="100" aria-hidden="true"></progress>
+              {{else}}
+              <span data-cd-label class="shrink-0 leading-none text-base-content/50">Idle</span>
+              <progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="0" max="100" aria-hidden="true"></progress>
+              {{end}}
+            </span>
+            {{if .ShowCancelPending}}
+            <label for="modal-cancel-domain-{{.Domain}}" class="btn btn-soft btn-error btn-xs btn-square tooltip tooltip-top shrink-0" data-tip="Cancel all pending" aria-label="Cancel all pending">
+              <i data-lucide="list-x" class="size-3.5"></i>
+            </label>
+            {{else}}
+            <span class="tooltip tooltip-top shrink-0 inline-flex" data-tip="No pending tasks">
+              <button type="button" class="btn btn-soft btn-error btn-xs btn-square pointer-events-none" disabled aria-label="Cancel all pending">
+                <i data-lucide="list-x" class="size-3.5"></i>
+              </button>
+            </span>
+            {{end}}
+            </span>
+            <div class="join shrink-0">
+              <a class="btn btn-secondary btn-square join-item tooltip tooltip-top" href="/history?domain={{urlquery .Domain}}#tasks" data-tip="History" aria-label="History">
+                <i data-lucide="history" class="size-4"></i>
+              </a>
+              {{if and .CanPause (not .Paused)}}
+              <form method="post" action="/actions/set-domain-paused" class="contents">
+                <input type="hidden" name="domain" value="{{.Domain}}" />
+                <input type="hidden" name="paused" value="1" />
+                <input type="hidden" name="redirect" value="/tasks" />
+                <button type="submit" class="btn btn-warning btn-square join-item tooltip tooltip-top" data-tip="Pause" aria-label="Pause">
+                  <i data-lucide="pause" class="size-4"></i>
+                </button>
+              </form>
+              {{else if and .CanPause .Paused}}
+              <form method="post" action="/actions/set-domain-paused" class="contents">
+                <input type="hidden" name="domain" value="{{.Domain}}" />
+                <input type="hidden" name="paused" value="0" />
+                <input type="hidden" name="redirect" value="/tasks" />
+                <button type="submit" class="btn btn-primary btn-square join-item tooltip tooltip-top" data-tip="Resume" aria-label="Resume">
+                  <i data-lucide="play" class="size-4"></i>
+                </button>
+              </form>
+              {{end}}
+            </div>
+            {{end}}
+            {{if eq .Domain "system"}}
+            {{if .ShowCancelPending}}
+            <label for="modal-cancel-domain-{{.Domain}}" class="btn btn-soft btn-error btn-square tooltip tooltip-top" data-tip="Cancel all pending" aria-label="Cancel all pending">
+              <i data-lucide="list-x" class="size-4"></i>
+            </label>
+            {{else}}
+            <span class="tooltip tooltip-top inline-flex h-auto" data-tip="No pending tasks">
+              <button type="button" class="btn btn-soft btn-error btn-square pointer-events-none" disabled aria-label="Cancel all pending">
+                <i data-lucide="list-x" class="size-4"></i>
+              </button>
+            </span>
+            {{end}}
+            {{end}}
+          </span>
         </span>
-        {{end}}
-        {{if .ShowCooldown}}
-        <span class="inline-flex items-baseline font-mono text-sm tooltip" data-tip="Task cooldown" data-domain-cooldown data-ends-at="{{.CooldownEndsAt}}" aria-label="Task cooldown">
-          <span data-cd-min-wrap class="countdown{{if eq .CooldownMin 0}} hidden{{end}}"><span data-cd-min style="--value:{{.CooldownMin}};" aria-live="polite" aria-label="{{.CooldownMin}}">{{.CooldownMin}}</span>m&nbsp;</span><span class="countdown"><span data-cd-sec style="--value:{{.CooldownSec}}; --digits: 2;" aria-live="polite" aria-label="{{.CooldownSec}}">{{printf "%02d" .CooldownSec}}</span>s</span>
+        {{if ne .Domain "system"}}
+        <span class="flex flex-wrap items-center gap-x-4 gap-y-2 w-full font-normal text-sm">
+          <span class="inline-flex flex-wrap items-center gap-4 min-w-0">
+          {{if gt .MaxDownloadQueue 0}}
+          <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .QueueOverride}} text-base-content/50{{end}}" data-tip="Max download queue · {{if .QueueOverride}}Domain override{{else}}default{{end}}" aria-label="Queue {{.MaxDownloadQueue}}">
+            <i data-lucide="list" class="size-4 shrink-0"></i>
+            <span class="tabular-nums">{{.MaxDownloadQueue}}</span>
+          </span>
+          {{end}}
+          {{if gt .MaxParallelTasks 0}}
+          <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .ParallelOverride}} text-base-content/50{{end}}" data-tip="Max parallel tasks · {{if .ParallelOverride}}Domain override{{else}}default{{end}}" aria-label="Parallel {{.MaxParallelTasks}}">
+            <i data-lucide="layers-2" class="size-4 shrink-0"></i>
+            <span class="tabular-nums">{{.MaxParallelTasks}}</span>
+          </span>
+          {{end}}
+          {{if ge .TaskCooldownSeconds 0}}
+          <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .CooldownOverride}} text-base-content/50{{end}}" data-tip="Task cooldown · {{if .CooldownOverride}}Domain override{{else}}default{{end}}" aria-label="Cooldown {{.TaskCooldownSeconds}}s">
+            <i data-lucide="timer" class="size-4 shrink-0"></i>
+            <span class="tabular-nums">{{.TaskCooldownSeconds}}s</span>
+          </span>
+          {{end}}
+          {{if .RateLimit}}
+          <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .RateOverride}} text-base-content/50{{end}}" data-tip="Download rate limit · {{if .RateOverride}}Domain override{{else}}default{{end}}" aria-label="Download rate {{.RateLimit}}">
+            <i data-lucide="download" class="size-4 shrink-0"></i>
+            <span class="font-mono tabular-nums">{{.RateLimit}}</span>
+          </span>
+          {{end}}
+          {{if .SleepRequests}}
+          <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .SleepOverride}} text-base-content/50{{end}}" data-tip="Sleep between requests · {{if .SleepOverride}}Domain override{{else}}default{{end}}" aria-label="Sleep {{.SleepRequests}}s">
+            <i data-lucide="snail" class="size-4 shrink-0"></i>
+            <span class="tabular-nums">{{.SleepRequests}}s</span>
+          </span>
+          {{end}}
+          <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .CookiesFromHost}} text-base-content/50{{end}}" data-tip="Cookies · {{if .CookiesFromHost}}Domain override{{else}}none{{end}}" aria-label="{{if .HasCookies}}Cookies yes{{else}}Cookies no{{end}}">
+            <i data-lucide="cookie" class="size-4 shrink-0{{if .CookiesFromHost}} text-amber-800{{end}}"></i>
+            <span>{{if .HasCookies}}yes{{else}}no{{end}}</span>
+          </span>
+          {{$flareOver := eq .FlareOverride "on"}}
+          <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not $flareOver}} text-base-content/50{{end}}" data-tip="FlareSolverr · {{if $flareOver}}Domain override{{else}}off{{end}}" aria-label="FlareSolverr {{if .UseFlareSolverr}}yes{{else}}no{{end}}">
+            <i data-lucide="flame" class="size-4 shrink-0{{if and .UseFlareSolverr $flareOver}} text-error{{end}}"></i>
+            <span>{{if .UseFlareSolverr}}yes{{else}}no{{end}}</span>
+          </span>
+          <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .CredentialsFromHost}} text-base-content/50{{end}}" data-tip="Credentials · {{if .CredentialsFromHost}}Domain override{{else}}none{{end}}" aria-label="{{if .HasCredentials}}Credentials yes{{else}}Credentials no{{end}}">
+            <i data-lucide="key-round" class="size-4 shrink-0{{if .CredentialsFromHost}} text-primary{{end}}"></i>
+            <span>{{if .HasCredentials}}yes{{else}}no{{end}}</span>
+          </span>
+          </span>
         </span>
         {{end}}
       </h2>
-      <p class="text-sm opacity-60 mt-1">
-        {{len .Tasks}} task(s)
-        {{if .DownloadCount}}· Downloads {{.DownloadCount}}{{end}}
-      </p>
-    </div>
-    <div class="list-actions flex flex-wrap gap-2 shrink-0 items-center">
-      {{if and .CanPause (not .Paused)}}
-      <form method="post" action="/actions/set-domain-paused" class="inline">
-        <input type="hidden" name="domain" value="{{.Domain}}" />
-        <input type="hidden" name="paused" value="1" />
-        <input type="hidden" name="redirect" value="/tasks" />
-        <button type="submit" class="btn btn-outline">Pause</button>
-      </form>
-      {{else if and .CanPause .Paused}}
-      <form method="post" action="/actions/set-domain-paused" class="inline">
-        <input type="hidden" name="domain" value="{{.Domain}}" />
-        <input type="hidden" name="paused" value="0" />
-        <input type="hidden" name="redirect" value="/tasks" />
-        <button type="submit" class="btn btn-outline">Resume</button>
-      </form>
-      {{end}}
-      {{if ne .Domain "system"}}
-      <a class="btn btn-outline" href="/history?domain={{urlquery .Domain}}">History</a>
-      <label for="modal-edit-domain-{{.Domain}}" class="btn btn-outline">Edit</label>
-      {{end}}
-      {{if .ShowCancelPending}}
-      <label for="modal-cancel-domain-{{.Domain}}" class="btn btn-outline btn-error">Cancel pending</label>
-      {{else}}
-      <button type="button" class="btn btn-outline btn-error tooltip tooltip-top" disabled data-tip="No pending tasks">Cancel pending</button>
-      {{end}}
     </div>
   </div>
   {{if .Tasks}}
-  {{template "list_table"}}
-  <thead><tr><th class="w-12">#</th><th>Status</th><th>Kind</th><th>Series / video</th><th>Message</th><th></th></tr></thead>
-  <tbody>
+  <ul class="list bg-base-100 rounded-box border border-base-300 mt-1">
     {{range .Tasks}}{{template "task_row" .}}{{end}}
-  </tbody>
-  {{template "list_table_end"}}
-  {{template "pagination" .Page}}
+  </ul>
+  {{else}}
+  {{template "list_empty" "No tasks."}}
   {{end}}
+  {{template "pagination" .Page}}
   {{template "list_panel_end"}}
   {{end}}
 </div>
@@ -100,37 +171,13 @@
     <form method="post" action="/actions/cancel-domain-tasks">
       <input type="hidden" name="domain" value="{{.Domain}}" />
       <div class="modal-action">
-        <label for="modal-cancel-domain-{{.Domain}}" class="btn btn-ghost modal-cancel">Keep</label>
+        <label for="modal-cancel-domain-{{.Domain}}" class="btn modal-cancel">Keep</label>
         <button type="submit" class="btn btn-error">Cancel pending</button>
       </div>
     </form>
   </div>
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
-{{end}}
-{{end}}
-{{range .Lanes}}
-{{if ne .Domain "system"}}
-{{template "domain_override_modal" (dict
-  "Mode" "edit"
-  "Redirect" "/tasks"
-  "Domain" .Domain
-  "CooldownOverride" .CooldownOverride
-  "QueueOverride" .QueueOverride
-  "ParallelOverride" .ParallelOverride
-  "RateOverride" .RateOverride
-  "SleepOverride" .SleepOverride
-  "FlareOverride" .FlareOverride
-  "CookieContent" .CookieContent
-  "HasRow" .HasOverrideRow
-  "DefaultCooldown" .DefaultCooldown
-  "DefaultQueue" .DefaultQueue
-  "DefaultParallel" .DefaultParallel
-  "DefaultRate" .DefaultRate
-  "DefaultSleep" .DefaultSleep
-  "DefaultFlare" .DefaultFlare
-  "FlareConfigured" $.FlareConfigured
-)}}
 {{end}}
 {{end}}
 {{template "foot" .}}

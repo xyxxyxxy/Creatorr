@@ -47,33 +47,3 @@ func TestVideoResolutionLabel(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
-
-func TestStreamTypeLabel(t *testing.T) {
-	cases := []struct {
-		kind, want string
-	}{
-		{"", ""},
-		{"pipe", "piped"},
-		{"PIPE", "piped"},
-		{"hls", "CDN HLS"},
-		{"progressive", "CDN progressive"},
-		{"other", ""},
-	}
-	for _, tc := range cases {
-		if got := StreamTypeLabel(tc.kind); got != tc.want {
-			t.Fatalf("StreamTypeLabel(%q)=%q want %q", tc.kind, got, tc.want)
-		}
-	}
-}
-
-func TestStreamTypeListLabel(t *testing.T) {
-	if got := StreamTypeListLabel("pipe", true); got != "piped - beginning cached" {
-		t.Fatalf("cached pipe: got %q", got)
-	}
-	if got := StreamTypeListLabel("pipe", false); got != "piped" {
-		t.Fatalf("cold pipe: got %q", got)
-	}
-	if got := StreamTypeListLabel("hls", true); got != "CDN HLS" {
-		t.Fatalf("CDN ignores beginning flag: got %q", got)
-	}
-}

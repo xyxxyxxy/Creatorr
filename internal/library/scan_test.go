@@ -408,76 +408,6 @@ func TestEnqueueScansDueIncompleteFullScan(t *testing.T) {
 	}
 }
 
-func TestEnqueueTipScanDownloadsOrderAndCap(t *testing.T) {
-	s := openLib(t)
-	_ = settings.SetDomainDefault(s.DB, 0, 1, 1, "10M", "0", false)
-	_ = settings.Set(s.DB, settings.KeyDownloadWantedOrder, settings.DownloadWantedOrderNewest)
-	rootID, profileID := seedRootProfile(t, s)
-	ser, err := s.CreateSeries(library.CreateSeriesParams{
-		Title: "TipDL", SourceURL: "https://www.example.com/@tipdl", RootID: rootID,
-		QualityProfileID: profileID, Monitored: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _ = s.DB.SQL.Exec(`UPDATE tasks SET status = 'cancelled' WHERE kind = 'scan'`)
-	srcID := ser.Sources[0].ID
-	old, err := s.UpsertListed(ser.ID, library.ListedVideo{
-		RemoteID: "old", Title: "Old", WebpageURL: "https://www.example.com/watch?v=old",
-		UploadDate: "2020-01-01", SourceID: srcID,
-	}, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	neu, err := s.UpsertListed(ser.ID, library.ListedVideo{
-		RemoteID: "new", Title: "New", WebpageURL: "https://www.example.com/watch?v=new",
-		UploadDate: "2024-06-01", SourceID: srcID,
-	}, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	n, err := s.EnqueueTipScanDownloads(ser.ID, []int64{old.VideoID, neu.VideoID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 1 {
-		t.Fatalf("want 1 enqueue (cap 1), got %d", n)
-	}
-	var vid int64
-	err = s.DB.SQL.QueryRow(`SELECT video_id FROM tasks WHERE kind = 'download' AND status = 'pending'`).Scan(&vid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if vid != neu.VideoID {
-		t.Fatalf("newest-first should enqueue new first, got video %d want %d", vid, neu.VideoID)
-	}
-}
-
-func TestEnqueueTipScanDownloadsSkipsUnmonitored(t *testing.T) {
-	s := openLib(t)
-	rootID, profileID := seedRootProfile(t, s)
-	ser, err := s.CreateSeries(library.CreateSeriesParams{
-		Title: "Unmon", SourceURL: "https://www.example.com/@unmon", RootID: rootID,
-		QualityProfileID: profileID, Monitored: false,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _ = s.DB.SQL.Exec(`UPDATE tasks SET status = 'cancelled'`)
-	srcID := ser.Sources[0].ID
-	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
-		RemoteID: "x", Title: "X", WebpageURL: "https://www.example.com/watch?v=x",
-		SourceID: srcID,
-	}, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	n, err := s.EnqueueTipScanDownloads(ser.ID, []int64{res.VideoID})
-	if err != nil || n != 0 {
-		t.Fatalf("unmonitored: n=%d err=%v", n, err)
-	}
-}
-
 func TestEnqueueScanSourceConflictMessage(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
@@ -504,6 +434,34 @@ func TestEnqueueScanSourceConflictMessage(t *testing.T) {
 	_ = s.DB.SQL.QueryRow(`SELECT full_scan_done FROM sources WHERE id = ?`, srcID).Scan(&done)
 	if done != 0 {
 		t.Fatalf("full_scan_done must stay false when FullRescanSource conflicts before reset, got %d", done)
+	}
+}
+
+func TestManualTipScanAllowsUnmonitored(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "UnmonTip", SourceURL: "https://www.example.com/@unmontip", RootID: rootID,
+		QualityProfileID: profileID, Monitored: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcID := ser.Sources[0].ID
+	_, _ = s.DB.SQL.Exec(`UPDATE tasks SET status = 'cancelled' WHERE kind = 'scan'`)
+	if err := s.MarkFullScanDone(srcID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.EnqueueScanSource(srcID); err != nil {
+		t.Fatalf("per-source tip Scan: %v", err)
+	}
+	_, _ = s.DB.SQL.Exec(`UPDATE tasks SET status = 'cancelled' WHERE kind = 'scan'`)
+	n, _, err := s.EnqueueScansForSeries(ser.ID)
+	if err != nil {
+		t.Fatalf("series tip Scan: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("want 1 tip Scan, got %d", n)
 	}
 }
 
