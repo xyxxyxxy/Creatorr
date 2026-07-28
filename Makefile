@@ -1,4 +1,4 @@
-.PHONY: generate test vet lint openapi-check build css sbom image pot-plugin
+.PHONY: generate test vet lint openapi-check build css sbom image pot-plugin hooks
 
 GO ?= go
 OAPI_CODEGEN ?= $(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.4.1
@@ -20,6 +20,11 @@ vet:
 lint:
 	golangci-lint run ./...
 
+# Point this clone at versioned hooks under .githooks/ (repo-local git config).
+hooks:
+	git config core.hooksPath .githooks
+	@chmod +x .githooks/pre-commit
+	@echo "Enabled .githooks (pre-commit runs make lint + make test). Skip: SKIP_GITHOOKS=1"
 openapi-check: generate
 	@git diff --exit-code -- api/openapi.yaml internal/api/gen/ || (echo "OpenAPI generated code out of date; run make generate" && exit 1)
 
