@@ -32,7 +32,7 @@ var Help = map[string]string{
 	KeyDownloadWantedOrder:          "Which wanted videos to download first inside each series (by upload date; no date uses id). Series take turns so one series does not fill the whole queue.",
 	KeySyncFilesCron:                "Library scan will detect changed files in the root folders and cache directories.",
 	KeyRetentionDeleteCron:          "Deleting old data according to root folder retention ('Settings → Library').",
-	KeyStatsRetentionDays:           "",
+	KeyStatsRetentionDays:           "Shorter windows delete older samples immediately on Save.",
 	KeySourceDownloadErrorThreshold: "When this many videos of a source enter an error state, other videos from that source are held until the issue is resolved.\nSet to 1 so the first error stops further downloads from that source.",
 	KeySubtitleLangs:                "Supports all, regex (en.*), and -TAG exclusions. Saving does not re-fetch existing episodes.",
 	KeySubtitleAuto:                 "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",

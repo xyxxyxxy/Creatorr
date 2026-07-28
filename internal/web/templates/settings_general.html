@@ -11,7 +11,7 @@
   "Label" .Label
   "Type" "select"
   "Value" .Value
-  "Info" .Help
+  "Hint" .Help
   "Options" .Options
   "Disabled" .Disabled
   "DisabledTitle" .DisabledTitle
@@ -31,11 +31,11 @@
   <div class="card-body gap-6">
     <fieldset class="fieldset gap-3">
       <legend class="fieldset-legend text-lg font-semibold">Authentication</legend>
-      <p class="text-sm opacity-60">Single operator account for the web UI. API clients use the API key header <span class="font-mono text-xs">X-Api-Key</span>. Changing username or password signs out other browsers.</p>
+      <p class="text-sm opacity-60">Single operator account for the web UI and API key.</p>
       <div class="grid gap-3 md:grid-cols-2 w-full items-start">
         <div class="form-control w-full min-w-0 gap-2">
           <span class="label-text">Login</span>
-          <label for="modal-change-credentials" class="btn btn-outline w-full">Change username / password</label>
+          <label for="modal-change-credentials" class="btn btn-secondary w-full">Change username / password</label>
         </div>
         <div class="form-control w-full min-w-0 gap-2">
           <span class="label-text">API key</span>

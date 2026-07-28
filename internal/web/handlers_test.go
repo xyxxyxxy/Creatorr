@@ -108,7 +108,7 @@ func TestSeriesListRenders(t *testing.T) {
 	}
 }
 
-func TestImportPageRequiresSeries(t *testing.T) {
+func TestImportPageWithoutSeries(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -130,14 +130,20 @@ func TestImportPageRequiresSeries(t *testing.T) {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Create a series first") {
-		t.Fatalf("missing empty-series message: %s", truncate(body, 400))
+	if strings.Contains(body, "Create a series first") {
+		t.Fatalf("empty-series gate should be gone: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, `for="modal-add-series"`) || !strings.Contains(body, "modal-add-series") {
-		t.Fatalf("missing Add series CTA/modal: %s", truncate(body, 400))
+	if !strings.Contains(body, `id="btn-import"`) || !strings.Contains(body, "File matching") {
+		t.Fatalf("import UI should render with no series: %s", truncate(body, 400))
 	}
-	if strings.Contains(body, `id="btn-scan"`) || strings.Contains(body, "File matching") {
-		t.Fatalf("import UI should be disabled with no series: %s", truncate(body, 400))
+	if !strings.Contains(body, "modal-add-series") || !strings.Contains(body, "Create new series") {
+		t.Fatalf("expected add-series modal + Match create row with no series: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, "modal-add-video") || !strings.Contains(body, "js-add-video-form") {
+		t.Fatalf("expected add-video modal with no series: %s", truncate(body, 400))
+	}
+	if strings.Contains(body, `id="btn-scan"`) {
+		t.Fatalf("scan button should be removed: %s", truncate(body, 400))
 	}
 
 	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
