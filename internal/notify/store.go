@@ -35,7 +35,7 @@ func List(database *db.DB) ([]Channel, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		c, err := scanChannel(rows)
 		if err != nil {
@@ -90,7 +90,7 @@ func Upsert(database *db.DB, id int64, name, rawURL string, events []string) (in
 	}
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
-		return 0, fmt.Errorf("Apprise URL required")
+		return 0, fmt.Errorf("apprise URL required")
 	}
 	if IsInAppURL(rawURL) {
 		return 0, ErrInAppChannelReadOnly

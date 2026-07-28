@@ -25,7 +25,7 @@ func TestRunnerCompletesStub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = settings.SeedDefaults(d)
 	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
@@ -66,7 +66,7 @@ func TestRunnerCancelDoesNotMarkDownloadFailed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = settings.SeedDefaults(d)
 	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
@@ -162,7 +162,7 @@ func testRunnerDomainIssueNotify(t *testing.T, returnCode, returnMsg string, wan
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
 
@@ -268,7 +268,7 @@ func TestRunnerDownloadsDoneDigest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = settings.SetDomainDefault(d, 0, 8, 2, "10M", "0", false)
 	if _, err := notify.Upsert(d, 0, "d", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventDownloadDigest}); err != nil {
@@ -357,7 +357,7 @@ func TestRunnerMediaTypeExcludedMarksIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
 	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{
@@ -456,7 +456,7 @@ func TestRunnerLiveBroadcastSkippedStaysWanted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
 	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{

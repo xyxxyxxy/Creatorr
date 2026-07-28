@@ -13,7 +13,6 @@ type Client struct {
 	Bin              string // path to yt-dlp binary; empty uses YTDLP_BIN / "yt-dlp"
 	PluginsDir       string // operator plugin mounts; always passed as --plugin-dirs when non-empty
 	SystemPluginsDir string // baked POT plugin path; always passed in addition to PluginsDir
-	FFmpegBin        string // path to ffmpeg; empty uses FFMPEG_BIN / "ffmpeg"
 	PotProviderURL   string // CREATORR_POT_PROVIDER_URL; empty forces fetch_pot=never
 	// PotFetch returns Settings pot_fetch (or never when URL unset). Optional; defaults apply when nil.
 	PotFetch func() string
@@ -78,7 +77,6 @@ func (c *Client) fill(o *options) {
 		return
 	}
 	o.ytdlpPath = strings.TrimSpace(c.Bin)
-	o.ffmpegPath = strings.TrimSpace(c.FFmpegBin)
 	o.pluginDirs = strings.TrimSpace(c.PluginsDir)
 	o.systemPluginDirs = strings.TrimSpace(c.SystemPluginsDir)
 	o.potProviderURL = strings.TrimSpace(c.PotProviderURL)

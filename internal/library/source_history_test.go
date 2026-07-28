@@ -64,9 +64,6 @@ func TestSourceHistoryScannedAndStatus(t *testing.T) {
 		if e.Event == "discovered" {
 			found = true
 		}
-		if e.Event == "discovered" || e.Event == "updated" {
-			// ok projected
-		}
 	}
 	if !found {
 		t.Fatalf("expected projected discovered on timeline, got %+v", tl)

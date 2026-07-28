@@ -7,6 +7,9 @@ IMAGE ?= creatorr:local
 VERSION ?= dev
 REVISION ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BGUTIL_POT_VERSION ?= 1.3.1
+# Keep in sync with .github/workflows/ci.yml golangci-lint-action version.
+GOLANGCI_LINT_VERSION ?= v2.12.2
+GOLANGCI_LINT_IMAGE ?= golangci/golangci-lint:$(GOLANGCI_LINT_VERSION)
 
 generate:
 	$(OAPI_CODEGEN) -config api/oapi-codegen.yaml api/openapi.yaml
@@ -18,7 +21,7 @@ vet:
 	$(GO) vet ./...
 
 lint:
-	golangci-lint run ./...
+	docker run --rm -v "$(CURDIR):/app" -w /app $(GOLANGCI_LINT_IMAGE) golangci-lint run ./...
 
 # Point this clone at versioned hooks under .githooks/ (repo-local git config).
 hooks:

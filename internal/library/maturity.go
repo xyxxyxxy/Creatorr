@@ -57,7 +57,7 @@ func (s *Store) enqueueMaturityMedia(limit int) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	n := 0
 	for rows.Next() {
@@ -145,7 +145,7 @@ func (s *Store) enqueueMaturitySidecars(limit int) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	n := 0
 	for rows.Next() {

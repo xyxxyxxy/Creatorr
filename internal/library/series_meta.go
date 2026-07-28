@@ -147,8 +147,8 @@ func FormatSeriesNFO(meta SeriesNFO) []byte {
 		if typ == "" {
 			typ = "creatorr"
 		}
-		b.WriteString(fmt.Sprintf(`  <uniqueid type="%s" default="true">%s</uniqueid>`+"\n",
-			xmlEscape(typ), xmlEscape(meta.UniqueIDValue)))
+		fmt.Fprintf(&b, `  <uniqueid type="%s" default="true">%s</uniqueid>`+"\n",
+			xmlEscape(typ), xmlEscape(meta.UniqueIDValue))
 	}
 	for i, a := range meta.Actors {
 		name := strings.TrimSpace(a.Name)
@@ -164,7 +164,7 @@ func FormatSeriesNFO(meta SeriesNFO) []byte {
 		if role := strings.TrimSpace(a.Role); role != "" {
 			b.WriteString("    <role>" + xmlEscape(role) + "</role>\n")
 		}
-		b.WriteString(fmt.Sprintf("    <order>%d</order>\n", order))
+		fmt.Fprintf(&b, "    <order>%d</order>\n", order)
 		b.WriteString("  </actor>\n")
 	}
 	b.WriteString("</tvshow>\n")
@@ -686,7 +686,7 @@ func (s *Store) RewriteSeriesEpisodeNFOs(seriesID, taskID int64) (rewrote, faile
 	if err != nil {
 		return 0, 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var ids []int64
 	for rows.Next() {
 		var id int64
@@ -722,7 +722,7 @@ func downloadURLToCache(rawURL, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
@@ -733,7 +733,7 @@ func downloadURLToCache(rawURL, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = io.Copy(f, resp.Body)
 	return err
 }
@@ -956,13 +956,13 @@ func (s *Store) ListMetaSuggestions() (MetaSuggestions, error) {
 		for rows.Next() {
 			var studio, genresJSON, tagsJSON, country, mpaa, actorsJSON string
 			if err := rows.Scan(&studio, &genresJSON, &tagsJSON, &country, &mpaa, &actorsJSON); err != nil {
-				rows.Close()
+				_ = rows.Close()
 				return out, err
 			}
 			absorb(studio, genresJSON, tagsJSON, country, mpaa, actorsJSON)
 		}
 		err = rows.Err()
-		rows.Close()
+		_ = rows.Close()
 		if err != nil {
 			return out, err
 		}

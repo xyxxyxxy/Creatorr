@@ -172,7 +172,7 @@ func (c *Checker) checkFlareSolverr(ctx context.Context) Check {
 	if err != nil {
 		return Check{Name: "flaresolverr", Status: StatusDegraded, Message: err.Error()}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 500 {
 		return Check{Name: "flaresolverr", Status: StatusDegraded, Message: resp.Status}
 	}
@@ -195,7 +195,7 @@ func (c *Checker) checkPotProvider(ctx context.Context) Check {
 	if err != nil {
 		return Check{Name: "pot_provider", Status: StatusDegraded, Message: err.Error()}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 500 {
 		return Check{Name: "pot_provider", Status: StatusDegraded, Message: resp.Status}
 	}

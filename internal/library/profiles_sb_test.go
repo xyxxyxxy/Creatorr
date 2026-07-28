@@ -14,7 +14,7 @@ func TestListProfilesAlphabetical(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	lib := library.NewStore(d, queue.NewStore(d))
 
 	for _, name := range []string{"zebra", "Alpha", "best", "1080p"} {
@@ -42,7 +42,7 @@ func TestProfileInfoCardsRequireReencode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	lib := library.NewStore(d, queue.NewStore(d))
 
 	_, err = lib.CreateProfileFull("t", "bv*+ba/b", 0, 0, nil, []string{"sponsor"}, false, true, false)

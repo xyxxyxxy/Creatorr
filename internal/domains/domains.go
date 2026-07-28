@@ -117,7 +117,7 @@ func List(database *db.DB) ([]Domain, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Domain
 	for rows.Next() {
 		d, err := scanDomain(rows)
@@ -140,7 +140,7 @@ func ListInactive(database *db.DB) ([]Domain, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Domain
 	for rows.Next() {
 		d, err := scanDomain(rows)

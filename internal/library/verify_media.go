@@ -117,7 +117,7 @@ func (s *Store) CancelMediaVerifyForVideo(videoID int64, message string) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var ids []int64
 	for rows.Next() {
 		var id int64

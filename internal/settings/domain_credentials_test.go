@@ -14,7 +14,7 @@ func TestCredentialsHostOverrideOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if err := settings.SeedDefaults(d); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestSaveDefaultCredentialsKeepPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if err := settings.SeedDefaults(d); err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestCredentialsForURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if err := settings.SeedDefaults(d); err != nil {
 		t.Fatal(err)
 	}

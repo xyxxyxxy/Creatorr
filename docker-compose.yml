@@ -5,7 +5,6 @@ services:
   creatorr:
     image: ghcr.io/xyxxyxxy/creatorr:latest
     container_name: creatorr
-    # Host uid/gid for volume writes (set PUID/PGID in .env; defaults 1000).
     user: "${PUID:-1000}:${PGID:-1000}"
     depends_on:
       creatorr-po-token:
@@ -23,7 +22,7 @@ services:
       - ${CREATORR_INITIAL_ROOT_FOLDER:-./var/library}:/library
       # Optional yt-dlp plugins:
       # - ./var/yt-dlp-plugins:/yt-dlp-plugins:ro
-      # Optional custom yt-dlp (replaces image /usr/local/bin/yt-dlp):
+      # Optional custom yt-dlp binary:
       # - /path/to/your/yt-dlp:/usr/local/bin/yt-dlp:ro
     environment:
       # PO Token provider (creatorr-po-token sidecar). Empty disables Settings pot_fetch.

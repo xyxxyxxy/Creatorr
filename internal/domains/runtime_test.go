@@ -14,7 +14,7 @@ func TestSetPausedDoesNotCreateDomainsRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 
 	if err := domains.SetPaused(d, "example.com", true); err != nil {
@@ -48,7 +48,7 @@ func TestSetPausedRejectsInvalid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	if err := domains.SetPaused(d, "example,com", true); err == nil {
 		t.Fatal("expected invalid hostname rejected")

@@ -33,7 +33,7 @@ func EmbedChapters(ctx context.Context, mediaPath string, chapters []Chapter) er
 	if err := os.WriteFile(metaPath, []byte(b.String()), 0o644); err != nil {
 		return err
 	}
-	defer os.Remove(metaPath)
+	defer func() { _ = os.Remove(metaPath) }()
 
 	ext := filepath.Ext(mediaPath)
 	tmp := filepath.Join(dir, fmt.Sprintf("sb-embed-%d%s", time.Now().UnixNano(), ext))

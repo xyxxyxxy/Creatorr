@@ -71,10 +71,10 @@ func BuildEncodePlan(probe MediaProbe) EncodePlan {
 		return p
 	}
 	ac := strings.ToLower(probe.AudioCodec)
-	switch {
-	case ac == "aac":
+	switch ac {
+	case "aac":
 		p.AudioEncoder = "aac"
-	case ac == "opus":
+	case "opus":
 		p.AudioEncoder = "libopus"
 	default:
 		p.AudioEncoder = "aac"

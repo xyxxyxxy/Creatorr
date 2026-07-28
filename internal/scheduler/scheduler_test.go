@@ -20,7 +20,7 @@ func TestTickEnqueuesCatchupScanAndDownloadWanted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = settings.Set(d, settings.KeyDownloadWantedCron, "*/1 * * * *")
 	_ = settings.Set(d, settings.KeySyncFilesCron, "")
@@ -97,7 +97,7 @@ func TestRunSkipsMissedSchedulesAtBoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = settings.Set(d, settings.KeyDownloadWantedCron, "0 * * * *")
 	_ = settings.Set(d, settings.KeySyncFilesCron, "0 * * * *")
@@ -184,7 +184,7 @@ func TestTickEnqueuesFullScanWhenBackfillIncomplete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = settings.Set(d, settings.KeyDownloadWantedCron, "")
 	_ = settings.Set(d, settings.KeySyncFilesCron, "")
@@ -254,7 +254,7 @@ func TestFileSyncMarksMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
@@ -312,7 +312,7 @@ func TestFileSyncRestoresMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
@@ -370,7 +370,7 @@ func TestFileSyncSkipsOfflineRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
@@ -430,7 +430,7 @@ func TestRetentionPurge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)

@@ -121,7 +121,7 @@ func ListNotifications(database *db.DB, f ListFilter, limit, offset int) ([]Noti
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Notification
 	for rows.Next() {
 		n, err := scanNotification(rows)

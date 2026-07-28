@@ -101,7 +101,7 @@ func (s *Store) ReindexSeriesUTCDay(seriesID int64, dayYYYYMMDD string) (changed
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var peers []dayPeer
 	for rows.Next() {
@@ -191,9 +191,6 @@ func (s *Store) repackOneEpisodeNumbers(videoID int64, cfg NamingConfig, taskID 
 		season, episode, aired, domain, root.Path, cfg)
 	if fail {
 		return fmt.Errorf("repack rename failed for video %d", videoID)
-	}
-	if !ok {
-		// Path unchanged; still refresh NFO season/episode if present.
 	}
 	var mediaPath string
 	_ = s.DB.SQL.QueryRow(`

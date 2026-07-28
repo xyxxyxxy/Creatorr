@@ -15,7 +15,7 @@ func TestFlareSolverrURLPerDomain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if err := settings.SeedDefaults(d); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestClearUseFlareSolverr(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if err := settings.SeedDefaults(d); err != nil {
 		t.Fatal(err)
 	}

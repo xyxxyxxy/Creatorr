@@ -247,7 +247,7 @@ func (s *Store) hasPendingScanForSource(sourceID int64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
 		var payload string
@@ -278,7 +278,7 @@ func (s *Store) HasActiveScanForSource(sourceID int64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
 		var payload string

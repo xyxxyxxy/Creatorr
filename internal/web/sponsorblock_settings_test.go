@@ -22,7 +22,7 @@ func TestLibrarySettingsSponsorBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)

@@ -72,7 +72,7 @@ func (s *Store) ActiveFileDeleteTargets() (seriesIDs map[int64]struct{}, videoID
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var raw string
 		if err := rows.Scan(&raw); err != nil {
@@ -251,7 +251,7 @@ func (s *Store) deleteVideoDiskArtifacts(videoID int64) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	seen := map[string]struct{}{}
 	for rows.Next() {
 		var p string

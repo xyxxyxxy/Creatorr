@@ -15,7 +15,7 @@ func TestCookieJarHostOnlyNoDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	dir := t.TempDir()
 	path, err := domains.TempJarForURL(database, dir, "https://www.example.com/v")

@@ -111,7 +111,7 @@ go run ./cmd/creatorr
 make hooks      # once per clone: pre-commit runs make lint + make test
 make test
 make vet
-make lint
+make lint       # golangci-lint in Docker (version pinned in Makefile; needs Docker)
 make generate   # after editing api/openapi.yaml
 make openapi-check
 make css        # after Tailwind/daisyUI class or ECharts vendor changes

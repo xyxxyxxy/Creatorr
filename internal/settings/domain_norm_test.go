@@ -65,7 +65,7 @@ func TestDefaultDomainRowSeeded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if err := settings.SeedDefaults(d); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestSetDomainDefaultRejectsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	if err := settings.SetDomainDefault(d, 10, 8, 1, "", "1", false); err == nil {
 		t.Fatal("expected empty rate rejected")
@@ -112,7 +112,7 @@ func TestLimitsForDomainInheritsDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = settings.SetDomainDefault(d, 12, 8, 1, "3M", "2", false)
 	lim, err := settings.LimitsForDomain(d, "example.com")

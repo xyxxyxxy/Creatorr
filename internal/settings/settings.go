@@ -353,7 +353,7 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []DomainQueueRow
 	for rows.Next() {
 		var host string

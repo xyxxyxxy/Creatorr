@@ -30,7 +30,7 @@ func TestSeriesListRenders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
@@ -113,7 +113,7 @@ func TestImportPageRequiresSeries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
@@ -193,7 +193,7 @@ func TestOverviewRenders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
@@ -238,7 +238,7 @@ func TestTasksShowsSoftPausedHostWithoutDomainsRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
@@ -270,7 +270,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
@@ -444,7 +444,7 @@ func TestTaskDetailPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
@@ -552,7 +552,7 @@ func TestSourceDetailPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
@@ -632,7 +632,7 @@ func TestMonitorToggleHTMX(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
@@ -676,7 +676,7 @@ func TestActionAddSeriesManual(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
@@ -711,7 +711,7 @@ func TestActionAddSeriesManualJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
@@ -745,7 +745,7 @@ func TestActionAddSeriesURLRequiresTitleWithoutDraft(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
