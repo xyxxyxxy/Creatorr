@@ -1,7 +1,7 @@
 // Package notify sends operator alerts via Apprise (github.com/unraid/apprise-go)
 // and records them in the in-app notifications table via the fixed Creatorr channel.
 //
-// Channels: virtual creatorr://in-app (all events, read-only) plus notify_channels
+// Channels: virtual creatorr://in-app (all events, read-only) plus notification_channels
 // (Apprise URL + subscribed event ids).
 package notify
 

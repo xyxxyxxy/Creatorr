@@ -345,27 +345,9 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	cookieByDomain := map[string]string{}
-	if crows, err := database.SQL.Query(`SELECT domain, content FROM cookies`); err == nil {
-		for crows.Next() {
-			var d, content string
-			if err := crows.Scan(&d, &content); err != nil {
-				_ = crows.Close()
-				return nil, err
-			}
-			cookieByDomain[NormalizeDomain(d)] = content
-		}
-		if err := crows.Err(); err != nil {
-			_ = crows.Close()
-			return nil, err
-		}
-		if err := crows.Close(); err != nil {
-			return nil, err
-		}
-	}
 	rows, err := database.SQL.Query(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-		       download_rate_limit, sleep_requests, use_flaresolverr, username, password
+		       download_rate_limit, sleep_requests, use_flaresolverr, cookies, username, password
 		FROM domains WHERE domain != ? ORDER BY domain
 	`, DomainDefault)
 	if err != nil {
@@ -373,7 +355,6 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 	}
 	defer rows.Close()
 	var out []DomainQueueRow
-	seen := map[string]bool{}
 	for rows.Next() {
 		var host string
 		var active int
@@ -381,8 +362,8 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 		var rate sql.NullString
 		var sleep sql.NullFloat64
 		var flare sql.NullInt64
-		var credUser, credPass sql.NullString
-		if err := rows.Scan(&host, &active, &delay, &maxQ, &maxP, &rate, &sleep, &flare, &credUser, &credPass); err != nil {
+		var jar, credUser, credPass sql.NullString
+		if err := rows.Scan(&host, &active, &delay, &maxQ, &maxP, &rate, &sleep, &flare, &jar, &credUser, &credPass); err != nil {
 			return nil, err
 		}
 		r := DomainQueueRow{
@@ -393,9 +374,11 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 			DownloadRateLimit:   def.DownloadRateLimit,
 			SleepRequests:       def.SleepRequests,
 			UseFlareSolverr:     def.UseFlareSolverr,
-			CookieContent:       cookieByDomain[NormalizeDomain(host)],
 		}
-		r.HasCookies = strings.TrimSpace(r.CookieContent) != ""
+		if jar.Valid {
+			r.CookieContent = jar.String
+			r.HasCookies = strings.TrimSpace(jar.String) != ""
+		}
 		if delay.Valid && delay.Int64 >= 0 {
 			r.TaskCooldownSeconds = int(delay.Int64)
 			r.CooldownOverride = strconv.FormatInt(delay.Int64, 10)
@@ -438,30 +421,8 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 		}
 		r.CredentialsHasStoredPassword = credPass.Valid && strings.TrimSpace(credPass.String) != ""
 		out = append(out, r)
-		seen[NormalizeDomain(host)] = true
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	// Host cookie jars without a domains row still appear (editable via override modal).
-	for host, content := range cookieByDomain {
-		host = NormalizeDomain(host)
-		if host == "" || host == DomainDefault || seen[host] {
-			continue
-		}
-		out = append(out, DomainQueueRow{
-			Domain: host, Active: true, HasRow: false,
-			TaskCooldownSeconds: def.TaskCooldownSeconds,
-			MaxDownloadQueue:    def.MaxDownloadQueue,
-			MaxParallelTasks:    def.MaxParallelTasks,
-			DownloadRateLimit:   def.DownloadRateLimit,
-			SleepRequests:       def.SleepRequests,
-			UseFlareSolverr:     def.UseFlareSolverr,
-			CookieContent:       content,
-			HasCookies:          strings.TrimSpace(content) != "",
-		})
-	}
-	return out, nil
+	return out, rows.Err()
 }
 
 // DomainQueueRows is an alias for DomainOverrideRows (legacy name).
@@ -469,7 +430,7 @@ func DomainQueueRows(database *db.DB) ([]DomainQueueRow, error) {
 	return DomainOverrideRows(database)
 }
 
-// DeleteDomainOverride removes a host domains row (never default). Caller should also clear host cookies.
+// DeleteDomainOverride removes a host domains row (never default). Jar text lives on the row and is deleted with it.
 func DeleteDomainOverride(database *db.DB, domain string) error {
 	domain = NormalizeDomain(domain)
 	if domain == "" || domain == DomainDefault {

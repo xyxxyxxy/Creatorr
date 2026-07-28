@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xyxxyxxy/Creatorr/internal/cookies"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
@@ -147,7 +146,7 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 			} else {
 				lv.FlareTip = "FlareSolverr off (host Domain override)"
 			}
-			if ok, _, err := cookies.Applies(h.Queue.DB, domain); err == nil && ok {
+			if ok, _, err := domains.CookiesApply(h.Queue.DB, domain); err == nil && ok {
 				lv.HasCookies = true
 				lv.CookiesFromHost = true
 				lv.CookiesTip = "Cookies set (host jar)"
@@ -184,7 +183,7 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 					lv.SleepOverride = strconv.FormatFloat(meta.SleepRequests.Float64, 'f', -1, 64)
 				}
 			}
-			if c, err := cookies.Get(h.Queue.DB, domain); err == nil {
+			if c, err := domains.GetCookies(h.Queue.DB, domain); err == nil {
 				lv.CookieContent = c
 			}
 		}

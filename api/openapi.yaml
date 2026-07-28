@@ -15,7 +15,6 @@ tags:
   - name: tasks
   - name: history
   - name: settings
-  - name: cookies
   - name: queue
   - name: library
 
@@ -363,50 +362,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/cookies:
+  /api/domains/cookies:
     get:
-      tags: [cookies]
-      operationId: listCookies
-      summary: List per-domain Netscape cookie jars
+      tags: [queue]
+      operationId: listDomainCookies
+      summary: List Netscape cookie jars on host domain overrides
       responses:
         "200":
-          description: Cookies
+          description: Host jars with non-empty domains.cookies
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Cookie"
+                  $ref: "#/components/schemas/DomainCookie"
+
+  /api/domains/{domain}/cookies:
     put:
-      tags: [cookies]
-      operationId: upsertCookie
-      summary: Create or replace cookies for a domain
+      tags: [queue]
+      operationId: setDomainCookies
+      summary: Create or replace the Netscape jar on a host domain override
+      parameters:
+        - $ref: "#/components/parameters/Domain"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpsertCookieRequest"
+              $ref: "#/components/schemas/SetDomainCookiesRequest"
       responses:
         "204":
           description: Saved
         "400":
-          description: Invalid
+          description: Invalid (including domain=default)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
-  /api/cookies/{domain}:
     delete:
-      tags: [cookies]
-      operationId: deleteCookie
-      summary: Delete cookies for a domain
+      tags: [queue]
+      operationId: clearDomainCookies
+      summary: Clear the Netscape jar on a host domain override
       parameters:
         - $ref: "#/components/parameters/Domain"
       responses:
         "204":
-          description: Deleted
+          description: Cleared
 
   /api/roots:
     get:
@@ -1408,28 +1409,26 @@ components:
           additionalProperties:
             type: string
 
-    Cookie:
+    DomainCookie:
       type: object
       required: [domain, content, updated_at]
       properties:
         domain:
           type: string
-          description: Hostname (www. stripped) or `default` for the global fallback jar
+          description: Host override hostname (www. stripped). Not `default`.
         content:
           type: string
         updated_at:
           type: string
           format: date-time
 
-    UpsertCookieRequest:
+    SetDomainCookiesRequest:
       type: object
-      required: [domain, content]
+      required: [content]
       properties:
-        domain:
-          type: string
-          description: Hostname or `default` for the global fallback jar
         content:
           type: string
+          description: Netscape jar text; empty clears the jar
 
     RootFolder:
       type: object

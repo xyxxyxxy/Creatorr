@@ -60,9 +60,9 @@ When introducing a new domain term, add it here (or the topic doc above if it be
 | `files` | On-disk paths linked to videos: kind (video/nfo/thumb) |
 | `tasks` | Queued background work; finished rows power History → Tasks (`status` + optional `detail` outcome JSON) |
 | `notifications` | In-app notify log (event, title, body, optional `task_id`, `external_ok`, `read_at`) |
-| `cookies` | Netscape jar text per host override key (no global fallback jar) |
+| `notification_channels` | Optional Apprise targets (URL + subscribed event ids); in-app Creatorr channel is virtual |
 | `domain_runtime` | Soft pause per hostname (`paused`); missing row = not paused; never a limits override |
-| `domains` | Hostname profiles: `default` (concurrency limits only; Use FlareSolverr forced off) + host overrides; `active`, optional limit overrides and `use_flaresolverr` (NULL = inherit off; 1 = On; host Off is stored as NULL, not 0), optional `username`/`password` on hosts (NULL/empty = none), FlareSolverr HTTP pre-solve when host On |
+| `domains` | Hostname profiles: `default` (concurrency limits only; Use FlareSolverr forced off) + host overrides; `active`, optional limit overrides and `use_flaresolverr` (NULL = inherit off; 1 = On; host Off is stored as NULL, not 0), Access on hosts: `cookies` (Netscape jar; NULL/empty = none), optional `username`/`password` (NULL/empty = none); FlareSolverr HTTP pre-solve when host On |
 | `settings` | Key/value runtime config |
 
 ## Video statuses (minimum)

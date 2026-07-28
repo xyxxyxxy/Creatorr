@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xyxxyxxy/Creatorr/internal/cookies"
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/health"
@@ -648,7 +647,7 @@ func (h *Handler) actionSaveDomainDefault(w http.ResponseWriter, r *http.Request
 		return
 	}
 	// Access (Flare / cookies / credentials) is override-only; clear any legacy defaults jar/creds.
-	_ = cookies.Delete(h.Queue.DB, settings.DomainDefault)
+	_ = domains.ClearCookies(h.Queue.DB, settings.DomainDefault)
 	if err := settings.SaveDefaultCredentials(h.Queue.DB, "", "", false); err != nil {
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
@@ -727,7 +726,6 @@ func (h *Handler) actionDeleteDomainOverride(w http.ResponseWriter, r *http.Requ
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
-	_ = cookies.Delete(h.Queue.DB, domain)
 	redirectSettings(w, r, "/settings/queue", "ok=domain-deleted")
 }
 
@@ -748,20 +746,14 @@ func (h *Handler) saveDomainCookies(domain, content string) error {
 	}
 	content = strings.TrimSpace(content)
 	if content == "" {
-		return cookies.Delete(h.Queue.DB, domain)
+		return domains.ClearCookies(h.Queue.DB, domain)
 	}
-	if err := cookies.Upsert(h.Queue.DB, domain, content); err != nil {
-		return err
-	}
-	if domain != settings.DomainDefault {
-		_ = domains.EnsureHost(h.Queue.DB, domain)
-	}
-	return nil
+	return domains.SetCookies(h.Queue.DB, domain, content)
 }
 
 func (h *Handler) actionDeleteCookie(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
-	_ = cookies.Delete(h.Queue.DB, strings.TrimSpace(r.FormValue("domain")))
+	_ = domains.ClearCookies(h.Queue.DB, strings.TrimSpace(r.FormValue("domain")))
 	redirectSettings(w, r, "/settings/queue", "ok=cookie-deleted")
 }
 

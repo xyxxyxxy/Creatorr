@@ -3,7 +3,6 @@ package domains
 import (
 	"strings"
 
-	"github.com/xyxxyxxy/Creatorr/internal/cookies"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
@@ -51,7 +50,7 @@ func SnapshotDomainAccess(database *db.DB, domain string) (*DomainAccessSnapshot
 		snap.SleepOverride = meta.SleepRequests.Valid
 		snap.FlareOverride = FlareOverrideLabel(meta.UseFlareSolverr) == FlareOn
 	}
-	if ok, _, err := cookies.Applies(database, domain); err != nil {
+	if ok, _, err := CookiesApply(database, domain); err != nil {
 		return nil, err
 	} else if ok {
 		snap.Cookies = true

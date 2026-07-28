@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/xyxxyxxy/Creatorr/internal/cookies"
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
@@ -101,7 +100,7 @@ func (h *Handler) actionProbeSourceTitle(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	defer os.RemoveAll(tmp)
-	jar, err := cookies.TempJarForURL(h.Library.DB, tmp, url)
+	jar, err := domains.TempJarForURL(h.Library.DB, tmp, url)
 	if err != nil {
 		slog.Warn("probe source title cookies", "url", url, "err", err)
 		jar = ""

@@ -12,7 +12,7 @@ import (
 )
 
 // Channel is one notification target with subscribed events.
-// Apprise channels are rows in notify_channels; the Creatorr in-app channel is virtual.
+// Apprise channels are rows in notification_channels; the Creatorr in-app channel is virtual.
 type Channel struct {
 	ID        int64    `json:"id"`
 	Name      string   `json:"name"`
@@ -30,7 +30,7 @@ func List(database *db.DB) ([]Channel, error) {
 	}
 	rows, err := database.SQL.Query(`
 		SELECT id, name, url, events, created_at, updated_at
-		FROM notify_channels ORDER BY id
+		FROM notification_channels ORDER BY id
 	`)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func Get(database *db.DB, id int64) (Channel, error) {
 	}
 	row := database.SQL.QueryRow(`
 		SELECT id, name, url, events, created_at, updated_at
-		FROM notify_channels WHERE id = ?
+		FROM notification_channels WHERE id = ?
 	`, id)
 	c, err := scanChannel(row)
 	if err == sql.ErrNoRows {
@@ -119,7 +119,7 @@ func Upsert(database *db.DB, id int64, name, rawURL string, events []string) (in
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if id > 0 {
 		res, err := database.SQL.Exec(`
-			UPDATE notify_channels SET name = ?, url = ?, events = ?, updated_at = ?
+			UPDATE notification_channels SET name = ?, url = ?, events = ?, updated_at = ?
 			WHERE id = ?
 		`, name, rawURL, string(evJSON), now, id)
 		if err != nil {
@@ -132,7 +132,7 @@ func Upsert(database *db.DB, id int64, name, rawURL string, events []string) (in
 		return id, nil
 	}
 	res, err := database.SQL.Exec(`
-		INSERT INTO notify_channels (name, url, events, created_at, updated_at)
+		INSERT INTO notification_channels (name, url, events, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?)
 	`, name, rawURL, string(evJSON), now, now)
 	if err != nil {
@@ -150,7 +150,7 @@ func Delete(database *db.DB, id int64) error {
 	if id <= 0 {
 		return ErrInAppChannelReadOnly
 	}
-	_, err := database.SQL.Exec(`DELETE FROM notify_channels WHERE id = ?`, id)
+	_, err := database.SQL.Exec(`DELETE FROM notification_channels WHERE id = ?`, id)
 	return err
 }
 

@@ -9,7 +9,7 @@ import (
 	apprise "github.com/unraid/apprise-go"
 )
 
-// Event ids stored on notify_channels.events and used by SendEvent.
+// Event ids stored on notification_channels.events and used by SendEvent.
 const (
 	EventCookieInvalid  = "cookie_invalid"
 	EventRateLimited    = "rate_limited"

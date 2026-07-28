@@ -29,8 +29,7 @@ internal/db/            fresh schema only; no migrateTo* helpers
 internal/domain/        series, source, video types
 internal/library/       series/videos/files, pack, remux, import, NFO
 internal/queue/         per-domain task queue, cooldown, History (finished tasks)
-internal/domains/       known hostnames: active + optional limit overrides; soft pause in domain_runtime
-internal/cookies/       Netscape jar storage per domain
+internal/domains/       known hostnames: active + optional limit overrides; soft pause in domain_runtime; Access cookies/credentials on host rows
 internal/settings/      SQLite settings keys + domain_queue JSON
 internal/scheduler/     cron kicks (scan, download-wanted, file sync, retention purge)
 internal/worker/        background task runner

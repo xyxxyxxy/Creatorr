@@ -134,12 +134,6 @@ CREATE TABLE IF NOT EXISTS tasks (
   finished_at TEXT
 );
 
-CREATE TABLE IF NOT EXISTS cookies (
-  domain TEXT PRIMARY KEY,
-  content TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
 -- Soft pause per hostname (claim stop). Missing row = not paused.
 -- Never creates domains override rows; resume deletes the row.
 CREATE TABLE IF NOT EXISTS domain_runtime (
@@ -151,6 +145,7 @@ CREATE TABLE IF NOT EXISTS domain_runtime (
 -- Known hostnames + reserved domain=default (global limit defaults).
 -- Host rows: NULL task_cooldown_seconds / max_download_queue / max_parallel_tasks / download_rate_limit / sleep_requests / use_flaresolverr → use domain=default.
 -- domain=default limit columns + use_flaresolverr must be non-NULL. Domains are never auto-deleted when sources go away.
+-- Access (host overrides): cookies (Netscape jar text; NULL/empty = none), username/password (NULL/empty = none). No default-jar fallback.
 CREATE TABLE IF NOT EXISTS domains (
   domain TEXT PRIMARY KEY,
   active INTEGER NOT NULL DEFAULT 1,
@@ -160,6 +155,7 @@ CREATE TABLE IF NOT EXISTS domains (
   download_rate_limit TEXT,
   sleep_requests REAL,
   use_flaresolverr INTEGER,
+  cookies TEXT,
   username TEXT,
   password TEXT,
   updated_at TEXT NOT NULL
@@ -172,7 +168,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- Apprise notification channels (URL + subscribed event ids as JSON array).
 -- Creatorr in-app delivery is a virtual channel (creatorr://in-app), not a row here.
-CREATE TABLE IF NOT EXISTS notify_channels (
+CREATE TABLE IF NOT EXISTS notification_channels (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL DEFAULT '',
   url TEXT NOT NULL,

@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/xyxxyxxy/Creatorr/internal/cookies"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
@@ -444,7 +443,7 @@ func ScanHandler(d Deps) TaskHandler {
 		}
 		defer os.RemoveAll(work)
 
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, src.URL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, src.URL)
 		if err != nil {
 			mode := library.SourceHistModeScan
 			if !src.FullScanDone {
@@ -695,7 +694,7 @@ func DownloadHandler(d Deps) TaskHandler {
 		defer os.RemoveAll(work)
 
 		progress("Resolving cookies…", nil)
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, dlctx.URL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, dlctx.URL)
 		if err != nil {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 		}
@@ -1183,7 +1182,7 @@ func RefreshSidecarsHandler(d Deps) TaskHandler {
 		defer os.RemoveAll(work)
 
 		progress("Resolving cookies…", ptrFloat(0.1))
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, url)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, url)
 		if err != nil {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 		}
@@ -1243,7 +1242,7 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 	defer os.RemoveAll(work)
 
 	progress("Fetching metadata…", ptrFloat(0.05))
-	jar, err := cookies.TempJarForURL(d.Library.DB, work, url)
+	jar, err := domains.TempJarForURL(d.Library.DB, work, url)
 	if err != nil {
 		return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 	}
@@ -1345,7 +1344,7 @@ func metadataRescanSeries(ctx context.Context, d Deps, t *queue.Task, progress f
 		}
 		progress(fmt.Sprintf("Listing source %d/%d: %s", i+1, n, label), ptrFloat(float64(i)/float64(n)))
 
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, src.URL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, src.URL)
 		if err != nil {
 			_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, err.Error(), map[string]any{
 				"mode": library.SourceHistModeRescanMetadata,
@@ -1445,7 +1444,7 @@ func PrefetchSeriesMetaHandler(d Deps) TaskHandler {
 		}
 		defer os.RemoveAll(work)
 
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, fetchURL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
 		if err != nil {
 			return err
 		}
@@ -1525,7 +1524,7 @@ func PrefetchAddSeriesHandler(d Deps) TaskHandler {
 		}
 		defer os.RemoveAll(work)
 
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, fetchURL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
 		if err != nil {
 			jar = ""
 		}
@@ -1587,7 +1586,7 @@ func PrefetchAddVideoHandler(d Deps) TaskHandler {
 		}
 		defer os.RemoveAll(work)
 
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, fetchURL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
 		if err != nil {
 			draft := library.AddVideoDraft{Error: err.Error()}
 			_ = d.Library.WriteAddVideoDraft(token, draft)
@@ -1648,7 +1647,7 @@ func PrefetchVideoMetaHandler(d Deps) TaskHandler {
 		}
 		defer os.RemoveAll(work)
 
-		jar, err := cookies.TempJarForURL(d.Library.DB, work, fetchURL)
+		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
 		if err != nil {
 			draft := library.VideoPrefetchDraft{Error: err.Error()}
 			_ = d.Library.WriteVideoPrefetchDraft(videoID, t.ID, draft)

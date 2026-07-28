@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// In-app Creatorr channel (virtual; not stored in notify_channels).
+// In-app Creatorr channel (virtual; not stored in notification_channels).
 // Always subscribed to AllEvents; not editable or deletable in Settings.
 const (
 	InAppURL  = "creatorr://in-app"

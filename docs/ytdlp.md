@@ -58,7 +58,7 @@ Creatorr passes `--extractor-args youtubepot-bgutilhttp:base_url=…` when the e
 
 - FlareSolverr pre-solve when the host override sets **Use FlareSolverr** On and `CREATORR_FLARESOLVERR_URL` is set (see **FlareSolverr** above).
 - PO Token provider URL (env) + Settings **PO token fetch** mode (see above).
-- Netscape cookie jars (Settings → Queue / Domains; host jar, else `default`) for Cloudflare clearance and similar.
+- Netscape cookie jars on host Domain overrides only (`domains.cookies`; Settings → Queue / Domains) for Cloudflare clearance and similar. No default-jar fallback.
 - Membership credentials on host `domains` override rows only (`username` / `password`): passed as yt-dlp `--username` / `--password` when non-empty. Site plugins may cache access tokens in yt-dlp's default cache (`~/.cache/yt-dlp` under process `HOME`; Creatorr does not pass `--cache-dir`). Do not export member session cookies into the jar when a plugin supports login.
 - **Delivery mode format selector:** series `delivery_mode` picks the format string. **Video** (default) passes the series' quality profile `format_selector` as `--format`. **Audio** ignores the profile selector and always passes `ba/bestaudio/b` (best available audio); the quality profile is still attached to the series (maturity delays, SponsorBlock) but its format ladder does not apply.
 - Pace flags from domain limits: `--limit-rate` from `download_rate_limit` (archive/scan); when `sleep_requests` > 0 also `--sleep-requests`, `--sleep-subtitles`, and `--sleep-interval` (same seconds; no `--max-sleep-interval`).
