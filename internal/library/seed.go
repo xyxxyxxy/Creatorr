@@ -13,18 +13,18 @@ const (
 	DefaultProfileName = "best"
 	DefaultFormat      = "bv*+ba/b"
 
-	Profile1080Name   = "1080p"
+	Profile1080Name   = "HD 1080p"
 	Profile1080Format = "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"
-	Profile720Name    = "720p"
+	Profile720Name    = "HD 720p"
 	Profile720Format  = "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b"
-	Profile480Name    = "480p"
+	Profile480Name    = "SD 480p"
 	Profile480Format  = "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b"
 )
 
 // SeedDefaults inserts the shipped root folder and quality profiles when tables are empty.
 // Root path comes from cfg.LibraryRoot (/media/library in container; var/media/library local),
 // stored as an absolute path. Seeded root name is the last path segment (operator create may leave name empty).
-// Profiles: best (bv*+ba/b merge with progressive fallback), 1080p, 720p, 480p (soft unrestricted tails).
+// Profiles: best (bv*+ba/b merge with progressive fallback), HD 1080p, HD 720p, SD 480p (soft unrestricted tails).
 // Seed insert order is unrelated to UI order (ListProfiles sorts by name).
 // Remux is always MKV (library.RemuxContainer; not a Setting).
 // Bare yt-dlp "best" alone is avoided as the primary selector (soft progressive on DASH sites).

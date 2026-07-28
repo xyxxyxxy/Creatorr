@@ -12,6 +12,11 @@ func TestProgressMapperMonotonicAcrossReset(t *testing.T) {
 		}
 		prev = v
 	}
+	// First format reserves half of [Lo, Hi]; end near midpoint, not Hi.
+	mid := 0.05 + (0.80-0.05)*0.5
+	if prev < mid-0.02 || prev > mid+0.02 {
+		t.Fatalf("first format end = %v, want ~%v", prev, mid)
+	}
 	// Second format restarts at ~0.
 	for _, raw := range []float64{0.02, 0.3, 0.6, 0.99} {
 		v := m.Map(raw)
@@ -25,6 +30,31 @@ func TestProgressMapperMonotonicAcrossReset(t *testing.T) {
 	}
 	fin := m.Finish()
 	if fin != 0.80 {
+		t.Fatalf("Finish = %v", fin)
+	}
+}
+
+func TestProgressMapperFullRangeDualFormat(t *testing.T) {
+	m := ProgressMapper{Lo: 0, Hi: 1}
+	var prev float64
+	for _, raw := range []float64{0.2, 0.6, 1.0} {
+		prev = m.Map(raw)
+	}
+	if prev < 0.45 || prev > 0.55 {
+		t.Fatalf("first format at 100%% mapped to %v, want ~0.5", prev)
+	}
+	for _, raw := range []float64{0, 0.5, 1.0} {
+		v := m.Map(raw)
+		if v+1e-9 < prev {
+			t.Fatalf("bar reset: prev=%v got=%v raw=%v", prev, v, raw)
+		}
+		prev = v
+	}
+	if prev < 0.95 {
+		t.Fatalf("second format end = %v, want near 1", prev)
+	}
+	fin := m.Finish()
+	if fin != 1 {
 		t.Fatalf("Finish = %v", fin)
 	}
 }

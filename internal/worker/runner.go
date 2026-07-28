@@ -10,6 +10,7 @@ import (
 	"time"
 
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
+	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/events"
 	"github.com/xyxxyxxy/Creatorr/internal/exectrace"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
@@ -94,6 +95,13 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 	sid, vid := taskIDs(task)
 	r.Queue.Logs.Append(task.ID, "Running")
 	r.Events.TaskUpdated(task.ID, task.Kind, task.Domain, queue.StatusRunning, "Running", sid, vid, nil)
+	if snap, err := domains.SnapshotDomainAccess(r.Queue.DB, task.Domain); err != nil {
+		log.Warn("domain-access snapshot", "task", task.ID, "err", err)
+	} else if snap != nil {
+		if err := r.Queue.MergeDetailJSON(task.ID, map[string]any{domains.DetailKeyDomainAccess: snap}); err != nil {
+			log.Warn("domain-access persist", "task", task.ID, "err", err)
+		}
+	}
 
 	handler := r.Handlers[task.Kind]
 	progress := func(msg string, pct *float64) {

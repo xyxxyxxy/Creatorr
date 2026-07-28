@@ -634,6 +634,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 			errorHistoryID = v.HistoryID
 		}
 	}
+	histGroups := groupVideoHistoryByTask(histViews)
 	t, _ := h.Queue.ActiveTaskForVideo(vid)
 	dlRunning := deliveryTaskActive(t) && t.Status == queue.StatusRunning
 	deliveryQueued := deliveryTaskActive(t)
@@ -688,7 +689,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		SizeLabel           string
 		Files               []videoFileView
 		DetailRows          []videoDetailRow
-		History             []videoHistoryView
+		History             []videoHistoryGroup
 		HistoryPage         PageInfo
 		ErrorHistoryID      int64
 		TaskInd             taskIndicatorView
@@ -706,7 +707,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		SizeLabel:           sizeLabel,
 		Files:               fileRows,
 		DetailRows:          detailRows,
-		History:             histViews,
+		History:             histGroups,
 		HistoryPage:         histPageInfo,
 		ErrorHistoryID:      errorHistoryID,
 		TaskInd:             h.videoIndicator(vid, t, video.Status),

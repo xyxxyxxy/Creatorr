@@ -263,7 +263,7 @@ func downloadMedia(ctx context.Context, url, outdir, format, cookiesPath, userAg
 	args = append(args, url)
 	args = withPluginDirs(args, o.systemPluginDirs, o.pluginDirs)
 
-	stderrTail, err := runStream(ctx, o, args, outdir, onProgress)
+	stderrTail, err := runStream(ctx, o, args, outdir, onProgress, nil)
 	notePOTOutput(ctx, o, stderrTail)
 	if err != nil {
 		if code, msg := classifyMatchFilterReject(string(stderrTail), o.matchFilter); code != "" {
@@ -411,7 +411,8 @@ func runCapture(ctx context.Context, o options, args []string, cwd string) (stdo
 // progress can be forwarded as it happens; it returns the last portion of
 // output (for error detail) alongside cmd.Wait's error, if any.
 // onProgress fraction may be nil for message-only lines (PO token trace).
-func runStream(ctx context.Context, o options, args []string, cwd string, onProgress func(message string, fraction *float64)) ([]byte, error) {
+// steps may be nil (a fresh StepProgress is used) or pre-seeded with total.
+func runStream(ctx context.Context, o options, args []string, cwd string, onProgress func(message string, fraction *float64), steps *StepProgress) ([]byte, error) {
 	bin := o.resolveYtdlpBin()
 	cmd := exec.CommandContext(ctx, bin, args...)
 	if cwd != "" {
@@ -427,6 +428,9 @@ func runStream(ctx context.Context, o options, args []string, cwd string, onProg
 		return nil, err
 	}
 
+	if steps == nil {
+		steps = &StepProgress{}
+	}
 	tracePOT := strings.TrimSpace(o.potProviderURL) != "" && o.potFetch != "never"
 	var tail bytes.Buffer
 	sc := bufio.NewScanner(stdout)
@@ -444,7 +448,7 @@ func runStream(ctx context.Context, o options, args []string, cwd string, onProg
 				onProgress(trimPOTLine(line), nil)
 			}
 		}
-		if msg, frac := parseProgress(line); msg != "" && frac != nil && onProgress != nil {
+		if msg, frac, ok := steps.Feed(line); ok && onProgress != nil {
 			onProgress(msg, frac)
 		}
 	}

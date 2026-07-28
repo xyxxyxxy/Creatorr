@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
@@ -76,6 +77,30 @@ func parsePOTDetail(detail string) *potDetailView {
 		label = "Off"
 	}
 	return &potDetailView{State: pot.State, Label: label, Detail: pot.Detail, Fetch: pot.Fetch}
+}
+
+func parseDomainAccessDetail(detail string) *domains.DomainAccessSnapshot {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return nil
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(detail), &raw); err != nil {
+		return nil
+	}
+	accRaw, ok := raw[domains.DetailKeyDomainAccess]
+	if !ok || accRaw == nil {
+		return nil
+	}
+	b, err := json.Marshal(accRaw)
+	if err != nil {
+		return nil
+	}
+	var snap domains.DomainAccessSnapshot
+	if err := json.Unmarshal(b, &snap); err != nil {
+		return nil
+	}
+	return &snap
 }
 
 // detailField is one top-level key from task detail JSON.
@@ -236,6 +261,9 @@ func (h *Handler) taskDetailFields(detail string) []detailField {
 		switch k {
 		case ytdlp.DetailKeyPOToken:
 			// Shown as dedicated Details row (PO token).
+			continue
+		case domains.DetailKeyDomainAccess:
+			// Shown as dedicated Details row (Domain access chips).
 			continue
 		case "ignored_media_type_ids", "ignored_index_as_ignored_ids":
 			if ids, ok := jsonNumberIDs(v); ok {
@@ -435,6 +463,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 	payloadMuted := isEmptyJSONPayload(payload)
 	detailFields := mergeVideoHistoryDetailFields(h.taskDetailFields(t.Detail), histRows)
 	pot := parsePOTDetail(t.Detail)
+	domainAccess := parseDomainAccessDetail(t.Detail)
 
 	var progress *float64
 	if t.Progress.Valid {
@@ -460,6 +489,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		PayloadMuted bool
 		DetailFields []detailField
 		POT          *potDetailView
+		DomainAccess *domains.DomainAccessSnapshot
 		Commands     []string
 		CreatedAt    string
 		CreatedAgo   string
@@ -483,6 +513,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		PayloadMuted: payloadMuted,
 		DetailFields: detailFields,
 		POT:          pot,
+		DomainAccess: domainAccess,
 		Commands:     commands,
 		CreatedAt:    createdAt,
 		CreatedAgo:   createdAgo,

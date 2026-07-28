@@ -14,6 +14,7 @@ import (
 
 	"github.com/xyxxyxxy/Creatorr/internal/config"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
+	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
@@ -229,6 +230,38 @@ func TestOverviewRenders(t *testing.T) {
 	}
 	if !strings.Contains(body, "Recent additions") {
 		t.Fatalf("missing recent additions section: %s", truncate(body, 400))
+	}
+}
+
+func TestTasksShowsSoftPausedHostWithoutDomainsRow(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	if err := domains.SetPaused(d, "tylerraw.com", true); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/tasks", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "tylerraw.com") {
+		t.Fatalf("soft-paused host missing from tasks page")
+	}
+	if !strings.Contains(body, `data-tip="Resume"`) {
+		t.Fatalf("expected Resume control for soft-paused lane")
 	}
 }
 

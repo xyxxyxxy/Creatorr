@@ -604,14 +604,12 @@ func (s *Store) CountMediaActive() (int, error) {
 	return n, err
 }
 
-// Finish marks a task done or failed. Host lanes start domain cooldown (non-interactive only);
-// the system lane never cools down.
+// Finish marks a task done, failed, or cancelled.
+// Domain cooldown is started on ClaimNext only (not here); interactive finishes never cool down.
 func (s *Store) Finish(id int64, status, message, errCode, errMsg string) error {
 	if status != StatusDone && status != StatusFailed && status != StatusCancelled {
 		return fmt.Errorf("invalid finish status %q", status)
 	}
-	var domain, kind string
-	_ = s.DB.SQL.QueryRow(`SELECT domain, kind FROM tasks WHERE id = ?`, id).Scan(&domain, &kind)
 
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.DB.SQL.Exec(`
@@ -622,16 +620,6 @@ func (s *Store) Finish(id int64, status, message, errCode, errMsg string) error 
 		return err
 	}
 	s.Logs.Clear(id)
-
-	// System lane is serial only - no task_cooldown_seconds between system tasks.
-	if domain != "" && domain != SystemDomain && !IsInteractiveKind(kind) {
-		lim, err := settings.LimitsForDomain(s.DB, domain)
-		if err == nil && lim.TaskCooldownSeconds > 0 {
-			s.mu.Lock()
-			s.cooldown[domain] = time.Now().Add(time.Duration(lim.TaskCooldownSeconds) * time.Second)
-			s.mu.Unlock()
-		}
-	}
 	return nil
 }
 

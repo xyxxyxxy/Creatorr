@@ -20,6 +20,19 @@ func TestParsePOTDetail(t *testing.T) {
 	}
 }
 
+func TestParseDomainAccessDetail(t *testing.T) {
+	got := parseDomainAccessDetail(`{"domain-access":{"rate_limit":"10M","rate_override":true,"sleep_requests":1,"cookies":true,"cookies_override":true,"flare":false,"credentials":true,"credentials_override":true}}`)
+	if got == nil || got.RateLimit != "10M" || !got.RateOverride || !got.Cookies || !got.Credentials || got.Flare {
+		t.Fatalf("got %#v", got)
+	}
+	if !got.ShowRate() || !got.ShowSleep() {
+		t.Fatal("expected show rate+sleep")
+	}
+	if parseDomainAccessDetail(`{"created_ids":[1]}`) != nil {
+		t.Fatal("expected nil without domain-access")
+	}
+}
+
 func TestTaskDetailFieldsCreatedState(t *testing.T) {
 	h := &Handler{}
 	detail := `{

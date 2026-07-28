@@ -26,8 +26,8 @@
       {{else if and (eq .Status "running") (progressActive .Progress)}}
       <progress data-task-progress class="progress progress-secondary w-full" value="{{pct .Progress}}" max="100" aria-label="{{pct .Progress}}%"></progress>
       {{else}}
-      {{/* running without mid progress: daisyUI indeterminate (no value) */}}
-      <progress data-task-progress class="progress progress-secondary w-full" aria-label="In progress"></progress>
+      {{/* running at 0%/100%/nil: daisyUI indeterminate busy; max kept for SSE */}}
+      <progress data-task-progress class="progress progress-secondary w-full" max="100" aria-label="In progress"></progress>
       {{end}}
     </div>
     <form method="post" action="/actions/cancel-task" class="inline shrink-0">

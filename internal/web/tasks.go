@@ -38,6 +38,7 @@ type laneView struct {
 	ShowCancelPending   bool
 	ShowCooldown        bool
 	ShowBusy            bool // running >= max parallel (not paused / cooling)
+	ShowActive          bool // running > 0 and below max parallel (not paused / cooling)
 	RunningCount        int
 	CooldownEndsAt      string  // RFC3339Nano for JS tick
 	CooldownTotalSec    int     // configured task_cooldown_seconds (progress max)
@@ -206,6 +207,13 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 			ensureLane(host)
 		}
 	}
+	// Soft-paused hosts always get a lane (auto-pause from failed prefetch before any
+	// series/source exists would otherwise leave the nav badge with no Resume target).
+	if pausedHosts, err := domains.ListPaused(h.Queue.DB); err == nil {
+		for _, host := range pausedHosts {
+			ensureLane(host)
+		}
+	}
 	for _, t := range tasks {
 		lv := ensureLane(t.Domain)
 		tv := taskView{
@@ -286,6 +294,8 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 			}
 			if !lv.Paused && !lv.ShowCooldown && lv.MaxParallelTasks > 0 && lv.RunningCount >= lv.MaxParallelTasks {
 				lv.ShowBusy = true
+			} else if !lv.Paused && !lv.ShowCooldown && lv.RunningCount > 0 {
+				lv.ShowActive = true
 			}
 		}
 		pageTasks, pageInfo := SlicePage(r, "page", lv.Tasks)

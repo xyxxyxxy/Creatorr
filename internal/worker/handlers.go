@@ -714,7 +714,6 @@ func DownloadHandler(d Deps) TaskHandler {
 		if exclude, err := d.Library.SeriesAutoIgnoreMediaTypes(dlctx.Video.SeriesID); err == nil {
 			matchFilter = library.BuildDownloadMatchFilter(exclude)
 		}
-		dlMap := ytdlp.ProgressMapper{Lo: 0, Hi: 1}
 		media, err := downloadMedia(ctx, d, ytdlp.DownloadOpts{
 			URL:            dlctx.URL,
 			CookiesPath:    jar,
@@ -725,14 +724,9 @@ func DownloadHandler(d Deps) TaskHandler {
 			MatchFilter:    matchFilter,
 			SubLangs:       subOpts.Langs,
 			SubAuto:        subOpts.Auto,
-			OnProgress: func(msg string, pct *float64) {
-				if pct == nil {
-					progress(msg, nil)
-					return
-				}
-				mapped := dlMap.Map(*pct)
-				progress(msg, &mapped)
-			},
+			// StepProgress (in ytdlp) labels video/audio (1/2) and resets the bar
+			// 0→100% per format on purpose.
+			OnProgress: progress,
 		})
 		if err != nil {
 			return err
@@ -741,8 +735,6 @@ func DownloadHandler(d Deps) TaskHandler {
 		if st, _ := d.Library.Queue.TaskStatus(t.ID); st == queue.StatusCancelled {
 			return context.Canceled
 		}
-
-		_ = dlMap.Finish()
 		sbCfg := dlctx.Profile.SponsorBlockConfig()
 		if audioOnly {
 			// Info cards are a burned-in video overlay; audio-only media has no video track.

@@ -124,15 +124,19 @@ func TestCooldownUntil(t *testing.T) {
 	if _, err := s.ClaimNext(); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Finish(id, queue.StatusDone, "Done", "", ""); err != nil {
-		t.Fatal(err)
-	}
 	until := s.CooldownUntil("example.com")
 	if until.IsZero() {
-		t.Fatal("expected cooldown after finish")
+		t.Fatal("expected cooldown after claim")
 	}
 	if !s.CooldownUntil("other.example.com").IsZero() {
 		t.Fatal("other domain should not cool down")
+	}
+	if err := s.Finish(id, queue.StatusDone, "Done", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	after := s.CooldownUntil("example.com")
+	if !after.Equal(until) {
+		t.Fatalf("finish must not change claim cooldown: before %v after %v", until, after)
 	}
 }
 

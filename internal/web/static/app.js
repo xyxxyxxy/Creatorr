@@ -294,12 +294,18 @@
     }
   }
 
-  function refreshTasksPanel() {
+  function refreshTasksPanel(force) {
     const panel = document.getElementById("tasks-live");
-    if (panel && window.htmx) {
-      const q = location.search || "";
-      window.htmx.ajax("GET", "/tasks" + q, { target: "#tasks-live", select: "#tasks-live", swap: "outerHTML" });
+    if (!panel || !window.htmx) return;
+    const now = Date.now();
+    // Soft refreshes (SSE miss / 15s poll) recreate lane Busy indeterminate bars;
+    // throttle so the CSS animation is not restarted every progress tick.
+    if (!force) {
+      if (now - (refreshTasksPanel._at || 0) < 2500) return;
     }
+    refreshTasksPanel._at = now;
+    const q = location.search || "";
+    window.htmx.ajax("GET", "/tasks" + q, { target: "#tasks-live", select: "#tasks-live", swap: "outerHTML" });
   }
 
   function clearCooldownBusyTip(wrap) {
@@ -307,11 +313,98 @@
     wrap.removeAttribute("data-tip");
   }
 
+  /** Lane card that owns a cooldown/status wrap (or a task row inside it). */
+  function lanePanelFor(el) {
+    return el && el.closest ? el.closest("section.list-panel") : null;
+  }
+
+  function inferLaneActivity(wrap) {
+    const panel = lanePanelFor(wrap);
+    let running = 0;
+    let pending = 0;
+    let max = 1;
+    if (panel) {
+      panel.querySelectorAll("[data-task-row-status]").forEach((row) => {
+        const st = row.getAttribute("data-task-row-status");
+        if (st === "running") running++;
+        else if (st === "pending") pending++;
+      });
+      const parallel = panel.querySelector('[aria-label^="Parallel "]');
+      const m = parallel && parallel.getAttribute("aria-label").match(/Parallel\s+(\d+)/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > 0) max = n;
+      }
+    }
+    return { running, pending, max };
+  }
+
+  /**
+   * Paint Busy/Active/Idle from task rows in the lane.
+   * Used when cooldown ends client-side and when SSE patches pending→running
+   * without a full #tasks-live swap (which otherwise leaves a Idle flash).
+   */
+  function applyInferredLaneStatus(wrap) {
+    if (!wrap || wrap.hasAttribute("data-paused")) return;
+    const endsAttr = wrap.getAttribute("data-ends-at");
+    if (endsAttr) {
+      const ends = Date.parse(endsAttr);
+      if (Number.isFinite(ends) && ends > Date.now()) return;
+    }
+    wrap.removeAttribute("data-ends-at");
+    wrap.removeAttribute("data-total-sec");
+    const { running, pending, max } = inferLaneActivity(wrap);
+    if (running > 0 && running >= max) {
+      showCooldownBusy(wrap);
+      return;
+    }
+    if (running > 0) {
+      showCooldownActive(wrap);
+      return;
+    }
+    if (pending > 0) {
+      // Cooldown just ended / claim about to land: avoid Idle→Busy flash.
+      // max_parallel=1 fills the only slot on the next claim.
+      if (max <= 1) {
+        showCooldownBusy(wrap);
+        return;
+      }
+      const label = wrap.querySelector("[data-cd-label]");
+      if (label && label.textContent === "Cooldown") {
+        const bar = wrap.querySelector("[data-cd-bar]");
+        if (bar) {
+          bar.value = 0;
+          if (!bar.max || Number(bar.max) < 1) bar.max = 1;
+        }
+        wrap.setAttribute("aria-label", "Waiting before the next task on this lane");
+        return;
+      }
+      showCooldownActive(wrap);
+      return;
+    }
+    wrap.removeAttribute("data-slots-full");
+    wrap.removeAttribute("data-lane-active");
+    showCooldownReady(wrap);
+  }
+
   function showCooldownPaused(wrap) {
     wrap.removeAttribute("data-ends-at");
     wrap.removeAttribute("data-total-sec");
+    wrap.removeAttribute("data-slots-full");
+    wrap.removeAttribute("data-lane-active");
     clearCooldownBusyTip(wrap);
     wrap.setAttribute("aria-label", "Paused");
+    const label = wrap.querySelector("[data-cd-label]");
+    const bar = wrap.querySelector("[data-cd-bar]");
+    if (
+      label &&
+      bar &&
+      label.textContent === "Paused" &&
+      bar.hasAttribute("value") &&
+      Number(bar.value) === 100
+    ) {
+      return;
+    }
     wrap.innerHTML =
       '<span data-cd-label class="shrink-0 leading-none text-warning">Paused</span>' +
       '<progress data-cd-bar class="progress progress-warning w-24 sm:w-32 h-2 shrink-0" value="100" max="100" aria-hidden="true"></progress>';
@@ -320,12 +413,50 @@
   function showCooldownBusy(wrap) {
     wrap.removeAttribute("data-ends-at");
     wrap.removeAttribute("data-total-sec");
-    wrap.classList.add("tooltip", "tooltip-top");
-    wrap.setAttribute("data-tip", "Maximum of parallel tasks reached");
+    wrap.removeAttribute("data-lane-active");
+    wrap.setAttribute("data-slots-full", "");
+    wrap.classList.remove("tooltip", "tooltip-top");
+    wrap.removeAttribute("data-tip");
     wrap.setAttribute("aria-label", "Maximum of parallel tasks reached");
+    // Keep existing indeterminate <progress> — rewriting innerHTML restarts the slide.
+    const label = wrap.querySelector("[data-cd-label]");
+    const bar = wrap.querySelector("[data-cd-bar]");
+    if (label && bar && label.textContent === "Busy" && !bar.hasAttribute("value")) {
+      const tip = label.closest(".tooltip");
+      if (tip) {
+        tip.classList.add("tooltip", "tooltip-top");
+        tip.setAttribute("data-tip", "Maximum of parallel tasks reached");
+      }
+      return;
+    }
     wrap.innerHTML =
-      '<span data-cd-label class="shrink-0 leading-none">Busy</span>' +
-      '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" aria-hidden="true"></progress>';
+      '<span class="tooltip tooltip-top" data-tip="Maximum of parallel tasks reached">' +
+      '<span data-cd-label class="shrink-0 leading-none">Busy</span></span>' +
+      '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" max="100" aria-hidden="true"></progress>';
+  }
+
+  function showCooldownActive(wrap) {
+    wrap.removeAttribute("data-ends-at");
+    wrap.removeAttribute("data-total-sec");
+    wrap.removeAttribute("data-slots-full");
+    wrap.setAttribute("data-lane-active", "");
+    wrap.classList.remove("tooltip", "tooltip-top");
+    wrap.removeAttribute("data-tip");
+    wrap.setAttribute("aria-label", "Running with free parallel slots");
+    const label = wrap.querySelector("[data-cd-label]");
+    const bar = wrap.querySelector("[data-cd-bar]");
+    if (label && bar && label.textContent === "Active" && !bar.hasAttribute("value")) {
+      const tip = label.closest(".tooltip");
+      if (tip) {
+        tip.classList.add("tooltip", "tooltip-top");
+        tip.setAttribute("data-tip", "Running with free parallel slots");
+      }
+      return;
+    }
+    wrap.innerHTML =
+      '<span class="tooltip tooltip-top" data-tip="Running with free parallel slots">' +
+      '<span data-cd-label class="shrink-0 leading-none">Active</span></span>' +
+      '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" max="100" aria-hidden="true"></progress>';
   }
 
   function showCooldownReady(wrap) {
@@ -337,12 +468,29 @@
       showCooldownBusy(wrap);
       return;
     }
+    if (wrap.hasAttribute("data-lane-active")) {
+      showCooldownActive(wrap);
+      return;
+    }
     wrap.removeAttribute("data-ends-at");
     wrap.removeAttribute("data-total-sec");
+    wrap.removeAttribute("data-slots-full");
+    wrap.removeAttribute("data-lane-active");
     clearCooldownBusyTip(wrap);
-    wrap.setAttribute("aria-label", "Ready for tasks");
+    wrap.setAttribute("aria-label", "Idle");
+    const label = wrap.querySelector("[data-cd-label]");
+    const bar = wrap.querySelector("[data-cd-bar]");
+    if (
+      label &&
+      bar &&
+      label.textContent === "Idle" &&
+      bar.hasAttribute("value") &&
+      Number(bar.value) === 0
+    ) {
+      return;
+    }
     wrap.innerHTML =
-      '<span data-cd-label class="shrink-0 leading-none text-base-content/50">Ready for tasks</span>' +
+      '<span data-cd-label class="shrink-0 leading-none text-base-content/50">Idle</span>' +
       '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="0" max="100" aria-hidden="true"></progress>';
   }
 
@@ -350,16 +498,26 @@
     let anyActive = false;
     document.querySelectorAll("[data-domain-cooldown]").forEach((wrap) => {
       if (wrap.hasAttribute("data-paused")) return;
+      // Active / Busy have no ends-at — leave the indeterminate bar alone.
+      if (
+        (wrap.hasAttribute("data-slots-full") || wrap.hasAttribute("data-lane-active")) &&
+        !wrap.getAttribute("data-ends-at")
+      ) {
+        return;
+      }
       const endsAttr = wrap.getAttribute("data-ends-at");
       if (!endsAttr) return;
       const ends = Date.parse(endsAttr);
       if (!Number.isFinite(ends)) {
-        showCooldownReady(wrap);
+        applyInferredLaneStatus(wrap);
+        refreshTasksPanel(true);
         return;
       }
       const remMs = ends - Date.now();
       if (remMs <= 0) {
-        showCooldownReady(wrap);
+        // Do not paint Idle here: claim often lands next and Busy would flash Idle first.
+        applyInferredLaneStatus(wrap);
+        refreshTasksPanel(true);
         return;
       }
       anyActive = true;
@@ -371,9 +529,12 @@
       clearCooldownBusyTip(wrap);
       let bar = wrap.querySelector("[data-cd-bar]");
       let label = wrap.querySelector("[data-cd-label]");
+      const tipText = "Waiting " + remSec + "s before the next task on this lane";
       if (!bar || !label) {
         wrap.innerHTML =
-          '<span data-cd-label class="shrink-0 leading-none">Cooldown</span>' +
+          '<span class="tooltip tooltip-top" data-tip="' +
+          tipText +
+          '"><span data-cd-label class="shrink-0 leading-none">Cooldown</span></span>' +
           '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="' +
           remFrac +
           '" max="' +
@@ -383,15 +544,25 @@
         label = wrap.querySelector("[data-cd-label]");
       }
       if (label) {
-        label.textContent = "Cooldown";
+        if (label.textContent !== "Cooldown") label.textContent = "Cooldown";
         label.classList.remove("text-base-content/50", "text-warning");
+        let tipHost = label.closest(".tooltip");
+        if (!tipHost) {
+          tipHost = document.createElement("span");
+          tipHost.className = "tooltip tooltip-top";
+          label.parentNode.insertBefore(tipHost, label);
+          tipHost.appendChild(label);
+        }
+        tipHost.classList.add("tooltip", "tooltip-top");
+        tipHost.setAttribute("data-tip", tipText);
       }
       if (bar) {
-        bar.className = "progress progress-primary w-24 sm:w-32 h-2 shrink-0";
-        bar.max = total;
-        bar.value = remFrac;
+        const cls = "progress progress-primary w-24 sm:w-32 h-2 shrink-0";
+        if (bar.className !== cls) bar.className = cls;
+        if (Number(bar.max) !== total) bar.max = total;
+        if (Number(bar.value) !== remFrac) bar.value = remFrac;
       }
-      wrap.setAttribute("aria-label", "Cooldown " + remSec + "s remaining");
+      wrap.setAttribute("aria-label", tipText);
     });
     return anyActive;
   }
@@ -482,36 +653,52 @@
     createLucideIcons(cell);
   }
 
-  /** Sync Tasks list progress: pending label, running determinate, or indeterminate. */
+  /** Sync Tasks list progress bar in place. Skip no-op writes so daisyUI
+   * indeterminate CSS animation is not restarted every SSE tick. */
   function syncTaskRowProgress(row, status, progress) {
     const wrap = row.querySelector("[data-task-progress-wrap]");
     if (!wrap) return;
-    const st = status === "pending" ? "pending" : "running";
-    const hasPct =
-      progress != null && Number.isFinite(Number(progress)) && Number(progress) > 0 && Number(progress) < 1;
-    wrap.replaceChildren();
-    const bar = document.createElement("progress");
-    bar.setAttribute("data-task-progress", "");
-    if (st === "pending") {
-      const paused = row.hasAttribute("data-lane-paused");
-      bar.className = "progress " + (paused ? "progress-warning" : "progress-secondary") + " w-full";
-      bar.value = 0;
+    let bar = wrap.querySelector("progress[data-task-progress]");
+    if (!bar) {
+      bar = document.createElement("progress");
+      bar.setAttribute("data-task-progress", "");
       bar.max = 100;
-      bar.setAttribute("aria-label", "pending");
-      wrap.appendChild(bar);
+      wrap.replaceChildren(bar);
+    }
+    if (status === "pending") {
+      const paused = row.hasAttribute("data-lane-paused");
+      const cls = "progress " + (paused ? "progress-warning" : "progress-secondary") + " w-full";
+      if (bar.className !== cls) bar.className = cls;
+      bar.max = 100;
+      if (bar.getAttribute("aria-label") !== "pending" || Number(bar.value) !== 0 || !bar.hasAttribute("value")) {
+        bar.value = 0;
+        bar.setAttribute("aria-label", "pending");
+      }
       return;
     }
-    bar.className = "progress progress-secondary w-full";
-    if (hasPct) {
-      const pct = Math.max(0, Math.min(100, Math.round(Number(progress) * 100)));
-      bar.value = pct;
-      bar.max = 100;
-      bar.setAttribute("aria-label", pct + "%");
-    } else {
-      bar.removeAttribute("value");
-      bar.setAttribute("aria-label", "In progress");
+    const cls = "progress progress-secondary w-full";
+    if (bar.className !== cls) bar.className = cls;
+    bar.max = 100;
+    const n = progress == null ? NaN : Number(progress);
+    // Mid (0,1): determinate. 0% / 100% / nil: daisyUI indeterminate busy slide.
+    const mid = Number.isFinite(n) && n > 0 && n < 1;
+    if (mid) {
+      const pct = Math.max(1, Math.min(99, Math.round(n * 100)));
+      if (!bar.hasAttribute("value") || Number(bar.value) !== pct) {
+        bar.value = pct;
+        bar.setAttribute("aria-label", pct + "%");
+      }
+      return;
     }
-    wrap.appendChild(bar);
+    // Already busy: do not touch value/class (re-removing value restarts animation).
+    if (!bar.hasAttribute("value")) {
+      if (bar.getAttribute("aria-label") !== "In progress") {
+        bar.setAttribute("aria-label", "In progress");
+      }
+      return;
+    }
+    bar.removeAttribute("value");
+    bar.setAttribute("aria-label", "In progress");
   }
 
   /** Patch message/progress on an existing task row. Avoids full panel swap (button flicker). */
@@ -529,6 +716,9 @@
     const statusChanged = typeof data.status === "string" && data.status;
     if (statusChanged) {
       patchStatusCell(row, data.status);
+      const panel = lanePanelFor(row);
+      const wrap = panel && panel.querySelector("[data-domain-cooldown]");
+      if (wrap) applyInferredLaneStatus(wrap);
     }
     const msgEl = row.querySelector("[data-task-message]");
     if (msgEl) {
@@ -588,42 +778,39 @@
         msgEl.textContent = data.message || "-";
       }
     }
-    if (data.progress != null && Number.isFinite(Number(data.progress))) {
-      const raw = Number(data.progress);
-      const pct = Math.max(0, Math.min(100, Math.round(raw * 100)));
+    if (Object.prototype.hasOwnProperty.call(data, "progress")) {
       const cell = page.querySelector("[data-task-progress-cell]");
+      if (!cell) return true;
+      const raw =
+        data.progress != null && Number.isFinite(Number(data.progress))
+          ? Number(data.progress)
+          : null;
+      const mid = raw != null && raw > 0 && raw < 1;
       let bar = page.querySelector("progress[data-task-progress]");
-      const showBar = raw > 0 && raw < 1;
-      if (!showBar) {
-        if (bar) bar.remove();
-        if (cell && !cell.querySelector("[data-task-progress]")) {
-          cell.textContent = "";
-          const dash = document.createElement("span");
-          dash.className = "opacity-60";
-          dash.textContent = "-";
-          cell.appendChild(dash);
+      if (!bar) {
+        cell.textContent = "";
+        bar = document.createElement("progress");
+        bar.setAttribute("data-task-progress", "");
+        bar.className = "progress progress-primary w-full max-w-xs";
+        cell.appendChild(bar);
+      }
+      // Always set max before value. SSR indeterminate bars omit max (HTML
+      // default max=1), so value=4 would clamp to full bar.
+      bar.max = 100;
+      if (mid) {
+        const pct = Math.max(1, Math.min(99, Math.round(raw * 100)));
+        if (!bar.hasAttribute("value") || Number(bar.value) !== pct) {
+          bar.value = pct;
+          bar.setAttribute("aria-label", pct + "%");
+        }
+      } else if (!bar.hasAttribute("value")) {
+        if (bar.getAttribute("aria-label") !== "In progress") {
+          bar.setAttribute("aria-label", "In progress");
         }
       } else {
-        if (!bar && cell) {
-          cell.textContent = "";
-          bar = document.createElement("progress");
-          bar.setAttribute("data-task-progress", "");
-          bar.className = "progress progress-primary w-full max-w-xs";
-          bar.max = 100;
-          cell.appendChild(bar);
-        }
-        if (bar) bar.value = pct;
-      }
-    } else if (data.progress === null) {
-      const cell = page.querySelector("[data-task-progress-cell]");
-      const bar = page.querySelector("progress[data-task-progress]");
-      if (bar) bar.remove();
-      if (cell && !cell.querySelector("progress")) {
-        cell.textContent = "";
-        const dash = document.createElement("span");
-        dash.className = "opacity-60";
-        dash.textContent = "-";
-        cell.appendChild(dash);
+        // 0% / 100% / null while running: busy indeterminate (in place).
+        bar.removeAttribute("value");
+        bar.setAttribute("aria-label", "In progress");
       }
     }
     return true;
@@ -941,14 +1128,14 @@
       return;
     }
     if (ev.type === "task.updated") {
-      // In-place patch on Tasks page - full swap recreates Cancel buttons every tick.
-      if (!patchTaskRow(ev)) refreshTasksPanel();
+      // In-place patch on Tasks page - full swap recreates Busy/Cancel every tick.
+      if (!patchTaskRow(ev)) refreshTasksPanel(false);
       patchTaskDetail(ev);
       refreshTaskIndicators();
       refreshVideoHistoryIfMatch(ev);
       refreshTaskVideoHistoryIfMatch(ev);
     } else if (ev.type === "task.done" || ev.type === "task.failed") {
-      refreshTasksPanel();
+      refreshTasksPanel(true);
       refreshTaskIndicators();
       refreshHistoryPanel();
       reloadTaskDetailIfMatch(ev);
@@ -1478,7 +1665,7 @@
     setInterval(() => {
       refreshBadge();
       refreshNotifyBadge();
-      if (document.getElementById("tasks-live")) refreshTasksPanel();
+      if (document.getElementById("tasks-live")) refreshTasksPanel(false);
     }, 15000);
   });
 
