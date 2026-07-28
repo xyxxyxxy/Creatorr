@@ -84,7 +84,7 @@ func TestChannelCRUDAndSendEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	taskID := seedTask(t, d)
 
 	var calls atomic.Int32
@@ -162,7 +162,7 @@ func TestInAppChannelReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_, err = notify.Upsert(d, 0, "x", notify.InAppURL, notify.AllEvents)
 	if err == nil {
 		t.Fatal("expected upsert reject")
@@ -212,7 +212,7 @@ func TestFileSyncIssuesEmptyNoop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
 		t.Fatal("should not send")
 		return nil
@@ -228,7 +228,7 @@ func TestFileSyncIssuesRecordsOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	taskID := seedTask(t, d)
 	sends := 0
 	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
@@ -263,7 +263,7 @@ func TestSendEventNoChannelsStillRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	taskID := seedTask(t, d)
 	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
 		t.Fatal("should not send")
@@ -291,7 +291,7 @@ func TestSendEventErrorRequiresTaskID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if err := notify.SendEvent(context.Background(), d, notify.EventYtDlpFailed, "t", "b", 0); err == nil {
 		t.Fatal("expected error")
 	}
@@ -302,7 +302,7 @@ func TestYtDlpFailedExternalFailStaysUnread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	taskID := seedTask(t, d)
 	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
 		return context.DeadlineExceeded
@@ -326,7 +326,7 @@ func TestDownloadDigestAlwaysRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
 		return nil
 	})
@@ -348,7 +348,7 @@ func TestMarkRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	taskID := seedTask(t, d)
 	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
 		return nil
@@ -370,7 +370,7 @@ func TestListNotificationsRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	taskID := seedTask(t, d)
 	_, err = notify.InsertNotification(d, notify.EventCookieInvalid, "early", "b", taskID, false, "")
 	if err != nil {
@@ -406,7 +406,7 @@ func TestListNotificationsByLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	taskID := seedTask(t, d)
 	old := notify.SetSendFnForTest(func([]string, string, string, apprise.NotifyType) error { return nil })
 	defer notify.SetSendFnForTest(old)
@@ -440,7 +440,7 @@ func TestPOTProviderWarningUnread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	taskID := seedTask(t, d)
 	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
 		if nt != apprise.NotifyWarning {
@@ -479,7 +479,7 @@ func TestLiveSkippedInfoWithTaskID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	taskID := seedTask(t, d)
 	var gotType apprise.NotifyType
 	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {

@@ -2,7 +2,7 @@
 
 Mandatory reading for AI agents. Creatorr is a Sonarr-shaped Go daemon for creator VOD: mirror channels/playlists, download via in-tree yt-dlp (+ optional plugins), track videos + packed `info.json`, pack TV libraries (video + NFO).
 
-**Stack:** Go only (`github.com/xyxxyxxy/Creatorr`). Fresh SQLite `schema_version=1` only - no upgrade path from older DBs.
+**Stack:** Go only (`github.com/xyxxyxxy/Creatorr`). SQLite for app state; published images on GHCR (`:latest` / `:develop`).
 
 ## Hard rules
 
@@ -25,7 +25,7 @@ api/openapi.yaml        REST contract (source of truth)
 internal/api/gen/       oapi-codegen output (committed; do not hand-edit)
 internal/api/           handler impl, SSE, route mounting
 internal/config/        env bootstrap + settings bridge
-internal/db/            fresh schema only; no migrateTo* helpers
+internal/db/            SQLite open + schema
 internal/domain/        series, source, video types
 internal/library/       series/videos/files, pack, remux, import, NFO
 internal/queue/         per-domain task queue, cooldown, History (finished tasks)
@@ -40,7 +40,7 @@ internal/notify/        Apprise (apprise-go) + in-app log (info digests vs unrea
 internal/stats/         every-minute change-only sampler + daily library size + chart series for /stats
 internal/web/           HTMX UI (see docs/ui.md)
 internal/errors/        AppError codes + ErrorResponse mapping
-.github/workflows/      GitHub Actions CI + Docker beta
+.github/workflows/      GitHub Actions CI + GHCR images
 ```
 
 Image sidecars / yt-dlp binary / plugins: [`docs/ytdlp.md`](docs/ytdlp.md). **Stats** live only in `internal/stats` (not the main scheduler) - global change-only samples, daily storage, retention and pie endpoints: [`docs/settings.md`](docs/settings.md).
@@ -64,12 +64,13 @@ New domain term → matching docs file (domain-model by default).
 1. Read this file + [`docs/README.md`](docs/README.md), then the topic doc for the task (UI → [`docs/ui.md`](docs/ui.md)).
 2. API: OpenAPI → `make generate` → handlers → tests.
 3. UI: daisyUI + shared partials; follow setting-description rules in `docs/ui.md`.
-4. Before push: `make test vet lint openapi-check` (and `make css` if UI classes/vendors changed).
+4. Before push: `make test vet lint openapi-check` (and `make css` if UI classes/vendors changed). After clone, `make hooks` enables `.githooks/pre-commit` (lint + test on each commit; skip with `SKIP_GITHOOKS=1`).
 5. Prompt on uncertainty; do not guess.
 
 ## Ship
 
 - **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker`, `ytdlp`, `disk`, `flaresolverr`, `pot_provider` (last two skipped if URL unset). Compose healthcheck should use it.
+- **Images:** `ghcr.io/xyxxyxxy/creatorr:latest` from `main`, `:develop` from `develop`, `:sha-<short>` for pins. Compose: [`docker-compose.yml`](docker-compose.yml).
 - **Tests:** unit (domain/settings), yt-dlp fixtures (no live net), integration (temp SQLite + worker/queue), API httptest + schema. Prefer golden fixtures; add tests for behavior changes.
 - **Branching:** git-flow (`feature/*`, `develop`, `main`).
 - **Commits:** Conventional Commits; one logical step each; subject ≤72 chars; body explains why when not obvious.

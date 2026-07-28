@@ -132,10 +132,7 @@ func isPlaylistOnlyInfo(info map[string]any) bool {
 		return true
 	}
 	u := firstString(info, "webpage_url", "original_url")
-	if strings.Contains(u, "/playlist") {
-		return true
-	}
-	return false
+	return strings.Contains(u, "/playlist")
 }
 
 func firstString(m map[string]any, keys ...string) string {

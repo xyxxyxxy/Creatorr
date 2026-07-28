@@ -85,13 +85,6 @@ func audioChannels(p MediaProbe) int {
 	return p.Channels
 }
 
-func audioLayout(p MediaProbe) string {
-	if audioChannels(p) == 1 {
-		return "mono"
-	}
-	return "stereo"
-}
-
 // RenderSkipCard writes a short card matching EncodePlan codecs/bitrate.
 // Multi-line copy uses stacked drawtext filters (text=/textfile= newline escapes are unreliable).
 func RenderSkipCard(ctx context.Context, outPath string, plan EncodePlan, text string, durationSec float64, fontFile string) error {

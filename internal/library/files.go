@@ -49,7 +49,7 @@ func (s *Store) VideoSizeBytesMap(videoIDs []int64) (map[int64]int64, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id, size int64
 		if err := rows.Scan(&id, &size); err != nil {
@@ -99,7 +99,7 @@ func (s *Store) VideoThumbPathMap(videoIDs []int64) (map[int64]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
 		var path string
@@ -136,7 +136,7 @@ func (s *Store) VideoJSONPathMap(videoIDs []int64) (map[int64]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
 		var path string
@@ -180,7 +180,7 @@ func (s *Store) ListVideoMediaFiles(videoID int64) ([]VideoFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []VideoFile
 	for rows.Next() {
 		var f VideoFile
@@ -322,7 +322,7 @@ func (s *Store) videoMediaStemContext(videoID int64) (mediaPath string, mediaBas
 	if err != nil {
 		return "", nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	mediaBases = map[string]struct{}{}
 	for rows.Next() {
 		var path, kind string
@@ -349,7 +349,7 @@ func (s *Store) listVideoFilesByPath(videoID int64) (map[string]VideoFile, error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := map[string]VideoFile{}
 	for rows.Next() {
 		var f VideoFile

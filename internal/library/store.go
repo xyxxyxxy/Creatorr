@@ -16,8 +16,8 @@ import (
 type Store struct {
 	DB         *db.DB
 	Queue      *queue.Store
-	ImportRoot string // import inbox path (/media/import or var/media/import)
-	CacheDir   string // /cache or var/cache
+	ImportRoot string // import inbox path (/import or var/import)
+	CacheDir   string // /data/cache or var/data/cache
 }
 
 func NewStore(database *db.DB, q *queue.Store) *Store {

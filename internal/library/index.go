@@ -362,7 +362,7 @@ func (s *Store) HasVideoFile(videoID int64) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var p string
 		if err := rows.Scan(&p); err != nil {

@@ -153,7 +153,7 @@ func (s *Sampler) ensureLastCache(log *slog.Logger) {
 		s.cacheOK = true
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var metric string
 		var value int
@@ -466,7 +466,7 @@ func LoadChartAt(database *db.DB, now time.Time) (ChartPayload, error) {
 	if err != nil {
 		return out, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	byTime := map[string]map[string]int{}
 	var allTimes []string
@@ -642,7 +642,7 @@ func LoadLibrarySize(database *db.DB, group string) (LibrarySizePayload, error) 
 	if err != nil {
 		return out, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type agg struct {
 		id    int64

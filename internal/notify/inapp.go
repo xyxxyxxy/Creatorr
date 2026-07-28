@@ -13,7 +13,7 @@ const (
 )
 
 // ErrInAppChannelReadOnly is returned when Upsert/Delete targets the in-app channel.
-var ErrInAppChannelReadOnly = fmt.Errorf("Creatorr in-app channel cannot be edited or deleted")
+var ErrInAppChannelReadOnly = fmt.Errorf("in-app Creatorr channel cannot be edited or deleted")
 
 // IsInAppURL reports whether raw is the fixed in-app channel URL.
 func IsInAppURL(raw string) bool {

@@ -22,7 +22,7 @@ There is **no** global Settings `scan_cron`.
 | Kind / path | Domain | Notes |
 |---|---|---|
 | `import` | `system` | Per-video duplicate guard |
-| `sync_files` | `system` | One pending/running; cron or Maintenance → Scan for missing files; higher priority than Apply |
+| `sync_files` | `system` | One pending/running; cron or Maintenance → Scan root folders; higher priority than Apply |
 | `retention_delete` | `system` | One pending/running; cron enqueues at higher priority than Apply |
 | `rename_episodes` | `system` | One pending/running; Settings → Maintenance → Apply episode format |
 | `regenerate_nfo` | `system` | One pending/running; Settings → Library → Regenerate NFO; resumable cursors |
@@ -66,9 +66,9 @@ Flat listing only (newest-first). No full metadata extract during scan. YouTube 
 
 | Field | Default | Role |
 |---|---|---|
-| `task_cooldown_seconds` | `30` | Pause after a task **starts** before another may start on that host domain (still applies with parallel tasks). Interactive prefetch kinds do not start cooldown. Does not apply to the `system` lane. |
-| `max_download_queue` | `8` | Max pending+running download tasks **for this hostname**. Auto-enqueue stops when full; **Download now** bypasses. Upper bound for max parallel tasks. |
-| `max_parallel_tasks` | `1` | Max concurrent **running** non-interactive tasks on this hostname (scan, download, …). Set ≥ 2 so a tip scan can start while a download runs. Must be ≤ max download queue. |
+| `task_cooldown_seconds` | `30` | Pause after a task **starts** before another may start within the queue on that host domain (still applies with parallel tasks). Interactive prefetch kinds do not start cooldown. Does not apply to the `system` lane. |
+| `max_download_queue` | `8` | **Max download tasks** UI label. Max pending+running download tasks **for this hostname**. Auto-enqueue stops when full; **Download now** bypasses. Upper bound for max parallel tasks. |
+| `max_parallel_tasks` | `1` | Max concurrent **running** non-interactive tasks on this hostname (scan, download, …). Set ≥ 2 so a tip scan can start while a download runs. Must be ≤ max download tasks (`max_download_queue`). |
 | `download_rate_limit` | `10M` | Passed to yt-dlp as `--limit-rate` for archive download and scan/list. UI: number + unit join (`K`/`M`/`G`, or Unlimited → `off`). `off` / `0` / `none` = unlimited. Not used for **interactive** metadata prefetch (`prefetch_*`). |
 | `sleep_requests` | `1` | Seconds for yt-dlp pacing: `--sleep-requests`, `--sleep-subtitles`, and `--sleep-interval` (same value). `0` = off. Applies to archive/scan; **not** to interactive metadata prefetch. |
 
@@ -115,7 +115,7 @@ Store in `tasks` table. Never use kind name `poll`. Boot renames legacy kind str
 
 | Pass | Trigger | Behavior |
 |---|---|---|
-| **File sync** | `sync_files_cron` (optional); Settings → Maintenance → **Scan for missing files** | Online roots only. Cron/manual enqueue is a no-op when there are no videos. (1) `downloaded`/`verify_failed` + path gone → `missing` (keep rows). (2) `missing` + path back → `downloaded`. (3) present media: non-NULL `files.size_bytes` vs on-disk size; mismatch → `verify_failed`, update size, history `file_externally_changed` (no auto re-download); NULL size backfilled quietly. (4) Registered sidecars (`kind != video`): missing → keep row + `size_bytes = -1` + `sidecar_missing` (status unchanged); restore + `sidecar_restored`; size mismatch + `sidecar_externally_changed` (status unchanged); NULL size backfilled quietly. Size only - no hash/mtime. History detail when changed (`missing_ids` / `restored_ids` / `externally_changed_ids` / `sidecar_*`). One alert digest `file_sync_issues` when media or sidecar missing/size issues found. |
+| **File sync** | `sync_files_cron` (optional); Settings → Maintenance → **Scan root folders** | Online roots only. Cron/manual enqueue is a no-op when there are no videos. (1) `downloaded`/`verify_failed` + path gone → `missing` (keep rows). (2) `missing` + path back → `downloaded`. (3) present media: non-NULL `files.size_bytes` vs on-disk size; mismatch → `verify_failed`, update size, history `file_externally_changed` (no auto re-download); NULL size backfilled quietly. (4) Registered sidecars (`kind != video`): missing → keep row + `size_bytes = -1` + `sidecar_missing` (status unchanged); restore + `sidecar_restored`; size mismatch + `sidecar_externally_changed` (status unchanged); NULL size backfilled quietly. Size only - no hash/mtime. History detail when changed (`missing_ids` / `restored_ids` / `externally_changed_ids` / `sidecar_*`). One alert digest `file_sync_issues` when media or sidecar missing/size issues found. |
 | **Retention delete** | `retention_delete_cron` (optional) | Online roots only. Cron enqueue is a no-op when no root has `retention_ttl_seconds`. Roots with TTL: delete expired artifacts → `deleted` + history `retention`; prune empty series dirs. Default root has **no** TTL. History detail on the finished `retention_delete` task when changed (`retention_ids`). |
 | **NFO regenerate** | Settings → Maintenance | System task `regenerate_nfo` with video/series cursors (resumes after Creatorr restart via `RequeueStaleRunning`). Skips write when on-disk bytes match; episode rewrite appends `video_history` (`nfo_regenerated`) with task id. One History outcome on the finished task (`tasks.detail`) on completion. |
 | **File delete** | Series UI delete (required confirm) / video Delete | System task `delete_files` (payload `series_ids` / `video_ids` + cursors). HTTP cancels related work and enqueues; rows stay until worker finishes. Standalone video → `MarkDeleted(..., task_id)`; series purge → disk unlink then `DELETE series`. UI shows **queued for deletion** from payload membership (no new `videos.status`). REST `DELETE /api/series/{id}` keeps library files. | Per-sidecar Delete (`sub`/`thumb`/`other`): sync `delete_sidecar` bookkeeping + `sidecar_deleted` (not this task).

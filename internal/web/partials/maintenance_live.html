@@ -6,12 +6,12 @@
   <div class="flex flex-col items-stretch gap-3 w-full max-w-md">
     {{if .SyncFilesBusy}}
     <div class="join w-full">
-      <button type="button" class="btn btn-warning join-item grow" disabled>Scan for missing files (queued)</button>
+      <button type="button" class="btn btn-warning join-item grow" disabled>Scan root folders (queued)</button>
       {{template "field_info" (dict "Join" true "Info" "Find missing or restored media. Same pass as 'File sync schedule'.")}}
     </div>
     {{else}}
     <form method="post" action="/actions/sync-files" class="join w-full">
-      <button type="submit" class="btn btn-warning join-item grow">Scan for missing files</button>
+      <button type="submit" class="btn btn-warning join-item grow">Scan root folders</button>
       {{template "field_info" (dict "Join" true "Info" "Find missing or restored media. Same pass as 'File sync schedule'.")}}
     </form>
     {{end}}

@@ -85,14 +85,6 @@ func RemuxAudioIfNeeded(ctx context.Context, mediaPath string) (path string, rem
 	return out, true, nil
 }
 
-func truncateBytes(b []byte, n int) string {
-	s := string(b)
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
-}
-
 // truncateBytesTail keeps the end of ffmpeg logs (banner is at the start; the
 // failure line is usually last).
 func truncateBytesTail(b []byte, n int) string {

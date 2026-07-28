@@ -99,7 +99,7 @@ func (h *Handler) actionProbeSourceTitle(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	defer os.RemoveAll(tmp)
+	defer func() { _ = os.RemoveAll(tmp) }()
 	jar, err := domains.TempJarForURL(h.Library.DB, tmp, url)
 	if err != nil {
 		slog.Warn("probe source title cookies", "url", url, "err", err)

@@ -302,7 +302,7 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 		lv.Page = pageInfo
 		lanes = append(lanes, *lv)
 	}
-	flareOK := settings.FlareSolverrConfigured()
+	flareOK := strings.TrimSpace(h.FlareSolverrURL) != ""
 
 	render(w, "tasks", struct {
 		pageBase

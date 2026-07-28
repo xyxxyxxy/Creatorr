@@ -779,7 +779,7 @@ func (s *Store) CancelDownloadsForVideo(videoID int64, message string) ([]Task, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var ids []int64
 	var out []Task
 	for rows.Next() {
@@ -855,7 +855,7 @@ func (s *Store) CancelAll() ([]Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Task
 	for rows.Next() {
 		t, err := scanTask(rows)
@@ -928,7 +928,7 @@ func (s *Store) cancelDomain(domain, message string, statuses ...string) ([]Task
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var ids []int64
 	var out []Task
 	for rows.Next() {
@@ -1014,7 +1014,7 @@ func (s *Store) cancelPendingScans(where, message string, args ...any) (int64, e
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var ids []int64
 	var out []Task
 	for rows.Next() {
@@ -1062,7 +1062,7 @@ func (s *Store) ListActive() ([]Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Task
 	pos := map[string]int{}
 	for rows.Next() {
@@ -1090,7 +1090,7 @@ func (s *Store) ListActiveFileDelete() ([]Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Task
 	for rows.Next() {
 		t, err := scanTask(rows)
@@ -1115,7 +1115,7 @@ func (s *Store) ListActiveForSeries(seriesID int64) ([]Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Task
 	for rows.Next() {
 		t, err := scanTask(rows)

@@ -46,7 +46,7 @@ func TestEnqueueDownloadQueueCap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = settings.SetDomainDefault(d, 0, 2, 1, "10M", "0", false)
 	s := queue.NewStore(d)

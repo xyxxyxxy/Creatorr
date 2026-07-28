@@ -117,7 +117,7 @@ func List(database *db.DB) ([]Domain, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Domain
 	for rows.Next() {
 		d, err := scanDomain(rows)
@@ -140,7 +140,7 @@ func ListInactive(database *db.DB) ([]Domain, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Domain
 	for rows.Next() {
 		d, err := scanDomain(rows)
@@ -297,7 +297,7 @@ func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelSt
 	if s := strings.TrimSpace(queueStr); s != "" {
 		n, err := strconv.Atoi(s)
 		if err != nil || n < 1 {
-			return fmt.Errorf("max download queue must be an integer ≥ 1")
+			return fmt.Errorf("max download tasks must be an integer ≥ 1")
 		}
 		maxQ = n
 		effQueue = n

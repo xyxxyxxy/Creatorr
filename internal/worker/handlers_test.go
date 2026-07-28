@@ -17,7 +17,7 @@ func TestDefaultHandlersRequireYtDlp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)

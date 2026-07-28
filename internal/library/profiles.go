@@ -149,7 +149,7 @@ func (s *Store) ListProfiles() ([]QualityProfile, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []QualityProfile
 	for rows.Next() {
 		p, err := scanProfile(rows)

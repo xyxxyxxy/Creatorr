@@ -1,4 +1,4 @@
-# Domain model (fresh SQLite schema version 1)
+# Domain model
 
 Index: [README.md](README.md). Agent contract: [`AGENTS.md`](../AGENTS.md). yt-dlp/plugins: [ytdlp.md](ytdlp.md). Scan/queue: [scan-and-queue.md](scan-and-queue.md). Download/library: [download-and-library.md](download-and-library.md).
 

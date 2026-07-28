@@ -128,19 +128,3 @@ func (s *Store) CategoriesForPackedVideo(videoID int64) []string {
 func (s *Store) SoftFillVideoGenresFromPackedInfo(videoID int64) (bool, error) {
 	return s.EnsureVideoGenresFromCategories(videoID, s.CategoriesForPackedVideo(videoID))
 }
-
-// softFillGenresOntoVideo merges category genres from packed info.json onto v in-memory when enabled.
-func (s *Store) softFillGenresOntoVideo(v *Video) {
-	if v == nil {
-		return
-	}
-	ok, err := s.SoftFillVideoGenresFromPackedInfo(v.ID)
-	if err != nil || !ok {
-		return
-	}
-	fresh, err := s.GetVideo(v.ID)
-	if err != nil {
-		return
-	}
-	v.Genres = fresh.Genres
-}

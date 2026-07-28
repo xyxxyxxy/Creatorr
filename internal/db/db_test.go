@@ -15,7 +15,7 @@ func TestOpenFreshSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if err := d.Ping(); err != nil {
 		t.Fatalf("ping: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestWorkerHeartbeat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	at, err := d.WorkerHeartbeat()
 	if err != nil {
@@ -54,19 +54,19 @@ func TestOpenBusyTimeoutOnPooledConns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	ctx := context.Background()
 	c1, err := d.SQL.Conn(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c1.Close()
+	defer func() { _ = c1.Close() }()
 	c2, err := d.SQL.Conn(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c2.Close()
+	defer func() { _ = c2.Close() }()
 
 	readTimeout := func(c *sql.Conn) int {
 		t.Helper()

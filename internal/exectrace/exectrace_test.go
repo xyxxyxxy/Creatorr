@@ -28,7 +28,7 @@ func TestFormat(t *testing.T) {
 
 func TestRecordNoopWithoutRecorder(t *testing.T) {
 	Record(context.Background(), "ffmpeg", "-version")
-	Record(nil, "ffmpeg", "-version")
+	Record(context.TODO(), "ffmpeg", "-version")
 }
 
 func TestRecordWithRecorder(t *testing.T) {

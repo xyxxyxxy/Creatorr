@@ -60,15 +60,12 @@ func (s *Scheduler) Run(ctx context.Context) {
 }
 
 // TickOnce evaluates cron schedules and runs due work.
-func (s *Scheduler) TickOnce(ctx context.Context, log *slog.Logger) {
+func (s *Scheduler) TickOnce(_ context.Context, log *slog.Logger) {
 	if s.Library == nil {
 		return
 	}
 	if log == nil {
 		log = slog.Default()
-	}
-	if ctx == nil {
-		ctx = context.Background()
 	}
 	now := s.Now().UTC()
 	database := s.Library.DB

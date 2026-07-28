@@ -57,7 +57,7 @@ func (s *Store) SeriesWarnLevels(seriesIDs []int64) (map[int64]SeriesWarnLevel, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var srcID, seriesID int64
 		var done int
@@ -91,7 +91,7 @@ func (s *Store) SeriesWarnLevels(seriesIDs []int64) (map[int64]SeriesWarnLevel, 
 	if err != nil {
 		return nil, err
 	}
-	defer errRows.Close()
+	defer func() { _ = errRows.Close() }()
 	for errRows.Next() {
 		var seriesID int64
 		if err := errRows.Scan(&seriesID); err != nil {
@@ -161,7 +161,7 @@ func (s *Store) SeriesVideoErrorFlagsMap(seriesIDs []int64) (map[int64]SeriesVid
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var seriesID int64
 		var srcErr, dlErr, verifyErr int
@@ -219,7 +219,7 @@ func (s *Store) activeScanSourceIDs() (map[int64]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := map[int64]bool{}
 	for rows.Next() {
 		var payload string

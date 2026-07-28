@@ -125,11 +125,9 @@ func (h *Handler) seriesMetaFileViewPage(w http.ResponseWriter, r *http.Request)
 		sizeLabel = library.FormatBytes(st.Size())
 	}
 	rawHref := fmt.Sprintf("/series/%d/files/%s/raw", seriesID, role)
-	kind := role
+	kind := "thumb" // image art for preview helpers
 	if role == library.SeriesMetaFileRoleNFO {
 		kind = "nfo"
-	} else {
-		kind = "thumb" // image art for preview helpers
 	}
 	view := struct {
 		pageBase

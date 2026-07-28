@@ -41,7 +41,7 @@ func (s *Store) ListRoots() ([]RootFolder, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []RootFolder
 	for rows.Next() {
 		var r RootFolder

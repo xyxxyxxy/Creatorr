@@ -1,6 +1,6 @@
 # Creatorr product docs
 
-Topic specs for product behavior. Terminology glossary: [domain-model.md](domain-model.md) § Terminology (agent naming pointers in [`AGENTS.md`](../AGENTS.md)). Fresh SQLite `schema_version=1` only - no DB upgrade path.
+Topic specs for product behavior. Terminology glossary: [domain-model.md](domain-model.md) § Terminology (agent naming pointers in [`AGENTS.md`](../AGENTS.md)).
 
 | Doc | Covers |
 | --- | --- |

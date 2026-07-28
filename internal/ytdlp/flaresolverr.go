@@ -174,7 +174,7 @@ func postFlare(ctx context.Context, flareURL string, body flareRequest, timeout 
 	if err != nil {
 		return zero, fmt.Errorf("FlareSolverr unreachable: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return zero, fmt.Errorf("FlareSolverr returned %s", resp.Status)
 	}
@@ -289,12 +289,6 @@ func flareCachePut(host string, cookies []flareCookie, ua string) {
 		userAgent: ua,
 		expiresAt: cookieCacheExpiry(cookies, time.Now()),
 	}
-}
-
-func flareCacheDelete(host string) {
-	flareMu.Lock()
-	defer flareMu.Unlock()
-	delete(flareCache, host)
 }
 
 func cookieCacheExpiry(cookies []flareCookie, now time.Time) time.Time {

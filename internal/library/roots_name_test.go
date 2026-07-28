@@ -6,7 +6,7 @@ import (
 
 func TestCreateRootRejectsRelativePath(t *testing.T) {
 	s := openLib(t)
-	if _, err := s.CreateRoot("rel", "var/media/library", nil); err == nil {
+	if _, err := s.CreateRoot("rel", "var/library", nil); err == nil {
 		t.Fatal("want error for relative path")
 	}
 }

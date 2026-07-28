@@ -231,16 +231,7 @@ func MergeMarkChapters(native []Chapter, marks []Segment) []Chapter {
 	}
 
 	// Split native around SB marks, then merge overlaps / adjacent same title / tiny neighbors.
-	type edge struct {
-		t     float64
-		isSB  bool
-		title string
-		end   float64
-	}
-	var events []Chapter
-	for _, n := range native {
-		events = append(events, n)
-	}
+	events := append([]Chapter(nil), native...)
 	// For each SB mark, split overlapping native pieces
 	for _, m := range sb {
 		var next []Chapter
@@ -289,9 +280,8 @@ func collapseChapters(chs []Chapter) []Chapter {
 			}
 			if last.Title == "" {
 				last.Title = c.Title
-			} else if c.Title != "" && c.Title != last.Title {
-				// keep first title (native usually first after sort by start)
 			}
+			// else keep first title (native usually first after sort by start)
 			continue
 		}
 		// adjacent same title
