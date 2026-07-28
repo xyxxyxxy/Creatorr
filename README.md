@@ -109,7 +109,7 @@ go run ./cmd/creatorr
 
 ```bash
 make hooks      # once per clone: pre-commit runs make lint + make test
-make test
+make test       # host Go, or Docker golang image if go missing
 make vet
 make lint       # golangci-lint in Docker (version pinned in Makefile; needs Docker)
 make generate   # after editing api/openapi.yaml

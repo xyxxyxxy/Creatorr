@@ -10,15 +10,26 @@ BGUTIL_POT_VERSION ?= 1.3.1
 # Keep in sync with .github/workflows/ci.yml golangci-lint-action version.
 GOLANGCI_LINT_VERSION ?= v2.12.2
 GOLANGCI_LINT_IMAGE ?= golangci/golangci-lint:$(GOLANGCI_LINT_VERSION)
+# Keep in sync with .github/workflows/ci.yml go-version (bookworm matches CI).
+GO_TEST_IMAGE ?= golang:1.25-bookworm
 
 generate:
 	$(OAPI_CODEGEN) -config api/oapi-codegen.yaml api/openapi.yaml
 
+# Prefer host Go; fall back to Docker when Go is not on PATH (pre-commit / lint-only hosts).
 test:
-	$(GO) test -race -count=1 ./...
+	@if command -v $(GO) >/dev/null 2>&1; then \
+		$(GO) test -race -count=1 ./...; \
+	else \
+		docker run --rm -v "$(CURDIR):/app" -w /app $(GO_TEST_IMAGE) go test -race -count=1 ./...; \
+	fi
 
 vet:
-	$(GO) vet ./...
+	@if command -v $(GO) >/dev/null 2>&1; then \
+		$(GO) vet ./...; \
+	else \
+		docker run --rm -v "$(CURDIR):/app" -w /app $(GO_TEST_IMAGE) go vet ./...; \
+	fi
 
 lint:
 	docker run --rm -v "$(CURDIR):/app" -w /app $(GOLANGCI_LINT_IMAGE) golangci-lint run ./...

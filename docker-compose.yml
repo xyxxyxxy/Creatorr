@@ -15,9 +15,8 @@ services:
       - "8787:8787"
     volumes:
       - ./var/data:/data
-      # Import inbox (Settings → Import).
       - ./var/import:/import
-      # Initial root folder: host CREATORR_INITIAL_ROOT_FOLDER → fixed container /library.
+      # Initial root folder: host CREATORR_INITIAL_ROOT_FOLDER.
       # Override the host path in .env before first boot. Add more roots in Settings → Library.
       - ${CREATORR_INITIAL_ROOT_FOLDER:-./var/library}:/library
       # Optional yt-dlp plugins:
