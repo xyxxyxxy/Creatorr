@@ -55,13 +55,13 @@ Or use [DB Browser for SQLite](https://sqlitebrowser.org/): open `creatorr.db` �
 | --- | --- |
 | `./var/data` | `/data` (SQLite `creatorr.db` + cache) |
 | `./var/import` | `/import` |
-| `CREATORR_INITIAL_ROOT_FOLDER` (default `./var/library`) | `/library` (fixed; initial root folder) |
+| `CREATORR_LIBRARY_ROOT` (default `./var/library`) | `/library` (fixed; initial root folder) |
 
 Compose comments show optional mounts: extra library roots, `/yt-dlp-plugins`, custom yt-dlp binary.
 
 Image includes the Creatorr binary plus **yt-dlp**, **ffmpeg**, and **Deno**. Runtime yt-dlp is `/usr/local/bin/yt-dlp`.
 
-First boot seeds one root at `/library` (local Go: `var/library`) and quality profiles `best`, `HD 1080p`, `HD 720p`, `SD 480p`. Override the host bind in `.env` (`CREATORR_INITIAL_ROOT_FOLDER`) before first boot; add more roots later in Settings → Library.
+First boot seeds one root at `/library` (local Go: `var/library`) and quality profiles `best`, `HD 1080p`, `HD 720p`, `SD 480p`. Override the host bind in `.env` (`CREATORR_LIBRARY_ROOT`) before first boot; add more roots later in Settings → Library.
 
 ### Sidecars
 
@@ -86,7 +86,7 @@ HTTP always binds `0.0.0.0`. Most runtime knobs live in Settings (SQLite / UI). 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PUID` / `PGID` | `1000` | Host uid/gid for Compose `user:` on the Creatorr service (volume ownership). See `.env.example`. |
-| `CREATORR_INITIAL_ROOT_FOLDER` | `./var/library` | Compose-only host path bind-mounted to fixed container `/library` (seeded as the initial root folder when `root_folders` is empty). |
+| `CREATORR_LIBRARY_ROOT` | `./var/library` | Compose-only host path bind-mounted to fixed container `/library` (seeded as the initial root folder when `root_folders` is empty). |
 | `CREATORR_PORT` | `8787` | HTTP port |
 | `CREATORR_POT_PROVIDER_URL` | *(empty)* | bgutil PO token provider base URL. Compose default `http://creatorr-po-token:4416`. Empty disables Settings **PO token fetch**. |
 | `CREATORR_FLARESOLVERR_URL` | *(empty)* | FlareSolverr base URL. Compose default `http://creatorr-flaresolverr:8191`. Empty skips Flare health/pre-solve. |

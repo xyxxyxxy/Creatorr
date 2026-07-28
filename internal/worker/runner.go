@@ -197,7 +197,7 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 					seriesTitle = ser.Title
 				}
 			}
-			if err := notify.LiveSkipped(ctx, r.Queue.DB, task.ID, seriesTitle, videoTitle); err != nil {
+			if err := notify.LiveSkipped(context.WithoutCancel(ctx), r.Queue.DB, task.ID, seriesTitle, videoTitle); err != nil {
 				log.Warn("live_skipped notify", "task", task.ID, "err", err)
 			}
 			r.Events.TaskDone(task.ID, task.Kind, task.Domain, doneMsg, sid, vid)
