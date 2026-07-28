@@ -233,7 +233,7 @@ func (s *Store) ListSeriesFiltered(filter SeriesListFilter, limit, offset int) (
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Series
 	for rows.Next() {
 		ser, err := scanSeriesListRow(rows)
@@ -384,7 +384,7 @@ func (s *Store) ListAllSourceURLs() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []string
 	for rows.Next() {
 		var u string
@@ -403,7 +403,7 @@ func (s *Store) seriesFolderTaken(rootID int64, title string, excludeSeriesID in
 	if err != nil {
 		return false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
 		var t string
@@ -612,7 +612,7 @@ func (s *Store) listSources(seriesID int64) ([]Source, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Source
 	for rows.Next() {
 		src, err := scanSource(rows)
@@ -643,7 +643,7 @@ func (s *Store) ListAutoIgnoreMediaTypeSuggestions() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var customs []string
 	for rows.Next() {
 		var raw string
@@ -664,7 +664,7 @@ func (s *Store) ListSourceDomains() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	seen := map[string]struct{}{}
 	var out []string
 	for rows.Next() {

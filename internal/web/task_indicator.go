@@ -359,15 +359,6 @@ type sourceStatusParams struct {
 	LastTipScannedAt    time.Time // tip scan (mode=scan) success; zero if none
 }
 
-func sourceStatusCellID(sourceID int64) string {
-	return fmt.Sprintf("source-status-%d", sourceID)
-}
-
-// Deprecated alias kept for any leftover id references in tips.
-func sourceStatusIndicatorID(sourceID int64) string {
-	return sourceStatusCellID(sourceID)
-}
-
 func joinStatusTip(parts ...string) string {
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {

@@ -28,7 +28,7 @@ func ListCookieJars(database *db.DB) ([]CookieJar, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []CookieJar
 	for rows.Next() {
 		var c CookieJar

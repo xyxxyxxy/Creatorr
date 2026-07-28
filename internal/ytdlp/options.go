@@ -2,7 +2,7 @@ package ytdlp
 
 // options holds every flag any Client method accepts. Only the fields
 // relevant to the called method are populated. Client methods also fill
-// ytdlpPath / ffmpegPath / pluginDirs from Client fields.
+// ytdlpPath / pluginDirs from Client fields.
 type options struct {
 	url              string
 	cookies          string
@@ -19,7 +19,6 @@ type options struct {
 	matchFilter      string
 
 	ytdlpPath        string
-	ffmpegPath       string
 	pluginDirs       string
 	systemPluginDirs string
 

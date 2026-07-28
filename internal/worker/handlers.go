@@ -441,7 +441,7 @@ func ScanHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(work)
+		defer func() { _ = os.RemoveAll(work) }()
 
 		jar, err := domains.TempJarForURL(d.Library.DB, work, src.URL)
 		if err != nil {
@@ -691,7 +691,7 @@ func DownloadHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(work)
+		defer func() { _ = os.RemoveAll(work) }()
 
 		progress("Resolving cookies…", nil)
 		jar, err := domains.TempJarForURL(d.Library.DB, work, dlctx.URL)
@@ -1179,7 +1179,7 @@ func RefreshSidecarsHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(work)
+		defer func() { _ = os.RemoveAll(work) }()
 
 		progress("Resolving cookies…", ptrFloat(0.1))
 		jar, err := domains.TempJarForURL(d.Library.DB, work, url)
@@ -1239,7 +1239,7 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(work)
+	defer func() { _ = os.RemoveAll(work) }()
 
 	progress("Fetching metadata…", ptrFloat(0.05))
 	jar, err := domains.TempJarForURL(d.Library.DB, work, url)
@@ -1332,7 +1332,7 @@ func metadataRescanSeries(ctx context.Context, d Deps, t *queue.Task, progress f
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(work)
+	defer func() { _ = os.RemoveAll(work) }()
 
 	var refreshed, skippedNew, sidecars, okSources int
 	var lastErr error
@@ -1442,7 +1442,7 @@ func PrefetchSeriesMetaHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(work)
+		defer func() { _ = os.RemoveAll(work) }()
 
 		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
 		if err != nil {
@@ -1522,7 +1522,7 @@ func PrefetchAddSeriesHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(work)
+		defer func() { _ = os.RemoveAll(work) }()
 
 		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
 		if err != nil {
@@ -1584,7 +1584,7 @@ func PrefetchAddVideoHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(work)
+		defer func() { _ = os.RemoveAll(work) }()
 
 		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
 		if err != nil {
@@ -1645,7 +1645,7 @@ func PrefetchVideoMetaHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(work)
+		defer func() { _ = os.RemoveAll(work) }()
 
 		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
 		if err != nil {

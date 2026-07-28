@@ -47,7 +47,7 @@ func (h *Handler) actionSaveSeriesMetadata(w http.ResponseWriter, r *http.Reques
 		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
 		return
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	artSrc := map[string]string{}
 	artClear := map[string]bool{}

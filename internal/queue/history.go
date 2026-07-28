@@ -43,7 +43,7 @@ func (s *Store) ListHistory(f HistoryFilter, limit, offset int) ([]Task, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanTaskRows(rows)
 }
 
@@ -76,7 +76,7 @@ func (s *Store) DistinctHistoryDomains() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []string
 	for rows.Next() {
 		var d string
@@ -98,7 +98,7 @@ func (s *Store) DistinctHistoryKinds() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []string
 	for rows.Next() {
 		var k string
@@ -163,7 +163,7 @@ func (s *Store) ListHistoryForSource(sourceID int64, limit, offset int) ([]Task,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanTaskRows(rows)
 }
 

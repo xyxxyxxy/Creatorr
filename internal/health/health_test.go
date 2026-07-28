@@ -17,7 +17,7 @@ func TestHealthDBAndWorker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if err := d.TouchWorkerHeartbeat(time.Now()); err != nil {
 		t.Fatalf("heartbeat: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestHealthDBAndWorker(t *testing.T) {
 	}
 	cfg := config.Config{
 		DBPath:      filepath.Join(dir, "creatorr.db"),
-		LibraryRoot: filepath.Join(dir, "library"),
+		InitialRootFolder: filepath.Join(dir, "library"),
 		ImportRoot:  filepath.Join(dir, "import"),
 		YtDlpBin:    bin,
 	}

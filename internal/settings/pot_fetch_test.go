@@ -40,3 +40,31 @@ func TestEffectivePotFetch(t *testing.T) {
 		t.Fatalf("with URL: mode=%q err=%v", mode, err)
 	}
 }
+
+func TestDisablePotFetchWhenUnset(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	if err := SeedDefaults(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := Set(d, KeyPotFetch, PotFetchAlways); err != nil {
+		t.Fatal(err)
+	}
+	if err := DisablePotFetchWhenUnset(d, "http://creatorr-po-token:4416"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Get(d, KeyPotFetch)
+	if err != nil || got != PotFetchAlways {
+		t.Fatalf("URL set should leave always, got %q err=%v", got, err)
+	}
+	if err := DisablePotFetchWhenUnset(d, ""); err != nil {
+		t.Fatal(err)
+	}
+	got, err = Get(d, KeyPotFetch)
+	if err != nil || got != PotFetchNever {
+		t.Fatalf("URL unset should force never, got %q err=%v", got, err)
+	}
+}

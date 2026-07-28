@@ -187,7 +187,7 @@ func (h *Handler) actionSaveVideoMetadata(w http.ResponseWriter, r *http.Request
 		http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
 		return
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	thumbSrc := ""
 	thumbClear := false

@@ -92,7 +92,7 @@ func (s *Store) ListSourceHistoryPage(sourceID int64, limit, offset int) ([]Sour
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanSourceHistoryRows(rows)
 }
 
@@ -227,7 +227,7 @@ func (s *Store) ListVideoTimelinePage(videoID int64, limit, offset int) ([]Video
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []VideoHistoryEvent
 	for rows.Next() {
 		var e VideoHistoryEvent
@@ -297,7 +297,7 @@ func (s *Store) SeriesIDsWithSourceScanError(seriesIDs []int64) (map[int64]struc
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var seriesID int64
 		if err := rows.Scan(&seriesID); err != nil {

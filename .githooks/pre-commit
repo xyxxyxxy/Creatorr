@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Runs make lint + make test before each commit.
+# Enable once per clone: make hooks
+# Skip for one commit: SKIP_GITHOOKS=1 git commit ...
+# Or: git commit --no-verify
+set -euo pipefail
+
+if [[ "${SKIP_GITHOOKS:-}" == "1" ]]; then
+  echo "pre-commit: SKIP_GITHOOKS=1, skipping lint/test"
+  exit 0
+fi
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root"
+
+echo "pre-commit: make lint"
+make lint
+
+echo "pre-commit: make test"
+make test

@@ -121,7 +121,7 @@ func (c *Client) FetchSegments(ctx context.Context, videoID string, categories [
 	if err != nil {
 		return nil, SoftError{Msg: "SponsorBlock request failed: " + err.Error()}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 
 	switch resp.StatusCode {
@@ -147,7 +147,7 @@ func (c *Client) FetchSegments(ctx context.Context, videoID string, categories [
 			if err2 != nil {
 				return nil, SoftError{Msg: "SponsorBlock retry failed: " + err2.Error()}
 			}
-			defer resp2.Body.Close()
+			defer func() { _ = resp2.Body.Close() }()
 			body2, _ := io.ReadAll(io.LimitReader(resp2.Body, 4<<20))
 			if resp2.StatusCode == http.StatusOK {
 				return parseSegmentsJSON(body2)

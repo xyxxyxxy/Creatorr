@@ -131,7 +131,7 @@ func pngHasTwoTextBands(t *testing.T, path string) bool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	img, err := png.Decode(f)
 	if err != nil {
 		t.Fatal(err)

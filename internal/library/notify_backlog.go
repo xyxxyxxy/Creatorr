@@ -24,7 +24,7 @@ func (s *Store) hasEligibleDownloadWanted() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
 		var sourceURL, feedURL string

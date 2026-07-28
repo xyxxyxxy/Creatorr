@@ -34,11 +34,11 @@
         </fieldset>
 
         <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
-          <legend class="fieldset-legend">Queue</legend>
+          <legend class="fieldset-legend">Domain Queues</legend>
           <div class="grid gap-3">
             <div class="grid gap-3 md:grid-cols-2">
               <fieldset class="fieldset">
-                <legend class="fieldset-legend">Max download queue</legend>
+                <legend class="fieldset-legend">Max download tasks</legend>
                 <div class="join w-full">
                   <input type="number" min="1" name="max_download_queue" class="input join-item grow min-w-0{{if not .QueueOverride}} opacity-70{{end}}" value="{{.QueueOverride}}" placeholder="default: {{.DefaultQueue}}" data-override-clear />
                   {{template "override_clear_btn"}}
@@ -92,8 +92,8 @@
             "Label" "Use FlareSolverr"
             "Checked" $flareOn
             "Disabled" (not $flareOK)
-            "DisabledTitle" "Configure FlareSolverr in 'Settings → General' first."
-            "Hint" "Pre-solve CloudFlare challenges for this domain. Configure FlareSolverr under 'Settings → General'."
+            "DisabledTitle" "Set CREATORR_FLARESOLVERR_URL first (Compose default http://creatorr-flaresolverr:8191). See 'Settings → General'."
+            "Hint" "Pre-solve CloudFlare challenges for this domain. Requires CREATORR_FLARESOLVERR_URL ('Settings → General')."
           )}}
           {{template "domain_credentials_field" (dict
             "Override" true

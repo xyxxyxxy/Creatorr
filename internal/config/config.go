@@ -8,14 +8,14 @@ import (
 )
 
 // Config is process bootstrap from environment. Runtime knobs live in Settings (SQLite).
-// Paths are fixed layouts (not env): container absolute dirs when /data exists, else var/.
+// Paths use a fixed layout when /data exists (container: seed /library); otherwise local var/.
 type Config struct {
-	Host            string
-	Port            int
-	DBPath          string
-	FlareSolverrURL string // CREATORR_FLARESOLVERR_URL; empty skips FlareSolverr health + pre-solve
-	LibraryRoot     string // seed path for empty root_folders
-	ImportRoot      string
+	Host              string
+	Port              int
+	DBPath            string
+	FlareSolverrURL   string // CREATORR_FLARESOLVERR_URL; empty skips FlareSolverr health + pre-solve
+	InitialRootFolder string // first root_folders seed path (/library in container; var/library local)
+	ImportRoot        string
 	// YtDlpBin is the yt-dlp executable. Empty after Load; main sets via ytdlp.ResolveBin
 	// (Docker image: /usr/local/bin/yt-dlp; local: PATH fallback).
 	YtDlpBin string
@@ -29,14 +29,14 @@ type Config struct {
 	CacheDir string
 }
 
-// Load reads bootstrap env (port, public URL, POT provider) and selects path layout.
+// Load reads bootstrap env (port, sidecars) and selects path layout.
 func Load() Config {
 	paths := pathLayout()
 	return Config{
 		Host:                  "0.0.0.0",
 		Port:                  getenvInt("CREATORR_PORT", 8787),
 		DBPath:                paths.db,
-		LibraryRoot:           paths.library,
+		InitialRootFolder:     paths.library,
 		ImportRoot:            paths.importRoot,
 		YtDlpBin:              "", // main: ytdlp.ResolveBin
 		YtDlpPluginsDir:       paths.plugins,
@@ -57,18 +57,18 @@ func pathLayout() layout {
 	if isDir("/data") {
 		return layout{
 			db:            "/data/creatorr.db",
-			library:       "/media/library",
-			importRoot:    "/media/import",
-			cache:         "/cache",
+			library:       "/library",
+			importRoot:    "/import",
+			cache:         "/data/cache",
 			plugins:       "/yt-dlp-plugins",
 			systemPlugins: "/usr/local/share/yt-dlp-plugins/bgutil",
 		}
 	}
 	return layout{
 		db:            filepath.Join("var", "data", "creatorr.db"),
-		library:       filepath.Join("var", "media", "library"),
-		importRoot:    filepath.Join("var", "media", "import"),
-		cache:         filepath.Join("var", "cache"),
+		library:       filepath.Join("var", "library"),
+		importRoot:    filepath.Join("var", "import"),
+		cache:         filepath.Join("var", "data", "cache"),
 		plugins:       filepath.Join("var", "yt-dlp-plugins"),
 		systemPlugins: filepath.Join("var", "yt-dlp-plugins", "bgutil"),
 	}

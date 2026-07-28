@@ -224,7 +224,7 @@ func concatCopy(ctx context.Context, piecePaths []string, outPath, dir string) e
 	if err := os.WriteFile(listPath, []byte(b.String()), 0o644); err != nil {
 		return err
 	}
-	defer os.Remove(listPath)
+	defer func() { _ = os.Remove(listPath) }()
 	args := []string{
 		"-y", "-hide_banner", "-loglevel", "error",
 		"-f", "concat", "-safe", "0", "-i", listPath,

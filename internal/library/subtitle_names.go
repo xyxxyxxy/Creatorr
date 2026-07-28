@@ -115,7 +115,6 @@ func subtitleLangFromPath(srcPath, workStem string) string {
 	for ext := range subtitleExts {
 		if strings.HasSuffix(lower, ext) {
 			suffix = suffix[:len(suffix)-len(ext)]
-			lower = strings.ToLower(suffix)
 			break
 		}
 	}
@@ -135,7 +134,6 @@ func subtitleHasAutoMarker(srcPath, workStem string) bool {
 	for ext := range subtitleExts {
 		if strings.HasSuffix(lower, ext) {
 			suffix = suffix[:len(suffix)-len(ext)]
-			lower = strings.ToLower(suffix)
 			break
 		}
 	}

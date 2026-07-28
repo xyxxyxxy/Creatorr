@@ -44,7 +44,7 @@ func main() {
 		log.Error("open database", "err", err)
 		os.Exit(1)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	if err := settings.SeedDefaults(database); err != nil {
 		log.Error("seed settings", "err", err)
@@ -52,6 +52,10 @@ func main() {
 	}
 	if err := settings.DropFlareSolverrURLSetting(database); err != nil {
 		log.Error("drop legacy FlareSolverr URL setting", "err", err)
+		os.Exit(1)
+	}
+	if err := settings.DisablePotFetchWhenUnset(database, cfg.PotProviderURL); err != nil {
+		log.Error("disable pot_fetch when provider URL unset", "err", err)
 		os.Exit(1)
 	}
 	if err := library.SeedDefaults(database, cfg); err != nil {

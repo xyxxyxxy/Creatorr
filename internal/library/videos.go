@@ -152,7 +152,7 @@ func (s *Store) ListRecentVideos(limit int) ([]Video, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Video
 	for rows.Next() {
 		v, err := scanVideo(rows)
@@ -180,7 +180,7 @@ func (s *Store) SeriesTitles(ids []int64) (map[int64]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
 		var title string
@@ -201,7 +201,7 @@ func (s *Store) ListVideos(seriesID int64) ([]Video, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Video
 	for rows.Next() {
 		v, err := scanVideo(rows)
@@ -238,7 +238,7 @@ func (s *Store) ListVideosPageFiltered(seriesID int64, filter VideoListFilter, l
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Video
 	for rows.Next() {
 		v, err := scanVideo(rows)
@@ -267,7 +267,7 @@ func (s *Store) ListVideosBySourcePage(sourceID int64, limit, offset int) ([]Vid
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Video
 	for rows.Next() {
 		v, err := scanVideo(rows)
@@ -314,7 +314,7 @@ func (s *Store) ListVideosBySourceIDsPage(sourceIDs []int64, limit, offset int) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Video
 	for rows.Next() {
 		v, err := scanVideo(rows)
@@ -392,7 +392,7 @@ func (s *Store) DistinctVideoStatuses(seriesID int64) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []string
 	for rows.Next() {
 		var st string
@@ -427,7 +427,7 @@ func (s *Store) DistinctVideoYears(seriesID int64) (years []int, unknown bool, e
 	if err != nil {
 		return nil, false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var y int
 		if err := rows.Scan(&y); err != nil {
@@ -450,7 +450,7 @@ func (s *Store) CountVideosBySource(seriesID int64) (map[int64]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := map[int64]int{}
 	for rows.Next() {
 		var sid int64
@@ -663,7 +663,7 @@ func (s *Store) ListSeriesMediaTypes(seriesID int64) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []string
 	for rows.Next() {
 		var mt string
@@ -745,7 +745,7 @@ func (s *Store) ListVideoHistoryPage(videoID int64, limit, offset int) ([]VideoH
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []VideoHistoryEvent
 	for rows.Next() {
 		var e VideoHistoryEvent
@@ -777,7 +777,7 @@ func (s *Store) ListVideoHistoryByTaskID(taskID int64) ([]VideoHistoryEvent, err
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []VideoHistoryEvent
 	for rows.Next() {
 		var e VideoHistoryEvent

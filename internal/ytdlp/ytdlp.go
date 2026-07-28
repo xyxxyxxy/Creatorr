@@ -16,7 +16,6 @@ import (
 )
 
 const defaultYtdlpBin = "yt-dlp"
-const defaultFfmpegBin = "ffmpeg"
 
 func appendCookiesAndAuth(args []string, cookiesPath string, o options) []string {
 	if cookiesPath != "" {
@@ -36,13 +35,6 @@ func (o options) resolveYtdlpBin() string {
 		return v
 	}
 	return ytdlpBin()
-}
-
-func (o options) resolveFfmpegBin() string {
-	if v := strings.TrimSpace(o.ffmpegPath); v != "" {
-		return v
-	}
-	return ffmpegBin()
 }
 
 // withPluginDirs prepends --plugin-dirs for each resolved plugin search parent
@@ -134,14 +126,6 @@ func ytdlpBin() string {
 	return defaultYtdlpBin
 }
 
-// ffmpegBin resolves ffmpeg: env FFMPEG_BIN, else PATH lookup of "ffmpeg".
-func ffmpegBin() string {
-	if v := strings.TrimSpace(os.Getenv("FFMPEG_BIN")); v != "" {
-		return v
-	}
-	return defaultFfmpegBin
-}
-
 // appendPaceFlags forwards --limit-rate and Creatorr sleep_requests to yt-dlp.
 // When sleep is on, the same value is applied to --sleep-requests, --sleep-subtitles,
 // and --sleep-interval (fixed pause; no --max-sleep-interval).
@@ -196,16 +180,6 @@ func normalizeFormat(sel string) string {
 		return "bv*+ba/b"
 	}
 	return sel
-}
-
-// normalizeAudioFormat is the audio-only selector chain: bestaudio, then any audio,
-// then best (last resort when a source has no separable audio-only format).
-func normalizeAudioFormat(sel string) string {
-	sel = strings.TrimSpace(sel)
-	if sel != "" && sel != "best" {
-		return sel
-	}
-	return "ba/bestaudio/b"
 }
 
 // dumpJSON runs `yt-dlp --skip-download -J [--flat-playlist] URL` and parses the result.
@@ -383,7 +357,7 @@ func looksLikeHLSPlaylist(path string) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var buf [8]byte
 	n, err := f.Read(buf[:])
 	if err != nil && n == 0 {
@@ -511,13 +485,6 @@ func classifyMatchFilterReject(stderr, matchFilter string) (code, message string
 	default:
 		return apperrors.CodeMediaTypeExcluded, "media type excluded"
 	}
-}
-
-// isMediaTypeFilterReject reports whether yt-dlp skipped due to --match-filters on media_type.
-// Deprecated path kept for older call sites; prefer classifyMatchFilterReject.
-func isMediaTypeFilterReject(stderr, matchFilter string) bool {
-	code, _ := classifyMatchFilterReject(stderr, matchFilter)
-	return code == apperrors.CodeMediaTypeExcluded
 }
 
 // upgradeCode reclassifies a generic failure as CookieInvalid / RateLimited

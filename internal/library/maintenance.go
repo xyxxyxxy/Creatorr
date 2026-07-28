@@ -25,7 +25,7 @@ func (s *Store) SeriesIDsMonitored() ([]int64, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []int64
 	for rows.Next() {
 		var id int64
@@ -86,7 +86,7 @@ func (s *Store) EnqueueScansDue(now, notBefore time.Time) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	type scanDueRow struct {
 		id       int64
 		scanCron string
@@ -193,7 +193,7 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type row struct {
 		id, seriesID int64
@@ -627,7 +627,7 @@ func (s *Store) fileSyncMissingAndRestore(taskID int64, progress ProgressFn) (mi
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type hit struct {
 		id        int64
@@ -719,7 +719,7 @@ func (s *Store) fileSyncSidecars(taskID int64, progress ProgressFn) (missing, re
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type hit struct {
 		fileID    int64
@@ -812,7 +812,7 @@ func (s *Store) retentionPurge(now time.Time, taskID int64, progress ProgressFn)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type victim struct {
 		videoID int64

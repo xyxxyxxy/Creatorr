@@ -212,7 +212,7 @@ func (s *Store) knownTrackedPaths() (map[string]struct{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var p string
 		if err := rows.Scan(&p); err != nil {
@@ -250,7 +250,7 @@ func (s *Store) videoStemIndex() (map[string]videoStemRef, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := map[string]videoStemRef{}
 	for rows.Next() {
 		var path, title, seriesTitle string
@@ -388,7 +388,7 @@ func (s *Store) ListImportPickerVideos() ([]ImportPickerVideo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []ImportPickerVideo
 	for rows.Next() {
 		var v ImportPickerVideo
@@ -1116,7 +1116,7 @@ func (s *Store) titleSuggestions(stem string, limit int) ([]VideoSuggestion, err
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	clean := cleanStem(stem)
 	type scored struct {
 		score float64
@@ -1153,7 +1153,7 @@ func (s *Store) seriesSuggestions(mediaPath string, limit int) ([]SeriesSuggesti
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	needles := []string{
 		filepath.Base(filepath.Dir(mediaPath)),
 		cleanStem(strings.TrimSuffix(filepath.Base(mediaPath), filepath.Ext(mediaPath))),

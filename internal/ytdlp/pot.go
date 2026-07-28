@@ -124,14 +124,6 @@ func ObservePOT(ctx context.Context, st POTStatus) {
 	t.apply(st)
 }
 
-func reportPOTIssue(ctx context.Context, detail string) {
-	detail = strings.TrimSpace(detail)
-	if detail == "" {
-		return
-	}
-	ObservePOT(ctx, POTStatus{State: POTFailed, Detail: detail})
-}
-
 // ClassifyPOT derives PO token outcome from yt-dlp output and fetch settings.
 func ClassifyPOT(output, fetch, providerURL string) POTStatus {
 	fetch = strings.TrimSpace(fetch)

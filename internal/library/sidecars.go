@@ -59,8 +59,8 @@ func FormatEpisodeNFO(meta EpisodeNFO) []byte {
 	if meta.SeriesTitle != "" {
 		b.WriteString("  <showtitle>" + xmlEscape(meta.SeriesTitle) + "</showtitle>\n")
 	}
-	b.WriteString(fmt.Sprintf("  <season>%d</season>\n", meta.Season))
-	b.WriteString(fmt.Sprintf("  <episode>%d</episode>\n", meta.Episode))
+	fmt.Fprintf(&b, "  <season>%d</season>\n", meta.Season)
+	fmt.Fprintf(&b, "  <episode>%d</episode>\n", meta.Episode)
 	plot := meta.Plot
 	if plot == "" {
 		plot = meta.Title
@@ -94,7 +94,7 @@ func FormatEpisodeNFO(meta EpisodeNFO) []byte {
 		b.WriteString("  <aired>" + xmlEscape(day) + "</aired>\n")
 	}
 	if meta.RuntimeSeconds > 0 {
-		b.WriteString(fmt.Sprintf("  <runtime>%d</runtime>\n", (meta.RuntimeSeconds+59)/60))
+		fmt.Fprintf(&b, "  <runtime>%d</runtime>\n", (meta.RuntimeSeconds+59)/60)
 	}
 	if meta.Country != "" {
 		b.WriteString("  <country>" + xmlEscape(meta.Country) + "</country>\n")
@@ -111,8 +111,8 @@ func FormatEpisodeNFO(meta EpisodeNFO) []byte {
 		uidType = "creatorr"
 	}
 	if uidVal != "" {
-		b.WriteString(fmt.Sprintf(`  <uniqueid type="%s" default="true">%s</uniqueid>`+"\n",
-			xmlEscape(uidType), xmlEscape(uidVal)))
+		fmt.Fprintf(&b, `  <uniqueid type="%s" default="true">%s</uniqueid>`+"\n",
+			xmlEscape(uidType), xmlEscape(uidVal))
 	}
 	for i, a := range meta.Actors {
 		name := strings.TrimSpace(a.Name)
@@ -128,18 +128,18 @@ func FormatEpisodeNFO(meta EpisodeNFO) []byte {
 		if role := strings.TrimSpace(a.Role); role != "" {
 			b.WriteString("    <role>" + xmlEscape(role) + "</role>\n")
 		}
-		b.WriteString(fmt.Sprintf("    <order>%d</order>\n", order))
+		fmt.Fprintf(&b, "    <order>%d</order>\n", order)
 		b.WriteString("  </actor>\n")
 	}
 	if meta.RuntimeSeconds > 0 {
-		b.WriteString(fmt.Sprintf(`  <fileinfo>
+		fmt.Fprintf(&b, `  <fileinfo>
     <streamdetails>
       <video>
         <durationinseconds>%d</durationinseconds>
       </video>
     </streamdetails>
   </fileinfo>
-`, meta.RuntimeSeconds))
+`, meta.RuntimeSeconds)
 	}
 	b.WriteString("</episodedetails>\n")
 	return []byte(b.String())
@@ -314,7 +314,6 @@ func guessSubtitleWorkStem(srcPath string) string {
 	// Strip optional .auto marker (Creatorr auto-caption naming).
 	if strings.HasSuffix(lower, "."+autoSubtitleMarker) {
 		base = base[:len(base)-len("."+autoSubtitleMarker)]
-		lower = strings.ToLower(base)
 	}
 	// Strip trailing .lang or .lang-REGION (e.g. .en, .en-US)
 	if i := strings.LastIndex(base, "."); i > 0 {
@@ -526,7 +525,7 @@ func downloadURLToFile(rawURL, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("thumb http %d", resp.StatusCode)
 	}
@@ -534,7 +533,7 @@ func downloadURLToFile(rawURL, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = io.Copy(f, resp.Body)
 	return err
 }

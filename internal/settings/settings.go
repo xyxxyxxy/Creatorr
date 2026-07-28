@@ -25,7 +25,7 @@ const (
 
 // Help is one-line UI help text per key.
 var Help = map[string]string{
-	KeyPotFetch:                     "",
+	KeyPotFetch:                     "When the PO token provider URL is set: Auto (when needed), Always, or Never. Disabled and forced to Never while CREATORR_POT_PROVIDER_URL is unset.",
 	KeyEpisodeFormat:                "Relative path under the series folder for packed episodes (no extension). Saving does not rename existing files - use Apply episode format.",
 	KeyDownloadWantedCron:           "Schedule to enqueue wanted videos for monitored series.",
 	KeyDownloadWantedOrder:          "Which wanted videos to download first inside each series (by upload date; no date uses id). Series take turns so one series does not fill the whole queue.",
@@ -353,7 +353,7 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []DomainQueueRow
 	for rows.Next() {
 		var host string

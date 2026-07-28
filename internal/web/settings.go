@@ -131,7 +131,10 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 			}
 			if !potURLSet {
 				row.Disabled = true
+				row.Label = row.Label + " (disabled)"
+				row.Value = settings.PotFetchNever
 				row.DisabledTitle = "Set CREATORR_POT_PROVIDER_URL first (Compose default http://creatorr-po-token:4416)."
+				row.Help = "" // tip is DisabledTitle; no field_info when unset
 			}
 		}
 		rows = append(rows, row)
@@ -203,7 +206,7 @@ func externalServiceJoinViews(h *Handler) (flare, pot externalServiceURLView) {
 	pot = externalServiceURLView{
 		Label: "PO token provider URL",
 		Value: strings.TrimSpace(h.PotProviderURL),
-		Hint:  "Set CREATORR_POT_PROVIDER_URL and restart. Compose default http://creatorr-po-token:4416.",
+		Hint:  "Set CREATORR_POT_PROVIDER_URL and restart. Compose default http://creatorr-po-token:4416.\nEnable 'PO token fetch' below when the URL is set (forced to 'Never' while unset).",
 	}
 	if h.Health == nil {
 		flare.Status, flare.StatusLabel, flare.StatusTip = externalServiceStatusFromCheck(health.Check{Status: health.StatusSkipped, Message: "URL unset"})
@@ -292,7 +295,8 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 	dqRows, _ := settings.DomainOverrideRows(h.Queue.DB)
 	pageRows, pageInfo := SlicePage(r, "page", dqRows)
 	sourceDomains, _ := h.Library.ListSourceDomains()
-	flareOK := settings.FlareSolverrConfigured()
+	// Match Handler.FlareSolverrURL (process bootstrap), not a live env re-read.
+	flareOK := strings.TrimSpace(h.FlareSolverrURL) != ""
 	// Access is override-only; Domain defaults Flare is always off for inherit display.
 	defLim.UseFlareSolverr = false
 	render(w, "settings_queue", struct {
@@ -452,7 +456,11 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 		vals[e] = r.FormValue(e)
 	}
 	if raw, ok := vals[settings.KeyPotFetch]; ok {
-		vals[settings.KeyPotFetch] = settings.NormalizePotFetch(raw)
+		if strings.TrimSpace(h.PotProviderURL) == "" {
+			vals[settings.KeyPotFetch] = settings.PotFetchNever
+		} else {
+			vals[settings.KeyPotFetch] = settings.NormalizePotFetch(raw)
+		}
 	}
 	namingPosted := false
 	if r.FormValue("redirect") == "/settings/library" {
@@ -627,7 +635,7 @@ func (h *Handler) actionSaveDomainDefault(w http.ResponseWriter, r *http.Request
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery("invalid task_cooldown_seconds"))
 		return
 	}
-	maxQueue, err := settings.ParsePositiveInt(r.FormValue("max_download_queue"), "max download queue")
+	maxQueue, err := settings.ParsePositiveInt(r.FormValue("max_download_queue"), "max download tasks")
 	if err != nil {
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
@@ -678,8 +686,10 @@ func (h *Handler) actionUpsertDomainOverride(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	flareStr := "default"
-	if v := strings.TrimSpace(r.FormValue("use_flaresolverr")); v == "1" || strings.EqualFold(v, "on") || strings.EqualFold(v, "true") {
-		flareStr = "on"
+	if strings.TrimSpace(h.FlareSolverrURL) != "" {
+		if v := strings.TrimSpace(r.FormValue("use_flaresolverr")); v == "1" || strings.EqualFold(v, "on") || strings.EqualFold(v, "true") {
+			flareStr = "on"
+		}
 	}
 	if err := domains.UpdateHostOverrides(h.Queue.DB, domain,
 		r.FormValue("task_cooldown_seconds"),

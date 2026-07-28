@@ -15,10 +15,10 @@ func TestSeedDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	rootPath := filepath.Join(dir, "library")
-	cfg := config.Config{LibraryRoot: rootPath}
+	cfg := config.Config{InitialRootFolder: rootPath}
 	if err := library.SeedDefaults(d, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestSeedDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	want := []struct{ name, format string }{
 		{library.DefaultProfileName, library.DefaultFormat},
 		{library.Profile1080Name, library.Profile1080Format},
