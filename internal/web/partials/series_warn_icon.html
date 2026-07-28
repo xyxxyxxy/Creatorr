@@ -1,0 +1,8 @@
+{{define "series_warn_icon"}}
+{{/* Virtual series health: error (level 2) overwrites incomplete (level 1). Prefer series_status_indicator. */}}
+{{if eq . "error"}}
+<span class="tooltip tooltip-top inline-flex" data-tip="Active error: download hold on a video, or a source scan/download failure"><i data-lucide="circle-alert" class="size-4 shrink-0 text-error"></i></span>
+{{else if eq . "incomplete"}}
+<span class="tooltip tooltip-top inline-flex" data-tip="Full scan incomplete and no scan schedule"><i data-lucide="calendar-off" class="size-4 shrink-0 text-error"></i></span>
+{{end}}
+{{end}}

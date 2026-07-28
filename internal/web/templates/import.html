@@ -1,0 +1,2054 @@
+{{define "import"}}
+{{template "head" .}}
+{{template "list_panel"}}
+{{template "list_header" (dict
+  "level" "page"
+  "title" "Import"
+  "icon" .Icon
+  "help" "Scan lists every untracked file under the chosen folder. Media and sidecars show as one list item. Match media to an indexed video or create a new one before import."
+)}}
+{{if not .Series}}
+<div role="alert" class="alert alert-info text-sm">
+  <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
+  <span>It is recommended to create the series first and add relevant sources with 'Mark new videos as ignored' enabled before importing, so a video index is available to match the files automatically.</span>
+</div>
+<div class="flex w-full max-w-xl flex-col gap-4 py-6">
+  <div role="alert" class="alert">
+    <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
+    <span>Create a series first. Import needs a series to match or create videos under.</span>
+  </div>
+  <label for="modal-add-series" class="btn btn-primary w-full sm:w-auto">Add series</label>
+</div>
+{{else}}
+<div class="flex flex-col gap-3 w-full">
+  {{template "list_header" (dict "level" "section" "title" "File matching")}}
+  <ol class="list-decimal pl-5 space-y-1 text-sm">
+    <li>
+      Media auto-match.
+      <ol class="list-[lower-alpha] pl-5 space-y-0.5 mt-1">
+        <li>Remote ID: <code class="text-xs">[id]</code> in filename, then <code class="text-xs">info.json</code> <code class="text-xs">id</code>, then sibling <code class="text-xs">.nfo</code> <code class="text-xs">&lt;uniqueid&gt;</code>.</li>
+        <li>Title similarity on cleaned filename basename.</li>
+        <li>Series suggestion from parent folder / basename (series only; pick a video in 'Match').</li>
+      </ol>
+    </li>
+    <li>Sidecars: <code class="text-xs">.nfo</code> / thumb need a same-basename video beside them. Subs match by directory + basename to packed media. <code class="text-xs">info.json</code> helps ID lookup only.</li>
+  </ol>
+  <div role="alert" class="alert alert-info text-sm">
+    <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
+    <span>It is recommended to create the series first and add relevant sources with 'Mark new videos as ignored' enabled before importing, so a video index is available to match the files automatically.</span>
+  </div>
+</div>
+<label class="form-control w-full min-w-0">
+  <div class="label py-1"><span class="label-text text-sm opacity-70">Scan folder</span></div>
+  <div class="join w-full">
+    <select id="import-scan-scope" class="select select-bordered join-item font-mono text-sm grow min-w-0" aria-label="Scan folder">
+      <option value="0" selected>Inbox: {{.ImportPath}}</option>
+      {{range .Roots}}
+      <option value="{{.ID}}">{{if .Name}}{{.Name}}: {{.Path}}{{else}}{{.Path}}{{end}}</option>
+      {{end}}
+    </select>
+    <button type="button" class="btn join-item shrink-0" id="btn-import-rescan" title="Scan again for new files without changing current matches">Rescan</button>
+  </div>
+</label>
+<div class="list-actions flex flex-col gap-3" id="import-bulk">
+  <div id="btn-import-wrap" class="w-full block p-0.5 rounded-[calc(0.125rem+var(--radius-field))]">
+    <button type="button" class="btn btn-primary w-full tooltip tooltip-top" id="btn-import" disabled data-tip="Review ready items, then schedule import">Import</button>
+  </div>
+  <div class="flex flex-wrap items-center gap-3 min-w-0 w-full">
+    <div class="join">
+      <button type="button" class="join-item btn btn-ghost" id="btn-import-auto-match" disabled title="Re-apply scan auto-matches">Auto-match</button>
+      <button type="button" class="join-item btn btn-ghost" id="btn-import-reset-matches" disabled>Reset matches</button>
+      <button type="button" class="join-item btn" id="btn-import-bulk-series">Pick series for all unmatched</button>
+    </div>
+    <label class="label cursor-pointer gap-2 justify-start py-0">
+      <input type="checkbox" class="checkbox checkbox-sm" id="import-filter-unmatched" />
+      <span class="label-text text-sm">Show only unmatched</span>
+    </label>
+  </div>
+</div>
+<div id="status" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm opacity-60 mt-2">
+  <span id="status-scan">Scanning…</span>
+  <span id="status-match" class="text-right"></span>
+</div>
+<div id="import-full-scan-note" role="alert" class="alert alert-warning text-sm mt-2{{if not .IncompleteFullScan}} hidden{{end}}">
+  <i data-lucide="triangle-alert" class="size-5 shrink-0" aria-hidden="true"></i>
+  <span>'Full scan' is incomplete on one or more sources. Not all videos may be indexed yet for auto-match.</span>
+</div>
+<ul id="import-list" class="flex flex-col gap-3 w-full list-none p-0 m-0 mt-2" aria-label="Import candidates"></ul>
+<div id="import-pager" class="hidden flex flex-wrap items-center justify-between gap-2 mt-3">
+  <p class="text-sm opacity-60" id="import-pager-label"></p>
+  <div class="join">
+    <button type="button" class="join-item btn" id="import-prev">Previous</button>
+    <span class="join-item btn btn-ghost no-animation pointer-events-none" id="import-page-label"></span>
+    <button type="button" class="join-item btn" id="import-next">Next</button>
+  </div>
+</div>
+{{end}}
+{{template "list_panel_end"}}
+
+{{if .Series}}
+<input type="checkbox" id="modal-import-summary" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box max-w-3xl w-11/12">
+    <h3 class="font-bold text-lg mb-1">Import summary</h3>
+    <p class="text-sm opacity-70 mb-4">Review ready items, then schedule import.</p>
+    <div id="import-summary-list" class="flex flex-col gap-3 w-full max-h-[60vh] overflow-y-auto" aria-label="Import summary"></div>
+    <p id="import-summary-replace-warn" class="hidden text-sm text-warning mt-3">One or more items replace existing library media. That media (and companion sidecars) will be deleted on import.</p>
+    <div class="modal-action">
+      <label for="modal-import-summary" class="btn">Cancel</label>
+      <button type="button" class="btn btn-secondary" id="btn-import-now">Import now</button>
+      <button type="button" class="btn btn-primary" id="btn-import-now-verify">Import now and verify media</button>
+    </div>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-import-match" class="modal-toggle" />
+<div class="modal">
+  <div id="import-match-box" class="modal-box max-w-4xl w-11/12 h-[90vh] max-h-[90vh] flex flex-col gap-3">
+    <div class="shrink-0">
+      <h3 class="font-bold text-lg mb-1" id="import-match-title-heading">Match to library</h3>
+      <p class="text-sm opacity-70 truncate" id="import-match-file"></p>
+    </div>
+    <input type="search" id="import-match-q" class="input input-bordered w-full shrink-0" placeholder="Filter series and videos" aria-label="Filter series and videos" autocomplete="off" />
+    <label id="import-allow-existing-wrap" class="label cursor-pointer gap-2 justify-start py-0 w-fit tooltip tooltip-top shrink-0" data-tip="When on, the video list includes videos that already have library media. A video can still only be matched to one media import item. Confirming 'Import' deletes existing library media then installs the new file.">
+      <input type="checkbox" class="checkbox checkbox-sm" id="import-allow-existing" />
+      <span class="label-text text-sm">Allow matching existing media</span>
+    </label>
+    <div id="import-match-grid" class="grid gap-3 md:grid-cols-2 min-h-0 flex-1 overflow-hidden">
+      <div class="flex flex-col min-h-0 gap-2">
+        <h4 class="text-sm font-medium opacity-70 shrink-0">Series</h4>
+        <ul id="import-match-series" class="list bg-base-100 rounded-box border border-base-300 overflow-y-auto flex-1 min-h-0" aria-label="Series"></ul>
+      </div>
+      <div id="import-match-videos-col" class="flex flex-col min-h-0 gap-2">
+        <h4 class="text-sm font-medium opacity-70 shrink-0">Videos</h4>
+        <ul id="import-match-videos" class="list bg-base-100 rounded-box border border-base-300 overflow-y-auto flex-1 min-h-0" aria-label="Videos"></ul>
+      </div>
+    </div>
+    <div class="modal-action shrink-0">
+      <button type="button" class="btn" id="btn-import-match-cancel">Cancel</button>
+    </div>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<script>
+const SERIES = {{toJSON .Series}};
+const VIDEOS = {{toJSON .Videos}};
+const CREATE = '__create__';
+const PAGE_SIZE = 50;
+const SIDECAR_ROLES = { nfo:1, json:1, thumb:1, sub:1 };
+const ATTACHABLE_SIDECAR_ROLES = { thumb:1, sub:1 };
+function isAttachableSidecar(c) {
+  // NFO / thumb: only when a same-stem sibling video is beside them (scan sets suggested_video_id).
+  if (c.role === 'nfo' || c.role === 'thumb') return !!c.suggested_video_id;
+  return !!ATTACHABLE_SIDECAR_ROLES[c.role];
+}
+const MEDIA_EXTS = { '.mkv':1, '.mp4':1, '.mov':1, '.webm':1, '.m4v':1 };
+let importCandidates = [];
+let importBundles = [];
+let importPage = 1;
+/** @type {Map<string, {seriesId?: string, videoId?: string, title?: string, remote?: string, handler?: string}>} */
+const importUIState = new Map();
+let pendingImportJobs = [];
+/** True after user edits/clears a match; false after scan or Auto-match (suggestions already applied). */
+let autoMatchStale = false;
+
+function showImportMsg(title, body, opts) {
+  // Close Add series / Add video so the toast is not trapped under them.
+  const addToggle = document.getElementById('modal-add-series');
+  if (addToggle) addToggle.checked = false;
+  const addVideo = document.getElementById('modal-add-video');
+  if (addVideo) addVideo.checked = false;
+  const msg = [title, body].filter((s) => String(s || '').trim()).join(': ');
+  if (typeof window.showFlashToast === 'function') {
+    window.showFlashToast(msg, opts || {});
+    return;
+  }
+  window.alert(msg);
+}
+
+function finishImportMatchSeriesCreate(ser, form) {
+  addSeriesToImportPicker(ser);
+  delete form.dataset.importMatchLock;
+  form.reset();
+  delete form.dataset.addSeriesMode;
+  delete form.dataset.addSeriesStep;
+  const tok = form.querySelector('#add-series-draft-token');
+  if (tok) tok.value = '';
+  const toggle = document.getElementById('modal-add-series');
+  if (toggle) toggle.checked = false;
+  if (typeof window.syncAddSeriesForm === 'function') window.syncAddSeriesForm(form);
+  if (matchCtx) lockSeriesAndResetSearch(ser.id);
+}
+
+document.body.addEventListener('creatorr:series-created', (ev) => {
+  const form = ev.target && ev.target.closest
+    ? ev.target.closest('form.js-add-series-form')
+    : null;
+  const f = form || document.querySelector('form.js-add-series-form');
+  if (!f || f.dataset.importMatchLock !== '1') return;
+  const d = ev.detail || {};
+  if (d.warning) showImportMsg('Add series', d.warning, { warning: true });
+  finishImportMatchSeriesCreate({ id: d.id, title: d.title || '' }, f);
+});
+
+function allowExistingMedia() {
+  return document.getElementById('import-allow-existing')?.checked === true;
+}
+
+function videoHasMedia(id) {
+  if (id == null || id === '' || String(id) === CREATE) return false;
+  const v = VIDEOS.find((x) => Number(x.id) === Number(id));
+  return !!(v && v.has_media);
+}
+
+/** True when another media import row already picked this video (not CREATE). */
+function videoMatchedElsewhere(id, exceptKey) {
+  if (id == null || id === '' || String(id) === CREATE) return false;
+  const want = String(id);
+  for (const b of importBundles) {
+    if (b.kind !== 'media') continue;
+    const key = bundleStateKey(b);
+    if (exceptKey != null && String(key) === String(exceptKey)) continue;
+    const st = getUIState(key);
+    if (st.videoId != null && String(st.videoId) === want) return true;
+  }
+  return false;
+}
+
+function videoThumbURL(v) {
+  if (!v || !v.has_thumb) return '';
+  return '/series/' + v.series_id + '/videos/' + v.id + '/thumb';
+}
+
+function nameMatch(hay, q) {
+  if (!q) return true;
+  return String(hay || '').toLowerCase().includes(q);
+}
+
+function videosForSeries(seriesId, opts) {
+  const forMedia = !!(opts && opts.forMedia);
+  const q = (opts && opts.q != null) ? String(opts.q).trim().toLowerCase() : '';
+  const exceptKey = opts && opts.exceptKey;
+  const sid = seriesId ? Number(seriesId) : null;
+  let list = VIDEOS.filter((v) => !sid || v.series_id === sid);
+  if (forMedia) {
+    // One media import item per indexed video - always hide claims elsewhere.
+    list = list.filter((v) => !videoMatchedElsewhere(v.id, exceptKey));
+    if (!allowExistingMedia()) {
+      list = list.filter((v) => !v.has_media);
+    }
+  } else {
+    // Sidecar Attach: only videos that already have library media.
+    list = list.filter((v) => !!v.has_media);
+  }
+  if (q) {
+    list = list.filter((v) => nameMatch(v.title, q) || nameMatch(v.series_title, q));
+  }
+  return list;
+}
+
+function seriesForQuery(q) {
+  const needle = String(q || '').trim().toLowerCase();
+  if (!needle) return SERIES.slice();
+  return SERIES.filter((s) => nameMatch(s.title, needle));
+}
+
+/** Drop illegal media picks: duplicate claims always; packed media unless allow is on. */
+function scrubMediaVideoPick(st, exceptKey) {
+  if (!st) return st;
+  if (!st.videoId || String(st.videoId) === CREATE) return st;
+  if (videoMatchedElsewhere(st.videoId, exceptKey) ||
+      (!allowExistingMedia() && videoHasMedia(st.videoId))) {
+    st.videoId = '';
+  }
+  return st;
+}
+
+/** Sidecar Attach needs a video that already has packed library media (not CREATE). */
+function scrubSidecarVideoPick(st) {
+  if (!st) return st;
+  if (!st.videoId || String(st.videoId) === CREATE || !videoHasMedia(st.videoId)) {
+    if (st.videoId) st.videoId = '';
+  }
+  return st;
+}
+
+/** Clear other media rows that claim the same video so one file owns it. */
+function claimMediaVideoExclusive(stateKey, videoId) {
+  if (!videoId || String(videoId) === CREATE) return;
+  const claim = String(videoId);
+  importBundles.forEach((b) => {
+    if (b.kind !== 'media') return;
+    const key = bundleStateKey(b);
+    if (String(key) === String(stateKey)) return;
+    const other = getUIState(key);
+    if (other.videoId != null && String(other.videoId) === claim) {
+      other.videoId = '';
+    }
+  });
+}
+
+/** First media row keeps a video id; later duplicates (and packed media when disallowed) are cleared. */
+function scrubAllMediaDuplicateClaims() {
+  const seen = new Set();
+  importBundles.forEach((b) => {
+    if (b.kind !== 'media') return;
+    const st = getUIState(bundleStateKey(b));
+    if (!st.videoId || String(st.videoId) === CREATE) return;
+    const id = String(st.videoId);
+    if (seen.has(id) || (!allowExistingMedia() && videoHasMedia(id))) {
+      st.videoId = '';
+      return;
+    }
+    seen.add(id);
+  });
+}
+
+/** Init media UI state for every bundle, then enforce one video → one media row. */
+function ensureMediaMatchExclusive() {
+  importBundles.forEach((b) => {
+    if (b.kind === 'media') defaultStateForBundle(b);
+  });
+  scrubAllMediaDuplicateClaims();
+}
+
+function optionList(entries, valueKey, labelFn, selected) {
+  return entries.map((e) => {
+    const v = e[valueKey];
+    const sel = selected != null && Number(selected) === Number(v) ? ' selected' : '';
+    return `<option value="${v}"${sel}>${escapeHtml(labelFn(e))}</option>`;
+  }).join('');
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function isSidecar(c) { return !!SIDECAR_ROLES[c.role]; }
+function isVideo(c) { return c.role === 'video'; }
+function isOther(c) { return c.role === 'other' || (!isVideo(c) && !isSidecar(c)); }
+
+/** Mirror library.ClassifyImportFile stem for grouping. */
+function fileStem(filename) {
+  const name = String(filename || '');
+  const lower = name.toLowerCase();
+  const dot = name.lastIndexOf('.');
+  const ext = dot >= 0 ? lower.slice(dot) : '';
+  if (MEDIA_EXTS[ext]) return name.slice(0, name.length - ext.length);
+  if (lower.endsWith('.info.json')) return name.slice(0, name.length - '.info.json'.length);
+  if (ext === '.nfo' || { '.srt':1, '.vtt':1, '.ass':1, '.ssa':1, '.sub':1 }[ext]) {
+    return name.slice(0, name.length - ext.length);
+  }
+  if ({ '.jpg':1, '.jpeg':1, '.png':1, '.webp':1 }[ext]) {
+    let stem = name.slice(0, name.length - ext.length);
+    const ls = stem.toLowerCase();
+    if (ls.endsWith('-thumb')) stem = stem.slice(0, -'-thumb'.length);
+    else if (ls.endsWith('.thumb')) stem = stem.slice(0, -'.thumb'.length);
+    return stem;
+  }
+  return dot >= 0 ? name.slice(0, dot) : name;
+}
+
+/** Mirror library.NormalizeImportGroupStem - casefold + strip [id] for UI groups. */
+function groupStem(stem) {
+  return String(stem || '')
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function stemKey(c) {
+  const path = String(c.path || '').replace(/\\/g, '/');
+  const i = path.lastIndexOf('/');
+  const dir = i >= 0 ? path.slice(0, i) : '';
+  return dir + '\0' + groupStem(fileStem(c.filename || path));
+}
+
+function buildImportBundles(candidates) {
+  const byStem = new Map();
+  const others = [];
+  candidates.forEach((c) => {
+    if (isOther(c)) {
+      others.push({ kind: 'other', files: [c] });
+      return;
+    }
+    const key = stemKey(c);
+    let g = byStem.get(key);
+    if (!g) {
+      g = { key, video: null, sidecars: [] };
+      byStem.set(key, g);
+    }
+    if (isVideo(c)) g.video = c;
+    else g.sidecars.push(c);
+  });
+  const bundles = [];
+  byStem.forEach((g) => {
+    if (g.video) {
+      bundles.push({ kind: 'media', video: g.video, sidecars: g.sidecars });
+      return;
+    }
+    if (!g.sidecars.length) return;
+    const attachable = g.sidecars.filter(isAttachableSidecar);
+    const blocked = g.sidecars.filter((c) => !isAttachableSidecar(c));
+    if (attachable.length) {
+      bundles.push({ kind: 'sidecars', sidecars: attachable });
+    }
+    blocked.forEach((c) => others.push({ kind: 'other', files: [c] }));
+  });
+  bundles.push(...others);
+  return bundles;
+}
+
+function bundlePaths(b) {
+  if (b.kind === 'media') return [b.video.path, ...b.sidecars.map((s) => s.path)];
+  if (b.kind === 'sidecars') return b.sidecars.map((s) => s.path);
+  return b.files.map((f) => f.path);
+}
+
+function bundleStateKey(b) {
+  return bundlePaths(b).join('\0');
+}
+
+function getUIState(key) {
+  let st = importUIState.get(key);
+  if (!st) {
+    st = {};
+    importUIState.set(key, st);
+  }
+  return st;
+}
+
+function seriesLabel(id) {
+  const s = SERIES.find((x) => Number(x.id) === Number(id));
+  return s ? s.title : '';
+}
+
+function videoLabel(id) {
+  if (String(id) === CREATE) return '+ create new video';
+  const v = VIDEOS.find((x) => Number(x.id) === Number(id));
+  return v ? (v.series_title + ': ' + v.title) : '';
+}
+
+function itemReady(kind, st) {
+  const videoId = st.videoId || '';
+  if (kind === 'sidecar') return !!videoId && videoId !== CREATE && videoHasMedia(videoId);
+  if (!videoId) return false;
+  if (videoId === CREATE) {
+    return !!(st.seriesId || '') && !!(st.title || '').trim() && !!(st.upload || '').trim();
+  }
+  return true;
+}
+
+/** Match modal context: key, kind, hints, draft. */
+let matchCtx = null;
+
+function matchActionsHTML(st, kind) {
+  const ready = itemReady(kind, st);
+  const status = ready
+    ? `<span class="tooltip tooltip-top inline-flex shrink-0 text-success" data-tip="matched" aria-label="matched">
+        <i data-lucide="check" class="size-6" aria-hidden="true"></i>
+      </span>`
+    : `<span class="tooltip tooltip-top inline-flex shrink-0 text-warning" data-tip="not matched" aria-label="not matched">
+        <i data-lucide="circle-dashed" class="size-6" aria-hidden="true"></i>
+      </span>`;
+  if (ready) {
+    return `
+    <div class="flex items-center gap-3 shrink-0 self-center">
+      ${status}
+      <button type="button" class="btn btn-soft btn-primary btn-square js-unmatch tooltip tooltip-top" data-tip="Unmatch" aria-label="Unmatch">
+        <i data-lucide="unlink" class="size-5" aria-hidden="true"></i>
+      </button>
+    </div>`;
+  }
+  return `
+    <div class="flex items-center gap-3 shrink-0 self-center">
+      ${status}
+      <button type="button" class="btn btn-primary btn-square js-open-match tooltip tooltip-top" data-tip="Match" aria-label="Match">
+        <i data-lucide="link" class="size-5" aria-hidden="true"></i>
+      </button>
+    </div>`;
+}
+
+function otherActionsHTML() {
+  return `
+    <div class="flex items-center gap-3 shrink-0 self-center">
+      <span class="tooltip tooltip-top inline-flex shrink-0 text-error" data-tip="not importable" aria-label="not importable">
+        <i data-lucide="x" class="size-6" aria-hidden="true"></i>
+      </span>
+      <span class="tooltip tooltip-top inline-flex" data-tip="not importable">
+        <button type="button" class="btn btn-soft btn-primary btn-square" disabled aria-label="Match unavailable">
+          <i data-lucide="link" class="size-5" aria-hidden="true"></i>
+        </button>
+      </span>
+    </div>`;
+}
+
+function closeMatchModal() {
+  document.getElementById('modal-import-match').checked = false;
+  matchCtx = null;
+}
+
+function syncMatchCreateFields() {
+  // Create fields live in Add video modal (Match → Create new video only; scan never auto-CREATE).
+}
+
+function createSeriesListRowHTML() {
+  return `<li class="list-row cursor-pointer" data-create-series role="option">
+    <div class="relative shrink-0">
+      <div class="bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true">
+        <i data-lucide="plus" class="size-5 opacity-60"></i>
+      </div>
+    </div>
+    <div class="list-col-grow min-w-0 font-medium">Create new series</div>
+  </li>`;
+}
+
+function seriesListRowHTML(s, selectedId) {
+  const sel = selectedId && Number(selectedId) === Number(s.id);
+  const img = s.poster_url
+    ? `<img class="size-10 rounded-full object-cover" src="${escapeHtml(s.poster_url)}" alt="" width="40" height="40" loading="lazy" />`
+    : `<div class="bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true"><i data-lucide="tv" class="size-5 opacity-40"></i></div>`;
+  return `<li class="list-row cursor-pointer ${sel ? 'bg-base-200' : ''}" data-series-id="${s.id}" role="option" aria-selected="${sel ? 'true' : 'false'}">
+    <div class="relative shrink-0">${img}</div>
+    <div class="list-col-grow min-w-0 font-medium truncate">${escapeHtml(s.title)}</div>
+  </li>`;
+}
+
+function lockedSeriesRowHTML(s) {
+  const title = s ? s.title : 'Series';
+  const img = s && s.poster_url
+    ? `<img class="size-10 rounded-full object-cover" src="${escapeHtml(s.poster_url)}" alt="" width="40" height="40" loading="lazy" />`
+    : `<div class="bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true"><i data-lucide="tv" class="size-5 opacity-40"></i></div>`;
+  return `<li class="list-row bg-base-200" aria-selected="true">
+    <div class="relative shrink-0">${img}</div>
+    <div class="list-col-grow min-w-0 font-medium truncate">${escapeHtml(title)}</div>
+    <button type="button" class="btn btn-ghost btn-sm btn-square shrink-0 tooltip tooltip-left" data-unlock-series aria-label="Change series" data-tip="Change series">
+      <i data-lucide="x" class="size-4"></i>
+    </button>
+  </li>`;
+}
+
+function videoListRowHTML(v, selectedId, exceptKey) {
+  const sel = selectedId && Number(selectedId) === Number(v.id);
+  const thumb = videoThumbURL(v);
+  const img = thumb
+    ? `<img class="size-full rounded object-cover" src="${escapeHtml(thumb)}" alt="" loading="lazy" />`
+    : `<div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true"><i data-lucide="square-play" class="size-5 opacity-40"></i></div>`;
+  let suffix = '';
+  if (v.has_media) suffix = ' · has media';
+  const meta = escapeHtml(v.series_title) + suffix;
+  return `<li class="list-row cursor-pointer ${sel ? 'bg-base-200' : ''}" data-video-id="${v.id}" role="option" aria-selected="${sel ? 'true' : 'false'}">
+    <div class="relative shrink-0 w-20 aspect-video">${img}</div>
+    <div class="list-col-grow min-w-0">
+      <div class="font-medium truncate">${escapeHtml(v.title)}</div>
+      <div class="text-xs opacity-60 truncate">${meta}</div>
+    </div>
+  </li>`;
+}
+
+function lockedVideoRowHTML(v) {
+  const thumb = v ? videoThumbURL(v) : '';
+  const img = thumb
+    ? `<img class="size-full rounded object-cover" src="${escapeHtml(thumb)}" alt="" loading="lazy" />`
+    : `<div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true"><i data-lucide="square-play" class="size-5 opacity-40"></i></div>`;
+  const title = v ? v.title : 'Video';
+  const meta = v ? (escapeHtml(v.series_title) + (v.has_media ? ' · has media' : '')) : '';
+  return `<li class="list-row bg-base-200" data-video-id="${v ? v.id : ''}" aria-selected="true">
+    <div class="relative shrink-0 w-20 aspect-video">${img}</div>
+    <div class="list-col-grow min-w-0">
+      <div class="font-medium truncate">${escapeHtml(title)}</div>
+      <div class="text-xs opacity-60 truncate">${meta}</div>
+    </div>
+    <button type="button" class="btn btn-ghost btn-sm btn-square shrink-0 tooltip tooltip-left" data-unlock-video aria-label="Change video" data-tip="Change video">
+      <i data-lucide="x" class="size-4"></i>
+    </button>
+  </li>`;
+}
+
+function createListRowHTML(selected) {
+  return `<li class="list-row cursor-pointer ${selected ? 'bg-base-200' : ''}" data-video-id="${CREATE}" role="option" aria-selected="${selected ? 'true' : 'false'}">
+    <div class="relative shrink-0 w-20 aspect-video">
+      <div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true">
+        <i data-lucide="plus" class="size-5 opacity-60"></i>
+      </div>
+    </div>
+    <div class="list-col-grow min-w-0 font-medium">Create new video</div>
+  </li>`;
+}
+
+function renderMatchModalLists() {
+  if (!matchCtx) return;
+  const bulkSeries = matchCtx.kind === 'bulk-series';
+  const qEl = document.getElementById('import-match-q');
+  const q = qEl?.value || '';
+  const draft = matchCtx.draft;
+  const seriesList = document.getElementById('import-match-series');
+  const videoList = document.getElementById('import-match-videos');
+  const videosCol = document.getElementById('import-match-videos-col');
+  const grid = document.getElementById('import-match-grid');
+  const box = document.getElementById('import-match-box');
+  const seriesLocked = !!draft.seriesId;
+  // CREATE is a draft intent, not a locked library pick - keep the video list open.
+  const videoLocked = !!draft.videoId && String(draft.videoId) !== CREATE;
+  if (box) {
+    // Series-only picker (bulk) is one column - half width of the two-pane Match modal.
+    box.classList.toggle('max-w-4xl', !bulkSeries);
+    box.classList.toggle('max-w-2xl', bulkSeries);
+  }
+  if (grid) grid.classList.toggle('md:grid-cols-2', !bulkSeries);
+  if (videosCol) videosCol.classList.toggle('hidden', bulkSeries);
+  if (qEl) {
+    const ph = bulkSeries
+      ? 'Filter series'
+      : (videoLocked ? 'Video selected' : 'Filter series and videos');
+    qEl.placeholder = ph;
+    qEl.setAttribute('aria-label', ph);
+    qEl.disabled = !bulkSeries && videoLocked;
+  }
+  if (seriesLocked) {
+    const s = SERIES.find((x) => Number(x.id) === Number(draft.seriesId));
+    seriesList.innerHTML = lockedSeriesRowHTML(s);
+  } else {
+    const series = seriesForQuery(q);
+    // Sidecar Attach needs an existing series with packed media - no Create new series.
+    let html = matchCtx.kind === 'sidecar' ? '' : createSeriesListRowHTML();
+    if (series.length) {
+      html += series.map((s) => seriesListRowHTML(s, draft.seriesId)).join('');
+    } else if (String(q || '').trim()) {
+      html += '<li class="list-row"><span class="opacity-60 text-sm px-2">No series match</span></li>';
+    } else if (!html) {
+      html += '<li class="list-row"><span class="opacity-60 text-sm px-2">No series</span></li>';
+    }
+    seriesList.innerHTML = html;
+  }
+  const forMedia = matchCtx.kind === 'media';
+  const allowWrap = document.getElementById('import-allow-existing-wrap');
+  if (allowWrap) allowWrap.classList.toggle('hidden', !forMedia);
+  if (bulkSeries) {
+    lucideRefresh(seriesList);
+    return;
+  }
+  if (videoLocked) {
+    const v = VIDEOS.find((x) => String(x.id) === String(draft.videoId));
+    videoList.innerHTML = lockedVideoRowHTML(v);
+  } else {
+    let videos = [];
+    const exceptKey = matchCtx.key;
+    if (draft.seriesId) {
+      videos = videosForSeries(draft.seriesId, { forMedia, q, exceptKey });
+    } else if (String(q || '').trim()) {
+      videos = videosForSeries(null, { forMedia, q, exceptKey });
+    }
+    let html = '';
+    // Create only for media Match (sidecar Attach needs an existing packed video).
+    if (forMedia) {
+      html += createListRowHTML(String(draft.videoId) === CREATE);
+    }
+    if (videos.length) {
+      html += videos.map((v) => videoListRowHTML(v, '', exceptKey)).join('');
+    } else if (!draft.seriesId && !String(q || '').trim()) {
+      html += '<li class="list-row"><span class="opacity-60 text-sm px-2">Pick a series or search</span></li>';
+    } else {
+      html += '<li class="list-row"><span class="opacity-60 text-sm px-2">No videos match</span></li>';
+    }
+    videoList.innerHTML = html;
+  }
+  videoList.classList.add('flex-1');
+  videoList.classList.remove('shrink-0');
+  lucideRefresh(seriesList);
+  lucideRefresh(videoList);
+}
+
+function lockSeriesAndResetSearch(seriesId) {
+  if (!matchCtx) return;
+  matchCtx.draft.seriesId = String(seriesId || '');
+  if (matchCtx.draft.videoId && String(matchCtx.draft.videoId) !== CREATE &&
+      !videoBelongsToSeries(matchCtx.draft.videoId, matchCtx.draft.seriesId)) {
+    matchCtx.draft.videoId = '';
+  }
+  const qEl = document.getElementById('import-match-q');
+  if (qEl) qEl.value = '';
+  if (matchCtx.kind === 'bulk-series' && matchCtx.draft.seriesId) {
+    applyBulkSeriesToMissing(matchCtx.draft.seriesId);
+    closeMatchModal();
+    return;
+  }
+  renderMatchModalLists();
+}
+
+function addSeriesToImportPicker(ser) {
+  if (!ser || ser.id == null) return;
+  const id = Number(ser.id);
+  const title = String(ser.title || '');
+  const idx = SERIES.findIndex((x) => Number(x.id) === id);
+  const row = { id, title, poster_url: ser.poster_url || '' };
+  if (idx >= 0) SERIES[idx] = { ...SERIES[idx], ...row };
+  else SERIES.push(row);
+  SERIES.sort((a, b) => String(a.title).localeCompare(String(b.title)));
+}
+
+function openAddSeriesForImportMatch() {
+  const toggle = document.getElementById('modal-add-series');
+  const form = document.querySelector('form.js-add-series-form');
+  if (!toggle || !form) return;
+  form.dataset.importMatchLock = '1';
+  form.reset();
+  delete form.dataset.addSeriesMode;
+  delete form.dataset.addSeriesStep;
+  const tok = form.querySelector('#add-series-draft-token');
+  if (tok) tok.value = '';
+  if (typeof window.setAddSeriesFetchErr === 'function') window.setAddSeriesFetchErr(form, '');
+  else {
+    const errEl = form.querySelector('.js-add-series-fetch-err');
+    if (errEl) {
+      const span = errEl.querySelector('span');
+      if (span) span.textContent = '';
+      errEl.classList.add('hidden');
+    }
+  }
+  if (typeof window.clearFormControlValidity === 'function') window.clearFormControlValidity(form);
+  if (typeof window.syncAddSeriesForm === 'function') window.syncAddSeriesForm(form);
+  toggle.checked = true;
+}
+
+function setAddVideoAlert(form, msg) {
+  const errEl = form?.querySelector('.js-add-video-fetch-err');
+  if (!errEl) return;
+  const span = errEl.querySelector('span');
+  if (span) span.textContent = msg || '';
+  errEl.classList.toggle('hidden', !msg);
+}
+
+function setAddVideoFetchErr(form, msg) {
+  if (!form) return;
+  if (typeof window.clearFormControlValidity === 'function') window.clearFormControlValidity(form);
+  const text = String(msg || '').trim();
+  if (!text) {
+    setAddVideoAlert(form, '');
+    return;
+  }
+  const lower = text.toLowerCase();
+  let field = null;
+  if (/\burl\b/.test(lower) && /required|valid|fetch/.test(lower)) {
+    field = form.querySelector('#add-video-url');
+  } else if (/\btitle\b/.test(lower) && /required/.test(lower)) {
+    field = form.querySelector('#add-video-title');
+  } else if (/upload date/.test(lower) && /required/.test(lower)) {
+    field = form.querySelector('#add-video-upload');
+  } else if (/title and upload date are required/.test(lower)) {
+    const titleEl = form.querySelector('#add-video-title');
+    const uploadEl = form.querySelector('#add-video-upload');
+    if (titleEl && !String(titleEl.value || '').trim() && typeof window.setControlValidity === 'function') {
+      window.setControlValidity(titleEl, 'Title is required');
+    }
+    if (uploadEl && !String(uploadEl.value || '').trim() && typeof window.setControlValidity === 'function') {
+      window.setControlValidity(uploadEl, 'Upload date is required');
+    }
+    setAddVideoAlert(form, '');
+    (titleEl || uploadEl)?.focus();
+    return;
+  } else if (/remote_id|already exists/.test(lower)) {
+    field = form.querySelector('#add-video-url') || form.querySelector('#add-video-title');
+  }
+  if (field && typeof window.setControlValidity === 'function') {
+    window.setControlValidity(field, text);
+    setAddVideoAlert(form, '');
+    try { field.focus(); } catch (_) {}
+    return;
+  }
+  setAddVideoAlert(form, text);
+}
+
+function setAddVideoBusy(form, busy) {
+  const fetchBtn = form?.querySelector('.js-add-video-fetch');
+  const submit = form?.querySelector('.js-add-video-submit');
+  const fetching = form?.querySelector('.js-add-video-fetching');
+  const fields = form?.querySelector('.js-add-video-fields');
+  const urlEl = form?.querySelector('#add-video-url');
+  if (fetchBtn) fetchBtn.disabled = !!busy;
+  if (submit) submit.disabled = !!busy;
+  if (urlEl) urlEl.disabled = !!busy;
+  if (fetching) fetching.classList.toggle('hidden', !busy);
+  if (fields) fields.classList.toggle('opacity-50', !!busy);
+}
+
+function setAddVideoRemoteDisplay(form, remoteId, note) {
+  const hidden = form.querySelector('#add-video-remote-id');
+  const display = form.querySelector('#add-video-remote-display');
+  const noteEl = form.querySelector('#add-video-remote-note');
+  const id = String(remoteId || '').trim();
+  if (hidden) hidden.value = id;
+  if (display) {
+    if (id) {
+      display.textContent = id;
+      display.classList.remove('opacity-60');
+    } else {
+      display.innerHTML = '<span class="opacity-60">-</span>';
+    }
+  }
+  if (noteEl) noteEl.textContent = note || '';
+}
+
+async function pollAddVideoPrefetch(tid) {
+  const deadline = Date.now() + 120000;
+  while (Date.now() < deadline) {
+    const res = await fetch('/actions/add-video-prefetch/' + encodeURIComponent(tid), {
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || ('Status failed (' + res.status + ')'));
+    }
+    if (data.error) return data;
+    if (data.status === 'done') return data;
+    if (data.status === 'failed' || data.status === 'cancelled') {
+      return { error: data.error || 'Prefetch failed' };
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  return { error: 'Fetch timed out' };
+}
+
+function openAddVideoForImportMatch() {
+  if (!matchCtx || !matchCtx.draft.seriesId) return;
+  const toggle = document.getElementById('modal-add-video');
+  const form = document.querySelector('form.js-add-video-form');
+  if (!toggle || !form) return;
+  form.dataset.addVideoSeriesId = String(matchCtx.draft.seriesId);
+  form.querySelector('#add-video-draft-token').value = '';
+  setAddVideoFetchErr(form, '');
+  setAddVideoBusy(form, false);
+  const hints = matchCtx.hints || {};
+  const urlEl = form.querySelector('#add-video-url');
+  if (urlEl) urlEl.value = hints.suggested_webpage_url || '';
+  const titleEl = form.querySelector('#add-video-title');
+  if (titleEl) titleEl.value = matchCtx.draft.title || hints.suggested_title || '';
+  const uploadEl = form.querySelector('#add-video-upload');
+  if (uploadEl) {
+    uploadEl.value = matchCtx.draft.upload || uploadDateInputValue(hints.suggested_upload_date) || '';
+  }
+  const uploadNote = form.querySelector('#add-video-upload-note');
+  if (uploadNote) {
+    uploadNote.textContent = hints.suggested_upload_date_from_mtime ? '(file date)' : (hints.suggested_upload_date ? '(from file)' : '');
+  }
+  const remote = matchCtx.draft.remote || hints.suggested_remote_id || '';
+  setAddVideoRemoteDisplay(form, remote, hints.suggested_remote_id_generated ? '(generated)' : (remote ? '(from file)' : '(generated on add)'));
+  toggle.checked = true;
+  requestAnimationFrame(() => {
+    if (urlEl && urlEl.value) urlEl.focus();
+    else titleEl?.focus();
+  });
+}
+
+function addVideoToImportPicker(v, seriesId) {
+  if (!v || v.id == null) return;
+  const id = Number(v.id);
+  const series = SERIES.find((x) => Number(x.id) === Number(seriesId));
+  const row = {
+    id,
+    series_id: Number(seriesId),
+    title: String(v.title || ''),
+    series_title: series ? series.title : '',
+    status: v.status || 'ignored',
+    has_media: false,
+    has_thumb: false,
+  };
+  const idx = VIDEOS.findIndex((x) => Number(x.id) === id);
+  if (idx >= 0) VIDEOS[idx] = { ...VIDEOS[idx], ...row };
+  else VIDEOS.push(row);
+  VIDEOS.sort((a, b) => {
+    const st = String(a.series_title).localeCompare(String(b.series_title));
+    if (st) return st;
+    return String(a.title).localeCompare(String(b.title));
+  });
+}
+
+function finishImportMatchVideoCreate(v, form) {
+  if (!matchCtx || !v || v.id == null) return;
+  const seriesId = form?.dataset?.addVideoSeriesId || matchCtx.draft.seriesId;
+  addVideoToImportPicker(v, seriesId);
+  matchCtx.draft.videoId = String(v.id);
+  matchCtx.draft.seriesId = String(seriesId || matchCtx.draft.seriesId || '');
+  matchCtx.draft.title = v.title || matchCtx.draft.title || '';
+  matchCtx.draft.remote = v.remote_id || matchCtx.draft.remote || '';
+  matchCtx.draft.upload = uploadDateInputValue(v.upload_date) || matchCtx.draft.upload || '';
+  const toggle = document.getElementById('modal-add-video');
+  if (toggle) toggle.checked = false;
+  applyMatchModal();
+}
+
+async function submitAddVideoForImportMatch(form) {
+  const submitBtn = form.querySelector('.js-add-video-submit');
+  if (submitBtn) submitBtn.disabled = true;
+  setAddVideoFetchErr(form, '');
+  try {
+    const seriesId = Number(form.dataset.addVideoSeriesId || 0);
+    if (!seriesId) {
+      setAddVideoFetchErr(form, 'Series is required');
+      return;
+    }
+    const draftToken = String(form.querySelector('#add-video-draft-token')?.value || '').trim();
+    const title = String(form.querySelector('#add-video-title')?.value || '').trim();
+    const upload = String(form.querySelector('#add-video-upload')?.value || '').trim();
+    const remote = String(form.querySelector('#add-video-remote-id')?.value || '').trim();
+    const payload = {};
+    if (draftToken) {
+      payload.draft_token = draftToken;
+      if (title) payload.title = title;
+      if (upload) payload.upload_date = uploadDateToRFC(upload) || upload;
+    } else {
+      if (!title || !upload) {
+        setAddVideoFetchErr(form, 'Title and upload date are required without a Fetch URL draft');
+        return;
+      }
+      payload.title = title;
+      payload.upload_date = uploadDateToRFC(upload) || upload;
+      if (remote) payload.remote_id = remote;
+    }
+    const res = await fetch('/api/series/' + encodeURIComponent(seriesId) + '/videos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+      credentials: 'same-origin',
+    });
+    let data = null;
+    try { data = await res.json(); } catch (_) { data = null; }
+    if (!res.ok) {
+      const msg = (data && (data.message || data.error)) || ('Create video failed (' + res.status + ')');
+      setAddVideoFetchErr(form, msg);
+      return;
+    }
+    if (!data || data.id == null) {
+      setAddVideoFetchErr(form, 'Create video failed: invalid response');
+      return;
+    }
+    finishImportMatchVideoCreate(data, form);
+  } catch (err) {
+    setAddVideoFetchErr(form, err && err.message ? err.message : String(err));
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+function unlockSeries() {
+  if (!matchCtx) return;
+  matchCtx.draft.seriesId = '';
+  matchCtx.draft.videoId = '';
+  const qEl = document.getElementById('import-match-q');
+  if (qEl) {
+    qEl.value = '';
+    qEl.disabled = false;
+  }
+  renderMatchModalLists();
+}
+
+function unlockVideo() {
+  if (!matchCtx) return;
+  matchCtx.draft.videoId = '';
+  const qEl = document.getElementById('import-match-q');
+  if (qEl) {
+    qEl.value = '';
+    qEl.disabled = false;
+  }
+  renderMatchModalLists();
+}
+
+function uploadDateInputValue(rfc) {
+  const m = String(rfc || '').match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : '';
+}
+
+function uploadDateToRFC(dateStr) {
+  const d = String(dateStr || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '';
+  return d + 'T00:00:00Z';
+}
+
+function openMatchModal(key, kind, hints) {
+  const st = getUIState(key);
+  if (kind === 'media') scrubMediaVideoPick(st, key);
+  matchCtx = {
+    key,
+    kind,
+    hints: hints || {},
+    draft: {
+      seriesId: st.seriesId || '',
+      videoId: st.videoId || '',
+      title: st.title || hints.suggested_title || '',
+      remote: st.remote || hints.suggested_remote_id || '',
+      upload: st.upload || uploadDateInputValue(hints.suggested_upload_date) || '',
+      handler: st.handler || hints.suggested_handler_id || 'yt-dlp',
+    },
+  };
+  const heading = document.getElementById('import-match-title-heading');
+  if (heading) heading.textContent = 'Match to library';
+  document.getElementById('import-match-file').textContent = hints.filename || '';
+  const qEl = document.getElementById('import-match-q');
+  qEl.value = '';
+  qEl.disabled = false;
+  renderMatchModalLists();
+  document.getElementById('modal-import-match').checked = true;
+  if (!qEl.disabled) {
+    // Defer so focus sticks after modal becomes visible.
+    requestAnimationFrame(() => {
+      qEl.focus();
+      qEl.select();
+    });
+  }
+}
+
+function openBulkSeriesMatchModal() {
+  matchCtx = {
+    key: '',
+    kind: 'bulk-series',
+    hints: {},
+    draft: { seriesId: '', videoId: '', title: '', remote: '', upload: '', handler: '' },
+  };
+  const heading = document.getElementById('import-match-title-heading');
+  if (heading) heading.textContent = 'Pick series';
+  const n = countBundlesMissingSeries();
+  document.getElementById('import-match-file').textContent =
+    n === 1
+      ? 'Apply to 1 import item with no series'
+      : 'Apply to ' + n + ' import items with no series';
+  const qEl = document.getElementById('import-match-q');
+  qEl.value = '';
+  qEl.disabled = false;
+  renderMatchModalLists();
+  document.getElementById('modal-import-match').checked = true;
+  requestAnimationFrame(() => {
+    qEl.focus();
+    qEl.select();
+  });
+}
+
+function applyMatchModal() {
+  if (!matchCtx) return;
+  if (matchCtx.kind === 'bulk-series') {
+    if (!matchCtx.draft.seriesId) return;
+    applyBulkSeriesToMissing(matchCtx.draft.seriesId);
+    closeMatchModal();
+    return;
+  }
+  syncMatchCreateFields();
+  if (!itemReady(matchCtx.kind, matchCtx.draft)) return;
+  const st = getUIState(matchCtx.key);
+  st.seriesId = matchCtx.draft.seriesId || '';
+  st.videoId = matchCtx.draft.videoId || '';
+  st.title = matchCtx.draft.title || '';
+  st.remote = matchCtx.draft.remote || '';
+  st.upload = matchCtx.draft.upload || '';
+  st.handler = matchCtx.draft.handler || '';
+  if (matchCtx.kind === 'media') {
+    scrubMediaVideoPick(st, matchCtx.key);
+    if (st.videoId && String(st.videoId) !== CREATE) {
+      claimMediaVideoExclusive(matchCtx.key, st.videoId);
+    }
+  } else if (matchCtx.kind === 'sidecar') {
+    scrubSidecarVideoPick(st);
+  }
+  markAutoMatchStale();
+  closeMatchModal();
+  renderImportPage();
+}
+
+function wireMatchOpener(el, kind, hints) {
+  el.querySelector('.js-open-match')?.addEventListener('click', () => {
+    openMatchModal(el.dataset.stateKey, kind, hints);
+  });
+  el.querySelector('.js-unmatch')?.addEventListener('click', () => {
+    clearBundleMatch(el.dataset.stateKey);
+    renderImportPage();
+  });
+}
+
+/** Clear series/video pick for one list item (empty strings override scan suggestions). */
+function clearBundleMatch(stateKey) {
+  if (!stateKey) return;
+  const st = getUIState(stateKey);
+  st.seriesId = '';
+  st.videoId = '';
+  st.title = '';
+  st.remote = '';
+  st.upload = '';
+  st.handler = '';
+  markAutoMatchStale();
+}
+
+function clearAllMatches() {
+  syncVisibleItemState();
+  importBundles = buildImportBundles(importCandidates);
+  importBundles.forEach((b) => {
+    if (b.kind === 'other') return;
+    clearBundleMatch(bundleStateKey(b));
+  });
+  renderImportPage();
+}
+
+/** Importable bundles the last scan suggested a series and/or video for. */
+function countSuggestedAutoMatches() {
+  let n = 0;
+  importBundles.forEach((b) => {
+    if (b.kind === 'media') {
+      const c = b.video;
+      if (c && (c.suggested_video_id || c.suggested_series_id)) n++;
+      return;
+    }
+    if (b.kind === 'sidecars') {
+      if ((b.sidecars || []).some((s) => s.suggested_video_id)) n++;
+    }
+  });
+  return n;
+}
+
+function notifyAutoMatchCount(n) {
+  if (n <= 0) {
+    showImportMsg('Auto-match', 'No auto matches found.', { warning: true });
+    return;
+  }
+  showImportMsg('Auto-match', n === 1 ? '1 auto match found.' : (n + ' auto matches found.'));
+}
+
+/** Drop UI overrides and re-seed each bundle from the last scan's suggested_* fields. */
+function applyAutoMatch() {
+  if (!autoMatchStale || !importCandidates.length) return;
+  syncVisibleItemState();
+  importBundles = buildImportBundles(importCandidates);
+  importBundles.forEach((b) => {
+    if (b.kind === 'other') return;
+    importUIState.delete(bundleStateKey(b));
+    defaultStateForBundle(b);
+  });
+  ensureMediaMatchExclusive();
+  autoMatchStale = false;
+  renderImportPage();
+  notifyAutoMatchCount(countSuggestedAutoMatches());
+}
+
+function markAutoMatchStale() {
+  autoMatchStale = true;
+  updateAutoMatchBtn();
+}
+
+function bundleHasMatchPick(b) {
+  if (b.kind === 'other') return false;
+  const st = defaultStateForBundle(b);
+  return !!(st.seriesId || st.videoId);
+}
+
+function updateResetMatchesBtn() {
+  const btn = document.getElementById('btn-import-reset-matches');
+  if (!btn) return;
+  btn.disabled = !importBundles.some(bundleHasMatchPick);
+}
+
+function updateAutoMatchBtn() {
+  const btn = document.getElementById('btn-import-auto-match');
+  if (!btn) return;
+  btn.disabled = !autoMatchStale || !importCandidates.length;
+}
+
+function actionLabel(c) {
+  if (isSidecar(c)) return 'Attach';
+  return c.source === 'library' ? 'Bind' : 'Import';
+}
+
+function fileNameTip(c) {
+  return escapeHtml(c.filename || '');
+}
+
+function fileCell(c) {
+  return `<span class="tooltip tooltip-top text-left" data-tip="${fileNameTip(c)}"><code class="text-xs">${escapeHtml(c.filename)}</code></span>`;
+}
+
+/** Mirror web.sidecarKindIcon / sidecarKindLabel for import roles. */
+function roleIcon(role) {
+  switch (String(role || '')) {
+    case 'video': return 'film';
+    case 'nfo': return 'file-text';
+    case 'json': return 'braces';
+    case 'thumb': return 'image';
+    case 'sub': return 'captions';
+    case 'sponsorblock': return 'scissors';
+    default: return 'file';
+  }
+}
+
+function roleLabel(role) {
+  switch (String(role || '')) {
+    case 'video': return 'Video';
+    case 'nfo': return 'NFO';
+    case 'json': return 'info.json';
+    case 'thumb': return 'Thumbnail';
+    case 'sub': return 'Subtitle';
+    case 'sponsorblock': return 'SponsorBlock';
+    default: return role || 'other';
+  }
+}
+
+/** Icon role mark; tooltip = filename. */
+function roleIconMark(c) {
+  const role = c.role || 'video';
+  const name = fileNameTip(c);
+  const label = escapeHtml(roleLabel(role)) + (name ? ': ' + name : '');
+  return `<span class="tooltip tooltip-top inline-flex shrink-0" data-tip="${name}" aria-label="${label}">
+    <i data-lucide="${roleIcon(role)}" class="size-4 opacity-70" aria-hidden="true"></i>
+  </span>`;
+}
+
+function filesStack(primary, sidecars) {
+  let html = `<div class="flex flex-wrap items-center gap-1.5 text-xs min-w-0">
+    ${roleIconMark(primary)}
+    <span class="min-w-0">${fileCell(primary)}</span>`;
+  if (sidecars && sidecars.length) {
+    const n = sidecars.length;
+    html += `<span class="opacity-50 px-0.5" aria-hidden="true">+</span>`;
+    html += `<span class="opacity-60">${n} sidecar${n === 1 ? '' : 's'}</span>`;
+    sidecars.forEach((s) => {
+      html += roleIconMark(s);
+    });
+  }
+  html += `</div>`;
+  return html;
+}
+
+function matchNote(c, emptyText) {
+  if (c && c.match_label) {
+    return `<span class="opacity-60 text-xs">${escapeHtml(c.match_label)}</span>`;
+  }
+  return `<span class="opacity-60 text-xs">${escapeHtml(emptyText || 'no match')}</span>`;
+}
+
+/** Match note from current UI state (updates after Match applies a pick). */
+function stateMatchNote(kind, st, c, emptyText) {
+  const readyKind = kind === 'sidecars' ? 'sidecar' : kind;
+  const autoVid = c && c.suggested_video_id != null ? String(c.suggested_video_id) : '';
+  const autoSeries = c && c.suggested_series_id != null ? String(c.suggested_series_id) : '';
+  if (!itemReady(readyKind, st)) {
+    // Series-only (scan or bulk): keep series note; video still needs a pick in Match.
+    if (readyKind === 'media' && st.seriesId && !st.videoId) {
+      if (autoSeries && String(st.seriesId) === autoSeries && c && c.match_label) {
+        return matchNote(c, emptyText);
+      }
+      const series = seriesLabel(st.seriesId) || 'series';
+      return `<span class="opacity-60 text-xs">${escapeHtml('Series: ' + series + ' - pick a video')}</span>`;
+    }
+    return matchNote(null, emptyText);
+  }
+  if (String(st.videoId) === CREATE) {
+    const series = seriesLabel(st.seriesId) || 'series';
+    const title = (st.title || '').trim() || 'New video';
+    return `<span class="opacity-60 text-xs">${escapeHtml('Create new video: ' + title + ' on ' + series)}</span>`;
+  }
+  if (autoVid && String(st.videoId) === autoVid && c && c.match_label) {
+    return matchNote(c, emptyText);
+  }
+  const v = VIDEOS.find((x) => String(x.id) === String(st.videoId));
+  const series = (v && v.series_title) || seriesLabel(st.seriesId) || 'series';
+  const title = (v && v.title) || 'video';
+  const prefix = kind === 'sidecar' || kind === 'sidecars' ? 'Attach to ' : 'Matched to ';
+  return `<span class="opacity-60 text-xs">${escapeHtml(prefix + series + ' / ' + title)}</span>`;
+}
+
+function metaLine(html) {
+  if (!html) return '';
+  return `<div class="flex flex-wrap items-center gap-2">${html}</div>`;
+}
+
+function defaultStateForBundle(b) {
+  const key = bundleStateKey(b);
+  const st = getUIState(key);
+  if (st.videoId != null || st.seriesId != null) {
+    if (b.kind === 'media') scrubMediaVideoPick(st, key);
+    else if (b.kind === 'sidecars') scrubSidecarVideoPick(st);
+    return st;
+  }
+  if (b.kind === 'media') {
+    const c = b.video;
+    st.seriesId = c.suggested_series_id ? String(c.suggested_series_id) : '';
+    if (c.suggested_video_id) st.videoId = String(c.suggested_video_id);
+    else st.videoId = '';
+    scrubMediaVideoPick(st, key);
+    st.title = c.suggested_title || '';
+    st.remote = c.suggested_remote_id || '';
+    st.upload = uploadDateInputValue(c.suggested_upload_date) || '';
+    st.handler = c.suggested_handler_id || 'yt-dlp';
+  } else if (b.kind === 'sidecars') {
+    const lead = b.sidecars.find((s) => s.suggested_video_id) || b.sidecars[0];
+    st.seriesId = lead.suggested_series_id ? String(lead.suggested_series_id) : '';
+    st.videoId = lead.suggested_video_id ? String(lead.suggested_video_id) : '';
+    scrubSidecarVideoPick(st);
+  }
+  return st;
+}
+
+function collectReadyJobs() {
+  ensureMediaMatchExclusive();
+  const jobs = [];
+  importBundles.forEach((b) => {
+    if (b.kind === 'other') return;
+    const key = bundleStateKey(b);
+    const st = defaultStateForBundle(b);
+    if (!itemReady(b.kind === 'sidecars' ? 'sidecar' : 'media', st)) return;
+    if (b.kind === 'sidecars') {
+      const lead = b.sidecars[0];
+      jobs.push({
+        kind: 'sidecars',
+        action: 'Attach',
+        key,
+        videoId: Number(st.videoId),
+        paths: b.sidecars.map((s) => s.path),
+        remove: b.sidecars.map((s) => s.path),
+        seriesLabel: seriesLabel(st.seriesId),
+        videoLabel: videoLabel(st.videoId),
+        primary: lead,
+        sidecars: b.sidecars.slice(1),
+        roleLabel: 'sidecar',
+        sidecarCount: b.sidecars.length,
+        matchHtml: stateMatchNote('sidecar', st, lead, 'manual match'),
+        seriesId: st.seriesId,
+        st,
+      });
+      return;
+    }
+    const c = b.video;
+    const replace = String(st.videoId) !== CREATE && videoHasMedia(st.videoId);
+    jobs.push({
+      kind: 'media',
+      action: replace ? 'Replace' : actionLabel(c),
+      key,
+      path: c.path,
+      remove: bundlePaths(b),
+      seriesId: st.seriesId,
+      videoId: st.videoId,
+      title: (st.title || '').trim(),
+      remote: (st.remote || '').trim(),
+      upload: (st.upload || '').trim(),
+      handler: (st.handler || '').trim(),
+      replace,
+      seriesLabel: seriesLabel(st.seriesId),
+      videoLabel: videoLabel(st.videoId),
+      primary: c,
+      sidecars: b.sidecars,
+      roleLabel: 'video',
+      sidecarCount: b.sidecars.length,
+      matchHtml: stateMatchNote('media', st, c, 'manual match'),
+      st,
+    });
+  });
+  return jobs;
+}
+
+function updateImportBtn() {
+  const n = collectReadyJobs().length;
+  const btn = document.getElementById('btn-import');
+  const wrap = document.getElementById('btn-import-wrap');
+  if (!btn) return;
+  btn.disabled = n === 0;
+  btn.textContent = n === 0 ? 'Import' : 'Import (' + n + ')';
+  if (wrap) {
+    // daisyUI aura-rainbow when every importable item is matched (ignore listed-only).
+    // https://daisyui.com/components/aura/#aura-rainbow
+    // Wrap keeps p-0.5 always (= aura-md --aura-padding) so toggling does not jump layout.
+    const allReady = allImportableMatched();
+    wrap.classList.toggle('aura', allReady);
+    wrap.classList.toggle('aura-rainbow', allReady);
+  }
+  updateMatchStatus();
+  updateBulkSeriesBtn();
+  updateResetMatchesBtn();
+  updateAutoMatchBtn();
+}
+
+/** True when every media/sidecar Attach row is matched; skips non-importable rows. */
+function allImportableMatched() {
+  let n = 0;
+  for (const b of importBundles) {
+    if (b.kind === 'other') continue;
+    n++;
+    const kind = b.kind === 'sidecars' ? 'sidecar' : 'media';
+    if (!itemReady(kind, defaultStateForBundle(b))) return false;
+  }
+  return n > 0;
+}
+
+function syncVisibleItemState() {
+  // Match state lives in importUIState (modal), not inline controls.
+}
+
+function videoBelongsToSeries(videoId, seriesId) {
+  if (!videoId || !seriesId || String(videoId) === CREATE) return false;
+  const v = VIDEOS.find((x) => Number(x.id) === Number(videoId));
+  return !!(v && Number(v.series_id) === Number(seriesId));
+}
+
+/** Apply one series to importable items that have no series yet. */
+function applyBulkSeriesToMissing(seriesId) {
+  syncVisibleItemState();
+  importBundles = buildImportBundles(importCandidates);
+  seriesId = String(seriesId || '');
+  if (!seriesId) return;
+  let changed = false;
+  importBundles.forEach((b) => {
+    if (b.kind === 'other') return;
+    const st = defaultStateForBundle(b);
+    if (st.seriesId) return;
+    st.seriesId = seriesId;
+    if (st.videoId && String(st.videoId) !== CREATE && !videoBelongsToSeries(st.videoId, seriesId)) {
+      st.videoId = '';
+    }
+    changed = true;
+  });
+  if (changed) markAutoMatchStale();
+  renderImportPage();
+}
+
+function countBundlesMissingSeries() {
+  importBundles = buildImportBundles(importCandidates);
+  let n = 0;
+  importBundles.forEach((b) => {
+    if (b.kind === 'other') return;
+    if (!defaultStateForBundle(b).seriesId) n++;
+  });
+  return n;
+}
+
+function updateBulkSeriesBtn() {
+  const btn = document.getElementById('btn-import-bulk-series');
+  if (!btn) return;
+  const n = countBundlesMissingSeries();
+  btn.disabled = n === 0;
+}
+
+function importTotalPages(list) {
+  const n = (list || importBundles).length;
+  return Math.max(1, Math.ceil(n / PAGE_SIZE));
+}
+
+/** True when item has no ready video/create target (includes non-importable). */
+function bundleUnmatched(b) {
+  if (b.kind === 'other') return true;
+  const st = defaultStateForBundle(b);
+  const kind = b.kind === 'sidecars' ? 'sidecar' : 'media';
+  return !itemReady(kind, st);
+}
+
+function unmatchedFilterOn() {
+  return document.getElementById('import-filter-unmatched')?.checked === true;
+}
+
+function visibleImportBundles() {
+  if (!unmatchedFilterOn()) return importBundles;
+  return importBundles.filter(bundleUnmatched);
+}
+
+function listFilterNote(visibleLen) {
+  if (!unmatchedFilterOn()) return '';
+  return ' (unmatched: ' + visibleLen + ' of ' + importBundles.length + ')';
+}
+
+function listFilterEmptyLabel() {
+  return unmatchedFilterOn() ? 'No unmatched items' : 'No items';
+}
+
+function importListEl() {
+  return document.getElementById('import-list');
+}
+
+function lucideRefresh(root) {
+  if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    root.querySelectorAll('i[data-lucide]').forEach((el) => {
+      if (el.parentElement) window.lucide.createIcons({ root: el.parentElement, attrs: { 'stroke-width': 1.75, 'aria-hidden': 'true' } });
+    });
+  }
+}
+
+function setStatusScan(text) {
+  const el = document.getElementById('status-scan');
+  if (el) el.textContent = text;
+}
+
+function updateMatchStatus() {
+  const el = document.getElementById('status-match');
+  if (!el) return;
+  const videoIds = new Set();
+  const seriesIds = new Set();
+  importBundles.forEach((b) => {
+    if (b.kind === 'other') return;
+    const st = defaultStateForBundle(b);
+    const vid = st.videoId;
+    if (!vid || String(vid) === CREATE) return;
+    videoIds.add(String(vid));
+    const v = VIDEOS.find((x) => String(x.id) === String(vid));
+    if (v) seriesIds.add(String(v.series_id));
+    else if (st.seriesId) seriesIds.add(String(st.seriesId));
+  });
+  if (!videoIds.size) {
+    el.textContent = 'No videos matched';
+    return;
+  }
+  const vs = videoIds.size === 1 ? '1 video matched' : videoIds.size + ' videos matched';
+  const ss = seriesIds.size === 1 ? '1 series' : seriesIds.size + ' series';
+  el.textContent = vs + ' in ' + ss;
+}
+
+function renderImportPage() {
+  const list = importListEl();
+  const pager = document.getElementById('import-pager');
+  syncVisibleItemState();
+  list.innerHTML = '';
+  importBundles = buildImportBundles(importCandidates);
+  ensureMediaMatchExclusive();
+  updateImportBtn();
+  const visible = visibleImportBundles();
+  if (!importBundles.length) {
+    pager.classList.add('hidden');
+    updateMatchStatus();
+    return;
+  }
+  const pages = importTotalPages(visible);
+  if (importPage > pages) importPage = pages;
+  const start = (importPage - 1) * PAGE_SIZE;
+  const slice = visible.slice(start, start + PAGE_SIZE);
+  if (!visible.length) {
+    list.innerHTML = `<li class="opacity-60 text-sm py-2">${listFilterEmptyLabel()}</li>`;
+  } else {
+    slice.forEach((b) => list.appendChild(buildImportBundleItem(b)));
+  }
+  const from = slice.length ? start + 1 : 0;
+  const to = start + slice.length;
+  const filterNote = listFilterNote(visible.length);
+  document.getElementById('import-pager-label').textContent =
+    'Showing ' + from + ' - ' + to + ' of ' + visible.length + ' item(s)' + filterNote;
+  document.getElementById('import-page-label').textContent = importPage + ' / ' + pages;
+  document.getElementById('import-prev').disabled = importPage <= 1;
+  document.getElementById('import-next').disabled = importPage >= pages;
+  pager.classList.toggle('hidden', pages <= 1);
+  const counts = { video:0, sidecar:0, other:0 };
+  importCandidates.forEach(c => {
+    if (isVideo(c)) counts.video++;
+    else if (isSidecar(c)) counts.sidecar++;
+    else counts.other++;
+  });
+  setStatusScan(importCandidates.length + ' file(s) in ' + importBundles.length + ' item(s): ' +
+    counts.video + ' media, ' + counts.sidecar + ' sidecar(s), ' + counts.other + ' other.');
+  updateMatchStatus();
+  lucideRefresh(list);
+}
+
+function removePaths(paths) {
+  const drop = new Set(paths);
+  importCandidates = importCandidates.filter(x => !drop.has(x.path));
+  for (const key of [...importUIState.keys()]) {
+    const parts = key.split('\0');
+    if (parts.some((p) => drop.has(p))) importUIState.delete(key);
+  }
+}
+
+/** Drop match UI state whose paths are no longer in the candidate set. */
+function pruneImportUIState(candidates) {
+  const live = new Set((candidates || []).map((c) => c.path));
+  for (const key of [...importUIState.keys()]) {
+    const parts = key.split('\0');
+    if (!parts.length || parts.some((p) => !live.has(p))) importUIState.delete(key);
+  }
+}
+
+function setImportScanBusy(busy) {
+  const scope = document.getElementById('import-scan-scope');
+  const rescan = document.getElementById('btn-import-rescan');
+  if (scope) scope.disabled = !!busy;
+  if (rescan) rescan.disabled = !!busy;
+}
+
+function buildImportBundleItem(b) {
+  if (b.kind === 'other') return buildOtherItem(b.files[0]);
+  if (b.kind === 'sidecars') return buildSidecarBundleItem(b);
+  return buildMediaBundleItem(b);
+}
+
+function buildOtherItem(c) {
+  const li = document.createElement('li');
+  li.className = 'import-item rounded-box border border-base-300 p-4';
+  const note = c.role === 'json'
+    ? '<span class="opacity-60 text-xs">info.json is provenance - import only with media</span>'
+    : '<span class="opacity-60 text-xs">not importable</span>';
+  li.innerHTML = `
+    <div class="flex items-center gap-2">
+      <div class="min-w-0 flex-1 space-y-2">
+        ${filesStack(c, null)}
+        ${metaLine(note)}
+      </div>
+      ${otherActionsHTML()}
+    </div>`;
+  return li;
+}
+
+function buildSidecarBundleItem(b) {
+  const lead = b.sidecars.find((s) => s.suggested_video_id) || b.sidecars[0];
+  const st = defaultStateForBundle(b);
+  const li = document.createElement('li');
+  li.className = 'import-item rounded-box border border-base-300 p-4';
+  li.dataset.stateKey = bundleStateKey(b);
+  const match = stateMatchNote('sidecar', st, lead, 'no match');
+  const primary = b.sidecars[0];
+  const rest = b.sidecars.slice(1);
+  li.innerHTML = `
+    <div class="flex items-center gap-2">
+      <div class="min-w-0 flex-1 space-y-2">
+        ${filesStack(primary, rest)}
+        ${metaLine(match)}
+      </div>
+      ${matchActionsHTML(st, 'sidecar')}
+    </div>`;
+  wireMatchOpener(li, 'sidecar', {
+    filename: primary.filename,
+    suggested_title: lead.suggested_title,
+    suggested_remote_id: lead.suggested_remote_id,
+    suggested_remote_id_generated: !!lead.suggested_remote_id_generated,
+    suggested_upload_date: lead.suggested_upload_date,
+    suggested_upload_date_from_mtime: !!lead.suggested_upload_date_from_mtime,
+    suggested_handler_id: lead.suggested_handler_id,
+  });
+  return li;
+}
+
+function buildMediaBundleItem(b) {
+  const c = b.video;
+  const st = defaultStateForBundle(b);
+  const li = document.createElement('li');
+  li.className = 'import-item rounded-box border border-base-300 p-4';
+  li.dataset.stateKey = bundleStateKey(b);
+  const match = stateMatchNote('media', st, c, 'no match');
+  li.innerHTML = `
+    <div class="flex items-center gap-2">
+      <div class="min-w-0 flex-1 space-y-2">
+        ${filesStack(c, b.sidecars)}
+        ${metaLine(match)}
+      </div>
+      ${matchActionsHTML(st, 'media')}
+    </div>`;
+  wireMatchOpener(li, 'media', {
+    filename: c.filename,
+    suggested_title: c.suggested_title,
+    suggested_remote_id: c.suggested_remote_id,
+    suggested_remote_id_generated: !!c.suggested_remote_id_generated,
+    suggested_upload_date: c.suggested_upload_date,
+    suggested_upload_date_from_mtime: !!c.suggested_upload_date_from_mtime,
+    suggested_handler_id: c.suggested_handler_id,
+    suggested_webpage_url: c.suggested_webpage_url,
+  });
+  return li;
+}
+
+function episodeTitleForJob(job) {
+  if (String(job.videoId) === CREATE) {
+    return (job.title || '').trim() || 'New video';
+  }
+  const v = VIDEOS.find((x) => Number(x.id) === Number(job.videoId));
+  return v ? v.title : (job.videoLabel || 'Video');
+}
+
+function jobFiles(job) {
+  return [job.primary, ...(job.sidecars || [])].filter(Boolean);
+}
+
+/** Icon + basename; tooltip = full path. NFO: source XML discarded, library NFO regenerated. */
+function summaryFileRow(c) {
+  const role = c.role || 'video';
+  const tip = escapeHtml(c.path || c.filename || '');
+  const label = escapeHtml(roleLabel(role)) + (tip ? ': ' + tip : '');
+  const nfoNote = role === 'nfo'
+    ? `<span class="opacity-60 shrink-0">used for metadata; re-generated on import</span>`
+    : '';
+  return `<li class="flex items-center gap-1.5 text-xs min-w-0 py-0.5">
+    <span class="tooltip tooltip-top inline-flex shrink-0" data-tip="${tip}" aria-label="${label}">
+      <i data-lucide="${roleIcon(role)}" class="size-4 opacity-70" aria-hidden="true"></i>
+    </span>
+    <code class="truncate min-w-0">${escapeHtml(c.filename || '')}</code>
+    ${nfoNote}
+  </li>`;
+}
+
+function groupJobsForSummary(jobs) {
+  const seriesMap = new Map();
+  jobs.forEach((job) => {
+    const sid = String(job.seriesId || '');
+    if (!seriesMap.has(sid)) {
+      seriesMap.set(sid, {
+        id: sid,
+        label: job.seriesLabel || seriesLabel(sid) || 'Series',
+        episodes: new Map(),
+      });
+    }
+    const ser = seriesMap.get(sid);
+    const ek = String(job.videoId) === CREATE
+      ? 'create:' + job.key
+      : 'v:' + String(job.videoId);
+    if (!ser.episodes.has(ek)) {
+      ser.episodes.set(ek, {
+        label: episodeTitleForJob(job),
+        files: [],
+      });
+    }
+    const ep = ser.episodes.get(ek);
+    jobFiles(job).forEach((f) => {
+      if (!ep.files.some((x) => x.path === f.path)) ep.files.push(f);
+    });
+  });
+  return [...seriesMap.values()];
+}
+
+function buildSummaryTree(jobs) {
+  const groups = groupJobsForSummary(jobs);
+  const root = document.createElement('ul');
+  root.className = 'list-none pl-0 m-0 space-y-3 text-sm';
+  groups.forEach((ser) => {
+    let epHTML = '';
+    ser.episodes.forEach((ep) => {
+      const files = ep.files.map(summaryFileRow).join('');
+      epHTML += `
+        <li class="mt-2">
+          <div class="flex items-center gap-1.5 min-w-0 font-medium">
+            <i data-lucide="square-play" class="size-4 opacity-70 shrink-0" aria-hidden="true"></i>
+            <span class="truncate">${escapeHtml(ep.label)}</span>
+          </div>
+          <ul class="list-none pl-5 mt-1 m-0 flex flex-col gap-0.5">${files}</ul>
+        </li>`;
+    });
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <div class="flex items-center gap-1.5 min-w-0 font-medium">
+        <i data-lucide="tv" class="size-4 opacity-70 shrink-0" aria-hidden="true"></i>
+        <span class="truncate">${escapeHtml(ser.label)}</span>
+      </div>
+      <ul class="list-none pl-5 m-0 mt-2 space-y-1">${epHTML}</ul>`;
+    root.appendChild(li);
+  });
+  return root;
+}
+
+function openImportSummary() {
+  pendingImportJobs = collectReadyJobs();
+  if (!pendingImportJobs.length) return;
+  const list = document.getElementById('import-summary-list');
+  list.innerHTML = '';
+  list.appendChild(buildSummaryTree(pendingImportJobs));
+  const replaceWarn = document.getElementById('import-summary-replace-warn');
+  if (replaceWarn) {
+    replaceWarn.classList.toggle('hidden', !pendingImportJobs.some((j) => j.replace));
+  }
+  document.getElementById('modal-import-summary').checked = true;
+  lucideRefresh(list);
+}
+
+function jobRequestBody(job, verifyMedia) {
+  if (job.kind === 'sidecars') {
+    return { video_id: job.videoId, paths: job.paths };
+  }
+  if (String(job.videoId) === CREATE) {
+    return {
+      path: job.path,
+      series_id: Number(job.seriesId),
+      title: job.title,
+      remote_id: job.remote || undefined,
+      handler_id: job.handler || undefined,
+      upload_date: uploadDateToRFC(job.upload) || undefined,
+      verify: verifyMedia,
+    };
+  }
+  const body = { path: job.path, video_id: Number(job.videoId), verify: verifyMedia };
+  if (job.replace) body.replace = true;
+  return body;
+}
+
+document.getElementById('import-prev').addEventListener('click', () => {
+  if (importPage > 1) { importPage--; renderImportPage(); }
+});
+document.getElementById('import-next').addEventListener('click', () => {
+  syncVisibleItemState();
+  importBundles = buildImportBundles(importCandidates);
+  if (importPage < importTotalPages(visibleImportBundles())) { importPage++; renderImportPage(); }
+});
+
+document.getElementById('btn-import').addEventListener('click', () => {
+  openImportSummary();
+});
+
+async function runImportQueue(verifyMedia) {
+  const jobs = pendingImportJobs.length ? pendingImportJobs : collectReadyJobs();
+  if (!jobs.length) return;
+  const btns = [
+    document.getElementById('btn-import-now'),
+    document.getElementById('btn-import-now-verify'),
+  ];
+  btns.forEach((b) => { if (b) b.disabled = true; });
+  let ok = 0, fail = 0;
+  const removed = [];
+  for (const job of jobs) {
+    const r = await fetch('/api/import/manual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(jobRequestBody(job, verifyMedia)),
+    });
+    if (r.ok) {
+      ok++;
+      removed.push(...job.remove);
+    } else {
+      fail++;
+    }
+  }
+  btns.forEach((b) => { if (b) b.disabled = false; });
+  document.getElementById('modal-import-summary').checked = false;
+  pendingImportJobs = [];
+  removePaths(removed);
+  if (!importCandidates.length) {
+    setStatusScan('All pending imports queued.');
+    const matchEl = document.getElementById('status-match');
+    if (matchEl) matchEl.textContent = '';
+  }
+  renderImportPage();
+  const queuedMsg = 'Queued ' + ok + ' item(s)' + (fail ? '; ' + fail + ' failed' : '') +
+    (verifyMedia && ok ? ' (verify after import)' : '') + '.';
+  const toastOpts = fail && !ok ? { error: true } : (fail ? { warning: true } : {});
+  showImportMsg('Import queued', queuedMsg, toastOpts);
+}
+
+document.getElementById('btn-import-now').addEventListener('click', () => runImportQueue(false));
+document.getElementById('btn-import-now-verify').addEventListener('click', () => runImportQueue(true));
+
+async function runImportScan(opts) {
+  const preserveMatches = !!(opts && opts.preserveMatches);
+  const notifyAutoMatch = !(opts && opts.notifyAutoMatch === false);
+  const scope = document.getElementById('import-scan-scope');
+  const rootId = scope ? String(scope.value || '0') : '0';
+  closeMatchModal();
+  setStatusScan('Scanning…');
+  setImportScanBusy(true);
+  if (!preserveMatches) {
+    const matchEl = document.getElementById('status-match');
+    if (matchEl) matchEl.textContent = '';
+    importCandidates = [];
+    importBundles = [];
+    importPage = 1;
+    importUIState.clear();
+    autoMatchStale = false;
+    pendingImportJobs = [];
+    importListEl().innerHTML = '';
+    document.getElementById('import-pager').classList.add('hidden');
+    updateImportBtn();
+  }
+  const url = rootId === '0' ? '/api/import/scan' : '/api/import/scan?root_id=' + encodeURIComponent(rootId);
+  try {
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) {
+      setStatusScan('Scan failed: ' + await res.text());
+      return;
+    }
+    const data = await res.json();
+    const next = data.candidates || [];
+    if (preserveMatches) {
+      pruneImportUIState(next);
+    } else {
+      autoMatchStale = false;
+    }
+    importCandidates = next;
+    if (!importCandidates.length) {
+      importBundles = [];
+      importListEl().innerHTML = '';
+      document.getElementById('import-pager').classList.add('hidden');
+      setStatusScan(rootId === '0'
+        ? 'No untracked files in the import inbox.'
+        : 'No unmanaged files in this library root.');
+      updateMatchStatus();
+      updateAutoMatchBtn();
+      updateImportBtn();
+      if (notifyAutoMatch) notifyAutoMatchCount(0);
+      return;
+    }
+    if (!preserveMatches) autoMatchStale = false;
+    renderImportPage();
+    if (notifyAutoMatch) notifyAutoMatchCount(countSuggestedAutoMatches());
+  } finally {
+    setImportScanBusy(false);
+  }
+}
+
+document.getElementById('import-scan-scope').addEventListener('change', () => { runImportScan(); });
+document.getElementById('btn-import-rescan').addEventListener('click', () => {
+  runImportScan({ preserveMatches: true });
+});
+document.getElementById('btn-import-bulk-series').addEventListener('click', () => {
+  if (countBundlesMissingSeries() === 0) return;
+  openBulkSeriesMatchModal();
+});
+document.getElementById('btn-import-auto-match').addEventListener('click', () => {
+  applyAutoMatch();
+});
+document.getElementById('btn-import-reset-matches').addEventListener('click', () => {
+  clearAllMatches();
+});
+document.getElementById('import-filter-unmatched').addEventListener('change', () => {
+  importPage = 1;
+  renderImportPage();
+});
+document.getElementById('import-allow-existing').addEventListener('change', () => {
+  importBundles.forEach((b) => {
+    if (b.kind !== 'media') return;
+    const key = bundleStateKey(b);
+    scrubMediaVideoPick(getUIState(key), key);
+  });
+  if (matchCtx && matchCtx.kind === 'media') {
+    scrubMediaVideoPick(matchCtx.draft, matchCtx.key);
+    renderMatchModalLists();
+  }
+  renderImportPage();
+});
+document.getElementById('import-match-q').addEventListener('input', () => {
+  renderMatchModalLists();
+});
+document.getElementById('import-match-series').addEventListener('click', (ev) => {
+  if (!matchCtx) return;
+  const unlock = ev.target.closest('[data-unlock-series]');
+  if (unlock) {
+    unlockSeries();
+    return;
+  }
+  if (matchCtx.draft.seriesId) return; // locked
+  if (ev.target.closest('[data-create-series]')) {
+    if (matchCtx.kind === 'sidecar') return;
+    openAddSeriesForImportMatch();
+    return;
+  }
+  const row = ev.target.closest('[data-series-id]');
+  if (!row) return;
+  lockSeriesAndResetSearch(row.dataset.seriesId);
+});
+document.getElementById('import-match-videos').addEventListener('click', (ev) => {
+  if (!matchCtx) return;
+  const unlock = ev.target.closest('[data-unlock-video]');
+  if (unlock) {
+    unlockVideo();
+    return;
+  }
+  // Real library video pick locks the list; CREATE stays clickable (opens Add video).
+  if (matchCtx.draft.videoId && String(matchCtx.draft.videoId) !== CREATE) return;
+  const row = ev.target.closest('[data-video-id]');
+  if (!row) return;
+  const vid = String(row.dataset.videoId);
+  if (vid === CREATE) {
+    if (matchCtx.kind === 'sidecar') return;
+    if (!matchCtx.draft.seriesId) {
+      showImportMsg('Create video', 'Pick a series first', { error: true });
+      return;
+    }
+    if (!matchCtx.draft.title) matchCtx.draft.title = matchCtx.hints.suggested_title || '';
+    if (!matchCtx.draft.remote) matchCtx.draft.remote = matchCtx.hints.suggested_remote_id || '';
+    if (!matchCtx.draft.upload) matchCtx.draft.upload = uploadDateInputValue(matchCtx.hints.suggested_upload_date) || '';
+    openAddVideoForImportMatch();
+    return;
+  }
+  if (matchCtx.kind === 'media' && videoMatchedElsewhere(vid, matchCtx.key)) return;
+  if (matchCtx.kind === 'media' && !allowExistingMedia() && videoHasMedia(vid)) return;
+  if (matchCtx.kind === 'sidecar' && !videoHasMedia(vid)) return;
+  matchCtx.draft.videoId = vid;
+  const v = VIDEOS.find((x) => String(x.id) === vid);
+  if (v && String(matchCtx.draft.seriesId) !== String(v.series_id)) {
+    matchCtx.draft.seriesId = String(v.series_id);
+  }
+  applyMatchModal();
+});
+document.body.addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('.js-add-video-fetch');
+  if (!btn) return;
+  const form = btn.closest('form.js-add-video-form');
+  if (!form) return;
+  const urlEl = form.querySelector('#add-video-url');
+  const url = String(urlEl?.value || '').trim();
+  if (!url) {
+    setAddVideoFetchErr(form, 'URL is required');
+    return;
+  }
+  setAddVideoFetchErr(form, '');
+  setAddVideoBusy(form, true);
+  try {
+    const body = new URLSearchParams();
+    body.set('url', url);
+    const seriesId = form.dataset.addVideoSeriesId || '';
+    if (seriesId) body.set('series_id', seriesId);
+    const res = await fetch('/actions/fetch-add-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || ('Fetch failed (' + res.status + ')'));
+    }
+    const tid = data.task_id;
+    const draftToken = data.draft_token || '';
+    if (!tid) throw new Error('missing task id');
+    const result = await pollAddVideoPrefetch(tid);
+    if (result.error) throw new Error(result.error);
+    const tok = form.querySelector('#add-video-draft-token');
+    if (tok) tok.value = draftToken || result.draft_token || '';
+    const titleEl = form.querySelector('#add-video-title');
+    if (titleEl && result.title) titleEl.value = result.title;
+    const uploadEl = form.querySelector('#add-video-upload');
+    if (uploadEl && result.upload_date) {
+      uploadEl.value = uploadDateInputValue(result.upload_date) || '';
+    }
+    const uploadNote = form.querySelector('#add-video-upload-note');
+    if (uploadNote) uploadNote.textContent = '(from URL)';
+    setAddVideoRemoteDisplay(form, result.remote_id || '', '(from URL)');
+    if (urlEl && result.source_url) urlEl.value = result.source_url;
+  } catch (e) {
+    setAddVideoFetchErr(form, e && e.message ? e.message : 'Fetch failed');
+  } finally {
+    setAddVideoBusy(form, false);
+  }
+});
+document.body.addEventListener('submit', (ev) => {
+  const form = ev.target.closest('form.js-add-video-form');
+  if (!form) return;
+  ev.preventDefault();
+  submitAddVideoForImportMatch(form);
+});
+document.getElementById('btn-import-match-cancel').addEventListener('click', () => closeMatchModal());
+
+async function refreshImportFullScanNote(ev) {
+  const el = document.getElementById('import-full-scan-note');
+  if (!el) return;
+  let kind = '';
+  if (ev && ev.data) {
+    try { kind = JSON.parse(ev.data || '{}').kind || ''; } catch (_) {}
+  }
+  // Refresh on scan finish (and first paint); ignore unrelated task noise when possible.
+  if (ev && (ev.type === 'task.updated') && kind && kind !== 'scan') return;
+  if (ev && (ev.type === 'task.done' || ev.type === 'task.failed') && kind && kind !== 'scan') return;
+  try {
+    const res = await fetch('/actions/import-full-scan-status', {
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+    });
+    if (!res.ok) return;
+    const data = await res.json().catch(() => ({}));
+    el.classList.toggle('hidden', !data.incomplete);
+  } catch (_) {}
+}
+window.refreshImportFullScanNote = refreshImportFullScanNote;
+
+runImportScan({ notifyAutoMatch: false });
+</script>
+{{end}}
+{{template "add_series_modal" .}}
+{{if .Series}}
+{{template "add_video_modal" .}}
+{{end}}
+{{template "foot" .}}
+{{end}}

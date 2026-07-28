@@ -1,0 +1,68 @@
+{{define "status_badge"}}
+{{/* Icon-only status; tooltip + aria-label carry the name (or longer tip). Colors match task_indicator. */}}
+{{if eq . "running"}}
+<span class="inline-flex tooltip tooltip-top text-info" data-tip="running" aria-label="running">
+  <i data-lucide="loader-circle" class="size-4 animate-spin"></i>
+</span>
+{{else if eq . "pending"}}
+<span class="inline-flex tooltip tooltip-top text-base-content/50" data-tip="pending" aria-label="pending">
+  <i data-lucide="list-ordered" class="size-4"></i>
+</span>
+{{else if eq . "failed"}}
+<span class="inline-flex tooltip tooltip-top text-error" data-tip="failed" aria-label="failed">
+  <i data-lucide="circle-x" class="size-4"></i>
+</span>
+{{else if eq . "cancelled"}}
+<span class="inline-flex tooltip tooltip-top text-base-content/50" data-tip="cancelled" aria-label="cancelled">
+  <i data-lucide="ban" class="size-4"></i>
+</span>
+{{else if eq . "done"}}
+<span class="inline-flex tooltip tooltip-top text-success" data-tip="done" aria-label="done">
+  <i data-lucide="circle-check" class="size-4"></i>
+</span>
+{{else if eq . "success"}}
+<span class="inline-flex tooltip tooltip-top text-success" data-tip="success" aria-label="success">
+  <i data-lucide="circle-check" class="size-4"></i>
+</span>
+{{else if eq . "failure"}}
+<span class="inline-flex tooltip tooltip-top text-error" data-tip="failure" aria-label="failure">
+  <i data-lucide="circle-x" class="size-4"></i>
+</span>
+{{else if eq . "wanted"}}
+<span class="inline-flex tooltip tooltip-top text-warning" data-tip="wanted" aria-label="wanted">
+  <i data-lucide="download" class="size-4"></i>
+</span>
+{{else if eq . "wanted_source_error"}}
+<span class="inline-flex tooltip tooltip-top text-error" data-tip="Source has too many download errors - Retry on the source" aria-label="wanted (source error)">
+  <i data-lucide="circle-alert" class="size-4"></i>
+</span>
+{{else if eq . "wanted_download_error"}}
+<span class="inline-flex tooltip tooltip-top text-error" data-tip="Last download failed" aria-label="wanted (download error)">
+  <i data-lucide="circle-x" class="size-4"></i>
+</span>
+{{else if eq . "verify_failed"}}
+<span class="inline-flex tooltip tooltip-top text-warning" data-tip="Post-pack media verify failed - file kept; use 'Want' or 'Download now'" aria-label="Verify failed">
+  <i data-lucide="badge-alert" class="size-4"></i>
+</span>
+{{else if eq . "downloaded"}}
+<span class="inline-flex tooltip tooltip-top text-success" data-tip="downloaded" aria-label="downloaded">
+  <i data-lucide="circle-check" class="size-4"></i>
+</span>
+{{else if eq . "missing"}}
+<span class="inline-flex tooltip tooltip-top text-warning" data-tip="File path recorded but media not on disk - file sync may restore" aria-label="missing">
+  <i data-lucide="file-question" class="size-4"></i>
+</span>
+{{else if eq . "deleted"}}
+<span class="inline-flex tooltip tooltip-top text-base-content/50" data-tip="deleted" aria-label="deleted">
+  <i data-lucide="trash-2" class="size-4"></i>
+</span>
+{{else if eq . "ignored"}}
+<span class="inline-flex tooltip tooltip-top text-base-content/50" data-tip="ignored" aria-label="ignored">
+  <i data-lucide="eye-off" class="size-4"></i>
+</span>
+{{else}}
+<span class="inline-flex tooltip tooltip-top text-base-content/50" data-tip="{{.}}" aria-label="{{.}}">
+  <i data-lucide="circle-help" class="size-4"></i>
+</span>
+{{end}}
+{{end}}

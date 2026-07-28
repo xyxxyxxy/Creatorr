@@ -1,0 +1,19 @@
+{{define "video_metadata_form"}}
+{{/*
+  Video metadata editor modal shell.
+  Expects videoMetadataView fields.
+*/}}
+<div id="video-metadata">
+<input type="checkbox" id="modal-edit-video-metadata" class="modal-toggle" {{if or .Open .PrefetchPending}}checked{{end}} />
+<div class="modal">
+  <div class="modal-box max-w-3xl">
+    <h3 class="font-bold text-lg mb-2 inline-flex items-center gap-2 min-w-0 max-w-full">
+      <i data-lucide="file-pen" class="size-5 shrink-0"></i>
+      <span class="truncate tooltip tooltip-top" data-tip="Metadata editor - {{.Video.Title}}">Metadata editor - {{.Video.Title}}</span>
+    </h3>
+    {{template "video_metadata_body" .}}
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+</div>
+{{end}}

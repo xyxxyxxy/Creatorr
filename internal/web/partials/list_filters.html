@@ -1,0 +1,38 @@
+{{define "list_filters"}}
+{{/* Generic filter join: optional search + optional date + optional selects.
+     Dot: Query, QueryName (default q), QueryPlaceholder, AriaLabel,
+          HideQuery (bool - omit search input),
+          DateName, DateValue, DateAriaLabel, DateMax (optional type=date as daisyUI label-for-date-input join item),
+          Selects []{Name, AriaLabel, EmptyLabel, Options[{Value,Label,Selected}]},
+          Hidden []{Name, Value}, FormAction, LiveTarget.
+     JS: select/date/datetime-local change submits immediately; search submits on blur (js-list-filters). */}}
+{{$live := .LiveTarget}}
+{{$qName := .QueryName}}{{if not $qName}}{{$qName = "q"}}{{end}}
+{{$qPh := .QueryPlaceholder}}{{if not $qPh}}{{$qPh = "Search"}}{{end}}
+{{$aria := .AriaLabel}}{{if not $aria}}{{$aria = "Filters"}}{{end}}
+{{$dateAria := .DateAriaLabel}}{{if not $dateAria}}{{$dateAria = "Day"}}{{end}}
+<form method="get"{{if .FormAction}} action="{{.FormAction}}"{{end}} class="join w-full mb-3 js-keep-scroll js-list-filters" aria-label="{{$aria}}"{{if $live}} hx-get="{{.FormAction}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>
+  {{range .Hidden}}
+  <input type="hidden" name="{{.Name}}" value="{{.Value}}" />
+  {{end}}
+  {{if not .HideQuery}}
+  <input type="search" name="{{$qName}}" value="{{.Query}}" placeholder="{{$qPh}}" aria-label="{{$qPh}}"
+         class="input join-item grow min-w-0" autocomplete="off" />
+  {{end}}
+  {{if .DateName}}
+  {{/* daisyUI label-for-date-input as one join-item (span.label + date). shrink-0 + min width so the join bar does not crush the native date field (calendar over text / nested chrome). */}}
+  <label class="input join-item shrink-0 min-w-60">
+    <span class="label">{{$dateAria}}</span>
+    <input type="date" name="{{.DateName}}" value="{{.DateValue}}"{{if .DateMax}} max="{{.DateMax}}"{{else}} max="{{today}}"{{end}} />
+  </label>
+  {{end}}
+  {{range .Selects}}
+  <select name="{{.Name}}" class="select join-item w-auto max-w-48" aria-label="{{.AriaLabel}}">
+    <option value="">{{.EmptyLabel}}</option>
+    {{range .Options}}
+    <option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
+    {{end}}
+  </select>
+  {{end}}
+</form>
+{{end}}

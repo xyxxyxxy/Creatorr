@@ -1,0 +1,18 @@
+{{define "filter_bar"}}
+{{range .Fields}}
+{{/* Hide when fewer than 2 options - nothing useful to filter. */}}
+{{if ge (len .Options) 2}}
+{{$name := .Name}}
+{{$label := .Label}}
+<form method="get" class="filter mb-4" aria-label="{{$label}} filter">
+  <button type="button" class="btn btn-square filter-reset tooltip tooltip-top" data-filter-clear="{{$name}}" aria-label="Clear {{$label}} filter" data-tip="Clear {{$label}} filter">×</button>
+  {{range .Options}}
+  {{if ne .Value ""}}
+  <input class="btn" type="checkbox" name="{{$name}}" value="{{.Value}}" aria-label="{{.Label}}"
+    {{if .Selected}}checked{{end}} onchange="this.form.requestSubmit()"/>
+  {{end}}
+  {{end}}
+</form>
+{{end}}
+{{end}}
+{{end}}

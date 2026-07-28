@@ -1,0 +1,18 @@
+{{define "subtitle_langs_field"}}
+{{/*
+  Library subtitle language list. Expects optional:
+  Items ([]string), Options ([]string), ListID (default subtitle-lang-suggestions).
+*/}}
+{{$listID := .ListID}}{{if not $listID}}{{$listID = "subtitle-lang-suggestions"}}{{end}}
+{{template "metadata_string_list_editor" (dict
+  "Label" "Subtitle languages"
+  "Name" "subtitle_langs"
+  "Singular" "language"
+  "Placeholder" "Add a language tag"
+  "Items" .Items
+  "Options" .Options
+  "ListID" $listID
+  "NoReorder" true
+  "EmptyText" "none"
+)}}
+{{end}}

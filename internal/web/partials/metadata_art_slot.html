@@ -1,0 +1,55 @@
+{{define "metadata_art_slot"}}
+{{/*
+  Art upload slot with optional preview (saved series art / video thumb, prefetch, or local file pick).
+  Clear saved art: X sets clear_{Role}=1 and hides the preview wrap (do not hide the X alone).
+  Expects: Role, Label, Info|Help, HasFile, SeriesID, ArtVersion (optional), PrefetchPath (optional), PrefetchTaskID (optional)
+  Optional VideoID: preview URLs use video thumb / video-meta prefetch routes instead of series art.
+*/}}
+{{$preview := ""}}
+{{if .PrefetchPath}}
+  {{if .VideoID}}
+    {{$preview = printf "/series/%d/videos/%d/metadata/prefetch/%d/art/%s" .SeriesID .VideoID .PrefetchTaskID .Role}}
+  {{else}}
+    {{$preview = printf "/series/%d/metadata/prefetch/%d/art/%s" .SeriesID .PrefetchTaskID .Role}}
+  {{end}}
+{{else if .HasFile}}
+  {{if .VideoID}}
+    {{$preview = printf "/series/%d/videos/%d/thumb?v=%d" .SeriesID .VideoID .ArtVersion}}
+  {{else}}
+    {{$preview = printf "/series/%d/art/%s?v=%d" .SeriesID .Role .ArtVersion}}
+  {{end}}
+{{end}}
+{{$info := .Info}}{{if not $info}}{{$info = .Help}}{{end}}
+{{$canClear := and .HasFile (not .PrefetchPath)}}
+<fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      {{.Label}}
+      {{if and $info (not .PrefetchPath)}}{{template "field_info" (dict "Info" $info)}}{{end}}
+    </span>
+  </legend>
+  <div class="flex flex-wrap gap-3 items-end" data-art-slot{{if $canClear}} data-art-can-clear{{end}}>
+    {{if .PrefetchPath}}
+    <input type="hidden" name="prefetch_{{.Role}}" value="{{.PrefetchPath}}" data-art-prefetch />
+    {{end}}
+    {{if $canClear}}
+    <input type="hidden" name="clear_{{.Role}}" value="" data-art-clear />
+    {{end}}
+    <div class="indicator shrink-0{{if not $preview}} hidden{{end}}" data-art-preview-wrap>
+      {{if $canClear}}
+      <button type="button" class="indicator-item indicator-top indicator-end btn btn-circle btn-xs btn-error z-10" data-art-clear-btn aria-label="Clear {{.Label}}"><i data-lucide="x" class="size-3.5"></i></button>
+      {{end}}
+      <img data-art-preview data-orig-src="{{$preview}}"
+           {{if $preview}}src="{{$preview}}"{{end}}
+           alt="{{.Label}}"
+           class="max-h-24 max-w-40 rounded object-cover border border-base-300 block" />
+    </div>
+    <div class="grow min-w-[12rem]">
+      <input type="file" name="{{.Role}}" class="file-input w-full" accept="image/*" data-art-file />
+    </div>
+  </div>
+  {{if .PrefetchPath}}
+  <p class="label whitespace-normal">Prefetched preview - kept on Save (or replace with a new file).</p>
+  {{end}}
+</fieldset>
+{{end}}

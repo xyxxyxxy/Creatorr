@@ -1,0 +1,77 @@
+{{define "video_list_row"}}
+{{/* Dot is a dict: ID Title Status UploadDate SizeLabel ResolutionLabel DurationLabel MediaTypeLabel ThumbURL TaskInd DownloadRunning
+     DeliveryQueued DomainActive DomainDisabledTitle SeriesID KeepScroll LiveSwap Redirect FormClass Deleting
+     SeriesTitle? (cross-series lists: link in meta), NoActions - thumb + title + meta only */}}
+<li class="list-row">
+  <div class="relative shrink-0 w-[112px] aspect-video">
+    {{if .ThumbURL}}
+    <img class="size-full rounded object-cover" src="{{.ThumbURL}}" alt="" width="112" height="63" loading="lazy" />
+    {{else}}
+    <div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true">
+      <i data-lucide="square-play" class="size-6 opacity-40"></i>
+    </div>
+    {{end}}
+    {{if .DurationLabel}}
+    <span class="absolute bottom-1 right-1 badge badge-sm badge-neutral tabular-nums shadow">{{.DurationLabel}}</span>
+    {{end}}
+  </div>
+  <div class="list-col-grow min-w-0">
+    <div class="flex items-center gap-2 min-w-0">
+      {{if not .NoActions}}{{template "task_indicator" .TaskInd}}{{end}}
+      <a class="link link-hover font-medium truncate{{if eq .Status "ignored"}} opacity-40{{end}}" href="/series/{{.SeriesID}}/videos/{{.ID}}">{{.Title}}</a>
+    </div>
+    <div class="text-xs opacity-60 flex flex-wrap gap-x-2">
+      {{if .SeriesTitle}}<a class="link link-hover" href="/series/{{.SeriesID}}">{{.SeriesTitle}}</a>{{end}}
+      {{if .UploadDate.Valid}}<time datetime="{{.UploadDate.String}}" data-local-time>{{.UploadDate.String}}</time>{{end}}
+      {{if eq .MediaTypeLabel "-"}}{{template "empty_value"}}{{else if .MediaTypeLabel}}<span>{{.MediaTypeLabel}}</span>{{end}}
+      {{if .ResolutionLabel}}<span>{{.ResolutionLabel}}</span>{{end}}
+      {{if and .SizeLabel (ne .SizeLabel "-")}}<span>{{.SizeLabel}}</span>{{end}}
+    </div>
+  </div>
+  {{if not .NoActions}}
+  <div class="justify-self-end self-center">
+    {{if .Deleting}}
+    <span class="text-xs opacity-60">Queued for deletion</span>
+    {{else}}
+    <div class="join justify-end">
+      {{$delivery := dict
+        "VideoID" .ID
+        "SeriesID" .SeriesID
+        "Status" .Status
+        "DomainActive" .DomainActive
+        "DomainDisabledTitle" .DomainDisabledTitle
+        "DeliveryQueued" .DeliveryQueued
+        "Redirect" .Redirect
+        "FormClass" "contents"
+        "LiveSwap" .LiveSwap
+        "Icons" true
+        "BtnClass" "btn btn-ghost btn-square join-item"
+        "PrimaryClass" "btn btn-primary btn-square join-item"
+      }}
+      {{$wantIgnore := dict
+        "VideoID" .ID
+        "SeriesID" .SeriesID
+        "Status" .Status
+        "DomainActive" .DomainActive
+        "DomainDisabledTitle" .DomainDisabledTitle
+        "DownloadRunning" .DownloadRunning
+        "KeepScroll" .KeepScroll
+        "LiveSwap" .LiveSwap
+        "FormClass" "contents"
+        "Redirect" .Redirect
+        "Icons" true
+        "DeferModal" true
+        "Class" "btn btn-neutral btn-square join-item"
+        "DeleteClass" "btn btn-soft btn-error btn-square join-item"
+      }}
+      {{template "video_delivery_actions" $delivery}}
+      {{template "want_ignore_button" $wantIgnore}}
+    </div>
+    {{if eq .Status "downloaded"}}
+    {{template "delete_video_modal" $wantIgnore}}
+    {{end}}
+    {{end}}
+  </div>
+  {{end}}
+</li>
+{{end}}

@@ -1,0 +1,19 @@
+{{define "series_metadata_form"}}
+{{/*
+  Series metadata editor modal shell (stable; body is HTMX-swapped).
+  Expects: Series, Art, PrefetchArt, PrefetchTaskID?, PrefetchPending?, PrefetchDraft?, FetchURL?, Open?, Suggestions
+*/}}
+<div id="series-metadata">
+<input type="checkbox" id="modal-edit-series-metadata" class="modal-toggle" {{if or .Open .PrefetchPending}}checked{{end}} />
+<div class="modal">
+  <div class="modal-box max-w-3xl">
+    <h3 class="font-bold text-lg mb-2 inline-flex items-center gap-2 min-w-0 max-w-full">
+      <i data-lucide="images" class="size-5 shrink-0"></i>
+      <span class="truncate tooltip tooltip-top" data-tip="Metadata editor - {{.Series.Title}}">Metadata editor - {{.Series.Title}}</span>
+    </h3>
+    {{template "series_metadata_body" .}}
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+</div>
+{{end}}

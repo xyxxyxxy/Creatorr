@@ -1,0 +1,40 @@
+{{define "metadata_fetch_url"}}
+{{/*
+  Ephemeral fetch bar as one daisyUI join: URL input + Fetch.
+  Expects: SeriesID, Action (POST path), HxTarget (HTMX swap target id), Disabled (optional), FetchURL (optional).
+  Video optional: VideoID.
+*/}}
+{{$action := .Action}}{{if not $action}}{{$action = "/actions/series-metadata-prefetch"}}{{end}}
+{{$hx := .HxTarget}}{{if not $hx}}{{$hx = "#series-metadata-body"}}{{end}}
+{{$ph := .Placeholder}}{{if not $ph}}{{$ph = "https://www.example.com/@channel or playlist URL"}}{{end}}
+{{$info := .Info}}{{if not $info}}{{$info = "Ephemeral - fills the form for review. Not stored. Playlist fills text only; channel may include poster/banner."}}{{end}}
+<form method="post" action="{{$action}}"
+      class="mb-4"
+      hx-post="{{$action}}"
+      hx-target="{{$hx}}"
+      hx-swap="outerHTML"
+      {{if .Disabled}}aria-busy="true"{{end}}>
+  <input type="hidden" name="series_id" value="{{.SeriesID}}" />
+  {{if .VideoID}}<input type="hidden" name="video_id" value="{{.VideoID}}" />{{end}}
+  <fieldset class="fieldset" {{if .Disabled}}inert{{end}}>
+    <legend class="fieldset-legend">
+      <span class="inline-flex items-center gap-1">
+        Fetch from URL
+        {{template "field_info" (dict "Info" $info)}}
+      </span>
+    </legend>
+    <div class="join w-full">
+      <input type="text" name="fetch_url" class="input join-item grow min-w-0"
+             placeholder="{{$ph}}"
+             value="{{.FetchURL}}"
+             autocomplete="url"
+             {{if not .Disabled}}required{{end}}
+             {{if .Disabled}}disabled{{end}} />
+      <button type="submit" class="btn btn-soft join-item shrink-0" {{if .Disabled}}disabled{{end}}>
+        {{if .Disabled}}<span class="loading loading-spinner loading-sm"></span>{{end}}
+        Fetch
+      </button>
+    </div>
+  </fieldset>
+</form>
+{{end}}

@@ -1,0 +1,8 @@
+{{define "history_event"}}
+{{/* Error lifecycle / scan events - text-error so timeline rows match status badges. */}}
+{{if historyEventError .}}
+<span class="text-error">{{.}}</span>
+{{else}}
+{{.}}
+{{end}}
+{{end}}

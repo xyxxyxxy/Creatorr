@@ -1,0 +1,18 @@
+# Dev stack. Includes production base (ports, volumes, security, healthcheck).
+#   docker compose -f docker-compose.dev.yml up -d --build
+#   ./scripts/compose up -d --build
+#
+# Optional machine-local plugins: copy docker-compose.override.dev.example.yml
+# to docker-compose.override.dev.yml (gitignored) and add -f that file.
+include:
+  - path: docker-compose.yml
+
+services:
+  creatorr:
+    build: .
+    image: creatorr:dev
+    environment:
+      CREATORR_WEB_DEV: "1"
+      CREATORR_WEB_DIR: /web
+    volumes:
+      - ./internal/web:/web:ro

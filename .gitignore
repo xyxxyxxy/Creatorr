@@ -1,0 +1,21 @@
+# Local env overrides (optional; not required)
+.env
+.env.local
+
+# Machine-local Compose plugin mounts (dev only; not auto-merged)
+docker-compose.override.dev.yml
+# Legacy name (do not use - Compose auto-merges and would break prod defaults)
+docker-compose.override.yml
+
+# Runtime state (SQLite, media, cache, plugins) - mirrors container mounts
+/var/
+
+# Build / caches
+/bin/
+/creatorr
+.gopath/
+node_modules/
+sbom.cdx.json
+
+# Editor / Cursor local state (rules, plans, agent state)
+.cursor/

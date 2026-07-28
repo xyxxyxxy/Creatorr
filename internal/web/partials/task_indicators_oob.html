@@ -1,0 +1,8 @@
+{{define "task_indicators_oob"}}
+{{range .Indicators}}{{template "task_indicator" .}}{{end}}
+{{range .Sources}}
+{{template "source_status_cell" .StatusInd}}
+{{template "source_stalled" .}}
+{{template "source_scan_actions" .}}
+{{end}}
+{{end}}

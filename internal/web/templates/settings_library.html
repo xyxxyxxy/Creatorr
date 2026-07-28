@@ -1,0 +1,354 @@
+{{define "settings_library"}}
+{{template "head" .}}
+{{template "settings_nav" .}}
+{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Root folders" "help" "Named disk paths where series store files." "add_modal" "modal-add-root" "add_label" "Add root")}}
+{{if not .Roots}}
+{{template "list_empty" "No roots yet."}}
+{{else}}
+{{template "list_table"}}
+<thead><tr><th>Name</th><th>Path</th><th>Retention</th><th></th></tr></thead>
+<tbody>
+  {{range .Roots}}
+  <tr>
+    <td>{{if .Name}}{{.Name}}{{else}}{{template "empty_value"}}{{end}}</td>
+    <td class="font-mono text-xs">{{.Path}}</td>
+    <td>{{if .RetentionTTLSeconds.Valid}}{{retentionDays .RetentionTTLSeconds}} days{{else}}<span class="tooltip tooltip-top inline-flex" data-tip="Keep forever"><i data-lucide="infinity" class="size-4 opacity-70" aria-label="Keep forever"></i></span>{{end}}</td>
+    <td><label for="modal-edit-root-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+      <i data-lucide="pencil" class="size-3.5"></i>
+    </label></td>
+  </tr>
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{template "pagination" .RootsPage}}
+{{end}}
+<form method="post" action="/actions/save-settings" class="space-y-3 border-t border-base-300 pt-3 max-w-3xl">
+  <input type="hidden" name="redirect" value="/settings/library" />
+  {{if .NamingLocked}}
+  <div class="alert alert-info text-sm"><span>'Episode format' is locked while 'Apply episode format' is pending or running. Cancel that task on 'Tasks' or wait until it finishes.</span></div>
+  {{end}}
+  {{template "field_input" (dict
+    "Name" "episode_format"
+    "Label" "Episode format"
+    "Value" .EpisodeFormat
+    "Hint" "Saving does not rename existing files. Run maintenance task to apply new format to existing files."
+    "Mono" true
+    "Required" true
+    "JoinPrefix" "Series/"
+    "JoinSuffix" ".ext"
+    "Disabled" .NamingLocked
+    "DisabledTitle" "'Episode format' is locked while 'Apply episode format' is pending or running."
+  )}}
+  <details class="collapse collapse-arrow bg-base-100 border border-base-300 max-w-3xl">
+    <summary class="collapse-title font-medium text-sm min-h-0 py-3">Available format tokens</summary>
+    <div class="collapse-content text-sm text-base-content/70 space-y-2">
+      <div class="overflow-x-auto">
+        <table class="table table-sm w-full">
+          <thead>
+            <tr>
+              <th scope="col">Token</th>
+              <th scope="col">Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code class="text-xs">{id}</code></td>
+              <td>site video id</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{domain}</code></td>
+              <td>source hostname</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{series}</code> / <code class="text-xs">{series:N}</code></td>
+              <td>series title for the stem or subfolders (optional); series folder itself is always fixed. <code class="text-xs">:N</code> caps runes</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{title}</code> / <code class="text-xs">{title:N}</code></td>
+              <td>video title; <code class="text-xs">:N</code> caps runes</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{episode}</code></td>
+              <td><code class="text-xs">MMDD</code> + same-day index (<code class="text-xs">00</code>…; oldest upload first that UTC day). Equal times use arrival order. Zero-padded to 6 digits (January is <code class="text-xs">01…</code>).</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{date}</code></td>
+              <td>release date (<code class="text-xs">YYYY-MM-DD</code>)</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{year}</code></td>
+              <td>calendar year (year-season, e.g. 2026)</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{month}</code> / <code class="text-xs">{month:02}</code></td>
+              <td>UTC release month; <code class="text-xs">:02</code> zero-pads</td>
+            </tr>
+            <tr>
+              <td><code class="text-xs">{day}</code> / <code class="text-xs">{day:02}</code></td>
+              <td>UTC release day; <code class="text-xs">:02</code> zero-pads</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The following tokens become available after the release date of a video is known: <code class="text-xs">{date}</code>, <code class="text-xs">{year}</code>, <code class="text-xs">{month}</code>, <code class="text-xs">{day}</code>, and <code class="text-xs">{episode}</code>.</p>
+    </div>
+  </details>
+  <div class="card-actions"><button type="submit" class="btn btn-primary" {{if .NamingLocked}}disabled{{end}}>Save</button></div>
+</form>
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Quality profiles" "help" "Named yt-dlp format selectors (--format), maturity re-download and SponsorBlock configuration." "add_modal" "modal-add-profile" "add_label" "Add profile")}}
+{{if not .Profiles}}
+{{template "list_empty" "No profiles yet."}}
+{{else}}
+{{template "list_table"}}
+<thead><tr><th>Name</th><th>Media maturity</th><th>Sidecar maturity</th><th>SponsorBlock</th><th></th></tr></thead>
+<tbody>
+  {{range .Profiles}}
+  <tr>
+    <td><span class="tooltip tooltip-top tooltip-nowrap inline-flex" data-tip="{{.FormatSelector}}" aria-label="{{.Name}}: {{.FormatSelector}}">{{.Name}}</span></td>
+    <td>{{if eq .MaturityMediaPreset 0}}{{template "empty_value"}}{{else}}{{.MaturityMediaLabel}}{{end}}</td>
+    <td>{{if eq .MaturitySidecarPreset 0}}{{template "empty_value"}}{{else}}{{.MaturitySidecarLabel}}{{end}}</td>
+    <td>
+      <span class="inline-flex tooltip tooltip-top" data-tip="{{.SponsorBlockIconTip}}">
+        <i data-lucide="{{.SponsorBlockLucideIcon}}" class="size-4 {{if .SponsorBlockEnabled}}text-primary{{else}}opacity-40{{end}}" aria-label="{{.SponsorBlockIconTip}}"></i>
+      </span>
+    </td>
+    <td><label for="modal-edit-profile-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+      <i data-lucide="pencil" class="size-3.5"></i>
+    </label></td>
+  </tr>
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{template "pagination" .ProfilesPage}}
+{{end}}
+<fieldset class="fieldset">
+  <p class="label whitespace-normal">Changing quality profile format does not affect already downloaded or queued videos.</p>
+</fieldset>
+{{template "list_panel_end"}}
+
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl">
+    <input type="hidden" name="redirect" value="/settings/library" />
+    <input type="hidden" name="subtitle_settings" value="1" />
+    <h2 class="text-lg font-semibold">Subtitles</h2>
+    <p class="text-sm opacity-60">Sidecars are always SRT (yt-dlp --convert-subs). Added on download and Replace sidecars.</p>
+    <div class="space-y-3 w-full min-w-0">
+      {{template "subtitle_langs_field" (dict
+        "Items" .SubtitleLangs
+        "Options" .SubtitleLangOptions
+        "ListID" "library-subtitle-lang-suggestions"
+      )}}
+      {{template "checkbox_field" (dict
+        "Name" "subtitle_auto"
+        "Label" "Include auto-generated subtitles"
+        "Checked" .SubtitleAuto
+        "Hint" "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt)."
+      )}}
+    </div>
+    <div class="card-actions items-center gap-2">
+      <button type="submit" class="btn btn-primary">Save</button>
+      {{template "field_info" (dict "Info" "Saving does not re-fetch existing episodes.")}}
+    </div>
+  </form>
+</section>
+
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl">
+    <input type="hidden" name="redirect" value="/settings/library" />
+    <input type="hidden" name="metadata_settings" value="1" />
+    <h2 class="text-lg font-semibold">Metadata</h2>
+    <p class="text-sm opacity-60">Automatic enrichment updates tags/genres and is written into the episode NFO on pack and Save.</p>
+    <div class="space-y-3 w-full min-w-0">
+      {{template "checkbox_field" (dict
+        "Name" "metadata_domain_tag"
+        "Label" "Add source domain as video tag"
+        "Checked" .MetadataDomainTag
+        "Hint" "Prepend the source domain to video tags when source_url is known."
+      )}}
+      {{template "checkbox_field" (dict
+        "Name" "metadata_genres_from_categories"
+        "Label" "Add genres from yt-dlp categories"
+        "Checked" .MetadataGenresFromCategories
+        "Hint" "Add yt-dlp categories as video genres when categories are known."
+      )}}
+    </div>
+    <div class="card-actions items-center gap-2">
+      <button type="submit" class="btn btn-primary">Save</button>
+      {{template "field_info" (dict "Info" "Saving does not rewrite existing episodes.")}}
+    </div>
+  </form>
+</section>
+
+<input type="checkbox" id="modal-add-root" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Add root folder</h3>
+        <form method="post" action="/actions/add-root" class="space-y-2">
+      <input type="hidden" name="redirect" value="/settings/library" />
+      <fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      Path
+      {{template "field_info" (dict "Info" "Absolute path on disk.")}}
+    </span>
+  </legend>
+  <input name="path" id="add-root-path" class="input w-full" required autocomplete="off"
+                   placeholder="/media/library" />
+</fieldset>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">
+          <span class="inline-flex items-center gap-1">
+            Name (optional)
+            {{template "field_info" (dict "Info" "Optional display label. Leave empty to show no name in the UI.")}}
+          </span>
+        </legend>
+        <input name="name" id="add-root-name" class="input w-full" placeholder="Root folder name" autocomplete="off" />
+      </fieldset>
+      {{template "field_input" (dict
+        "Name" "retention_ttl_days"
+        "Label" "Retention days (optional)"
+        "Type" "number"
+        "Min" "1"
+        "Placeholder" "Forever"
+        "JoinSuffix" "days"
+        "Info" "Days after pack before retention delete may remove artifacts."
+      )}}
+      <div class="modal-action">
+        <label for="modal-add-root" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Add root</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+{{range .Roots}}
+<input type="checkbox" id="modal-edit-root-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Edit root{{if .Name}} {{.Name}}{{end}}</h3>
+        <form method="post" action="/actions/update-root" class="space-y-2">
+      <input type="hidden" name="id" value="{{.ID}}" />
+      <input type="hidden" name="redirect" value="/settings/library" />
+      {{template "field_input" (dict
+        "Name" "path"
+        "Label" "Path"
+        "Value" .Path
+        "Required" true
+        "Info" "Absolute path on disk."
+      )}}
+      {{template "field_input" (dict
+        "Name" "name"
+        "Label" "Name (optional)"
+        "Value" .Name
+        "Placeholder" "Root folder name"
+        "Info" "Optional display label. Leave empty to show no name in the UI."
+      )}}
+      {{template "field_input" (dict
+        "Name" "retention_ttl_days"
+        "Label" "Retention days (optional)"
+        "Type" "number"
+        "Min" "1"
+        "Placeholder" "Forever"
+        "Value" (retentionDaysValue .RetentionTTLSeconds)
+        "JoinSuffix" "days"
+        "Info" "Days after pack before retention delete may remove artifacts."
+      )}}
+      <div class="modal-action">
+        <label for="modal-edit-root-{{.ID}}" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+
+<input type="checkbox" id="modal-add-profile" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box max-w-2xl">
+    <h1 class="font-bold text-lg mb-2">Add quality profile</h1>
+        <form method="post" action="/actions/add-profile" class="space-y-2">
+      <input type="hidden" name="redirect" value="/settings/library" />
+      {{template "field_input" (dict "Name" "name" "Label" "Name" "Placeholder" "Quality profile name" "Required" true)}}
+      {{template "field_input" (dict
+        "Name" "format_selector"
+        "Label" "Format selector"
+        "Value" "bv*+ba/b"
+        "Required" true
+        "Info" "Passed to yt-dlp as --format (yt-dlp -f style)."
+      )}}
+      {{template "checkbox_field" (dict
+        "Name" "verify_media"
+        "Label" "Verify downloaded videos"
+        "Checked" false
+        "Hint" "After pack, queue a low-priority null-decode of the video file. Fail keeps the file and sets status verify_failed. When media maturity hours are set, only mature packs are verified automatically."
+      )}}
+      {{template "profile_maturity_fields" (dict
+        "MediaPreset" 0
+        "SidecarPreset" 0
+        "MediaOutID" "maturity-media-out-add"
+        "SidecarOutID" "maturity-sidecar-out-add"
+      )}}
+      {{template "profile_sponsorblock_fields" (dict "InfoCards" false "ReencodeCut" false)}}
+      <div class="modal-action">
+        <label for="modal-add-profile" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Add profile</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+{{range .Profiles}}
+<input type="checkbox" id="modal-edit-profile-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box max-w-xl">
+    <h1 class="font-bold text-lg mb-2">Edit quality profile - {{.Name}}</h1>
+        <form method="post" action="/actions/update-profile" class="space-y-2">
+      <input type="hidden" name="id" value="{{.ID}}" />
+      <input type="hidden" name="redirect" value="/settings/library" />
+      {{template "field_input" (dict "Name" "name" "Label" "Name" "Value" .Name "Placeholder" "Quality profile name" "Required" true)}}
+      {{template "field_input" (dict
+        "Name" "format_selector"
+        "Label" "Format selector"
+        "Value" .FormatSelector
+        "Required" true
+        "Info" "Passed to yt-dlp as --format (yt-dlp -f style)."
+      )}}
+      {{template "checkbox_field" (dict
+        "Name" "verify_media"
+        "Label" "Verify downloaded videos"
+        "Checked" .VerifyMedia
+        "Hint" "After pack, queue a low-priority null-decode of the video file. Fail keeps the file and sets status verify_failed. When media maturity hours are set, only mature packs are verified automatically."
+      )}}
+      {{template "profile_maturity_fields" (dict
+        "MediaPreset" .MaturityMediaPreset
+        "SidecarPreset" .MaturitySidecarPreset
+        "MediaOutID" (printf "maturity-media-out-%d" .ID)
+        "SidecarOutID" (printf "maturity-sidecar-out-%d" .ID)
+      )}}
+      {{template "profile_sponsorblock_fields" (dict
+        "Mark" .SponsorBlockMark
+        "Remove" .SponsorBlockRemove
+        "ReencodeCut" .SponsorBlockReencodeCut
+        "InfoCards" .SponsorBlockInfoCards
+      )}}
+      <div class="modal-action">
+        <label for="modal-edit-profile-{{.ID}}" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+
+{{template "foot" .}}
+{{end}}

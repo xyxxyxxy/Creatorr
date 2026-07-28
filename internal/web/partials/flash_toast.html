@@ -1,0 +1,28 @@
+{{define "flash_toast"}}
+{{/*
+  Transient daisyUI toast (https://daisyui.com/components/toast/).
+  Expects *flash: Message, Warning, Error. app.js removes [data-flash-toast] after a few seconds
+  and strips ok/err from the URL so refresh does not re-show.
+*/}}
+{{if .}}
+<div class="toast toast-top toast-end z-[60]" data-flash-toast>
+  <div role="status" class="alert {{if .Error}}alert-error{{else if .Warning}}alert-warning{{else}}alert-success{{end}} shadow-lg">
+    <span>{{.Message}}</span>
+  </div>
+</div>
+{{end}}
+{{end}}
+
+{{define "flash_toast_oob"}}
+{{/*
+  HTMX out-of-band toast (e.g. notify Test). Same flash shape as flash_toast.
+  Appends to body; app.js schedules dismiss on htmx:oobAfterSwap.
+*/}}
+{{if .}}
+<div class="toast toast-top toast-end z-[60]" data-flash-toast hx-swap-oob="beforeend:body">
+  <div role="status" class="alert {{if .Error}}alert-error{{else if .Warning}}alert-warning{{else}}alert-success{{end}} shadow-lg">
+    <span>{{.Message}}</span>
+  </div>
+</div>
+{{end}}
+{{end}}

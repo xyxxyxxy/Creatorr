@@ -1,0 +1,30 @@
+{{define "checkbox_field"}}
+{{/*
+  Boolean option as daisyUI fieldset: checkbox + label + optional field_info + Hint.
+  Expects: Name, Label. Optional: Info, Hint, Help (alias→Info), Checked, InputClass, Disabled, DisabledTitle.
+  Label reflects control state: when Disabled, appends " (disabled)" and uses cursor-not-allowed.
+  Disabled controls get a daisyUI tooltip (DisabledTitle, else Hint) instead of a Hint paragraph.
+*/}}
+{{$info := .Info}}{{if not $info}}{{$info = .Help}}{{end}}
+{{$disabledTip := .DisabledTitle}}{{if not $disabledTip}}{{$disabledTip = .Hint}}{{end}}
+<fieldset class="fieldset">
+  {{if .Disabled}}
+  <span class="tooltip tooltip-top inline-flex w-fit max-w-full" {{if $disabledTip}}data-tip="{{$disabledTip}}"{{end}}>
+    <label class="label justify-start gap-2 cursor-not-allowed">
+      <input type="checkbox" name="{{.Name}}" class="checkbox{{with .InputClass}} {{.}}{{end}}" value="1" disabled />
+      <span class="label-text text-base-content opacity-60">{{.Label}} (disabled)</span>
+      {{template "field_info" (dict "Info" $info)}}
+    </label>
+  </span>
+  {{else}}
+  <label class="label justify-start gap-2 cursor-pointer">
+    <input type="checkbox" name="{{.Name}}" class="checkbox{{with .InputClass}} {{.}}{{end}}" value="1" {{if .Checked}}checked{{end}} />
+    <span class="label-text text-base-content">{{.Label}}</span>
+    {{template "field_info" (dict "Info" $info)}}
+  </label>
+  {{if .Hint}}
+  <p class="label whitespace-normal">{{.Hint}}</p>
+  {{end}}
+  {{end}}
+</fieldset>
+{{end}}

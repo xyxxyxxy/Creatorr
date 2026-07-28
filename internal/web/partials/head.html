@@ -1,0 +1,79 @@
+{{define "head"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{.Title}} - Creatorr</title>
+  {{/* Apply theme before CSS paint: localStorage override, else OS prefers-color-scheme. */}}
+  <script>
+    (function () {
+      try {
+        var k = "creatorr-theme";
+        var allowed = {
+          dark: 1, synthwave: 1, forest: 1, black: 1, dracula: 1, coffee: 1, dim: 1, sunset: 1, abyss: 1,
+          cupcake: 1, emerald: 1, corporate: 1, garden: 1, fantasy: 1, autumn: 1,
+          cyberpunk: 1, valentine: 1, halloween: 1, aqua: 1
+        };
+        var legacy = { light: "emerald", night: "dark", bumblebee: "cupcake", retro: "cupcake", lofi: "cupcake", pastel: "cupcake", wireframe: "cupcake", luxury: "dracula", cmyk: "cupcake", business: "corporate", acid: "cupcake", lemonade: "cupcake", winter: "cupcake", nord: "dark", caramellatte: "cupcake", silk: "cupcake" };
+        var t = localStorage.getItem(k);
+        if (t && legacy[t]) t = legacy[t];
+        if (!t || !allowed[t]) {
+          t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "emerald";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/app.css" />
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  <script src="/static/vendor/lucide.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body class="min-h-screen bg-base-200">
+  <div class="drawer lg:drawer-open">
+    <input id="app-drawer" type="checkbox" class="drawer-toggle" />
+    <div class="drawer-content flex flex-col min-h-screen">
+      <header class="navbar bg-base-100 border-b border-base-300 sticky top-0 z-50 min-h-14 px-2 gap-1">
+        <div class="flex-none lg:hidden">
+          <label for="app-drawer" class="btn btn-ghost btn-square drawer-button" aria-label="Open menu">
+            <i data-lucide="menu" class="size-5"></i>
+          </label>
+        </div>
+        <div class="flex-1"></div>
+        <div class="flex-none flex items-center gap-1">
+          <div class="dropdown dropdown-end">
+            <div tabindex="0" role="button" class="btn btn-ghost btn-square relative" aria-label="Notifications" id="notify-bell-btn">
+              <i data-lucide="bell" class="size-5"></i>
+              <span id="notify-badge" class="badge badge-error badge-xs absolute top-1 right-1 hidden">0</span>
+            </div>
+            <ul tabindex="0" id="notify-menu"
+                class="dropdown-content menu menu-sm bg-base-200 rounded-box z-50 w-80 max-w-[calc(100vw-1rem)] p-2 shadow-lg border border-base-300 max-h-[min(24rem,70vh)] overflow-y-auto">
+              <li id="notify-menu-mark-all">
+                <button type="button" id="notify-mark-all-read" class="justify-center">
+                  Mark all as read
+                </button>
+              </li>
+              <li id="notify-dropdown-empty" class="disabled"><a class="justify-center">No notifications</a></li>
+              <li id="notify-menu-view-all">
+                <a href="/history#notifications" class="justify-center">
+                  View all
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </header>
+      <main class="p-4 md:p-6 flex-1 w-full max-w-5xl mx-auto">
+{{end}}
+
+{{define "foot"}}
+      </main>
+    </div>
+    {{template "nav" .}}
+  </div>
+</body>
+</html>
+{{end}}

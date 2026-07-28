@@ -1,0 +1,31 @@
+{{define "delivery_mode_field"}}
+{{/*
+  Delivery method: large joined Video | Audio buttons (series-list icons film / headphones).
+  Expects: Value (video|audio).
+  Optional: Info, Help (alias→Info), Hint.
+*/}}
+{{$val := .Value}}{{if not $val}}{{$val = "video"}}{{end}}
+{{$info := .Info}}{{if not $info}}{{$info = .Help}}{{end}}
+{{if not $info}}{{$info = "Audio downloads podcast-like VOD audio extracted from the source videos, not music or albums. Video downloads the full video file."}}{{end}}
+<div class="w-full">
+  <div class="flex items-center gap-1 mb-2">
+    <span class="text-sm font-medium">Delivery method</span>
+    {{template "field_info" (dict "Info" $info)}}
+  </div>
+  <div class="join delivery-mode-join w-full" role="group" aria-label="Delivery method">
+    <label class="btn btn-lg join-item flex-1 h-auto min-h-14 py-3 gap-2">
+      <input type="radio" name="delivery_mode" value="video" class="sr-only" {{if eq $val "video"}}checked{{end}} />
+      <i data-lucide="film" class="size-5 shrink-0" aria-hidden="true"></i>
+      <span>Video</span>
+    </label>
+    <label class="btn btn-lg join-item flex-1 h-auto min-h-14 py-3 gap-2">
+      <input type="radio" name="delivery_mode" value="audio" class="sr-only" {{if eq $val "audio"}}checked{{end}} />
+      <i data-lucide="headphones" class="size-5 shrink-0" aria-hidden="true"></i>
+      <span>Audio</span>
+    </label>
+  </div>
+  {{if .Hint}}
+  <p class="label whitespace-normal mt-1">{{.Hint}}</p>
+  {{end}}
+</div>
+{{end}}

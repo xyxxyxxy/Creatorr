@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Dev compose wrapper: docker compose with docker-compose.dev.yml (includes prod base)
+# + override.dev when present.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+args=(-f "$ROOT/docker-compose.dev.yml")
+if [[ -f "$ROOT/docker-compose.override.dev.yml" ]]; then
+  args+=(-f "$ROOT/docker-compose.override.dev.yml")
+fi
+exec docker compose "${args[@]}" "$@"

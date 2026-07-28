@@ -1,0 +1,44 @@
+{{define "profile_maturity_fields"}}
+{{/*
+  Quality-profile maturity delays (Add/Edit profile modals).
+  Optional: MediaPreset, SidecarPreset (int indexes), MediaOutID, SidecarOutID.
+*/}}
+{{$mIdx := .MediaPreset}}
+{{$sIdx := .SidecarPreset}}
+{{$mOut := .MediaOutID}}{{if not $mOut}}{{$mOut = "maturity-media-out"}}{{end}}
+{{$sOut := .SidecarOutID}}{{if not $sOut}}{{$sOut = "maturity-sidecar-out"}}{{end}}
+{{$after := " after upload"}}
+<fieldset class="fieldset gap-2 bg-base-200 border border-base-300 rounded-box p-4">
+  <legend class="fieldset-legend text-base">
+    <h2 class="text-base font-semibold m-0">Maturity</h2>
+  </legend>
+  <p class="label whitespace-normal">Right after upload, sites often offer only early low quality, and sidecars (especially community subtitles) may appear much later. Maturity waits a delay after the upload date, then once re-downloads media and/or NFO/thumb/subs when the video was first acquired before that deadline.</p>
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend"><h3 class="font-semibold m-0 text-inherit">Media</h3></legend>
+    <div class="flex items-center gap-3 w-full">
+      <input type="range" name="maturity_media_preset" id="{{$mOut}}-range"
+             class="range flex-1 min-w-0"
+             value="{{with $mIdx}}{{.}}{{else}}0{{end}}"
+             min="0" max="6" step="1"
+             data-range-output="#{{$mOut}}"
+             data-range-labels='["off","1h after upload","2h after upload","6h after upload","12h after upload","1 day after upload","2 days after upload"]'
+             data-range-zero="off" />
+      <span id="{{$mOut}}" class="tabular-nums text-sm whitespace-nowrap shrink-0 min-w-44">{{if eq $mIdx 1}}1h{{$after}}{{else if eq $mIdx 2}}2h{{$after}}{{else if eq $mIdx 3}}6h{{$after}}{{else if eq $mIdx 4}}12h{{$after}}{{else if eq $mIdx 5}}1 day{{$after}}{{else if eq $mIdx 6}}2 days{{$after}}{{else}}off{{end}}</span>
+    </div>
+  </fieldset>
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend"><h3 class="font-semibold m-0 text-inherit">Sidecars</h3></legend>
+    <div class="flex items-center gap-3 w-full">
+      <input type="range" name="maturity_sidecar_preset" id="{{$sOut}}-range"
+             class="range flex-1 min-w-0"
+             value="{{with $sIdx}}{{.}}{{else}}0{{end}}"
+             min="0" max="6" step="1"
+             data-range-output="#{{$sOut}}"
+             data-range-labels='["off","1 week after upload","2 weeks after upload","1 month after upload","3 months after upload","6 months after upload","1 year after upload"]'
+             data-range-zero="off" />
+      <span id="{{$sOut}}" class="tabular-nums text-sm whitespace-nowrap shrink-0 min-w-44">{{if eq $sIdx 1}}1 week{{$after}}{{else if eq $sIdx 2}}2 weeks{{$after}}{{else if eq $sIdx 3}}1 month{{$after}}{{else if eq $sIdx 4}}3 months{{$after}}{{else if eq $sIdx 5}}6 months{{$after}}{{else if eq $sIdx 6}}1 year{{$after}}{{else}}off{{end}}</span>
+    </div>
+    <p class="label whitespace-normal">Higher delays mean more videos still count as young at first download, so more re-downloads later.</p>
+  </fieldset>
+</fieldset>
+{{end}}

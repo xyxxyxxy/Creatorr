@@ -1,0 +1,49 @@
+{{define "task_indicator"}}
+{{/* ID required for live OOB swap. Status: pending|running|"". Progress optional (0–1).
+     VideoStatus: video-list mode - idle shows Lucide status icon (tooltip = status name);
+     busy replaces it in the same size-5 slot.
+     pending = static list-ordered + tooltip; running = spinner or radial progress. */}}
+<span id="{{.ID}}"
+      class="task-indicator inline-flex items-center justify-center shrink-0 align-middle{{if or .VideoStatus .Status}} size-5{{end}}{{if and .Title (ne .Status "pending")}} tooltip tooltip-top{{end}}"
+      {{if .OOB}}hx-swap-oob="true"{{end}}
+      {{if and .Title (ne .Status "pending")}}data-tip="{{.Title}}"{{end}}
+      {{if .Status}}aria-busy="true"{{else}}aria-busy="false"{{end}}>
+  {{if eq .Status "running"}}
+    {{if progressActive .Progress}}
+    <div class="radial-progress text-primary leading-none"
+         style="--value:{{pct .Progress}};--size:1.25rem;--thickness:2px;"
+         role="progressbar"
+         aria-valuenow="{{pct .Progress}}"
+         aria-valuemin="0"
+         aria-valuemax="100"
+         aria-label="{{pct .Progress}} percent"></div>
+    {{else}}
+    <span class="loading loading-spinner loading-sm text-info" aria-label="In progress"></span>
+    {{end}}
+  {{else if eq .Status "pending"}}
+    <span class="tooltip tooltip-top" data-tip="A task is queued for this item">
+      <i data-lucide="list-ordered" class="size-5 text-base-content/50" aria-label="A task is queued for this item"></i>
+    </span>
+  {{else if .VideoStatus}}
+    {{if eq .VideoStatus "wanted"}}
+    <i data-lucide="download" class="size-5 text-warning"></i>
+    {{else if eq .VideoStatus "wanted_source_error"}}
+    <i data-lucide="circle-alert" class="size-5 text-error"></i>
+    {{else if eq .VideoStatus "wanted_download_error"}}
+    <i data-lucide="circle-x" class="size-5 text-error"></i>
+    {{else if eq .VideoStatus "verify_failed"}}
+    <i data-lucide="badge-alert" class="size-5 text-warning"></i>
+    {{else if eq .VideoStatus "downloaded"}}
+    <i data-lucide="circle-check" class="size-5 text-success"></i>
+    {{else if eq .VideoStatus "missing"}}
+    <i data-lucide="file-question" class="size-5 text-warning"></i>
+    {{else if eq .VideoStatus "deleted"}}
+    <i data-lucide="trash-2" class="size-5 opacity-50"></i>
+    {{else if eq .VideoStatus "ignored"}}
+    <i data-lucide="eye-off" class="size-5 opacity-50"></i>
+    {{else}}
+    <i data-lucide="circle-help" class="size-5 opacity-50"></i>
+    {{end}}
+  {{end}}
+</span>
+{{end}}

@@ -1,0 +1,15 @@
+{{define "detail_row"}}
+{{/*
+  Detail list_table key/value row. Empty values grey the value cell only (opacity-60) and show EmptyText.
+  Expects: Label.
+  Optional: Value (non-empty → filled row), EmptyText (default "none"), ThClass, TdClass,
+            Empty (bool; force empty even if Value set).
+*/}}
+{{$empty := false}}
+{{if .Empty}}{{$empty = true}}{{else if not .Value}}{{$empty = true}}{{end}}
+{{$text := .EmptyText}}{{if not $text}}{{$text = "none"}}{{end}}
+<tr>
+  <th class="w-40{{with .ThClass}} {{.}}{{end}}">{{.Label}}</th>
+  <td{{if or $empty .TdClass}} class="{{if $empty}}opacity-60{{end}}{{with .TdClass}}{{if $empty}} {{end}}{{.}}{{end}}"{{end}}>{{if $empty}}{{$text}}{{else}}{{.Value}}{{end}}</td>
+</tr>
+{{end}}

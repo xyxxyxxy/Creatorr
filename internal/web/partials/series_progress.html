@@ -1,0 +1,14 @@
+{{define "series_progress"}}
+{{/* Dot: ProgressTotal, DownloadedCount.
+     Bar on top, counts under (centered); fills parent width (series list shares Line2 row 50/50). */}}
+<span class="tooltip tooltip-top block w-full min-w-0" data-tip="Downloaded / Total">
+  <div class="flex flex-col gap-0.5 w-full min-w-0 items-center">
+    {{if gt .ProgressTotal 0}}
+    <progress class="progress progress-primary w-full" value="{{.DownloadedCount}}" max="{{.ProgressTotal}}"></progress>
+    {{else}}
+    <progress class="progress w-full" value="0" max="1"></progress>
+    {{end}}
+    <span class="text-xs tabular-nums whitespace-nowrap opacity-80">{{.DownloadedCount}} / {{.ProgressTotal}}</span>
+  </div>
+</span>
+{{end}}

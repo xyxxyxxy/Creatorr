@@ -1,0 +1,160 @@
+{{define "settings_general_field"}}
+{{/*
+  One General settings control.
+  Expects dict: Row (settingsRowView).
+*/}}
+{{with .Row}}
+{{if .Select}}
+{{template "field_input" (dict
+  "Name" .Key
+  "ID" (printf "setting-%s" .Key)
+  "Label" .Label
+  "Type" "select"
+  "Value" .Value
+  "Info" .Help
+  "Options" .Options
+  "Disabled" .Disabled
+  "DisabledTitle" .DisabledTitle
+)}}
+{{else}}
+{{template "settings_row" .}}
+{{end}}
+{{end}}
+{{end}}
+
+{{define "settings_general"}}
+{{template "head" .}}
+{{template "settings_nav" .}}
+{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
+
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <form method="post" action="/actions/save-settings" class="card-body gap-6">
+    <input type="hidden" name="redirect" value="/settings/general" />
+
+    <fieldset class="fieldset gap-3">
+      <legend class="fieldset-legend text-lg font-semibold">External services</legend>
+      <p class="text-sm opacity-60">Optional helpers that raise download and resolve success. FlareSolverr can clear CloudFlare challenges on protected hosts. A PO token (proof-of-origin) provider mints attestation tokens some extractors need.</p>
+      <div class="grid gap-3 md:grid-cols-2 w-full items-start">
+        <div class="flex flex-col gap-3 w-full min-w-0">
+          {{template "external_service_url_join" .PotService}}
+          {{range .Settings}}
+          {{if eq .Key "pot_fetch"}}
+          {{template "settings_general_field" (dict "Row" .)}}
+          {{end}}
+          {{end}}
+        </div>
+        <div class="w-full min-w-0">
+          {{template "external_service_url_join" .FlareService}}
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="fieldset gap-3">
+      <legend class="fieldset-legend text-lg font-semibold">Stats</legend>
+      <div class="grid gap-3 md:grid-cols-2 w-full">
+        {{range .Settings}}
+        {{if eq .Key "stats_retention_days"}}
+        {{template "settings_general_field" (dict "Row" .)}}
+        {{end}}
+        {{end}}
+      </div>
+    </fieldset>
+
+    <div class="card-actions"><button type="submit" class="btn btn-primary">Save</button></div>
+  </form>
+</section>
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Notifications" "help" "Creatorr in-app channel (fixed, all events) plus optional Apprise channels. Each Apprise channel has a URL and event subscriptions. Successful Apprise delivery marks the matching in-app alert or warning as read." "add_modal" "modal-add-notify-channel" "add_label" "Add channel")}}
+{{if not .NotifyChannels}}
+{{template "list_empty" "No notification channels yet."}}
+{{else}}
+{{template "list_table"}}
+<thead><tr><th>Name</th><th>URL</th><th>Events</th><th></th></tr></thead>
+<tbody>
+  {{range .NotifyChannels}}
+  <tr>
+    <td>{{if .Name}}{{.Name}}{{else}}{{template "empty_value"}}{{end}}{{if .InApp}} <span class="badge badge-ghost badge-sm">in-app</span>{{end}}</td>
+    <td class="font-mono text-xs max-w-xs truncate">{{.URLMasked}}</td>
+    <td class="flex flex-wrap gap-1">
+      {{range .EventLabels}}
+      <span class="badge badge-ghost badge-sm">{{.}}</span>
+      {{else}}
+      {{template "muted" "none"}}
+      {{end}}
+    </td>
+    <td class="whitespace-nowrap">
+      {{if .InApp}}
+      <span class="tooltip tooltip-top inline-flex" data-tip="Fixed channel; cannot edit">
+        <button type="button" class="btn btn-ghost btn-xs btn-square" disabled aria-label="Edit">
+          <i data-lucide="pencil" class="size-3.5"></i>
+        </button>
+      </span>
+      {{else}}
+      <label for="modal-edit-notify-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+        <i data-lucide="pencil" class="size-3.5"></i>
+      </label>
+      <label for="modal-delete-notify-{{.ID}}" class="btn btn-ghost btn-xs btn-square text-error tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+        <i data-lucide="trash-2" class="size-3.5"></i>
+      </label>
+      {{end}}
+    </td>
+  </tr>
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{end}}
+{{template "list_panel_end"}}
+
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <div class="card-body gap-3">
+    <fieldset class="fieldset gap-3">
+      <legend class="fieldset-legend text-lg font-semibold">Appearance</legend>
+      <p class="text-sm opacity-60">Theme for this browser only (not saved with Settings). Default follows the OS until you pick one.</p>
+      {{template "theme_picker"}}
+    </fieldset>
+  </div>
+</section>
+
+{{$redir := "/settings/general"}}
+{{$evOpts := .EventOptions}}
+{{template "notify_channel_modal" (dict
+  "Mode" "add"
+  "Redirect" $redir
+  "Name" ""
+  "URL" ""
+  "Events" .DefaultEvents
+  "EventOptions" $evOpts
+)}}
+{{range .NotifyChannels}}
+{{if not .InApp}}
+{{template "notify_channel_modal" (dict
+  "Mode" "edit"
+  "Redirect" $redir
+  "ID" .ID
+  "Name" .Name
+  "URL" .URL
+  "Events" .Events
+  "EventOptions" $evOpts
+)}}
+<input type="checkbox" id="modal-delete-notify-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Delete channel{{if .Name}} - {{.Name}}{{end}}</h3>
+    <p class="text-sm mb-4">Removes this Apprise notification channel.</p>
+    <form method="post" action="/actions/delete-notify-channel">
+      <input type="hidden" name="redirect" value="{{$redir}}" />
+      <input type="hidden" name="id" value="{{.ID}}" />
+      <div class="modal-action">
+        <label for="modal-delete-notify-{{.ID}}" class="btn">Cancel</label>
+        <button type="submit" class="btn btn-error">Delete</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop"></div>
+</div>
+{{end}}
+{{end}}
+
+{{template "foot" .}}
+{{end}}

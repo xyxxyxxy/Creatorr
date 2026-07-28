@@ -1,0 +1,48 @@
+{{define "settings_row"}}
+{{/*
+  Settings key/value row via field_input.
+  Expects typed settingsRowView fields only: Key, Value, Help, Label, Textarea, Wide, Disabled.
+  Never read optional fields missing from the struct (Go templates error - WEB_DEV reloads HTML
+  before a binary rebuild). Per-key placeholders: branch on .Key below.
+*/}}
+{{$label := .Label}}{{if not $label}}{{$label = .Key}}{{end}}
+{{$ph := ""}}
+{{$info := .Help}}
+{{$id := printf "setting-%s" .Key}}
+<div class="w-full {{if .Wide}}md:col-span-2{{end}}">
+  {{if .Textarea}}
+  {{template "field_input" (dict
+    "Name" .Key
+    "ID" $id
+    "Label" $label
+    "Type" "textarea"
+    "Value" .Value
+    "Info" $info
+    "Placeholder" $ph
+    "Mono" true
+    "InputClass" "h-24"
+    "Disabled" .Disabled
+  )}}
+  {{else if eq .Key "source_download_error_threshold"}}
+  {{template "field_input" (dict
+    "Name" .Key
+    "ID" $id
+    "Label" $label
+    "Type" "number"
+    "Value" .Value
+    "Hint" .Help
+    "Min" "1"
+    "Step" "1"
+  )}}
+  {{else}}
+  {{template "field_input" (dict
+    "Name" .Key
+    "ID" $id
+    "Label" $label
+    "Value" .Value
+    "Info" $info
+    "Placeholder" $ph
+  )}}
+  {{end}}
+</div>
+{{end}}

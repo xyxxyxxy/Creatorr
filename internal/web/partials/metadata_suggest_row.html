@@ -1,0 +1,30 @@
+{{define "metadata_suggest_row"}}
+{{/*
+  daisyUI label-for-input + datalist of existing values
+  (https://daisyui.com/components/label/#label-for-input).
+  Expects: Name, Label, Value, ListID, Options ([]string). Optional: Info, Hint, Help (alias→Info), Placeholder.
+*/}}
+{{$info := .Info}}{{if not $info}}{{$info = .Help}}{{end}}
+<div class="w-full min-w-0">
+  <label class="input w-full">
+    <span class="label inline-flex items-center gap-1 shrink-0">
+      {{.Label}}
+      {{if $info}}{{template "field_info" (dict "Info" $info)}}{{end}}
+    </span>
+    <input type="text" name="{{.Name}}" value="{{.Value}}"
+           {{if .ListID}}list="{{.ListID}}"{{end}}
+           {{if .Placeholder}}placeholder="{{.Placeholder}}"{{end}}
+           autocomplete="off" />
+  </label>
+  {{if .ListID}}
+  <datalist id="{{.ListID}}">
+    {{range .Options}}
+    <option value="{{.}}"></option>
+    {{end}}
+  </datalist>
+  {{end}}
+  {{if .Hint}}
+  <p class="label whitespace-normal">{{.Hint}}</p>
+  {{end}}
+</div>
+{{end}}

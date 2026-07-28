@@ -1,0 +1,56 @@
+{{define "metadata_actors_editor"}}
+{{/*
+  Actor name+role pairs: plain locked rows (reorder + remove) + draft add.
+  Expects: Actors ([]library.SeriesActor), NameOptions, RoleOptions -
+  both from ListMetaSuggestions (library-wide series∪videos pools).
+  Form order is NFO/DB actor order. Locked rows: name/role 50/50.
+  Draft: one daisyUI join (Name|Role label-for-input + add).
+*/}}
+<div class="w-full" data-actors-editor>
+  <fieldset class="fieldset gap-2 bg-base-200 border border-base-300 rounded-box p-4">
+    <legend class="fieldset-legend">Actors</legend>
+    <div class="space-y-1" data-actors-list>
+      {{if not .Actors}}
+      <p class="text-sm opacity-60" data-actors-empty>none</p>
+      {{end}}
+      {{range .Actors}}
+      <div class="flex gap-1 items-center" data-actor-row>
+        <input type="hidden" name="actor_name" value="{{.Name}}" />
+        <input type="hidden" name="actor_role" value="{{.Role}}" />
+        <span class="tabular-nums text-xs opacity-60 w-4 shrink-0 text-right" data-list-ord aria-hidden="true"></span>
+        <div class="join shrink-0">
+          <button type="button" class="btn btn-ghost btn-sm btn-square join-item" data-actor-up aria-label="Move actor up"><i data-lucide="chevron-up" class="size-4"></i></button>
+          <button type="button" class="btn btn-ghost btn-sm btn-square join-item" data-actor-down aria-label="Move actor down"><i data-lucide="chevron-down" class="size-4"></i></button>
+        </div>
+        <div class="grid grid-cols-2 gap-2 grow min-w-0 text-sm">
+          <span class="truncate">{{.Name}}</span>
+          <span class="truncate{{if .Role}} opacity-60{{end}}">{{if .Role}}{{.Role}}{{else}}{{template "empty_value"}}{{end}}</span>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm btn-square shrink-0" data-actor-remove aria-label="Remove actor"><i data-lucide="minus" class="size-4"></i></button>
+      </div>
+      {{end}}
+    </div>
+    <div class="join w-full mt-2" data-actor-draft>
+      <label class="input join-item grow min-w-0">
+        <span class="label">Actor</span>
+        <input type="text" list="meta-dl-actor-name" data-actor-draft-name placeholder="Name" autocomplete="off" />
+      </label>
+      <label class="input join-item grow min-w-0">
+        <span class="label">Role</span>
+        <input type="text" list="meta-dl-actor-role" data-actor-draft-role placeholder="(optional)" autocomplete="off" />
+      </label>
+      <button type="button" class="btn btn-soft btn-square join-item shrink-0" data-actor-add aria-label="Add actor"><i data-lucide="plus" class="size-4"></i></button>
+    </div>
+    <datalist id="meta-dl-actor-name">
+      {{range .NameOptions}}
+      <option value="{{.}}"></option>
+      {{end}}
+    </datalist>
+    <datalist id="meta-dl-actor-role">
+      {{range .RoleOptions}}
+      <option value="{{.}}"></option>
+      {{end}}
+    </datalist>
+  </fieldset>
+</div>
+{{end}}

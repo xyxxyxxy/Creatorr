@@ -1,0 +1,52 @@
+{{define "list_row_shell"}}
+{{/* Shared daisyUI list-row: media | title+meta | actions.
+     MediaURL?, MediaClass?, ImgClass?, Circle?, PlaceholderIcon?, Badge?,
+     TitleHref, Title, KindIcon?, KindTip? (optional delivery badge on media bottom-right; audio only),
+     StatusInd? (series_status_indicator health on media top-left),
+     MonitorInd? (series_monitor_indicator left of title; always monitor state),
+     TaskInd?, WarnLevel?,
+     Line2? (plain text), ShowProgress? (uses series_progress on .; shares Line2 row 50/50),
+     Monitor? (dict for monitor_toggle). */}}
+{{$mediaClass := .MediaClass}}{{if not $mediaClass}}{{$mediaClass = "relative shrink-0 w-[112px] aspect-video"}}{{end}}
+{{$imgClass := .ImgClass}}{{if not $imgClass}}{{if .Circle}}{{$imgClass = "size-full rounded-full object-cover"}}{{else}}{{$imgClass = "size-full rounded object-cover"}}{{end}}{{end}}
+{{$ph := .PlaceholderIcon}}{{if not $ph}}{{$ph = "square-play"}}{{end}}
+<li class="list-row">
+  <div class="relative self-start {{$mediaClass}}">
+    {{if .MediaURL}}
+    <img class="{{$imgClass}}" src="{{.MediaURL}}" alt="" loading="lazy" />
+    {{else}}
+    <div class="bg-base-200 w-full h-full {{if .Circle}}rounded-full{{else}}rounded{{end}} flex items-center justify-center" aria-hidden="true">
+      <i data-lucide="{{$ph}}" class="size-6 opacity-40"></i>
+    </div>
+    {{end}}
+    {{with .StatusInd}}{{template "series_status_indicator" .}}{{end}}
+    {{with .Badge}}
+    <span class="absolute bottom-1 right-1 badge badge-sm badge-neutral tabular-nums shadow">{{.}}</span>
+    {{end}}
+    {{if .KindIcon}}
+    <span class="absolute -bottom-0.5 -right-0.5 z-10 badge badge-sm badge-neutral shadow p-1 tooltip tooltip-top" data-tip="{{.KindTip}}" aria-label="{{.KindTip}}">
+      <i data-lucide="{{.KindIcon}}" class="size-3"></i>
+    </span>
+    {{end}}
+  </div>
+  <div class="list-col-grow min-w-0">
+    <div class="flex items-center gap-2 min-w-0">
+      {{with .MonitorInd}}{{template "series_monitor_indicator" .}}{{end}}
+      {{with .TaskInd}}{{if .ID}}{{template "task_indicator" .}}{{end}}{{end}}
+      <a class="link link-hover font-medium truncate" href="{{.TitleHref}}">{{.Title}}</a>
+      {{with .WarnLevel}}{{template "series_warn_icon" .}}{{end}}
+    </div>
+    {{if or .Line2 .ShowProgress}}
+    <div class="flex items-start gap-2 min-w-0">
+      <div class="w-1/2 min-w-0 text-xs opacity-60 truncate">{{with .Line2}}{{.}}{{end}}</div>
+      {{if .ShowProgress}}
+      <div class="w-1/2 min-w-0">{{template "series_progress" .}}</div>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+  <div class="justify-self-end self-center">
+    {{with .Monitor}}{{template "monitor_toggle" .}}{{end}}
+  </div>
+</li>
+{{end}}
