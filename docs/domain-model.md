@@ -38,6 +38,7 @@ Use these terms consistently in code comments, UI copy, OpenAPI, tests, and docs
 | **Wanted** / **Ignored** / **Missing** / **Deleted** | Statuses: eligible / not auto-downloaded / path gone (recoverable) / intentional remove (Import or Want to recover). |
 | **Metadata rescan** | Refresh metadata for existing videos only (no discovery). |
 | **Cookies** / **Credentials** / **Settings** | Netscape jar per domain (`default` fallback) / yt-dlp login username+password on `domains` (NULL inherit) / SQLite runtime config (env seeds first boot). |
+| **App auth** | First-boot Setup sets operator username + password; afterward Forms session cookie or `X-Api-Key` for UI/API. Not the same as domain Access credentials. |
 | **Source URL** | `videos.source_url` - watch/clip page only (never feed URL). |
 | **Metadata suggestion pool** | Library-wide datalist values per field name (studio, genres, tags, country, mpaa, actor name, actor role) from `series` ∪ `videos`. Shared by series and video Metadata forms - see [download-and-library.md](download-and-library.md). |
 | **Video columns** / **Acquired** / **info.json** / **File size** / **Upload time** | Creatorr-owned packed fields; episode meta columns (plot=`description`, sorttitle, …) feed episode NFO; `acquired_at` on pack; `sidecars_acquired_at` when sidecars packed/refreshed; opaque yt-dlp sidecar written only with media (never edit content via Metadata editor; never rewrite on sidecar-only refresh); `files.size_bytes` for video kind; `upload_date` RFC3339 UTC. |

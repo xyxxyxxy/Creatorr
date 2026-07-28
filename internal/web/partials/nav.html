@@ -49,13 +49,18 @@
                   </a>
                 </li>
                 <li>
-                  <a href="/settings/scheduler" {{if eq .SettingsTab "scheduler"}}class="active"{{end}}>
-                    <i data-lucide="calendar-clock" class="size-4"></i>Scheduler
+                  <a href="/settings/connect" {{if eq .SettingsTab "connect"}}class="active"{{end}}>
+                    <i data-lucide="plug" class="size-4"></i>Connect
                   </a>
                 </li>
                 <li>
                   <a href="/settings/queue" {{if eq .SettingsTab "queue"}}class="active"{{end}}>
                     <i data-lucide="list-ordered" class="size-4"></i>Queue / Domains
+                  </a>
+                </li>
+                <li>
+                  <a href="/settings/scheduler" {{if eq .SettingsTab "scheduler"}}class="active"{{end}}>
+                    <i data-lucide="calendar-clock" class="size-4"></i>Scheduler
                   </a>
                 </li>
                 <li>

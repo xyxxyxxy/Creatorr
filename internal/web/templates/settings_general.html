@@ -1,6 +1,6 @@
 {{define "settings_general_field"}}
 {{/*
-  One General settings control.
+  One General/Connect settings control.
   Expects dict: Row (settingsRowView).
 */}}
 {{with .Row}}
@@ -28,83 +28,37 @@
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 
 <section class="card bg-base-100 border border-base-300 mb-4">
-  <form method="post" action="/actions/save-settings" class="card-body gap-6">
-    <input type="hidden" name="redirect" value="/settings/general" />
-
+  <div class="card-body gap-6">
     <fieldset class="fieldset gap-3">
-      <legend class="fieldset-legend text-lg font-semibold">External services</legend>
-      <p class="text-sm opacity-60">Optional helpers that raise download and resolve success. FlareSolverr can clear CloudFlare challenges on protected hosts. A PO token (proof-of-origin) provider mints attestation tokens some extractors need.</p>
+      <legend class="fieldset-legend text-lg font-semibold">Authentication</legend>
+      <p class="text-sm opacity-60">Single operator account for the web UI. API clients use the API key header <span class="font-mono text-xs">X-Api-Key</span>. Changing username or password signs out other browsers.</p>
       <div class="grid gap-3 md:grid-cols-2 w-full items-start">
-        <div class="flex flex-col gap-3 w-full min-w-0">
-          {{template "external_service_url_join" .PotService}}
-          {{range .Settings}}
-          {{if eq .Key "pot_fetch"}}
-          {{template "settings_general_field" (dict "Row" .)}}
-          {{end}}
-          {{end}}
+        <div class="form-control w-full min-w-0 gap-2">
+          <span class="label-text">Login</span>
+          <label for="modal-change-credentials" class="btn btn-outline w-full">Change username / password</label>
         </div>
-        <div class="w-full min-w-0">
-          {{template "external_service_url_join" .FlareService}}
+        <div class="form-control w-full min-w-0 gap-2">
+          <span class="label-text">API key</span>
+          <div class="join w-full">
+            <input type="text" class="input input-bordered join-item font-mono text-xs grow min-w-0" disabled value="{{.APIKey}}" id="api-key-value" />
+            <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-tip="Copy" aria-label="Copy" onclick="navigator.clipboard.writeText(document.getElementById('api-key-value').value)">
+              <i data-lucide="copy" class="size-4"></i>
+            </button>
+            <button type="submit" form="regenerate-api-key-form" class="btn btn-square btn-warning join-item tooltip tooltip-top" data-tip="Regenerate" aria-label="Regenerate" onclick="return confirm('Regenerate API key? Existing API clients will stop working until updated.');">
+              <i data-lucide="refresh-cw" class="size-4"></i>
+            </button>
+          </div>
+          <p class="text-sm opacity-60">
+            <a class="link" href="/api/openapi.json" target="_blank" rel="noopener noreferrer">OpenAPI spec</a>
+          </p>
         </div>
       </div>
     </fieldset>
-
-    <fieldset class="fieldset gap-3">
-      <legend class="fieldset-legend text-lg font-semibold">Stats</legend>
-      <div class="grid gap-3 md:grid-cols-2 w-full">
-        {{range .Settings}}
-        {{if eq .Key "stats_retention_days"}}
-        {{template "settings_general_field" (dict "Row" .)}}
-        {{end}}
-        {{end}}
-      </div>
-    </fieldset>
-
-    <div class="card-actions"><button type="submit" class="btn btn-primary">Save</button></div>
-  </form>
+    <form id="regenerate-api-key-form" method="post" action="/actions/regenerate-api-key" class="hidden">
+      <input type="hidden" name="redirect" value="/settings/general" />
+    </form>
+  </div>
 </section>
-
-{{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Notifications" "help" "Creatorr in-app channel (fixed, all events) plus optional Apprise channels. Each Apprise channel has a URL and event subscriptions. Successful Apprise delivery marks the matching in-app alert or warning as read." "add_modal" "modal-add-notify-channel" "add_label" "Add channel")}}
-{{if not .NotifyChannels}}
-{{template "list_empty" "No notification channels yet."}}
-{{else}}
-{{template "list_table"}}
-<thead><tr><th>Name</th><th>URL</th><th>Events</th><th></th></tr></thead>
-<tbody>
-  {{range .NotifyChannels}}
-  <tr>
-    <td>{{if .Name}}{{.Name}}{{else}}{{template "empty_value"}}{{end}}{{if .InApp}} <span class="badge badge-ghost badge-sm">in-app</span>{{end}}</td>
-    <td class="font-mono text-xs max-w-xs truncate">{{.URLMasked}}</td>
-    <td class="flex flex-wrap gap-1">
-      {{range .EventLabels}}
-      <span class="badge badge-ghost badge-sm">{{.}}</span>
-      {{else}}
-      {{template "muted" "none"}}
-      {{end}}
-    </td>
-    <td class="whitespace-nowrap">
-      {{if .InApp}}
-      <span class="tooltip tooltip-top inline-flex" data-tip="Fixed channel; cannot edit">
-        <button type="button" class="btn btn-ghost btn-xs btn-square" disabled aria-label="Edit">
-          <i data-lucide="pencil" class="size-3.5"></i>
-        </button>
-      </span>
-      {{else}}
-      <label for="modal-edit-notify-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
-        <i data-lucide="pencil" class="size-3.5"></i>
-      </label>
-      <label for="modal-delete-notify-{{.ID}}" class="btn btn-ghost btn-xs btn-square text-error tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
-        <i data-lucide="trash-2" class="size-3.5"></i>
-      </label>
-      {{end}}
-    </td>
-  </tr>
-  {{end}}
-</tbody>
-{{template "list_table_end"}}
-{{end}}
-{{template "list_panel_end"}}
 
 <section class="card bg-base-100 border border-base-300 mb-4">
   <div class="card-body gap-3">
@@ -116,45 +70,74 @@
   </div>
 </section>
 
-{{$redir := "/settings/general"}}
-{{$evOpts := .EventOptions}}
-{{template "notify_channel_modal" (dict
-  "Mode" "add"
-  "Redirect" $redir
-  "Name" ""
-  "URL" ""
-  "Events" .DefaultEvents
-  "EventOptions" $evOpts
-)}}
-{{range .NotifyChannels}}
-{{if not .InApp}}
-{{template "notify_channel_modal" (dict
-  "Mode" "edit"
-  "Redirect" $redir
-  "ID" .ID
-  "Name" .Name
-  "URL" .URL
-  "Events" .Events
-  "EventOptions" $evOpts
-)}}
-<input type="checkbox" id="modal-delete-notify-{{.ID}}" class="modal-toggle" />
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <form method="post" action="/actions/save-settings" class="card-body gap-6">
+    <input type="hidden" name="redirect" value="/settings/general" />
+    <fieldset class="fieldset gap-3">
+      <legend class="fieldset-legend text-lg font-semibold">Stats</legend>
+      <div class="grid gap-3 md:grid-cols-2 w-full">
+        {{range .Settings}}
+        {{if eq .Key "stats_retention_days"}}
+        {{template "settings_general_field" (dict "Row" .)}}
+        {{end}}
+        {{end}}
+      </div>
+    </fieldset>
+    <div class="card-actions"><button type="submit" class="btn btn-primary">Save</button></div>
+  </form>
+</section>
+
+<input type="checkbox" id="modal-change-credentials" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Delete channel{{if .Name}} - {{.Name}}{{end}}</h3>
-    <p class="text-sm mb-4">Removes this Apprise notification channel.</p>
-    <form method="post" action="/actions/delete-notify-channel">
-      <input type="hidden" name="redirect" value="{{$redir}}" />
-      <input type="hidden" name="id" value="{{.ID}}" />
+    <h3 class="font-bold text-lg mb-2">Change username / password</h3>
+    <p class="text-sm opacity-60 mb-4">Leave password blank to keep the current one. Changing username or password signs out other browsers.</p>
+    <form method="post" action="/actions/save-settings" class="flex flex-col gap-3 js-change-credentials-form" novalidate>
+      <input type="hidden" name="redirect" value="/settings/general" />
+      <input type="hidden" name="auth_settings" value="1" />
+      {{template "field_input" (dict
+        "Name" "auth_username"
+        "Label" "Username"
+        "Value" .AuthUsername
+        "Required" true
+        "Autocomplete" "username"
+        "NoPlaceholder" true
+        "Validator" true
+        "ValidatorHint" "Username is required"
+        "InputClass" "js-auth-username"
+      )}}
+      {{template "field_input" (dict
+        "Name" "auth_password"
+        "Label" "New password"
+        "Type" "password"
+        "Minlength" "4"
+        "Maxlength" "72"
+        "Autocomplete" "new-password"
+        "Placeholder" "Leave blank to keep current"
+        "Validator" true
+        "ValidatorHint" "Password must be at least 4 characters"
+        "InputClass" "js-auth-password"
+      )}}
+      {{template "field_input" (dict
+        "Name" "auth_password_confirm"
+        "Label" "Confirm new password"
+        "Type" "password"
+        "Minlength" "4"
+        "Maxlength" "72"
+        "Autocomplete" "new-password"
+        "NoPlaceholder" true
+        "Validator" true
+        "ValidatorHint" "Passwords do not match"
+        "InputClass" "js-auth-password-confirm"
+      )}}
       <div class="modal-action">
-        <label for="modal-delete-notify-{{.ID}}" class="btn">Cancel</label>
-        <button type="submit" class="btn btn-error">Delete</button>
+        <label for="modal-change-credentials" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
   </div>
-  <div class="modal-backdrop"></div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
-{{end}}
-{{end}}
 
 {{template "foot" .}}
 {{end}}

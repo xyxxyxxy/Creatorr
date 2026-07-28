@@ -2840,6 +2840,75 @@
     }
   });
 
+  function utf8ByteLength(s) {
+    try {
+      return new TextEncoder().encode(String(s || "")).length;
+    } catch (_) {
+      return String(s || "").length;
+    }
+  }
+
+  /** Client rules for Settings → General change-credentials modal (matches auth.ValidatePassword when set). */
+  function syncChangeCredentialsForm(form) {
+    if (!form || !form.classList.contains("js-change-credentials-form")) return "";
+    const user = form.querySelector(".js-auth-username");
+    const pass = form.querySelector(".js-auth-password");
+    const confirm = form.querySelector(".js-auth-password-confirm");
+    if (user) clearControlValidity(user);
+    if (pass) clearControlValidity(pass);
+    if (confirm) clearControlValidity(confirm);
+    if (user && !String(user.value || "").trim()) {
+      setControlValidity(user, "Username is required");
+      return "username";
+    }
+    const p = pass ? String(pass.value || "") : "";
+    const c = confirm ? String(confirm.value || "") : "";
+    if (!p && !c) return "";
+    if (Array.from(p).length < 4) {
+      setControlValidity(pass, "Password must be at least 4 characters");
+      return "password";
+    }
+    if (utf8ByteLength(p) > 72) {
+      setControlValidity(pass, "Password must be at most 72 bytes");
+      return "password";
+    }
+    if (p !== c) {
+      setControlValidity(confirm, "Passwords do not match");
+      return "confirm";
+    }
+    return "";
+  }
+
+  document.body.addEventListener("input", (ev) => {
+    const form = ev.target.closest(".js-change-credentials-form");
+    if (!form) return;
+    if (
+      !ev.target.closest(".js-auth-username") &&
+      !ev.target.closest(".js-auth-password") &&
+      !ev.target.closest(".js-auth-password-confirm")
+    ) {
+      return;
+    }
+    syncChangeCredentialsForm(form);
+  });
+  document.body.addEventListener("submit", (ev) => {
+    const form = ev.target.closest(".js-change-credentials-form");
+    if (!form) return;
+    const which = syncChangeCredentialsForm(form);
+    if (!which) return;
+    ev.preventDefault();
+    const sel =
+      which === "username"
+        ? ".js-auth-username"
+        : which === "confirm"
+          ? ".js-auth-password-confirm"
+          : ".js-auth-password";
+    const el = form.querySelector(sel);
+    try {
+      if (el) el.focus();
+    } catch (_) {}
+  });
+
   document.body.addEventListener("change", (ev) => {
     const input = ev.target.closest("input[data-art-file]");
     if (!input || input.type !== "file") return;

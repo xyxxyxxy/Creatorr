@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xyxxyxxy/Creatorr/internal/auth"
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/health"
@@ -110,7 +111,6 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows := make([]settingsRowView, 0, len(entries))
-	potURLSet := strings.TrimSpace(h.PotProviderURL) != ""
 	for _, e := range entries {
 		row := settingsRowView{
 			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
@@ -123,6 +123,36 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 				row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
 			}
 		}
+		rows = append(rows, row)
+	}
+	authUser, _ := settings.AuthUsername(h.Queue.DB)
+	apiKey, _ := settings.APIKey(h.Queue.DB)
+	render(w, "settings_general", struct {
+		pageBase
+		Settings     []settingsRowView
+		AuthUsername string
+		APIKey       string
+	}{
+		pageBase:     newSettingsPage("Settings · General", "general", flashFromQuery(r)),
+		Settings:     rows,
+		AuthUsername: authUser,
+		APIKey:       apiKey,
+	})
+}
+
+func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
+	entries, err := settings.Connect(h.Queue.DB)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	rows := make([]settingsRowView, 0, len(entries))
+	potURLSet := strings.TrimSpace(h.PotProviderURL) != ""
+	for _, e := range entries {
+		row := settingsRowView{
+			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
+			Cron: settings.CronKeys[e.Key],
+		}
 		if e.Key == settings.KeyPotFetch {
 			row.Select = true
 			row.Value = settings.NormalizePotFetch(e.Value)
@@ -134,7 +164,6 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 				row.Label = row.Label + " (disabled)"
 				row.Value = settings.PotFetchNever
 				row.DisabledTitle = "Set CREATORR_POT_PROVIDER_URL first (Compose default http://creatorr-po-token:4416)."
-				row.Help = "" // tip is DisabledTitle; no field_info when unset
 			}
 		}
 		rows = append(rows, row)
@@ -169,7 +198,7 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 	for _, id := range notify.EventsSortedByLevel() {
 		evOpts = append(evOpts, notifyEventOption{ID: id, Label: notify.EventLabels[id]})
 	}
-	render(w, "settings_general", struct {
+	render(w, "settings_connect", struct {
 		pageBase
 		FlareService   externalServiceURLView
 		PotService     externalServiceURLView
@@ -178,7 +207,7 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 		EventOptions   []notifyEventOption
 		DefaultEvents  []string
 	}{
-		pageBase:       newSettingsPage("Settings · General", "general", flashFromQuery(r)),
+		pageBase:       newSettingsPage("Settings · Connect", "connect", flashFromQuery(r)),
 		FlareService:   flareJoin,
 		PotService:     potJoin,
 		Settings:       rows,
@@ -439,6 +468,10 @@ func (h *Handler) actionSetDomainActive(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
+	if r.FormValue("auth_settings") == "1" {
+		h.actionSaveAuthSettings(w, r)
+		return
+	}
 	vals := map[string]string{}
 	for _, e := range []string{
 		settings.KeyPotFetch,
@@ -514,6 +547,47 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	redirectSettings(w, r, redir, "ok=saved")
 }
 
+func (h *Handler) actionSaveAuthSettings(w http.ResponseWriter, r *http.Request) {
+	username := strings.TrimSpace(r.FormValue("auth_username"))
+	password := r.FormValue("auth_password")
+	confirm := r.FormValue("auth_password_confirm")
+	if username == "" {
+		redirectSettings(w, r, "/settings/general", "err="+urlQuery("username required"))
+		return
+	}
+	var hash string
+	if password != "" || confirm != "" {
+		if err := auth.ValidatePassword(password, confirm); err != nil {
+			redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+			return
+		}
+		var err error
+		hash, err = auth.HashPassword(password)
+		if err != nil {
+			redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+			return
+		}
+	}
+	if _, err := settings.UpdateAuthCredentials(h.Queue.DB, username, hash, true); err != nil {
+		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+		return
+	}
+	if err := auth.IssueSession(w, r, h.Queue.DB, username); err != nil {
+		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+		return
+	}
+	redirectSettings(w, r, "/settings/general", "ok=saved")
+}
+
+func (h *Handler) actionRegenerateAPIKey(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	if _, err := settings.RegenerateAPIKey(h.Queue.DB); err != nil {
+		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+		return
+	}
+	redirectSettings(w, r, "/settings/general", "ok="+urlQuery("API key regenerated"))
+}
+
 func (h *Handler) actionUpsertNotifyChannel(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	htmx := r.Header.Get("HX-Request") == "true"
@@ -525,7 +599,7 @@ func (h *Handler) actionUpsertNotifyChannel(w http.ResponseWriter, r *http.Reque
 				h.writeNotifyURLFieldError(w, r, "invalid channel id")
 				return
 			}
-			redirectSettings(w, r, "/settings/general", "err="+urlQuery("invalid channel id"))
+			redirectSettings(w, r, "/settings/connect", "err="+urlQuery("invalid channel id"))
 			return
 		}
 		id = n
@@ -536,7 +610,7 @@ func (h *Handler) actionUpsertNotifyChannel(w http.ResponseWriter, r *http.Reque
 			h.writeNotifyURLFieldError(w, r, msg)
 			return
 		}
-		redirectSettings(w, r, "/settings/general", "err="+urlQuery(msg))
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(msg))
 		return
 	}
 	events := r.Form["events"]
@@ -546,14 +620,14 @@ func (h *Handler) actionUpsertNotifyChannel(w http.ResponseWriter, r *http.Reque
 			h.writeNotifyURLFieldError(w, r, err.Error())
 			return
 		}
-		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(err.Error()))
 		return
 	}
 	ok := "notify-channel"
 	if id > 0 {
 		ok = "notify-channel-saved"
 	}
-	redir := settingsFormRedirect(r, "/settings/general")
+	redir := settingsFormRedirect(r, "/settings/connect")
 	sep := "?"
 	if strings.Contains(redir, "?") {
 		sep = "&"
@@ -587,14 +661,14 @@ func (h *Handler) actionDeleteNotifyChannel(w http.ResponseWriter, r *http.Reque
 	_ = r.ParseForm()
 	id, err := strconv.ParseInt(strings.TrimSpace(r.FormValue("id")), 10, 64)
 	if err != nil || id <= 0 {
-		redirectSettings(w, r, "/settings/general", "err="+urlQuery("invalid channel id"))
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("invalid channel id"))
 		return
 	}
 	if err := notify.Delete(h.Queue.DB, id); err != nil {
-		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(err.Error()))
 		return
 	}
-	redirectSettings(w, r, "/settings/general", "ok=notify-channel-deleted")
+	redirectSettings(w, r, "/settings/connect", "ok=notify-channel-deleted")
 }
 
 func (h *Handler) actionTestNotifyChannel(w http.ResponseWriter, r *http.Request) {

@@ -27,6 +27,8 @@ type Config struct {
 	PotProviderURL string
 	// CacheDir holds Creatorr-managed working artifacts.
 	CacheDir string
+	// TrustProxy enables trusting X-Forwarded-Proto for Secure session cookies (CREATORR_TRUST_PROXY).
+	TrustProxy bool
 }
 
 // Load reads bootstrap env (port, sidecars) and selects path layout.
@@ -44,6 +46,7 @@ func Load() Config {
 		FlareSolverrURL:       strings.TrimRight(strings.TrimSpace(os.Getenv("CREATORR_FLARESOLVERR_URL")), "/"),
 		PotProviderURL:        strings.TrimSpace(os.Getenv("CREATORR_POT_PROVIDER_URL")),
 		CacheDir:              paths.cache,
+		TrustProxy:            getenvBool("CREATORR_TRUST_PROXY"),
 	}
 }
 
@@ -89,4 +92,9 @@ func getenvInt(key string, def int) int {
 		return def
 	}
 	return n
+}
+
+func getenvBool(key string) bool {
+	v := strings.TrimSpace(os.Getenv(key))
+	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
 }

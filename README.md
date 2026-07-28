@@ -29,9 +29,25 @@ docker compose up -d
 | | |
 | --- | --- |
 | Image | `ghcr.io/xyxxyxxy/creatorr:latest` (`main`); `:develop`; `:sha-<short>` for pins |
-| UI | `http://127.0.0.1:8787/` |
-| Health | `GET /api/health` (`ok` \| `degraded` \| `down`) |
-| OpenAPI | `GET /api/openapi.json` |
+| UI | `http://127.0.0.1:8787/` (first visit: **Setup** account, then login) |
+| Health | `GET /api/health` (`ok` \| `degraded` \| `down`; no auth) |
+| OpenAPI | `GET /api/openapi.json` (requires API key or session after setup) |
+
+### Authentication
+
+First boot: **Setup** (username + password). After that: Forms login (7-day sliding cookie) for the UI; API / SSE need the same cookie or `X-Api-Key` (Settings → General). `GET /api/health` stays public. Proxy TLS: set `CREATORR_TRUST_PROXY=1`. Details: [`docs/settings.md`](docs/settings.md).
+
+**Recover access** (forgot password): stop Creatorr, clear the password hash in SQLite, start again, complete Setup.
+
+CLI:
+
+```bash
+sqlite3 ./var/data/creatorr.db <<'SQL'
+UPDATE settings SET value = '' WHERE key = 'auth_password_hash';
+SQL
+```
+
+Or use [DB Browser for SQLite](https://sqlitebrowser.org/): open `creatorr.db` → Browse Data → `settings` → clear `value` on `auth_password_hash` → Write Changes.
 
 **Volumes** (host `./var` mirrors the container layout):
 
@@ -50,7 +66,7 @@ First boot seeds one root at `/library` (local Go: `var/library`) and quality pr
 ### Sidecars
 
 - **FlareSolverr** - Compose service `creatorr-flaresolverr` (headless Chrome; notable RAM). Set `CREATORR_FLARESOLVERR_URL` (Compose default `http://creatorr-flaresolverr:8191`). Enable **Use FlareSolverr** on a host under Settings → Queue / Domains.
-- **PO tokens** - Compose service `creatorr-po-token`. Set `CREATORR_POT_PROVIDER_URL` (Compose default `http://creatorr-po-token:4416`) and **PO token fetch** under Settings → General. See [`docs/ytdlp.md`](docs/ytdlp.md).
+- **PO tokens** - Compose service `creatorr-po-token`. Set `CREATORR_POT_PROVIDER_URL` (Compose default `http://creatorr-po-token:4416`) and **PO token fetch** under Settings → Connect. See [`docs/ytdlp.md`](docs/ytdlp.md).
 
 ### Custom yt-dlp
 

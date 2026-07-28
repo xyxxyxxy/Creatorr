@@ -12,11 +12,20 @@ import (
 )
 
 type pageBase struct {
-	Title       string
-	Nav         string
-	Icon        string // lucide icon for page title headers
-	SettingsTab string // set when Nav == "settings" (general|library|scheduler|queue|domains|handlers)
-	Flash       *flash
+	Title        string
+	Nav          string
+	Icon         string // lucide icon for page title headers
+	SettingsTab  string // set when Nav == "settings" (general|library|connect|queue|scheduler|maintenance)
+	Flash        *flash
+	AuthUsername string // operator account; for navbar account menu
+}
+
+// usernameForPage returns the operator username for shell chrome (set from Handler.Mount).
+var usernameForPage func() string
+
+// SetUsernameForPage wires the operator username lookup used by newPage.
+func SetUsernameForPage(fn func() string) {
+	usernameForPage = fn
 }
 
 // EpisodeLucideIcon is the Lucide name for indexed episodes (library videos).
@@ -25,7 +34,11 @@ const EpisodeLucideIcon = "square-play"
 
 // newPage builds pageBase with a nav-matched lucide icon.
 func newPage(title, nav string, flash *flash) pageBase {
-	return pageBase{Title: title, Nav: nav, Icon: pageIcon(nav), Flash: flash}
+	p := pageBase{Title: title, Nav: nav, Icon: pageIcon(nav), Flash: flash}
+	if usernameForPage != nil {
+		p.AuthUsername = usernameForPage()
+	}
+	return p
 }
 
 func newSettingsPage(title, tab string, flash *flash) pageBase {
@@ -62,6 +75,8 @@ func settingsTabIcon(tab string) string {
 	switch tab {
 	case "general":
 		return "sliders-horizontal"
+	case "connect":
+		return "plug"
 	case "library":
 		return "folder"
 	case "maintenance":

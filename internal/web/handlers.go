@@ -6,6 +6,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/health"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
@@ -14,13 +15,27 @@ type Handler struct {
 	Library         *library.Store
 	Queue           *queue.Store
 	YtDlp           *ytdlp.Client
-	FlareSolverrURL string // CREATORR_FLARESOLVERR_URL; display-only on Settings → General
+	FlareSolverrURL string // CREATORR_FLARESOLVERR_URL; display-only on Settings → Connect
 	PotProviderURL  string // CREATORR_POT_PROVIDER_URL; empty disables pot_fetch UI
 	Health          *health.Checker
 }
 
 // Mount registers UI routes on r.
 func (h *Handler) Mount(r chi.Router) {
+	SetUsernameForPage(func() string {
+		if h.Queue == nil || h.Queue.DB == nil {
+			return ""
+		}
+		u, _ := settings.AuthUsername(h.Queue.DB)
+		return u
+	})
+
+	r.Get("/setup", h.setupGet)
+	r.Post("/setup", h.setupPost)
+	r.Get("/login", h.loginGet)
+	r.Post("/login", h.loginPost)
+	r.Post("/logout", h.logoutPost)
+
 	r.Get("/", h.overview)
 	r.Get("/series", h.seriesList)
 	r.Get("/series/list-live", h.seriesListLive)
@@ -53,9 +68,10 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/settings", h.settingsRedirect)
 	r.Get("/settings/general", h.settingsGeneral)
 	r.Get("/settings/library", h.settingsLibrary)
-	r.Get("/settings/maintenance", h.settingsMaintenance)
-	r.Get("/settings/scheduler", h.settingsScheduler)
+	r.Get("/settings/connect", h.settingsConnect)
 	r.Get("/settings/queue", h.settingsQueue)
+	r.Get("/settings/scheduler", h.settingsScheduler)
+	r.Get("/settings/maintenance", h.settingsMaintenance)
 	r.Get("/settings/domains", h.settingsDomains)
 	r.Get("/import", h.importPage)
 	r.Get("/actions/import-full-scan-status", h.importFullScanStatus)
@@ -93,6 +109,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/cancel-task", h.actionCancelTask)
 	r.Post("/actions/cancel-domain-tasks", h.actionCancelDomainTasks)
 	r.Post("/actions/save-settings", h.actionSaveSettings)
+	r.Post("/actions/regenerate-api-key", h.actionRegenerateAPIKey)
 	r.Post("/actions/upsert-notify-channel", h.actionUpsertNotifyChannel)
 	r.Post("/actions/delete-notify-channel", h.actionDeleteNotifyChannel)
 	r.Post("/actions/test-notify-channel", h.actionTestNotifyChannel)

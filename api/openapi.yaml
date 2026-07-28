@@ -10,6 +10,9 @@ servers:
   - url: /
     description: Local / Docker
 
+security:
+  - ApiKeyAuth: []
+
 tags:
   - name: system
   - name: tasks
@@ -24,6 +27,7 @@ paths:
       tags: [system]
       operationId: getHealth
       summary: Dependency health checks
+      security: []
       responses:
         "200":
           description: Health report (may be ok, degraded, or down)
@@ -959,6 +963,13 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: Single regenerable API key from Settings → General (required after first-boot setup).
+
   parameters:
     TaskId:
       name: id

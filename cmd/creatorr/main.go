@@ -16,6 +16,7 @@ import (
 
 	"github.com/xyxxyxxy/Creatorr/internal/api"
 	"github.com/xyxxyxxy/Creatorr/internal/api/gen"
+	"github.com/xyxxyxxy/Creatorr/internal/auth"
 	"github.com/xyxxyxxy/Creatorr/internal/config"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/events"
@@ -36,6 +37,7 @@ func main() {
 	slog.SetDefault(log)
 
 	cfg := config.Load()
+	auth.SetTrustForwardedProto(cfg.TrustProxy)
 	if err := os.MkdirAll(cfg.ImportRoot, 0o755); err != nil {
 		log.Warn("mkdir import root", "path", cfg.ImportRoot, "err", err)
 	}
@@ -138,6 +140,7 @@ func main() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
+	r.Use(auth.Middleware(database))
 
 	// SSE must not use the global request timeout.
 	r.Get("/api/events", srvImpl.EventsSSE)

@@ -280,7 +280,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	for _, path := range []string{"/settings/general", "/settings/library", "/settings/maintenance", "/settings/scheduler", "/settings/queue", "/settings/domains", "/tasks", "/history", "/stats"} {
+	for _, path := range []string{"/settings/general", "/settings/connect", "/settings/library", "/settings/maintenance", "/settings/scheduler", "/settings/queue", "/settings/domains", "/tasks", "/history", "/stats"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
@@ -298,6 +298,28 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		}
 		if path == "/settings/general" {
 			body := rec.Body.String()
+			if !strings.Contains(body, "Authentication") || !strings.Contains(body, "Appearance") || !strings.Contains(body, `name="theme-picker"`) || !strings.Contains(body, `value="cyberpunk"`) {
+				t.Fatalf("%s missing auth/theme", path)
+			}
+			if !strings.Contains(body, "modal-change-credentials") || !strings.Contains(body, "Change username / password") {
+				t.Fatalf("%s missing credentials modal", path)
+			}
+			if !strings.Contains(body, "js-change-credentials-form") || !strings.Contains(body, "js-auth-username") {
+				t.Fatalf("%s missing credentials validator hooks", path)
+			}
+			if !strings.Contains(body, "validator-hint") || !strings.Contains(body, "Username is required") {
+				t.Fatalf("%s missing credentials validator hints", path)
+			}
+			if strings.Contains(body, "External services") || strings.Contains(body, "FlareSolverr URL") || strings.Contains(body, "modal-add-notify-channel") {
+				t.Fatalf("%s still has Connect content", path)
+			}
+			if strings.Contains(body, `id="theme-menu"`) || strings.Contains(body, `data-theme-toggle`) {
+				t.Fatalf("%s still has navbar theme controls", path)
+			}
+			continue
+		}
+		if path == "/settings/connect" {
+			body := rec.Body.String()
 			if !strings.Contains(body, "External services") || !strings.Contains(body, "FlareSolverr URL") || !strings.Contains(body, "PO token provider URL") {
 				t.Fatalf("%s missing external service URL joins", path)
 			}
@@ -313,14 +335,14 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "Not configured") && !strings.Contains(body, "Healthy") && !strings.Contains(body, "Unreachable") {
 				t.Fatalf("%s missing health status label", path)
 			}
-			if !strings.Contains(body, "Appearance") || !strings.Contains(body, `name="theme-picker"`) || !strings.Contains(body, `value="cyberpunk"`) {
-				t.Fatalf("%s missing theme picker", path)
-			}
-			if strings.Contains(body, `id="theme-menu"`) || strings.Contains(body, `data-theme-toggle`) {
-				t.Fatalf("%s still has navbar theme controls", path)
+			if !strings.Contains(body, "Notifications") {
+				t.Fatalf("%s missing Notifications", path)
 			}
 			if strings.Contains(body, `name="flare_solverr_url"`) {
 				t.Fatalf("%s still posts flare_solverr_url", path)
+			}
+			if strings.Contains(body, "Appearance") || strings.Contains(body, "Authentication") {
+				t.Fatalf("%s still has General content", path)
 			}
 			continue
 		}
@@ -338,7 +360,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		}
 		if path == "/settings/library" || path == "/settings/queue" || path == "/settings/maintenance" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "/settings/general") || !strings.Contains(body, "/settings/queue") || !strings.Contains(body, "/settings/scheduler") || !strings.Contains(body, "/settings/maintenance") {
+			if !strings.Contains(body, "/settings/general") || !strings.Contains(body, "/settings/connect") || !strings.Contains(body, "/settings/queue") || !strings.Contains(body, "/settings/scheduler") || !strings.Contains(body, "/settings/maintenance") {
 				t.Fatalf("%s missing settings sub-nav in drawer", path)
 			}
 			if strings.Contains(body, `href="/settings/domains"`) {

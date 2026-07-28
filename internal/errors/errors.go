@@ -61,6 +61,8 @@ const (
 	CodeMediaTypeExcluded = "MediaTypeExcluded"
 	CodeLiveBroadcastSkipped = "LiveBroadcastSkipped"
 	CodeMediaVerifyFailed = "MediaVerifyFailed"
+	CodeUnauthorized = "Unauthorized"
+	CodeSetupRequired = "SetupRequired"
 )
 
 // DownloadFailStage maps a download-task failure code to a pipeline stage for
