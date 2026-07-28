@@ -33,7 +33,7 @@ func TestSeriesListRenders(t *testing.T) {
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	h := &web.Handler{Library: lib, Queue: q}
@@ -116,7 +116,7 @@ func TestImportPageRequiresSeries(t *testing.T) {
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	h := &web.Handler{Library: lib, Queue: q}
@@ -196,7 +196,7 @@ func TestOverviewRenders(t *testing.T) {
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	h := &web.Handler{Library: lib, Queue: q}
@@ -240,7 +240,7 @@ func TestTasksShowsSoftPausedHostWithoutDomainsRow(t *testing.T) {
 	}
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	h := &web.Handler{Library: lib, Queue: q}
@@ -273,7 +273,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	h := &web.Handler{Library: lib, Queue: q}
@@ -303,6 +303,12 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			}
 			if !strings.Contains(body, "CREATORR_FLARESOLVERR_URL") || !strings.Contains(body, "CREATORR_POT_PROVIDER_URL") {
 				t.Fatalf("%s missing env hints", path)
+			}
+			if !strings.Contains(body, "Enable &#39;PO token fetch&#39; below") {
+				t.Fatalf("%s missing PO token enable hint", path)
+			}
+			if !strings.Contains(body, "PO token fetch (disabled)") || !strings.Contains(body, `value="never"`) {
+				t.Fatalf("%s pot_fetch should be disabled/never when provider URL unset", path)
 			}
 			if !strings.Contains(body, "Not configured") && !strings.Contains(body, "Healthy") && !strings.Contains(body, "Unreachable") {
 				t.Fatalf("%s missing health status label", path)
@@ -383,6 +389,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "Use FlareSolverr") || !strings.Contains(body, `name="use_flaresolverr"`) {
 				t.Fatalf("%s missing FlareSolverr control in override modal", path)
 			}
+			if !strings.Contains(body, "Use FlareSolverr (disabled)") || !strings.Contains(body, "CREATORR_FLARESOLVERR_URL") {
+				t.Fatalf("%s Use FlareSolverr should be disabled when Flare URL unset", path)
+			}
 			if !strings.Contains(body, "list-panel") {
 				t.Fatalf("%s missing list-panel", path)
 			}
@@ -390,7 +399,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		}
 		if path == "/settings/library" {
 			body := rec.Body.String()
-			if strings.Contains(body, "Scan for missing files") {
+			if strings.Contains(body, "Scan root folders") {
 				t.Fatalf("%s still has Maintenance actions", path)
 			}
 			if !strings.Contains(body, "list-panel") {
@@ -400,7 +409,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		}
 		if path == "/settings/maintenance" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "Scan for missing files") {
+			if !strings.Contains(body, "Scan root folders") {
 				t.Fatalf("%s missing maintenance actions", path)
 			}
 			if !strings.Contains(body, "Apply episode format") {
@@ -438,7 +447,7 @@ func TestTaskDetailPage(t *testing.T) {
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 
@@ -546,7 +555,7 @@ func TestSourceDetailPage(t *testing.T) {
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	ser, err := lib.CreateSeries(library.CreateSeriesParams{
@@ -626,7 +635,7 @@ func TestMonitorToggleHTMX(t *testing.T) {
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
 	seedHandler(t, d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	ser, err := lib.CreateSeries(library.CreateSeriesParams{
@@ -669,7 +678,7 @@ func TestActionAddSeriesManual(t *testing.T) {
 	}
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	h := &web.Handler{Library: lib, Queue: q}
@@ -704,7 +713,7 @@ func TestActionAddSeriesManualJSON(t *testing.T) {
 	}
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	h := &web.Handler{Library: lib, Queue: q}
@@ -738,7 +747,7 @@ func TestActionAddSeriesURLRequiresTitleWithoutDraft(t *testing.T) {
 	}
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	h := &web.Handler{Library: lib, Queue: q}

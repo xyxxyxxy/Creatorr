@@ -129,7 +129,7 @@ func (c *Checker) checkYtDlp(ctx context.Context) Check {
 }
 
 func (c *Checker) checkDisk() Check {
-	roots := []string{c.Cfg.LibraryRoot, c.Cfg.ImportRoot}
+	roots := []string{c.Cfg.InitialRootFolder, c.Cfg.ImportRoot}
 	for _, root := range roots {
 		if root == "" {
 			continue

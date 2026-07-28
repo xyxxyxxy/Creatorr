@@ -297,7 +297,7 @@ func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelSt
 	if s := strings.TrimSpace(queueStr); s != "" {
 		n, err := strconv.Atoi(s)
 		if err != nil || n < 1 {
-			return fmt.Errorf("max download queue must be an integer ≥ 1")
+			return fmt.Errorf("max download tasks must be an integer ≥ 1")
 		}
 		maxQ = n
 		effQueue = n

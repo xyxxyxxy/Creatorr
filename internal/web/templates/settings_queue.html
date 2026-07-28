@@ -36,18 +36,18 @@
     <p class="text-sm opacity-60">Per-hostname queue depth and concurrency. Overrides below replace these for individual domains.</p>
     <div class="grid gap-3">
       <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
-        <legend class="fieldset-legend">Queue</legend>
+        <legend class="fieldset-legend">Domain Queues</legend>
         <div class="grid gap-3">
           <div class="grid gap-3 md:grid-cols-2">
             <fieldset class="fieldset">
-              <legend class="fieldset-legend">Max download queue</legend>
+              <legend class="fieldset-legend">Max download tasks</legend>
               <input type="number" min="1" name="max_download_queue" class="input w-full" value="{{.DefaultLimits.MaxDownloadQueue}}" required />
               <p class="label whitespace-normal">Maximum number of download tasks to be queued for the given domain. 'Download now' user action bypasses this limit.</p>
             </fieldset>
             <fieldset class="fieldset">
               <legend class="fieldset-legend">Max parallel tasks</legend>
               <input type="number" min="1" name="max_parallel_tasks" class="input w-full" value="{{.DefaultLimits.MaxParallelTasks}}" required />
-              <p class="label whitespace-normal">How many tasks may run at once on this domain. Cannot exceed 'Max download queue'.</p>
+              <p class="label whitespace-normal">How many tasks may run at once on this domain. Cannot exceed 'Max download tasks'.</p>
             </fieldset>
           </div>
           <fieldset class="fieldset">
@@ -56,7 +56,7 @@
               <input type="number" min="0" name="task_cooldown_seconds" class="input join-item grow min-w-0" value="{{.DefaultLimits.TaskCooldownSeconds}}" required />
               <span class="btn join-item no-animation pointer-events-none">seconds</span>
             </div>
-            <p class="label whitespace-normal">Pause after a task starts before another may start (still applies when several run in parallel).</p>
+            <p class="label whitespace-normal">Pause after a task starts before another may start within the queue (still applies when several run in parallel).</p>
           </fieldset>
         </div>
       </fieldset>

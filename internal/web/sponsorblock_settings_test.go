@@ -24,7 +24,7 @@ func TestLibrarySettingsSponsorBlock(t *testing.T) {
 	}
 	defer d.Close()
 	_ = settings.SeedDefaults(d)
-	_ = library.SeedDefaults(d, config.Config{LibraryRoot: t.TempDir()})
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	h := &web.Handler{Library: lib, Queue: q}

@@ -29,7 +29,7 @@ func TestHealthDBAndWorker(t *testing.T) {
 	}
 	cfg := config.Config{
 		DBPath:      filepath.Join(dir, "creatorr.db"),
-		LibraryRoot: filepath.Join(dir, "library"),
+		InitialRootFolder: filepath.Join(dir, "library"),
 		ImportRoot:  filepath.Join(dir, "import"),
 		YtDlpBin:    bin,
 	}

@@ -120,13 +120,13 @@ func normalizeLimits(v DomainLimits) DomainLimits {
 // ValidateConcurrencyLimits checks max_parallel_tasks ≤ max_download_queue (both ≥ 1).
 func ValidateConcurrencyLimits(maxQueue, maxParallel int) error {
 	if maxQueue < 1 {
-		return fmt.Errorf("max download queue must be an integer ≥ 1")
+		return fmt.Errorf("max download tasks must be an integer ≥ 1")
 	}
 	if maxParallel < 1 {
 		return fmt.Errorf("max parallel tasks must be an integer ≥ 1")
 	}
 	if maxParallel > maxQueue {
-		return fmt.Errorf("max parallel tasks cannot exceed max download queue")
+		return fmt.Errorf("max parallel tasks cannot exceed max download tasks")
 	}
 	return nil
 }

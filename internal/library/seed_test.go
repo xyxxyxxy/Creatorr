@@ -18,7 +18,7 @@ func TestSeedDefaults(t *testing.T) {
 	defer d.Close()
 
 	rootPath := filepath.Join(dir, "library")
-	cfg := config.Config{LibraryRoot: rootPath}
+	cfg := config.Config{InitialRootFolder: rootPath}
 	if err := library.SeedDefaults(d, cfg); err != nil {
 		t.Fatal(err)
 	}

@@ -22,16 +22,16 @@ const (
 )
 
 // SeedDefaults inserts the shipped root folder and quality profiles when tables are empty.
-// Root path comes from cfg.LibraryRoot (/media/library in container; var/media/library local),
+// Root path comes from cfg.InitialRootFolder (/library in container; var/library local),
 // stored as an absolute path. Seeded root name is the last path segment (operator create may leave name empty).
 // Profiles: best (bv*+ba/b merge with progressive fallback), HD 1080p, HD 720p, SD 480p (soft unrestricted tails).
 // Seed insert order is unrelated to UI order (ListProfiles sorts by name).
 // Remux is always MKV (library.RemuxContainer; not a Setting).
 // Bare yt-dlp "best" alone is avoided as the primary selector (soft progressive on DASH sites).
 func SeedDefaults(database *db.DB, cfg config.Config) error {
-	path := cfg.LibraryRoot
+	path := cfg.InitialRootFolder
 	if path == "" {
-		path = filepath.Join("var", "media", "library")
+		path = filepath.Join("var", "library")
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {

@@ -54,6 +54,10 @@ func main() {
 		log.Error("drop legacy FlareSolverr URL setting", "err", err)
 		os.Exit(1)
 	}
+	if err := settings.DisablePotFetchWhenUnset(database, cfg.PotProviderURL); err != nil {
+		log.Error("disable pot_fetch when provider URL unset", "err", err)
+		os.Exit(1)
+	}
 	if err := library.SeedDefaults(database, cfg); err != nil {
 		log.Error("seed library defaults", "err", err)
 		os.Exit(1)

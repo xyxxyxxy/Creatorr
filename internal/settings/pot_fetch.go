@@ -61,3 +61,12 @@ func EffectivePotFetch(database *db.DB, providerURL string) (string, error) {
 	}
 	return NormalizePotFetch(raw), nil
 }
+
+// DisablePotFetchWhenUnset forces pot_fetch=never when CREATORR_POT_PROVIDER_URL is empty.
+// Keeps Settings UI and stored value aligned with runtime EffectivePotFetch.
+func DisablePotFetchWhenUnset(database *db.DB, providerURL string) error {
+	if strings.TrimSpace(providerURL) != "" {
+		return nil
+	}
+	return Set(database, KeyPotFetch, PotFetchNever)
+}

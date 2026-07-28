@@ -53,9 +53,9 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --gid 1000 creatorr \
   && useradd --uid 1000 --gid 1000 --home-dir /app --no-create-home --shell /usr/sbin/nologin creatorr \
-  && mkdir -p /data /cache /media/library /media/import /yt-dlp-plugins \
+  && mkdir -p /data /library /import /yt-dlp-plugins \
        /usr/local/share/yt-dlp-plugins \
-  && chown -R creatorr:creatorr /data /cache /media /yt-dlp-plugins
+  && chown -R creatorr:creatorr /data /library /import /yt-dlp-plugins
 
 COPY --from=build /out/creatorr /usr/local/bin/creatorr
 COPY --from=tools /out/yt-dlp /usr/local/bin/yt-dlp
