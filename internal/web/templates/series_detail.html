@@ -68,15 +68,15 @@
     </td>
     {{template "source_status_cell" .StatusInd}}
     <td class="whitespace-nowrap text-end">
-      <div class="flex items-center justify-end gap-0.5">
+      <div class="join">
       {{template "source_scan_actions" .}}
       {{if .HasRetryable}}
-      <label for="modal-retry-source-{{.ID}}" class="btn btn-ghost btn-xs tooltip tooltip-top" data-tip="Clear error hold: wanted_download_error and wanted_source_error → wanted. Does not enqueue downloads.">Retry</label>
+      <label for="modal-retry-source-{{.ID}}" class="btn btn-ghost btn-xs join-item tooltip tooltip-top" data-tip="Clear error hold: wanted_download_error and wanted_source_error → wanted. Does not enqueue downloads.">Retry</label>
       {{end}}
-      <label for="modal-edit-source-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+      <label for="modal-edit-source-{{.ID}}" class="btn btn-secondary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
         <i data-lucide="pencil" class="size-3.5"></i>
       </label>
-      <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+      <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
         <i data-lucide="trash-2" class="size-3.5"></i>
       </label>
       </div>
