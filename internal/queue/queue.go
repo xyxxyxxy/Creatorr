@@ -71,7 +71,7 @@ const PrioritySyncFilesDue = 50
 // PriorityRetentionDeleteDue bumps cron retention_delete ahead of pending apply naming.
 const PriorityRetentionDeleteDue = 50
 
-// PriorityDownloadNow places a download at the front of the domain lane.
+// PriorityDownloadNow places a Queue download at the front of the domain lane.
 const PriorityDownloadNow = 100
 
 // PrioritySponsorblockCut keeps SponsorBlock cut/encode behind other system work.
@@ -111,7 +111,7 @@ type EnqueueParams struct {
 	Payload           map[string]any
 	Priority          int
 	Message           string
-	BypassDownloadCap bool // Download now: skip max_download_queue
+	BypassDownloadCap bool // Queue download: skip max_download_queue
 }
 
 // Store wraps queue operations.

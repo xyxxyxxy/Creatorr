@@ -1316,7 +1316,7 @@ func TestEnqueueDownloadNowAllowsUnmonitoredSeries(t *testing.T) {
 	}
 	id, err := s.EnqueueDownloadNow(res.VideoID)
 	if err != nil || id == 0 {
-		t.Fatalf("download now: %v id=%d", err, id)
+		t.Fatalf("queue download: %v id=%d", err, id)
 	}
 }
 
@@ -1377,7 +1377,7 @@ func TestEnqueueDownloadNowBypassesCap(t *testing.T) {
 	}
 	id, err := s.EnqueueDownloadNow(vids[1])
 	if err != nil || id == 0 {
-		t.Fatalf("download now: %v id=%d", err, id)
+		t.Fatalf("queue download: %v id=%d", err, id)
 	}
 }
 

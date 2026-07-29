@@ -46,7 +46,7 @@ func enqueueDownloadParams(videoID, seriesID int64, domain string) queue.Enqueue
 
 func enqueueDownloadNowParams(videoID, seriesID int64, domain string) queue.EnqueueParams {
 	p := enqueueDownloadParams(videoID, seriesID, domain)
-	p.Message = "Download now"
+	p.Message = "Queue download"
 	p.Priority = queue.PriorityDownloadNow
 	p.BypassDownloadCap = true
 	return p

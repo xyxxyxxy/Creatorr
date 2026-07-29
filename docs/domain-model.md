@@ -72,12 +72,12 @@ When introducing a new domain term, add it here (or the topic doc above if it be
 - `wanted_source_error` - still wanted, but source has too many `wanted_download_error` videos (auto-download held)
 - `wanted_download_error` - last download failed; counts toward the per-source error threshold
 - `downloaded` - file present on disk
-- `verify_failed` - packed media failed post-pack null-decode verify; **file kept**; does not count toward `source_download_error_threshold`. **Want** → `wanted`; **Download now** re-downloads. File sync treats like `downloaded` (path gone → `missing`; path back → `downloaded`). Not eligible for media maturity while in this status.
+- `verify_failed` - packed media failed post-pack null-decode verify; **file kept**; does not count toward `source_download_error_threshold`. **Want** → `wanted`; **Queue download** re-downloads. File sync treats like `downloaded` (path gone → `missing`; path back → `downloaded`). Not eligible for media maturity while in this status.
 - `missing` - path still in DB but media not found; file sync may restore to `downloaded` when the file returns. Roots whose path is offline are skipped (no mass-missing on unmounted volume).
 - `deleted` - files intentionally gone (retention or user delete); index kept; file rows cleared - re-download via Want
 - `ignored` - user ignored, source **Mark new videos as ignored** (`index_as_ignored`), or series **auto ignore filters** (`media_type`) at index or download. Ignoring cancels pending **and** running download tasks for that video (running download asks for confirm in UI). Cancelled downloads appear in History with status **`cancelled`** (reason e.g. `Cancelled (video ignored)`).
 
-**No video monitored flag.** Eligibility is status only (`wanted` vs `ignored` / `deleted` / `missing` / errors). Download-wanted for status `wanted` when series monitored ∧ domain active. **Download now** also accepts ignore/deleted/missing/error/`verify_failed` (sets `wanted`), bypasses the queue cap, and may run when series is unmonitored (domain active still required). **Want** sets `ignored` / `deleted` / `missing` / `verify_failed` → `wanted` without enqueueing.
+**No video monitored flag.** Eligibility is status only (`wanted` vs `ignored` / `deleted` / `missing` / errors). Download-wanted for status `wanted` when series monitored ∧ domain active. **Queue download** also accepts ignore/deleted/missing/error/`verify_failed` (sets `wanted`), bypasses the queue cap, and may run when series is unmonitored (domain active still required). **Want** sets `ignored` / `deleted` / `missing` / `verify_failed` → `wanted` without enqueueing.
 
 ## Upload time
 

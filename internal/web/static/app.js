@@ -630,7 +630,7 @@
     const tips = {
       wanted_source_error: "Source has too many download errors - Retry on the source",
       wanted_download_error: "Last download failed",
-      verify_failed: "Post-pack media verify failed - file kept; Want or Download now",
+      verify_failed: "Post-pack media verify failed - file kept; Want or Queue download",
       missing: "File path recorded but media not on disk - file sync may restore",
     };
     const icons = {

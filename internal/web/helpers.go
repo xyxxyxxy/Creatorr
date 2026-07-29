@@ -166,7 +166,7 @@ func flashFromQuery(r *http.Request) *flash {
 	case "video-metadata-busy":
 		return flashOK("Episode metadata saved. Rename skipped while a download or pack task is busy - run Apply episode format later.")
 	case "download":
-		return flashOK("Download now enqueued.")
+		return flashOK("Queue download enqueued.")
 	case "video-deleted":
 		return flashOK("Video delete queued - files remove in the background.")
 	case "sidecar-deleted":
