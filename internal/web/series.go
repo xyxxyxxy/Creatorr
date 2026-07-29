@@ -53,7 +53,6 @@ func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
 	}
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
-	allSourceURLs, _ := h.Library.ListAllSourceURLs()
 	render(w, "series_list", struct {
 		pageBase
 		Live                       seriesListLiveData
@@ -61,7 +60,6 @@ func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
 		Profiles                   []library.QualityProfile
 		ScanCronDescriptors        []string
 		AutoIgnoreMediaTypeOptions []string
-		AllSourceURLs              []string
 	}{
 		pageBase:                   newPage("Series", "series", flashFromQuery(r)),
 		Live:                       live,
@@ -69,7 +67,6 @@ func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
 		Profiles:                   profiles,
 		ScanCronDescriptors:        scanCronDescriptors(),
 		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
-		AllSourceURLs:              allSourceURLs,
 	})
 }
 
@@ -730,19 +727,6 @@ func (h *Handler) actionFetchAddSeries(w http.ResponseWriter, r *http.Request) {
 	}
 	if sourceURL == "" {
 		writeJSON(http.StatusBadRequest, map[string]string{"error": "URL is required"})
-		return
-	}
-	if sid, ok, err := h.Library.FindSeriesIDBySourceURL(sourceURL); err != nil {
-		writeJSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	} else if ok {
-		name := fmt.Sprintf("#%d", sid)
-		if ser, err := h.Library.GetSeries(sid, false); err == nil && ser != nil {
-			name = ser.Title
-		}
-		writeJSON(http.StatusConflict, map[string]string{
-			"error": fmt.Sprintf("source URL already used by series %q", name),
-		})
 		return
 	}
 	if h.Queue == nil {

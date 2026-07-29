@@ -25,7 +25,6 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	profiles, _ := h.Library.ListProfiles()
-	allSourceURLs, _ := h.Library.ListAllSourceURLs()
 	incompleteFullScan, _ := h.Library.HasIncompleteFullScan()
 
 	rootPath := map[int64]string{}
@@ -56,7 +55,6 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 		Videos                     []library.ImportPickerVideo
 		ScanCronDescriptors        []string
 		AutoIgnoreMediaTypeOptions []string
-		AllSourceURLs              []string
 		IncompleteFullScan         bool
 	}{
 		pageBase:                   newPage("Import", "import", nil),
@@ -67,7 +65,6 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 		Videos:                     videos,
 		ScanCronDescriptors:        scanCronDescriptors(),
 		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
-		AllSourceURLs:              allSourceURLs,
 		IncompleteFullScan:         incompleteFullScan,
 	})
 }

@@ -119,6 +119,17 @@
 }
 
 /*
+  Disabled tip hosts: daisyUI sets pointer-events:none on .btn:disabled /
+  .btn-disabled / [aria-disabled=true], so tip on the same host never receives
+  hover. Prefer wrapping tip outside the control (docs/ui.md); this restores
+  hover for leftover tip-on-disabled buttons.
+*/
+.btn.tooltip:is(:disabled, [disabled], .btn-disabled, [aria-disabled="true"]) {
+  pointer-events: auto;
+  cursor: not-allowed;
+}
+
+/*
   daisyUI tooltips wrap at max-width 20rem (white-space:normal). Long yt-dlp
   --format selectors on quality profile names must stay one line.
   https://daisyui.com/components/tooltip/

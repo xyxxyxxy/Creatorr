@@ -316,17 +316,6 @@ func (s *Store) CreateSeries(p CreateSeriesParams) (*Series, error) {
 			title = "Untitled series"
 		}
 	}
-	if sourceURL != "" {
-		if sid, ok, err := s.FindSeriesIDBySourceURL(sourceURL); err != nil {
-			return nil, err
-		} else if ok {
-			name := fmt.Sprintf("#%d", sid)
-			if ser, err := s.GetSeries(sid, false); err == nil && ser != nil {
-				name = ser.Title
-			}
-			return nil, fmt.Errorf("%w: source URL already used by series %q", ErrConflict, name)
-		}
-	}
 	if taken, err := s.seriesFolderTaken(p.RootID, title, 0); err != nil {
 		return nil, err
 	} else if taken {
@@ -360,40 +349,6 @@ func (s *Store) CreateSeries(p CreateSeriesParams) (*Series, error) {
 		}
 	}
 	return s.GetSeries(sid, false)
-}
-
-// FindSeriesIDBySourceURL returns the series that already owns this source URL (any series).
-func (s *Store) FindSeriesIDBySourceURL(raw string) (seriesID int64, ok bool, err error) {
-	url := normalizeSourceURL(raw)
-	if url == "" {
-		return 0, false, nil
-	}
-	err = s.DB.SQL.QueryRow(`SELECT series_id FROM sources WHERE url = ? LIMIT 1`, url).Scan(&seriesID)
-	if err == sql.ErrNoRows {
-		return 0, false, nil
-	}
-	if err != nil {
-		return 0, false, err
-	}
-	return seriesID, true, nil
-}
-
-// ListAllSourceURLs returns every source URL (normalized as stored).
-func (s *Store) ListAllSourceURLs() ([]string, error) {
-	rows, err := s.DB.SQL.Query(`SELECT url FROM sources WHERE url != '' ORDER BY id`)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	var out []string
-	for rows.Next() {
-		var u string
-		if err := rows.Scan(&u); err != nil {
-			return nil, err
-		}
-		out = append(out, u)
-	}
-	return out, rows.Err()
 }
 
 // seriesFolderTaken reports whether another series on rootID would use the same SeriesDir name.
@@ -793,8 +748,8 @@ func (s *Store) GetSource(seriesID, sourceID int64) (*Source, error) {
 // UpdateSourceParams patches a source; nil pointers mean unchanged.
 // Kind and URL are immutable after create. Single sources force scan_cron empty and ignore cutoff.
 type UpdateSourceParams struct {
-	Label          *string
-	ScanCron       *string
+	Label              *string
+	ScanCron           *string
 	IndexAsIgnored     *bool
 	TitleRegexpInclude *string
 	TitleRegexpExclude *string

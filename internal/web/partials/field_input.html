@@ -16,7 +16,7 @@
   NoPlaceholder: omit placeholder (legend already names the field).
   Disabled: tip wrap (DisabledTitle, else Hint); mute legend label / hint / range readout only
             (never fieldset or tip host - docs/ui.md Tooltips). Control mute = daisyUI :disabled.
-  Hidden input keeps Name/Value in the form.
+  Hidden input keeps Name/Value in the form when Name is set (omit Name for display-only).
 */}}
 {{$ph := .Placeholder}}{{if and (not .NoPlaceholder) (not $ph)}}{{$ph = .Label}}{{end}}
 {{$type := .Type}}{{if not $type}}{{$type = "text"}}{{end}}
@@ -37,7 +37,7 @@
       {{if .Info}}{{template "field_info" (dict "Info" .Info)}}{{end}}
     </span>
   </legend>
-  {{if .Disabled}}
+  {{if and .Disabled .Name}}
   <input type="hidden" name="{{.Name}}" value="{{.Value}}" />
   {{end}}
   {{if eq $type "textarea"}}

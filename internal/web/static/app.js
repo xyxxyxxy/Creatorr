@@ -1797,17 +1797,6 @@
     });
   }
 
-  function existingAddSeriesSourceURLs() {
-    const el = document.getElementById("add-series-all-source-urls");
-    if (!el) return [];
-    try {
-      const v = JSON.parse(el.textContent || "[]");
-      return Array.isArray(v) ? v.map(normalizeSourceURLClient) : [];
-    } catch (_) {
-      return [];
-    }
-  }
-
   /** daisyUI validator hint sibling (https://daisyui.com/components/validator/). */
   function controlValidatorHint(el) {
     if (!el) return null;
@@ -1883,14 +1872,6 @@
   }
   window.clearFormControlValidity = clearFormControlValidity;
 
-  function addSeriesURLClash(form) {
-    if (!form) return false;
-    const urlEl = form.querySelector("#add-series-url");
-    const typed = normalizeSourceURLClient(urlEl && urlEl.value);
-    if (!typed) return false;
-    return existingAddSeriesSourceURLs().some((u) => u === typed);
-  }
-
   function addSeriesURLInvalid(form) {
     if (!form) return false;
     const urlEl = form.querySelector("#add-series-url");
@@ -1904,13 +1885,10 @@
     if (!urlEl) return;
     const has = String(urlEl.value || "").trim() !== "";
     const invalid = addSeriesURLInvalid(form);
-    const clash = !invalid && addSeriesURLClash(form);
     const blocked = form.querySelector("[data-add-series-submit]")?.getAttribute("data-blocked") === "1";
-    if (cont) cont.disabled = blocked || !has || clash || invalid || cont.dataset.busy === "1";
+    if (cont) cont.disabled = blocked || !has || invalid || cont.dataset.busy === "1";
     if (invalid) {
       setControlValidity(urlEl, "Enter a valid http(s) URL with a host.");
-    } else if (clash) {
-      setControlValidity(urlEl, "This URL is already a source on another series.");
     } else {
       clearControlValidity(urlEl);
     }
@@ -1937,7 +1915,7 @@
     let field = null;
     if (/\btitle\b/.test(lower) && /required|already exists|same root/.test(lower)) {
       field = form.querySelector("#add-series-title");
-    } else if (/source url|url already|valid http|with a host|already used by series/.test(lower)) {
+    } else if (/source url|url already|valid http|with a host/.test(lower)) {
       field = form.querySelector("#add-series-url");
     } else if (/\broot\b/.test(lower)) {
       field = form.querySelector('select[name="root_id"]');
@@ -2227,7 +2205,7 @@
     const form = btn.closest("form.js-add-series-form");
     if (!form) return;
     const urlEl = form.querySelector("#add-series-url");
-    if (!urlEl || !String(urlEl.value || "").trim() || addSeriesURLClash(form)) {
+    if (!urlEl || !String(urlEl.value || "").trim() || addSeriesURLInvalid(form)) {
       syncAddSeriesSourceNav(form);
       return;
     }

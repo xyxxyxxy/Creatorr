@@ -2,20 +2,22 @@
 {{/*
   Join-items for series source row. Wrapper uses display:contents so OOB swap
   still targets this id while buttons participate in the parent .join.
-  Disabled uses a non-submit join-item so tips still show (native :disabled
-  does not receive hover).
+  Disabled: tip wraps the control - daisyUI .btn-disabled / :disabled set
+  pointer-events:none, so tip on the same host never receives hover.
 */}}
 <span id="source-scan-actions-{{.ID}}" class="contents" {{if .OOB}}hx-swap-oob="true"{{end}}>
   {{if and (ne .Kind "single") .FullScanDone}}
-  {{$tipScanDisabled := or .ScanActive (not .DomainActive)}}
+  {{$scanOff := or .ScanActive (not .DomainActive)}}
   {{$tipScan := "Scan for new videos"}}
-  {{if .ScanActive}}{{$tipScan = "'Scan' queued"}}{{else if and (not .DomainActive) .DomainDisabledTitle}}{{$tipScan = .DomainDisabledTitle}}{{end}}
+  {{if .ScanActive}}{{$tipScan = "'Scan' queued"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{end}}
   <form method="post" action="/actions/scan-source" class="contents">
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     <input type="hidden" name="source_id" value="{{.ID}}" />
-    {{if $tipScanDisabled}}
-    <span class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top btn-disabled" data-tip="{{$tipScan}}" aria-label="Scan for new videos" aria-disabled="true" role="button" tabindex="-1">
-      <i data-lucide="scan-line" class="size-3.5" aria-hidden="true"></i>
+    {{if $scanOff}}
+    <span class="tooltip tooltip-top join-item inline-flex" data-tip="{{$tipScan}}">
+      <span class="btn btn-soft btn-primary btn-xs btn-square btn-disabled" aria-label="Scan for new videos" aria-disabled="true" role="button" tabindex="-1">
+        <i data-lucide="scan-line" class="size-3.5" aria-hidden="true"></i>
+      </span>
     </span>
     {{else}}
     <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="{{$tipScan}}" aria-label="Scan for new videos">
@@ -24,15 +26,17 @@
     {{end}}
   </form>
   {{end}}
-  {{$tipFullDisabled := or .ScanActive (not .DomainActive)}}
+  {{$fullOff := or .ScanActive (not .DomainActive)}}
   {{$tipFull := "Start 'Full scan'"}}
-  {{if .ScanActive}}{{$tipFull = "'Full scan' queued"}}{{else if and (not .DomainActive) .DomainDisabledTitle}}{{$tipFull = .DomainDisabledTitle}}{{end}}
+  {{if .ScanActive}}{{$tipFull = "'Full scan' queued"}}{{else if not .DomainActive}}{{$tipFull = .DomainDisabledTitle}}{{if not $tipFull}}{{$tipFull = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{end}}
   <form method="post" action="/actions/full-rescan-source" class="contents">
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     <input type="hidden" name="source_id" value="{{.ID}}" />
-    {{if $tipFullDisabled}}
-    <span class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top btn-disabled" data-tip="{{$tipFull}}" aria-label="Start full scan" aria-disabled="true" role="button" tabindex="-1">
-      <i data-lucide="scan-text" class="size-3.5" aria-hidden="true"></i>
+    {{if $fullOff}}
+    <span class="tooltip tooltip-top join-item inline-flex" data-tip="{{$tipFull}}">
+      <span class="btn btn-soft btn-primary btn-xs btn-square btn-disabled" aria-label="Start full scan" aria-disabled="true" role="button" tabindex="-1">
+        <i data-lucide="scan-text" class="size-3.5" aria-hidden="true"></i>
+      </span>
     </span>
     {{else}}
     <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="{{$tipFull}}" aria-label="Start full scan">

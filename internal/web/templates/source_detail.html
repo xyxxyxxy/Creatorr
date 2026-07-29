@@ -19,21 +19,31 @@
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
     {{if and (ne .Source.Kind "single") .Source.FullScanDone}}
+    {{$scanOff := or .ScanActive (not .DomainActive)}}
+    {{$tipScan := "Scan for new videos"}}
+    {{if .ScanActive}}{{$tipScan = "'Scan' already queued or running"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{end}}
     <form method="post" action="/actions/scan-source">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <button type="submit" class="btn btn-outline tooltip tooltip-top" {{if or .ScanActive (not .DomainActive)}}disabled{{end}} data-tip="{{if .ScanActive}}'Scan' already queued or running{{else if and (not .DomainActive) .DomainDisabledTitle}}{{.DomainDisabledTitle}}{{else}}Scan for new videos{{end}}">Scan</button>
+      <span class="tooltip tooltip-top inline-flex" data-tip="{{$tipScan}}">
+        <button type="submit" class="btn btn-outline" {{if $scanOff}}disabled{{end}}>Scan</button>
+      </span>
     </form>
     {{end}}
     {{if .HasRetryable}}
     <label for="modal-retry-source" class="btn btn-outline tooltip tooltip-top" data-tip="Clear error hold for this source’s videos.">Retry</label>
     {{end}}
+    {{$fullOff := or .ScanActive (not .DomainActive)}}
+    {{$tipFull := "Start 'Full scan'"}}
+    {{if .ScanActive}}{{$tipFull = "'Full scan' already queued or running"}}{{else if not .DomainActive}}{{$tipFull = .DomainDisabledTitle}}{{if not $tipFull}}{{$tipFull = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{else if .Source.FullScanDone}}{{$tipFull = "Start 'Full scan'. Keeps videos; adds new findings."}}{{end}}
     <form method="post" action="/actions/full-rescan-source">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <button type="submit" class="btn btn-outline tooltip tooltip-top" {{if or .ScanActive (not .DomainActive)}}disabled{{end}} data-tip="{{if .ScanActive}}'Full scan' already queued or running{{else if and (not .DomainActive) .DomainDisabledTitle}}{{.DomainDisabledTitle}}{{else if .Source.FullScanDone}}Start 'Full scan'. Keeps videos; adds new findings.{{else}}Start 'Full scan'{{end}}">Full scan</button>
+      <span class="tooltip tooltip-top inline-flex" data-tip="{{$tipFull}}">
+        <button type="submit" class="btn btn-outline" {{if $fullOff}}disabled{{end}}>Full scan</button>
+      </span>
     </form>
     <label for="modal-edit-source" class="btn btn-outline">Edit</label>
     <label for="modal-delete-source" class="btn btn-soft btn-error">Delete</label>
@@ -112,24 +122,17 @@
 <div class="modal">
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Edit {{if eq .Source.Kind "single"}}single{{else}}feed{{end}}</h3>
-        <form method="post" action="/actions/update-source" class="space-y-2 js-source-url-form" data-current-url="{{.Source.URL}}">
+        <form method="post" action="/actions/update-source" class="space-y-2">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <fieldset class="fieldset">
-  <legend class="fieldset-legend">
-    <span class="inline-flex items-center gap-1">
-      URL
-      {{if eq .Source.Kind "single"}}
-          {{template "field_info" (dict "Info" "Changing URL re-detects the domain (hostname). For singles, also restarts indexing.")}}
-          {{else}}
-          {{template "field_info" (dict "Info" "Changing URL re-detects the domain (hostname).")}}
-          {{end}}
-    </span>
-  </legend>
-  <input name="url" class="input w-full js-source-url validator" required value="{{.Source.URL}}" />
-  <p class="validator-hint hidden">Enter a valid http(s) URL with a host.</p>
-</fieldset>
+      {{template "field_input" (dict
+        "Label" "URL"
+        "Value" .Source.URL
+        "Disabled" true
+        "DisabledTitle" "Source URL cannot be changed later. Create a different source instead."
+        "NoPlaceholder" true
+      )}}
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Name (optional)</legend>
         <input name="label" class="input w-full" value="{{if .Source.Label.Valid}}{{.Source.Label.String}}{{end}}" />
@@ -156,7 +159,7 @@
       {{end}}
       <div class="modal-action">
         <label for="modal-edit-source" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary js-source-url-submit">Save</button>
+        <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
   </div>

@@ -14,7 +14,6 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	}
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
-	allSourceURLs, _ := h.Library.ListAllSourceURLs()
 
 	recentVids, _ := h.Library.ListRecentVideos(VideoPageSize)
 	recentRows := h.buildSeriesVideoRows(recentVids, nil, nil)
@@ -40,7 +39,6 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		Profiles                   []library.QualityProfile
 		ScanCronDescriptors        []string
 		AutoIgnoreMediaTypeOptions []string
-		AllSourceURLs              []string
 	}{
 		pageBase:                   newPage("Overview", "overview", flashFromQuery(r)),
 		SeriesCount:                totals.SeriesCount,
@@ -52,6 +50,5 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		Profiles:                   profiles,
 		ScanCronDescriptors:        scanCronDescriptors(),
 		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
-		AllSourceURLs:              allSourceURLs,
 	})
 }

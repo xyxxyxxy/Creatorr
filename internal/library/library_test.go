@@ -171,7 +171,7 @@ func TestCreateSeriesPassesSourceOptions(t *testing.T) {
 	}
 }
 
-func TestCreateSeriesRejectsDuplicateSourceURL(t *testing.T) {
+func TestCreateSeriesAllowsDuplicateSourceURLAcrossSeries(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	_, err := s.CreateSeries(library.CreateSeriesParams{
@@ -181,12 +181,15 @@ func TestCreateSeriesRejectsDuplicateSourceURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.CreateSeries(library.CreateSeriesParams{
+	ser2, err := s.CreateSeries(library.CreateSeriesParams{
 		Title: "Two", SourceURL: "https://example.com/@dup",
 		RootID: rootID, QualityProfileID: profileID, Monitored: true,
 	})
-	if !errors.Is(err, library.ErrConflict) {
-		t.Fatalf("want conflict, got %v", err)
+	if err != nil {
+		t.Fatalf("same URL on another series should succeed: %v", err)
+	}
+	if ser2 == nil || len(ser2.Sources) != 1 {
+		t.Fatalf("want one source on second series, got %#v", ser2)
 	}
 }
 
