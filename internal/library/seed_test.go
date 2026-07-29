@@ -45,16 +45,19 @@ func TestSeedDefaults(t *testing.T) {
 		t.Fatalf("root name=%q path=%q ttl=%v want name %q path %q", name, path, ttl, wantName, absRoot)
 	}
 
-	rows, err := d.SQL.Query(`SELECT id, name, format_selector FROM quality_profiles ORDER BY id`)
+	rows, err := d.SQL.Query(`SELECT id, name, format_selector, verify_media FROM quality_profiles ORDER BY id`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = rows.Close() }()
-	want := []struct{ name, format string }{
-		{library.DefaultProfileName, library.DefaultFormat},
-		{library.Profile1080Name, library.Profile1080Format},
-		{library.Profile720Name, library.Profile720Format},
-		{library.Profile480Name, library.Profile480Format},
+	want := []struct {
+		name, format string
+		verify       int
+	}{
+		{library.DefaultProfileName, library.DefaultFormat, 1},
+		{library.Profile1080Name, library.Profile1080Format, 0},
+		{library.Profile720Name, library.Profile720Format, 0},
+		{library.Profile480Name, library.Profile480Format, 0},
 	}
 	i := 0
 	for rows.Next() {
@@ -63,11 +66,12 @@ func TestSeedDefaults(t *testing.T) {
 		}
 		var id int64
 		var pname, fmtSel string
-		if err := rows.Scan(&id, &pname, &fmtSel); err != nil {
+		var verify int
+		if err := rows.Scan(&id, &pname, &fmtSel, &verify); err != nil {
 			t.Fatal(err)
 		}
-		if pname != want[i].name || fmtSel != want[i].format {
-			t.Fatalf("profile[%d] %q %q", i, pname, fmtSel)
+		if pname != want[i].name || fmtSel != want[i].format || verify != want[i].verify {
+			t.Fatalf("profile[%d] %q %q verify=%d", i, pname, fmtSel, verify)
 		}
 		if i == 0 && id != 1 {
 			t.Fatalf("best should be id 1, got %d", id)

@@ -345,7 +345,13 @@
    * without a full #tasks-live swap (which otherwise leaves a Idle flash).
    */
   function applyInferredLaneStatus(wrap) {
-    if (!wrap || wrap.hasAttribute("data-paused")) return;
+    if (!wrap) return;
+    // Soft-pause: keep Paused label; bar is indeterminate warning while
+    // tasks are still running, full warning when the lane is quiet.
+    if (wrap.hasAttribute("data-paused")) {
+      showCooldownPaused(wrap);
+      return;
+    }
     const endsAttr = wrap.getAttribute("data-ends-at");
     if (endsAttr) {
       const ends = Date.parse(endsAttr);
@@ -393,16 +399,37 @@
     wrap.removeAttribute("data-slots-full");
     wrap.removeAttribute("data-lane-active");
     clearCooldownBusyTip(wrap);
-    wrap.setAttribute("aria-label", "Paused");
+    const { running } = inferLaneActivity(wrap);
+    const busy = running > 0;
+    const tipText = "Some active tasks remain";
+    wrap.setAttribute(
+      "aria-label",
+      busy ? "Paused; tasks still running" : "Paused"
+    );
     const label = wrap.querySelector("[data-cd-label]");
     const bar = wrap.querySelector("[data-cd-bar]");
-    if (
-      label &&
-      bar &&
-      label.textContent === "Paused" &&
-      bar.hasAttribute("value") &&
-      Number(bar.value) === 100
-    ) {
+    if (label && bar && label.textContent === "Paused") {
+      const warning = bar.classList.contains("progress-warning");
+      const indeterminate = !bar.hasAttribute("value");
+      const full =
+        bar.hasAttribute("value") && Number(bar.value) === 100;
+      if (busy && warning && indeterminate) {
+        const tip = label.closest(".tooltip");
+        if (tip) {
+          tip.classList.add("tooltip", "tooltip-top");
+          tip.setAttribute("data-tip", tipText);
+        }
+        return;
+      }
+      if (!busy && warning && full) return;
+    }
+    if (busy) {
+      wrap.innerHTML =
+        '<span class="tooltip tooltip-top" data-tip="' +
+        tipText +
+        '">' +
+        '<span data-cd-label class="shrink-0 leading-none text-warning">Paused</span></span>' +
+        '<progress data-cd-bar class="progress progress-warning w-24 sm:w-32 h-2 shrink-0" max="100" aria-hidden="true"></progress>';
       return;
     }
     wrap.innerHTML =

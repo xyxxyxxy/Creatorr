@@ -61,7 +61,7 @@ Compose comments show optional mounts: extra library roots, `/yt-dlp-plugins`, c
 
 Image includes the Creatorr binary plus **yt-dlp**, **ffmpeg**, and **Deno**. Runtime yt-dlp is `/usr/local/bin/yt-dlp`.
 
-First boot seeds one root at `/library` (local Go: `var/library`) and quality profiles `best`, `HD 1080p`, `HD 720p`, `SD 480p`. Override the host bind in `.env` (`CREATORR_LIBRARY_ROOT`) before first boot; add more roots later in Settings → Library.
+First boot seeds one root at `/library` (local Go: `var/library`) and quality profiles `best` (with media verify on), `HD 1080p`, `HD 720p`, `SD 480p`. Override the host bind in `.env` (`CREATORR_LIBRARY_ROOT`) before first boot; add more roots later in Settings → Library.
 
 ### Sidecars
 
