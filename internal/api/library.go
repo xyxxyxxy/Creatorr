@@ -138,6 +138,14 @@ func (s *Server) UpdateQualityProfile(w http.ResponseWriter, r *http.Request, id
 	writeJSON(w, http.StatusOK, mapProfile(*p))
 }
 
+func (s *Server) DeleteQualityProfile(w http.ResponseWriter, r *http.Request, id gen.QualityProfileId) {
+	if err := s.Library.DeleteProfile(int64(id)); err != nil {
+		writeLibraryErr(w, err, "delete profile failed")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) ListSeries(w http.ResponseWriter, r *http.Request) {
 	list, err := s.Library.ListSeries()
 	if err != nil {

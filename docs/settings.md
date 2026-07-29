@@ -29,6 +29,8 @@ Editable settings (examples):
 
 Sidecars are always converted to SRT via yt-dlp `--convert-subs srt` (no format setting).
 
+**Quality profiles:** add/edit/delete from Settings → Library. Delete is blocked (`Conflict`) while any series still uses the profile; reassign series first. Unused profiles (including the last one) may be deleted.
+
 **Quality profile maturity:** `maturity_redownload_hours` (0–168) and `maturity_sidecar_hours` (0–8760) on each quality profile (`0` = that pass off). Settings → Library → Quality profiles (sidecar field shown as days). Applies to every series on the profile. See [`download-and-library.md`](download-and-library.md).
 
 **SponsorBlock (quality profile):** `sponsorblock_mark` / `sponsorblock_remove` (explicit category lists; must be disjoint), `sponsorblock_reencode_cut` (accurate cut via bitrate/codec-matched re-encode; default off = stream-copy keyframe snap), and `sponsorblock_info_cards` (requires reencode_cut; video delivery only - audio has no video track to draw a card on). Creatorr fetches [SponsorBlock](https://sponsor.ajay.app/) itself (never yt-dlp `--sponsorblock-*`). Cut ± re-encode ± cards, remapped chapters/subs, chapter embed in the packed container (creator timeline kept; SB marks additive). Attribution in profile UI and README.

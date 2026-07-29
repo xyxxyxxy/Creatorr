@@ -189,6 +189,8 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Quality profile added.")
 	case "profile-updated":
 		return flashOK("Quality profile updated.")
+	case "profile-deleted":
+		return flashOK("Quality profile deleted.")
 	case "nfo-regen-queued":
 		return flashOK("NFO regenerate queued.")
 	case "sync-files-queued":

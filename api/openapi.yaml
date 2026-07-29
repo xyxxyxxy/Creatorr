@@ -542,6 +542,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [library]
+      operationId: deleteQualityProfile
+      summary: Delete a quality profile
+      description: |
+        Fails with Conflict when any series still references the profile.
+        Reassign those series to another profile before deleting.
+      parameters:
+        - $ref: "#/components/parameters/QualityProfileId"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Profile is still used by one or more series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/series:
     get:

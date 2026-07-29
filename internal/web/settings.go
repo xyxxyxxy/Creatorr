@@ -35,6 +35,12 @@ type settingsRowView struct {
 	DisabledTitle string
 }
 
+// profileSettingsRow is a quality profile plus series usage for Settings → Library.
+type profileSettingsRow struct {
+	library.QualityProfile
+	SeriesCount int
+}
+
 type notifyChannelView struct {
 	ID          int64
 	Name        string
@@ -354,8 +360,16 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 	applyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain)
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
+	seriesByProfile, _ := h.Library.SeriesCountsByProfile()
 	pageRoots, rootsPage := SlicePage(r, "page", roots)
 	pageProfiles, profilesPage := SlicePage(r, "profiles_page", profiles)
+	profileRows := make([]profileSettingsRow, 0, len(pageProfiles))
+	for _, p := range pageProfiles {
+		profileRows = append(profileRows, profileSettingsRow{
+			QualityProfile: p,
+			SeriesCount:    seriesByProfile[p.ID],
+		})
+	}
 	entries, err := settings.LibrarySettings(h.Queue.DB)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -390,7 +404,7 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		NamingLocked                 bool
 		Roots                        []library.RootFolder
 		RootsPage                    PageInfo
-		Profiles                     []library.QualityProfile
+		Profiles                     []profileSettingsRow
 		ProfilesPage                 PageInfo
 		SubtitleLangs                []string
 		SubtitleLangOptions          []string
@@ -404,7 +418,7 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		NamingLocked:                 applyBusy,
 		Roots:                        pageRoots,
 		RootsPage:                    rootsPage,
-		Profiles:                     pageProfiles,
+		Profiles:                     profileRows,
 		ProfilesPage:                 profilesPage,
 		SubtitleLangs:                subtitleLangs,
 		SubtitleLangOptions:          settings.SubtitleLangSeed,
@@ -988,6 +1002,16 @@ func (h *Handler) actionUpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirectSettings(w, r, "/settings/library", "ok=profile-updated")
+}
+
+func (h *Handler) actionDeleteProfile(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	if err := h.Library.DeleteProfile(id); err != nil {
+		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+		return
+	}
+	redirectSettings(w, r, "/settings/library", "ok=profile-deleted")
 }
 
 func (h *Handler) actionRegenerateNFOs(w http.ResponseWriter, r *http.Request) {
