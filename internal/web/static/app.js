@@ -2381,11 +2381,44 @@
   });
 
   // Cancel discards draft; closing via toggle (not backdrop - inert) keeps form state.
+  // Metadata Fetch HTMX-swaps the body with draft values as new defaults, so form.reset()
+  // cannot restore saved fields - reload a clean body from the server instead.
   document.body.addEventListener("click", (ev) => {
     const cancel = ev.target.closest("label.modal-cancel");
     if (!cancel) return;
     const modal = cancel.closest(".modal");
     if (!modal) return;
+
+    const metaBody = modal.querySelector("[data-meta-reset]");
+    if (metaBody && metaBody.dataset.metaReset && window.htmx) {
+      let url = metaBody.dataset.metaReset;
+      const tidEl = metaBody.querySelector('input[name="prefetch_task_id"]');
+      const tid = tidEl && String(tidEl.value || "").trim();
+      if (tid) {
+        url += (url.indexOf("?") >= 0 ? "&" : "?") + "discard=" + encodeURIComponent(tid);
+      } else {
+        const poll = metaBody.getAttribute("hx-get") || "";
+        const m = poll.match(/\/metadata\/prefetch\/(\d+)/);
+        if (m) {
+          url += (url.indexOf("?") >= 0 ? "&" : "?") + "discard=" + encodeURIComponent(m[1]);
+        }
+      }
+      window.htmx.ajax("GET", url, { target: metaBody, swap: "outerHTML" });
+      try {
+        const u = new URL(location.href);
+        if (u.searchParams.has("prefetch_task") || u.searchParams.has("meta_prefetch") || u.searchParams.get("meta") === "1") {
+          u.searchParams.delete("prefetch_task");
+          u.searchParams.delete("meta_prefetch");
+          u.searchParams.delete("meta");
+          const qs = u.searchParams.toString();
+          history.replaceState({}, "", u.pathname + (qs ? "?" + qs : "") + u.hash);
+        }
+      } catch (_) {
+        /* ignore */
+      }
+      return;
+    }
+
     modal.querySelectorAll("form").forEach((form) => {
       form.reset();
       resetArtSlots(form);

@@ -348,6 +348,45 @@ func (h *Handler) videoMetadataPrefetchStatus(w http.ResponseWriter, r *http.Req
 	render(w, "video_metadata_body", view)
 }
 
+// videoMetadataBody returns the Metadata modal body from saved video state (no draft).
+// Optional ?discard=<task_id> cancels a pending prefetch and clears its cache draft.
+func (h *Handler) videoMetadataBody(w http.ResponseWriter, r *http.Request) {
+	sid, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	vid, _ := strconv.ParseInt(chi.URLParam(r, "vid"), 10, 64)
+	ser, err := h.Library.GetSeries(sid, false)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	video, err := h.Library.GetVideo(vid)
+	if err != nil || video.SeriesID != sid {
+		http.NotFound(w, r)
+		return
+	}
+	if discardStr := strings.TrimSpace(r.URL.Query().Get("discard")); discardStr != "" {
+		if tid, err := strconv.ParseInt(discardStr, 10, 64); err == nil && tid > 0 {
+			h.discardVideoMetaPrefetch(vid, tid)
+		}
+	}
+	render(w, "video_metadata_body", h.buildVideoMetadataView(ser, video))
+}
+
+func (h *Handler) discardVideoMetaPrefetch(videoID, taskID int64) {
+	if h.Queue != nil {
+		if task, err := h.Queue.GetTask(taskID); err == nil && task != nil {
+			if task.VideoID.Valid && task.VideoID.Int64 == videoID {
+				switch task.Status {
+				case queue.StatusPending, queue.StatusRunning:
+					_, _ = h.Queue.CancelWithMessage(taskID, "Metadata fetch discarded")
+				}
+			}
+		}
+	}
+	if h.Library != nil {
+		_ = h.Library.ClearVideoPrefetchDraft(videoID, taskID)
+	}
+}
+
 func (h *Handler) videoPrefetchArtFile(w http.ResponseWriter, r *http.Request) {
 	sid, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	vid, _ := strconv.ParseInt(chi.URLParam(r, "vid"), 10, 64)
