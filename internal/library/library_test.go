@@ -1014,6 +1014,14 @@ func TestDeleteSeriesKeepsOrRemovesFiles(t *testing.T) {
 	if err := os.WriteFile(purgeMedia, []byte("data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	poster := filepath.Join(libRoot, "PurgeFiles", "poster.jpg")
+	nfo := filepath.Join(libRoot, "PurgeFiles", "tvshow.nfo")
+	if err := os.WriteFile(poster, []byte("img"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nfo, []byte("<tvshow/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.CompleteImport(resPurge.VideoID, purgeMedia, "", "", library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
@@ -1029,6 +1037,15 @@ func TestDeleteSeriesKeepsOrRemovesFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(purgeMedia); !os.IsNotExist(err) {
 		t.Fatalf("library file should be gone when deleteFiles=true, err=%v", err)
+	}
+	if _, err := os.Stat(poster); !os.IsNotExist(err) {
+		t.Fatalf("poster should be gone with series folder, err=%v", err)
+	}
+	if _, err := os.Stat(nfo); !os.IsNotExist(err) {
+		t.Fatalf("tvshow.nfo should be gone with series folder, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(libRoot, "PurgeFiles")); !os.IsNotExist(err) {
+		t.Fatalf("series folder should be gone, err=%v", err)
 	}
 }
 
