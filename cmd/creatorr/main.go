@@ -97,7 +97,8 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go (&worker.Heartbeat{DB: database, Log: log}).Run(ctx)
+	hb := &worker.HeartbeatState{}
+	go (&worker.Heartbeat{State: hb, Log: log}).Run(ctx)
 
 	hub := events.NewHub()
 	notify.SetEventsHub(hub)
@@ -128,7 +129,13 @@ func main() {
 	go (&scheduler.Scheduler{Library: lib, Log: log}).Run(ctx)
 	go (&stats.Sampler{DB: database, Log: log}).Run(ctx)
 
-	healthChecker := &health.Checker{DB: database, Cfg: cfg}
+	healthChecker := &health.Checker{
+		DB:  database,
+		Cfg: cfg,
+		WorkerAt: func() time.Time {
+			return hb.At()
+		},
+	}
 	srvImpl := &api.Server{
 		Health:  healthChecker,
 		Queue:   q,

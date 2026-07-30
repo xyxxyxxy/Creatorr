@@ -104,6 +104,7 @@ func (d *DB) applySchema() error {
 }
 
 // TouchWorkerHeartbeat writes the worker heartbeat timestamp.
+// Kept for schema compatibility / tests; production health uses an in-process clock.
 func (d *DB) TouchWorkerHeartbeat(at time.Time) error {
 	ts := at.UTC().Format(time.RFC3339Nano)
 	_, err := d.SQL.Exec(`

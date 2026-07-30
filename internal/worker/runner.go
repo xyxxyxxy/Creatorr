@@ -107,9 +107,8 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 	progress := func(msg string, pct *float64) {
 		if err := r.Queue.UpdateProgress(task.ID, msg, pct); err != nil {
 			log.Warn("progress update", "task", task.ID, "err", err)
-		} else {
-			r.Queue.Logs.Append(task.ID, msg)
 		}
+		r.Queue.Logs.Append(task.ID, msg)
 		r.Events.TaskUpdated(task.ID, task.Kind, task.Domain, queue.StatusRunning, msg, sid, vid, pct)
 	}
 

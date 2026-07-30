@@ -44,7 +44,7 @@ func (s *Store) ListHistory(f HistoryFilter, limit, offset int) ([]Task, error) 
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	return scanTaskRows(rows)
+	return s.scanTaskRows(rows)
 }
 
 // CountHistory returns how many finished tasks match the filter.
@@ -164,7 +164,7 @@ func (s *Store) ListHistoryForSource(sourceID int64, limit, offset int) ([]Task,
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	return scanTaskRows(rows)
+	return s.scanTaskRows(rows)
 }
 
 // CountHistoryForSource counts finished tasks for a source.
@@ -198,10 +198,10 @@ func (s *Store) LatestHistoryIDForSource(sourceID int64) (int64, error) {
 	return id.Int64, nil
 }
 
-func scanTaskRows(rows *sql.Rows) ([]Task, error) {
+func (s *Store) scanTaskRows(rows *sql.Rows) ([]Task, error) {
 	var out []Task
 	for rows.Next() {
-		t, err := scanTask(rows)
+		t, err := s.scanTask(rows)
 		if err != nil {
 			return nil, err
 		}

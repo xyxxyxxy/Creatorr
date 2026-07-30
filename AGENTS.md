@@ -69,7 +69,7 @@ New domain term → matching docs file (domain-model by default).
 
 ## Ship
 
-- **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker`, `ytdlp`, `disk`, `flaresolverr`, `pot_provider` (last two skipped if URL unset). Compose healthcheck should use it.
+- **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker` (in-process heartbeat, not SQLite), `ytdlp`, `disk`, `flaresolverr`, `pot_provider` (last two skipped if URL unset). Compose healthcheck should use it.
 - **Images:** `ghcr.io/xyxxyxxy/creatorr:latest` from `main`, `:develop` from `develop`, `:sha-<short>` for pins. Compose: [`docker-compose.yml`](docker-compose.yml).
 - **Tests:** unit (domain/settings), yt-dlp fixtures (no live net), integration (temp SQLite + worker/queue), API httptest + schema. Prefer golden fixtures; add tests for behavior changes.
 - **Branching:** git-flow (`feature/*`, `develop`, `main`).

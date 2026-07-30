@@ -39,6 +39,8 @@ type Report struct {
 type Checker struct {
 	DB  *db.DB
 	Cfg config.Config
+	// WorkerAt returns the last in-process worker heartbeat (zero if unset).
+	WorkerAt func() time.Time
 }
 
 // Run executes all checks and rolls up overall status.
@@ -94,15 +96,11 @@ func (c *Checker) checkDB(ctx context.Context) Check {
 }
 
 func (c *Checker) checkWorker(ctx context.Context) Check {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	at, err := c.DB.WorkerHeartbeatContext(ctx)
-	if err != nil {
-		if ctx.Err() != nil {
-			return Check{Name: "worker", Status: StatusDegraded, Message: "heartbeat timeout"}
-		}
-		return Check{Name: "worker", Status: StatusDegraded, Message: err.Error()}
+	_ = ctx
+	if c.WorkerAt == nil {
+		return Check{Name: "worker", Status: StatusDegraded, Message: "no heartbeat source"}
 	}
+	at := c.WorkerAt()
 	if at.IsZero() {
 		return Check{Name: "worker", Status: StatusDegraded, Message: "no heartbeat yet"}
 	}

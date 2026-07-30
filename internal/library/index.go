@@ -414,31 +414,33 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 	}
 	acquired := nowRFC3339()
 	uploadFromInfo := uploadDateFromInfoJSON(infoPath)
-	tx, err := s.DB.SQL.Begin()
+
+	// Disk work outside the write tx so `_txlock=immediate` is not held across Remove/Stat.
+	oldRows, err := s.DB.SQL.Query(`SELECT path FROM files WHERE video_id = ?`, videoID)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	// Remove prior pack artifacts from disk before replacing rows.
-	oldRows, _ := tx.Query(`SELECT path FROM files WHERE video_id = ?`, videoID)
-	if oldRows != nil {
-		var oldPaths []string
-		for oldRows.Next() {
-			var p string
-			if oldRows.Scan(&p) == nil && p != "" {
-				oldPaths = append(oldPaths, p)
-			}
-		}
-		_ = oldRows.Close()
-		for _, p := range oldPaths {
-			_ = os.Remove(p)
+	var oldPaths []string
+	for oldRows.Next() {
+		var p string
+		if oldRows.Scan(&p) == nil && p != "" {
+			oldPaths = append(oldPaths, p)
 		}
 	}
-
-	if _, err := tx.Exec(`DELETE FROM files WHERE video_id = ? AND kind IN ('video','nfo','json','thumb','sub','sponsorblock')`, videoID); err != nil {
+	_ = oldRows.Close()
+	if err := oldRows.Err(); err != nil {
 		return err
 	}
+	for _, p := range oldPaths {
+		_ = os.Remove(p)
+	}
+
+	type fileRow struct {
+		kind string
+		path string
+		size any
+	}
+	var files []fileRow
 	for kind, path := range map[string]string{"video": mediaPath, "nfo": nfoPath, "json": infoPath, "thumb": thumbPath} {
 		if path == "" || !fileExists(path) {
 			continue
@@ -449,19 +451,36 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 				size = fi.Size()
 			}
 		}
-		if _, err := tx.Exec(`
-			INSERT INTO files (video_id, path, kind, acquired_at, size_bytes) VALUES (?, ?, ?, ?, ?)
-		`, videoID, path, kind, acquired, size); err != nil {
-			return err
-		}
+		files = append(files, fileRow{kind: kind, path: path, size: size})
 	}
 	for _, p := range subPaths {
 		if p == "" || !fileExists(p) {
 			continue
 		}
+		files = append(files, fileRow{kind: "sub", path: p})
+	}
+
+	tx, err := s.DB.SQL.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(`DELETE FROM files WHERE video_id = ? AND kind IN ('video','nfo','json','thumb','sub','sponsorblock')`, videoID); err != nil {
+		return err
+	}
+	for _, f := range files {
+		if f.kind == "sub" {
+			if _, err := tx.Exec(`
+				INSERT INTO files (video_id, path, kind, acquired_at) VALUES (?, ?, 'sub', ?)
+			`, videoID, f.path, acquired); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := tx.Exec(`
-			INSERT INTO files (video_id, path, kind, acquired_at) VALUES (?, ?, 'sub', ?)
-		`, videoID, p, acquired); err != nil {
+			INSERT INTO files (video_id, path, kind, acquired_at, size_bytes) VALUES (?, ?, ?, ?, ?)
+		`, videoID, f.path, f.kind, acquired, f.size); err != nil {
 			return err
 		}
 	}
@@ -564,6 +583,7 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 	}
 	return tx.Commit()
 }
+
 
 // uploadDateFromInfoJSON reads upload_date from a packed info.json (RFC3339 or YYYYMMDD).
 func uploadDateFromInfoJSON(path string) string {
