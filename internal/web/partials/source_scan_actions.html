@@ -7,7 +7,7 @@
   Tip host keeps join-item for seam layout but border-0 so .join-item's solid
   border does not double-outline the inner .btn.
 */}}
-<span id="source-scan-actions-{{.ID}}" class="contents" {{if .OOB}}hx-swap-oob="true"{{end}}>
+<span id="source-scan-actions-{{.ID}}" class="contents source-scan-actions" {{if .OOB}}hx-swap-oob="true"{{end}}>
   {{if and (ne .Kind "single") .FullScanDone}}
   {{$scanOff := or .ScanActive (not .DomainActive)}}
   {{$tipScan := "Scan for new videos"}}

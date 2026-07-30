@@ -1032,6 +1032,16 @@
     return taskIndicatorFingerprint(el) + "|" + label + "|" + tipBody;
   }
 
+  /** Scan/Full-scan join buttons: skip identical OOB so hover tips do not flicker on download SSE. */
+  function sourceScanActionsFingerprint(el) {
+    if (!el || !el.querySelectorAll) return "";
+    const tips = [...el.querySelectorAll("[data-tip]")].map((n) => n.getAttribute("data-tip") || "");
+    const icons = [...el.querySelectorAll("[data-lucide]")].map((n) => n.getAttribute("data-lucide") || "");
+    const disabled = el.querySelectorAll(".btn-disabled, [aria-disabled='true']").length;
+    const enabled = el.querySelectorAll("button[type='submit']:not(:disabled)").length;
+    return [tips.join(";"), icons.join(";"), disabled, enabled].join("|");
+  }
+
   // Poll/SSE OOB-replaces every task-indicator; identical swaps reset :hover and tip flickers.
   document.body.addEventListener("htmx:oobBeforeSwap", (ev) => {
     const detail = ev.detail || {};
@@ -1044,6 +1054,15 @@
       incoming.classList.contains("source-status-cell")
     ) {
       if (sourceStatusFingerprint(target) === sourceStatusFingerprint(incoming)) {
+        detail.shouldSwap = false;
+      }
+      return;
+    }
+    if (
+      target.classList.contains("source-scan-actions") &&
+      incoming.classList.contains("source-scan-actions")
+    ) {
+      if (sourceScanActionsFingerprint(target) === sourceScanActionsFingerprint(incoming)) {
         detail.shouldSwap = false;
       }
       return;
