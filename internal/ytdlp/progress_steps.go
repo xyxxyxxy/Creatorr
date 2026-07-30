@@ -15,7 +15,7 @@ var formatsInfoRe = regexp.MustCompile(`(?i)downloading\s+(\d+)\s+format(?:s|\(s
 
 // StepProgress turns yt-dlp download lines into labeled per-format progress.
 // The bar fraction is the raw 0..1 for the current format (resets each step);
-// multi-format messages carry role + step (e.g. "Downloading video (1/2) 42%").
+// multi-format messages carry role + step (e.g. "Downloading video (1/2) 42% · 1.00MiB/s").
 //
 // Do not seed total from the -f selector: a primary `bv*+ba` with `/b` fallback
 // may still resolve to one format. Trust the info line (and later Destinations).
@@ -47,7 +47,7 @@ func (s *StepProgress) Feed(line string) (msg string, frac *float64, ok bool) {
 		s.hasDest = true
 		s.beginStep(roleFromPath(destinationPath(line)))
 		// Nil fraction → busy indeterminate; do not send 0% (flips the bar every Dest).
-		return s.message(nil), nil, true
+		return s.message(nil, ""), nil, true
 	}
 
 	if strings.Contains(low, "[merger]") || strings.Contains(low, "merging formats") {
@@ -69,6 +69,7 @@ func (s *StepProgress) Feed(line string) (msg string, frac *float64, ok bool) {
 		if raw > 1 {
 			raw = 1
 		}
+		speed := parseDownloadSpeed(line)
 		// Without Destination lines, a sharp drop means a new format file.
 		if !s.hasDest && s.seenPct && raw+0.2 < s.lastRaw && s.lastRaw > 0.5 {
 			s.beginStep("")
@@ -80,14 +81,14 @@ func (s *StepProgress) Feed(line string) (msg string, frac *float64, ok bool) {
 		s.applyRole()
 		// Still at 0%: keep busy (nil). HLS fragment restarts stay at peak.
 		if raw <= 0 && s.peak <= 0 {
-			return s.message(nil), nil, true
+			return s.message(nil, ""), nil, true
 		}
 		if raw < s.peak {
 			raw = s.peak
 		} else {
 			s.peak = raw
 		}
-		return s.message(&raw), &raw, true
+		return s.message(&raw, speed), &raw, true
 	}
 	return "", nil, false
 }
@@ -154,7 +155,7 @@ func (s *StepProgress) applyRole() {
 	s.role = ""
 }
 
-func (s *StepProgress) message(pct *float64) string {
+func (s *StepProgress) message(pct *float64, speed string) string {
 	var b strings.Builder
 	b.WriteString("Downloading")
 	total := s.total
@@ -173,6 +174,9 @@ func (s *StepProgress) message(pct *float64) string {
 	}
 	if pct != nil {
 		fmt.Fprintf(&b, " %.0f%%", *pct*100)
+		if speed != "" {
+			fmt.Fprintf(&b, " · %s", speed)
+		}
 	} else if total <= 1 {
 		b.WriteString("…")
 	}
