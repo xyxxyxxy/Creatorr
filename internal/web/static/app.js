@@ -521,6 +521,34 @@
       '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="0" max="100" aria-hidden="true"></progress>';
   }
 
+  /** Short span like "3min 2sec" (at most two units). Matches Go formatDurationCompact. */
+  function formatDurationCompact(totalSec) {
+    let sec = Math.max(0, Math.floor(Number(totalSec) || 0));
+    if (sec < 1) return "1sec";
+    const days = Math.floor(sec / 86400);
+    sec -= days * 86400;
+    const hours = Math.floor(sec / 3600);
+    sec -= hours * 3600;
+    const minutes = Math.floor(sec / 60);
+    sec -= minutes * 60;
+    const parts = [];
+    const add = (n, u) => {
+      if (n > 0) parts.push(n + u);
+    };
+    add(days, "d");
+    add(hours, "h");
+    add(minutes, "min");
+    if (days === 0) add(sec, "sec");
+    if (!parts.length) return "1sec";
+    if (parts.length > 2) parts.length = 2;
+    return parts.join(" ");
+  }
+
+  function cooldownWaitTip(remSec) {
+    const n = Math.max(1, Math.ceil(Number(remSec) || 0));
+    return "Waiting " + formatDurationCompact(n);
+  }
+
   function tickDomainCooldowns() {
     let anyActive = false;
     document.querySelectorAll("[data-domain-cooldown]").forEach((wrap) => {
@@ -556,7 +584,7 @@
       clearCooldownBusyTip(wrap);
       let bar = wrap.querySelector("[data-cd-bar]");
       let label = wrap.querySelector("[data-cd-label]");
-      const tipText = "Waiting " + remSec + "s before the next task on this lane";
+      const tipText = cooldownWaitTip(remSec);
       if (!bar || !label) {
         wrap.innerHTML =
           '<span class="tooltip tooltip-top" data-tip="' +

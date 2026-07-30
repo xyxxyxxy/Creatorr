@@ -111,6 +111,24 @@ func TestFormatDurationProse(t *testing.T) {
 	}
 }
 
+func TestCooldownWaitTip(t *testing.T) {
+	cases := []struct {
+		rem  int
+		want string
+	}{
+		{0, "Waiting 1sec"},
+		{3, "Waiting 3sec"},
+		{63, "Waiting 1min 3sec"},
+		{3680, "Waiting 1h 1min"},
+	}
+	for _, tc := range cases {
+		got := cooldownWaitTip(tc.rem)
+		if got != tc.want {
+			t.Fatalf("cooldownWaitTip(%d)=%q want %q", tc.rem, got, tc.want)
+		}
+	}
+}
+
 func TestTaskQueuedAndRuntimeLabel(t *testing.T) {
 	created := time.Date(2026, 7, 21, 20, 43, 46, 0, time.UTC).Format(time.RFC3339Nano)
 	started := time.Date(2026, 7, 21, 20, 43, 49, 0, time.UTC).Format(time.RFC3339Nano)

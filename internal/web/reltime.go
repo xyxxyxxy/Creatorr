@@ -237,6 +237,62 @@ func formatAbsoluteTip(t time.Time) string {
 	return t.UTC().Format("Jan 2, 2006, 3:04:05 PM UTC")
 }
 
+// cooldownWaitTip is the Tasks lane cooldown tooltip / aria-label.
+func cooldownWaitTip(remSec int) string {
+	if remSec < 1 {
+		remSec = 1
+	}
+	return "Waiting " + formatDurationCompact(time.Duration(remSec)*time.Second)
+}
+
+// formatDurationCompact is a short span like "3min 2sec" (at most two units).
+func formatDurationCompact(d time.Duration) string {
+	if d < 0 {
+		d = -d
+	}
+	if d < time.Second {
+		return "1sec"
+	}
+	days := int(d / (24 * time.Hour))
+	d -= time.Duration(days) * 24 * time.Hour
+	hours := int(d / time.Hour)
+	d -= time.Duration(hours) * time.Hour
+	minutes := int(d / time.Minute)
+	d -= time.Duration(minutes) * time.Minute
+	seconds := int(d / time.Second)
+
+	type part struct {
+		n int
+		u string
+	}
+	var parts []part
+	add := func(n int, u string) {
+		if n > 0 {
+			parts = append(parts, part{n, u})
+		}
+	}
+	add(days, "d")
+	add(hours, "h")
+	add(minutes, "min")
+	if days == 0 {
+		add(seconds, "sec")
+	}
+	if len(parts) == 0 {
+		return "1sec"
+	}
+	if len(parts) > 2 {
+		parts = parts[:2]
+	}
+	var b strings.Builder
+	for i, p := range parts {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		fmt.Fprintf(&b, "%d%s", p.n, p.u)
+	}
+	return b.String()
+}
+
 // formatDurationProse is a human span like "1 minute and 3 seconds" (at most two units).
 func formatDurationProse(d time.Duration) string {
 	if d < 0 {
