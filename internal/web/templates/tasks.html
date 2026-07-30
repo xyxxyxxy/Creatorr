@@ -127,9 +127,9 @@
           </span>
           {{end}}
           {{if .RateLimit}}
-          <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .RateOverride}} text-base-content/50{{end}}" data-tip="Download rate limit · {{if .RateOverride}}Domain override{{else}}default{{end}}" aria-label="Download rate {{.RateLimit}}">
+          <span class="inline-flex items-center gap-1 tooltip tooltip-top{{if not .RateOverride}} text-base-content/50{{end}}" data-tip="Download rate limit · {{if .RateOverride}}Domain override{{else}}default{{end}}" aria-label="Download rate {{formatRateLimit .RateLimit}}">
             <i data-lucide="download" class="size-4 shrink-0"></i>
-            <span class="font-mono tabular-nums">{{.RateLimit}}</span>
+            <span class="font-mono tabular-nums">{{formatRateLimit .RateLimit}}</span>
           </span>
           {{end}}
           {{if .SleepRequests}}

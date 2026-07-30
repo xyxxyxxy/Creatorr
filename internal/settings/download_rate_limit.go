@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Download rate units for yt-dlp --limit-rate (K/M/G binary suffixes).
+// Download rate units for yt-dlp --limit-rate (K/M/G = binary KiB/MiB/GiB).
 const (
 	RateUnitK   = "K"
 	RateUnitM   = "M"
@@ -84,5 +84,37 @@ func CombineDownloadRateLimitOverride(value, unit, defaultRate string) (string, 
 		return "", nil
 	}
 	return CombineDownloadRateLimit(value, unit)
+}
+
+// FormatDownloadRateLimitDisplay turns a stored yt-dlp rate (e.g. "10M", "off")
+// into operator-facing text using binary unit names (e.g. "10MiB/s", "Unlimited").
+// Empty or unrecognized input returns "" (inherit / unknown).
+func FormatDownloadRateLimitDisplay(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	val, unit := SplitDownloadRateLimit(s)
+	switch unit {
+	case RateUnitOff:
+		return "Unlimited"
+	case RateUnitK:
+		if val == "" {
+			return ""
+		}
+		return val + "KiB/s"
+	case RateUnitM:
+		if val == "" {
+			return ""
+		}
+		return val + "MiB/s"
+	case RateUnitG:
+		if val == "" {
+			return ""
+		}
+		return val + "GiB/s"
+	default:
+		return ""
+	}
 }
 

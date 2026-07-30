@@ -136,6 +136,18 @@ func templateFuncs() template.FuncMap {
 			val, unit := settings.SplitDownloadRateLimit(s)
 			return map[string]string{"Value": val, "Unit": unit}
 		},
+		"formatRateLimit": func(raw any) string {
+			var s string
+			switch v := raw.(type) {
+			case string:
+				s = v
+			case nil:
+				return ""
+			default:
+				s = fmt.Sprint(v)
+			}
+			return settings.FormatDownloadRateLimitDisplay(s)
+		},
 	}
 }
 

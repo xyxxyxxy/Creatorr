@@ -7,7 +7,8 @@
             DefaultRate (Domain defaults rate; override inherit shows default: N or default: Unlimited),
             Placeholder (number placeholder; override default = "default: …" from DefaultRate),
             ShowClear (join override_clear_btn after unit),
-            HideG (omit G/s unless the current value is already G).
+            HideG (omit GiB/s unless the current value is already G).
+  Option labels use binary unit names (KiB/MiB/GiB); stored values stay K/M/G for yt-dlp.
 */}}
 {{$name := .Name}}{{if not $name}}{{$name = "download_rate_limit"}}{{end}}
 {{$stored := rateLimitParts .Value}}
@@ -39,10 +40,10 @@
           data-rate-unit
           {{if .Override}}data-override-clear{{end}}
           {{if .Required}}required{{end}}>
-    <option value="K" {{if eq $unit "K"}}selected{{end}}>K/s</option>
-    <option value="M" {{if eq $unit "M"}}selected{{end}}>M/s</option>
+    <option value="K" {{if eq $unit "K"}}selected{{end}}>KiB/s</option>
+    <option value="M" {{if eq $unit "M"}}selected{{end}}>MiB/s</option>
     {{if or (not .HideG) (eq $unit "G")}}
-    <option value="G" {{if eq $unit "G"}}selected{{end}}>G/s</option>
+    <option value="G" {{if eq $unit "G"}}selected{{end}}>GiB/s</option>
     {{end}}
     <option value="off" {{if eq $unit "off"}}selected{{end}}>Unlimited</option>
   </select>
