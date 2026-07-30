@@ -460,17 +460,14 @@ func ScanHandler(d Deps) TaskHandler {
 		domain := queue.DomainFromURL(src.URL)
 		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
 
-		cutoff := ""
-		if src.ScanCutoff.Valid {
-			cutoff = src.ScanCutoff.String
-		}
-
 		fullScan := !src.FullScanDone
 		mode := library.SourceHistModeScan
+		playlistEnd := 0
 		if fullScan {
 			mode = library.SourceHistModeFull
+			playlistEnd = src.FullScanLimit
 		}
-		entries, err := listEntries(ctx, d, src.URL, jar, 0, lim)
+		entries, err := listEntries(ctx, d, src.URL, jar, playlistEnd, lim)
 		if err != nil {
 			code, msg := classify(err)
 			_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, msg+": "+err.Error(), map[string]any{
@@ -485,7 +482,6 @@ func ScanHandler(d Deps) TaskHandler {
 		var ignoredMediaTypeIDs, ignoredIndexAsIgnoredIDs []int64
 		var skippedTitleInclude, skippedTitleExclude []map[string]string
 		var created, updated int
-		hitCutoff := false
 		hitKnown := false
 
 		recordSkipTitle := func(dest *[]map[string]string, remoteID, title string) {
@@ -524,11 +520,6 @@ func ScanHandler(d Deps) TaskHandler {
 			progress(fmt.Sprintf("Full scan (listed=%d)", len(entries)), ptrFloat(0.2))
 			nEntries := len(entries)
 			for i, e := range entries {
-				upload := library.NormalizeUploadTime(e.UploadDate)
-				if library.BeforeCutoff(upload, cutoff) {
-					hitCutoff = true
-					break // discard this and older; do not index
-				}
 				li := library.EntryFromYtDlp(e, src.ID)
 				res, err := d.Library.UpsertListed(seriesID, li, t.ID)
 				if err != nil {
@@ -547,11 +538,6 @@ func ScanHandler(d Deps) TaskHandler {
 			var news []ytdlp.Entry
 			nEntries := len(entries)
 			for i, e := range entries {
-				upload := library.NormalizeUploadTime(e.UploadDate)
-				if library.BeforeCutoff(upload, cutoff) {
-					hitCutoff = true
-					break // past cutoff; nothing newer left in newest-first list
-				}
 				if ok, reason := library.TitlePassesFilters(src.TitleRegexpInclude, src.TitleRegexpExclude, e.Title); !ok {
 					switch reason {
 					case library.SkipReasonTitleRegexpInclude:
@@ -615,14 +601,11 @@ func ScanHandler(d Deps) TaskHandler {
 			"ignored_media_type_ids":       ignoredMediaTypeIDs,
 			"ignored_index_as_ignored_ids": ignoredIndexAsIgnoredIDs,
 			"hit_known":                    hitKnown,
-			"hit_cutoff":                   hitCutoff,
+			"full_scan_limit":              playlistEnd,
 		}
 		_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanned, scanMsg, histDetail, t.ID)
 
 		msg := scanMsg
-		if hitCutoff {
-			msg += ", cutoff reached"
-		}
 		detailBytes, _ := json.Marshal(map[string]any{
 			"created":                      created,
 			"updated":                      updated,
@@ -635,7 +618,7 @@ func ScanHandler(d Deps) TaskHandler {
 			"source_id":                    src.ID,
 			"full":                         fullScan,
 			"hit_known":                    hitKnown,
-			"hit_cutoff":                   hitCutoff,
+			"full_scan_limit":              playlistEnd,
 		})
 		_ = d.Library.Queue.UpdateProgress(t.ID, msg, ptrFloat(1))
 		_ = d.Library.Queue.SetDetail(t.ID, string(detailBytes))

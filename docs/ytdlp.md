@@ -89,8 +89,8 @@ Downloads/imports set Creatorr-owned columns (`tool`, `download_format_selector`
 
 ## Entry `upload_date`
 
-RFC3339 UTC only (full timestamp). Same rules as before for cutoff / season / episode / NFO `<aired>` (UTC calendar day).
+RFC3339 UTC only (full timestamp). Same rules as before for season / episode / NFO `<aired>` (UTC calendar day).
 
-**List order:** newest-first (yt-dlp flat playlist / plugin extractors must match).
+**List order:** newest-first assumed (yt-dlp flat playlist / plugin extractors must match). Order is site-specific; `--playlist-end` (source `full_scan_limit`) takes the first N entries in that extractor order.
 
 **Channel URLs:** yt-dlp `--flat-playlist` on a channel root returns tab playlists (Videos / Live / Shorts) with videos nested inside. Creatorr expands the **Videos** tab when listing; use a `/videos` URL (or a playlist URL) when you want that catalog explicitly. Metadata prefetch still uses the channel root for art/title.

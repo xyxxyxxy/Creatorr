@@ -9,7 +9,7 @@ Use these terms consistently in code comments, UI copy, OpenAPI, tests, and docs
 | Term | Meaning |
 | --- | --- |
 | **Series** | One title, one root folder, one quality profile, **delivery mode** (`video` default \| `audio`), **monitored** flag, sources, video **index**, optional show metadata (`tvshow.nfo` + art). |
-| **Source** | URL on a series (immutable after create; same URL may exist on other series; uniqueness is per series). **Kind** `feed` (full scan then tip Scan) or `single` (index once) is fixed at create. Feed: `scan_cron`, optional **Mark new videos as ignored** (`index_as_ignored`), optional **title include/exclude** (`title_regexp_include` / `title_regexp_exclude`), optional **scan cutoff**. Singles: no title filters / mark-new-as-ignored UI (always index as wanted unless series auto-ignore media types apply). No per-source monitored. |
+| **Source** | URL on a series (immutable after create; same URL may exist on other series; uniqueness is per series). **Kind** `feed` (full scan then tip Scan) or `single` (index once) is fixed at create. Feed: `scan_cron`, optional **Mark new videos as ignored** (`index_as_ignored`), optional **title include/exclude** (`title_regexp_include` / `title_regexp_exclude`), optional **full scan limit** (`full_scan_limit`). Singles: no title filters / mark-new-as-ignored / full-scan-limit UI (always index as wanted unless series auto-ignore media types apply). No per-source monitored. |
 | **Feed / single** | Source kinds. Feed = recurring tip Scan; single = one-shot index (no tip Scan after first index). |
 | **Video** | Indexed creator content in a series (not “item”). Status + metadata + optional files + **video history**. On disk after pack it is treated as an **episode** (below). |
 | **Episode** | Library / media-server view of a packed **video**: season/episode numbers, episode filename stem, episode NFO (`episodedetails`). Created at **pack** from a video; episode format setting (`episode_format`; relative under the series folder; tokens include `{year}`, `{title:N}`, `{episode}`, `{month}`, `{day}`, `{date}`, `{domain}`, optional `{series}`) applies to on-disk episodes, not to the DB video title shown in the UI. |
@@ -21,7 +21,7 @@ Use these terms consistently in code comments, UI copy, OpenAPI, tests, and docs
 | **Title include / exclude** | Optional feed-source Go regexps (`title_regexp_include`, `title_regexp_exclude`). Index only when include matches (if set) **and** exclude does not match (if set). **Exclude wins** when both match (not indexed). Tip scan walks past skips without treating them as known. Empty = no filter. UI hidden for singles. |
 | **Auto ignore filters** | Series `auto_ignore_media_types` (JSON string array of yt-dlp `media_type` values). Videos are **indexed**, then marked **`ignored`** when type is known and listed (create-time if list has type; else download `--match-filters` when type appears then). Empty = none. Missing/empty media type is never auto-ignored. |
 | **Live soft-skip** | Always-on for archive **download**: yt-dlp `is_live` (`--match-filters` `is_live!=?1`). Task **`done`**, status stays **`wanted`**, history `live_skipped`, info notify `live_skipped` (task link) - retry after broadcast ends. Not a status; distinct from auto-ignore `livestream`. |
-| **Scan cutoff** | Optional source `scan_cutoff` (YYYY-MM-DD UTC). Full scan and tip Scan stop at the first listing with an upload date **before** that day; the cutoff day is indexed; older dated days are not. Listings with **no** upload date are not stopped by cutoff (still indexed when the newest-first walk reaches them). Empty = walk full history (until known id on tip Scan). |
+| **Full scan limit** | Optional source `full_scan_limit` (integer; **0 = unlimited**). Full scan only: yt-dlp `--playlist-end N` caps how many playlist entries are listed before title filters. Usually the N latest, but not guaranteed (site-specific extractor order). Tip Scan stays uncapped (stops at known `remote_id`). Raising the limit does not auto-rescan; use **Full scan** restart to index deeper. |
 | **Active** | Domain flag (`domains.active`). Inactive → no queue claims + enqueue gates; deactivate cancels pending+running. API only (not on Settings → Queue / Domains overrides UI). |
 | **Paused** | Soft claim stop (`domain_runtime`) for **ClaimNext** only. Pending stay queued; running continue; resume deletes runtime row. Interactive metadata prefetch (`prefetch_series_meta` / `prefetch_video_meta` / `prefetch_add_series` / `prefetch_add_video`) still claims. Never creates a `domains` override row (Tasks still shows a lane for soft-paused hosts so Resume is reachable). Operator control on Tasks; also set automatically on yt-dlp-facing task failures (`CookieInvalid` / `RateLimited` / `DownloadFailed` / `ResolveFailed`). |
 | **wanted_download_error** / **wanted_source_error** | Download failure status / held-wanted when source error threshold hit. Source **Retry** → `wanted`. |
@@ -54,7 +54,7 @@ When introducing a new domain term, add it here (or the topic doc above if it be
 | `root_folders` | Named path + optional `retention_ttl_seconds` (UI: days; stored as seconds) |
 | `quality_profiles` | Named `format_selector` (yt-dlp `-f` style; passed as `--format`) plus `maturity_redownload_hours` / `maturity_sidecar_hours` (`0` = off), plus `sponsorblock_mark` / `sponsorblock_remove` (JSON category lists), `sponsorblock_reencode_cut`, and `sponsorblock_info_cards` (cards require reencode). Remux is always MKV (Creatorr ffmpeg). |
 | `series` | Title, one root folder, one quality profile, monitored, delivery_mode, `auto_ignore_media_types` |
-| `sources` | URL, optional name (`label` column), `kind` (`feed`\|`single`), `scan_cron`, `index_as_ignored`, `title_regexp_include`, `title_regexp_exclude`, cutoff, `full_scan_done` (no sticky last_error / last_scanned_at - derived from `source_history`) |
+| `sources` | URL, optional name (`label` column), `kind` (`feed`\|`single`), `scan_cron`, `index_as_ignored`, `title_regexp_include`, `title_regexp_exclude`, `full_scan_limit`, `full_scan_done` (no sticky last_error / last_scanned_at - derived from `source_history`) |
 | `source_history` | Per-source list-pass timeline: `scanned` / `scan_error` / `cancelled`; detail `mode` (`full`\|`scan`\|`rescan_metadata`) + counts/ids; required `task_id`; cascades on source delete |
 | `videos` | Indexed video: source_id, title, status, season/episode, `source_url`, `acquired_at` / `sidecars_acquired_at` (set on pack; sidecar maturity updates latter only), duration/resolution/download columns, `media_type`; `upload_date` stored as RFC3339 UTC |
 | `video_history` | Per-video lifecycle timeline (download/remux/pack/file/…); required `task_id`. Not used for list-pass discover/update |
@@ -65,6 +65,7 @@ When introducing a new domain term, add it here (or the topic doc above if it be
 | `domain_runtime` | Soft pause per hostname (`paused`); missing row = not paused; never a limits override |
 | `domains` | Hostname profiles: `default` (concurrency limits only; Use FlareSolverr forced off) + host overrides; `active`, optional limit overrides and `use_flaresolverr` (NULL = inherit off; 1 = On; host Off is stored as NULL, not 0), Access on hosts: `cookies` (Netscape jar; NULL/empty = none), optional `username`/`password` (NULL/empty = none); FlareSolverr HTTP pre-solve when host On |
 | `settings` | Key/value runtime config |
+| `schema_version` | Single-row integer; Open applies `schema.sql` then stepwise migrations (`internal/db/migrate.go`). v2: add `sources.full_scan_limit`, drop `sources.scan_cutoff` |
 
 ## Video statuses (minimum)
 
@@ -81,7 +82,7 @@ When introducing a new domain term, add it here (or the topic doc above if it be
 
 ## Upload time
 
-`videos.upload_date` is always **RFC3339 UTC** in the database (full timestamp for same-day ordering). yt-dlp / plugins must send RFC3339 UTC; Creatorr does not normalize Unix / date-only on ingest. **`season`** is the UTC **calendar year** (year-season, e.g. 2026). **`episode`** is `MMDD` + 0-based same-day index (`MM*10000+DD*100+i`, e.g. 31500 for 15 Mar first that day). Same UTC day: sort by `upload_date` then `id` (arrival). An earlier same-day timestamp reindexes that day and repacks shifted packed files. Undated videos leave season/episode unset in the DB; pack uses year-season **0**, so `{year}` in `episode_format` renders as **`0000`** (e.g. `S0000`), not TV default `S1`. Cutoff comparisons use the UTC calendar day only.
+`videos.upload_date` is always **RFC3339 UTC** in the database (full timestamp for same-day ordering). yt-dlp / plugins must send RFC3339 UTC; Creatorr does not normalize Unix / date-only on ingest. **`season`** is the UTC **calendar year** (year-season, e.g. 2026). **`episode`** is `MMDD` + 0-based same-day index (`MM*10000+DD*100+i`, e.g. 31500 for 15 Mar first that day). Same UTC day: sort by `upload_date` then `id` (arrival). An earlier same-day timestamp reindexes that day and repacks shifted packed files. Undated videos leave season/episode unset in the DB; pack uses year-season **0**, so `{year}` in `episode_format` renders as **`0000`** (e.g. `S0000`), not TV default `S1`.
 
 When media disappears or is purged:
 
@@ -98,7 +99,7 @@ Chronological list-pass outcomes per source (DB: `source_history`, required `tas
 
 | Event | When | Detail |
 |---|---|---|
-| `scanned` | List succeeded | `mode`: `full` \| `scan` \| `rescan_metadata`; `created` / `updated` counts; `created_ids` / `updated_ids`; optional `skipped_title_regexp_include` / `skipped_title_regexp_exclude`; optional `ignored_media_type_ids` / `ignored_index_as_ignored_ids` (subsets of `created_ids`); optional `hit_known` / `hit_cutoff` |
+| `scanned` | List succeeded | `mode`: `full` \| `scan` \| `rescan_metadata`; `created` / `updated` counts; `created_ids` / `updated_ids`; optional `skipped_title_regexp_include` / `skipped_title_regexp_exclude`; optional `ignored_media_type_ids` / `ignored_index_as_ignored_ids` (subsets of `created_ids`); optional `hit_known` / `full_scan_limit` |
 | `scan_error` | List/cookie failure | `mode` (same); `code` |
 | `cancelled` | Scan task cancelled (pending or running) | `mode` from task payload; UI Event column shows `scan` |
 

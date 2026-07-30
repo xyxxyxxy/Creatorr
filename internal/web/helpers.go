@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
@@ -231,17 +231,21 @@ func formDomain(r *http.Request) string {
 	return settings.NormalizeDomain(r.FormValue("domain"))
 }
 
-// clampPastDate keeps YYYY-MM-DD on or before today UTC; empty stays empty.
-func clampPastDate(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
+// parseFullScanLimitForm reads full_scan_limit (empty = unlimited / stored 0).
+// Values must be >= 1 when set; do not post 0 - leave the field empty instead.
+func parseFullScanLimitForm(r *http.Request) (int, error) {
+	raw := strings.TrimSpace(r.FormValue("full_scan_limit"))
+	if raw == "" {
+		return 0, nil
 	}
-	today := time.Now().UTC().Format("2006-01-02")
-	if s > today {
-		return today
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid full_scan_limit")
 	}
-	return s
+	if n < 1 {
+		return 0, fmt.Errorf("full_scan_limit must be >= 1 (leave empty for all)")
+	}
+	return n, nil
 }
 
 func urlQuery(s string) string {

@@ -998,6 +998,11 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		scanCron := sched
+		fullScanLimit, err := parseFullScanLimitForm(r)
+		if err != nil {
+			redirErr(err.Error())
+			return
+		}
 
 		ser, err := h.Library.CreateSeries(library.CreateSeriesParams{
 			Title:                title,
@@ -1006,7 +1011,7 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 			QualityProfileID:     qpID,
 			Monitored:            true,
 			DeliveryMode:         delivery,
-			ScanCutoff:           clampPastDate(strings.TrimSpace(r.FormValue("scan_cutoff"))),
+			FullScanLimit:        fullScanLimit,
 			ScanCron:             scanCron,
 			IndexAsIgnored:       r.FormValue("index_as_ignored") == "1",
 			TitleRegexpInclude:   strings.TrimSpace(r.FormValue("title_regexp_include")),
@@ -1107,10 +1112,17 @@ func (h *Handler) actionAddSource(w http.ResponseWriter, r *http.Request) {
 	titleInclude := ""
 	titleExclude := ""
 	indexAsIgnored := false
+	fullScanLimit := 0
 	if kind != library.SourceKindSingle {
 		titleInclude = strings.TrimSpace(r.FormValue("title_regexp_include"))
 		titleExclude = strings.TrimSpace(r.FormValue("title_regexp_exclude"))
 		indexAsIgnored = r.FormValue("index_as_ignored") == "1"
+		var err error
+		fullScanLimit, err = parseFullScanLimitForm(r)
+		if err != nil {
+			http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
+			return
+		}
 	}
 	_, err := h.Library.AddSource(sid, library.AddSourceParams{
 		URL:                strings.TrimSpace(r.FormValue("url")),
@@ -1120,7 +1132,7 @@ func (h *Handler) actionAddSource(w http.ResponseWriter, r *http.Request) {
 		IndexAsIgnored:     indexAsIgnored,
 		TitleRegexpInclude: titleInclude,
 		TitleRegexpExclude: titleExclude,
-		ScanCutoff:         clampPastDate(strings.TrimSpace(r.FormValue("scan_cutoff"))),
+		FullScanLimit:      fullScanLimit,
 	})
 	if err != nil {
 		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
@@ -1134,7 +1146,6 @@ func (h *Handler) actionUpdateSource(w http.ResponseWriter, r *http.Request) {
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
 	srcID, _ := strconv.ParseInt(r.FormValue("source_id"), 10, 64)
 	label := strings.TrimSpace(r.FormValue("label"))
-	cutoff := clampPastDate(strings.TrimSpace(r.FormValue("scan_cutoff")))
 	redir := seriesSourceRedirect(r, sid, srcID)
 	cur, err := h.Library.GetSource(sid, srcID)
 	if err != nil {
@@ -1142,11 +1153,15 @@ func (h *Handler) actionUpdateSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := library.UpdateSourceParams{
-		Label:       &label,
-		ScanCutoff:  &cutoff,
-		ClearCutoff: cutoff == "",
+		Label: &label,
 	}
 	if !cur.IsSingle() {
+		limit, err := parseFullScanLimitForm(r)
+		if err != nil {
+			http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
+			return
+		}
+		p.FullScanLimit = &limit
 		if _, ok := r.Form["scan_cron"]; ok {
 			cron, err := cronexpr.NormalizeScanCron(r.FormValue("scan_cron"))
 			if err != nil {

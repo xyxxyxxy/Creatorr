@@ -141,7 +141,7 @@ func TestCreateSeriesPassesSourceOptions(t *testing.T) {
 		IndexAsIgnored:   true,
 		TitleRegexpInclude: `(?i)show`,
 		AutoIgnoreMediaTypes: []string{"short"},
-		ScanCutoff:       "2020-01-01",
+		FullScanLimit:    50,
 		SourceLabel:      "My feed",
 	})
 	if err != nil {
@@ -166,8 +166,8 @@ func TestCreateSeriesPassesSourceOptions(t *testing.T) {
 	if !src.Label.Valid || src.Label.String != "My feed" {
 		t.Fatalf("label=%v", src.Label)
 	}
-	if !src.ScanCutoff.Valid || src.ScanCutoff.String != "2020-01-01" {
-		t.Fatalf("cutoff=%v", src.ScanCutoff)
+	if src.FullScanLimit != 50 {
+		t.Fatalf("full_scan_limit=%d", src.FullScanLimit)
 	}
 }
 
@@ -556,18 +556,18 @@ func TestEnqueueDownloadWantedSkipsUnmonitoredSeries(t *testing.T) {
 	}
 }
 
-func TestUpsertListedNoLongerIgnoresByCutoff(t *testing.T) {
-	// Cutoff stop/discard is handled in the scan worker, not UpsertListed.
+func TestUpsertListedIgnoresFullScanLimit(t *testing.T) {
+	// Full-scan limit is enforced at list time (yt-dlp --playlist-end), not UpsertListed.
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
-		Title: "CutIgn", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+		Title: "LimIgn", RootID: rootID, QualityProfileID: profileID, Monitored: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	src, err := s.AddSource(ser.ID, library.AddSourceParams{
-		URL: "https://www.example.com/@cutign", ScanCutoff: "2024-01-01",
+		URL: "https://www.example.com/@limign", FullScanLimit: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -577,7 +577,7 @@ func TestUpsertListedNoLongerIgnoresByCutoff(t *testing.T) {
 		SourceID: src.ID, UploadDate: "2020-06-01T12:00:00Z",
 	}, 0)
 	if err != nil || !res.Created || res.Status != "wanted" {
-		t.Fatalf("upsert past-cutoff date must not force ignored: %+v err=%v", res, err)
+		t.Fatalf("upsert must index regardless of full_scan_limit: %+v err=%v", res, err)
 	}
 }
 

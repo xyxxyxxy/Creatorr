@@ -52,7 +52,7 @@
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Source settings" "help" "URL, domain, Scan schedule, title filter / media-type exclude / mark-new-as-ignored (feeds), cutoff, and last scan outcome.")}}
+{{template "list_header" (dict "level" "section" "title" "Source settings" "help" "URL, domain, Scan schedule, title filter / media-type exclude / mark-new-as-ignored (feeds), full-scan limit, and last scan outcome.")}}
 {{template "list_table"}}
 <tbody>
   <tr><th class="w-40">URL</th><td class="text-xs break-all"><a class="link" href="{{.Source.URL}}" target="_blank" rel="noopener">{{.Source.URL}}</a></td></tr>
@@ -66,10 +66,10 @@
   <tr><th class="w-40">Domain</th><td class="font-mono text-xs">{{.DomainHost}}{{if not .DomainActive}} <span class="badge badge-warning badge-sm">inactive</span>{{end}}</td></tr>
   {{if ne .Source.Kind "single"}}
   <tr><th class="w-40">Scan</th><td class="text-sm">{{.ScanCronLabel}}</td></tr>
-  {{if .Source.ScanCutoff.Valid}}
-  <tr><th class="w-40">Cutoff</th><td>{{.Source.ScanCutoff.String}}</td></tr>
+  {{if gt .Source.FullScanLimit 0}}
+  <tr><th class="w-40">Full scan limit</th><td>{{.Source.FullScanLimit}}</td></tr>
   {{else}}
-  {{template "detail_row" (dict "Label" "Cutoff")}}
+  {{template "detail_row" (dict "Label" "Full scan limit" "EmptyText" "all")}}
   {{end}}
   {{if .Source.TitleRegexpInclude}}
   <tr><th class="w-40">Title include</th><td class="font-mono text-xs break-all">{{.Source.TitleRegexpInclude}}</td></tr>
@@ -146,10 +146,9 @@
       )}}
       {{end}}
       {{if ne .Source.Kind "single"}}
-      {{$cutoff := ""}}{{if .Source.ScanCutoff.Valid}}{{$cutoff = .Source.ScanCutoff.String}}{{end}}
       {{template "source_filter_fields" (dict
-        "Cutoff" $cutoff
-        "CutoffID" "edit-source-scan-cutoff"
+        "FullScanLimit" .Source.FullScanLimit
+        "FullScanLimitID" "edit-source-full-scan-limit"
         "IndexAsIgnored" .Source.IndexAsIgnored
         "TitleRegexpInclude" .Source.TitleRegexpInclude
         "TitleRegexpIncludeID" "edit-source-title-include"

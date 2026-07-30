@@ -15,8 +15,8 @@ import (
 //go:embed schema.sql
 var schemaFS embed.FS
 
-// schemaVersion is the single fresh-install version. No upgrade path from older DBs.
-const schemaVersion = 1
+// schemaVersion is the latest schema. Fresh installs record this; existing DBs migrate up.
+const schemaVersion = 2
 
 // busyTimeoutMS is how long pooled connections wait on SQLITE_BUSY before failing.
 // Must be set via DSN _pragma so every pool conn gets it (Exec PRAGMA only hits one conn).
@@ -80,8 +80,8 @@ func (d *DB) Ping() error {
 	return d.SQL.Ping()
 }
 
-// applySchema installs schema.sql and records schema_version=1 on first boot.
-// Existing DBs that already have schema_version are left as-is (no stepwise upgrades).
+// applySchema installs schema.sql (CREATE IF NOT EXISTS), ensures a schema_version
+// row, then runs stepwise migrations for existing databases.
 func (d *DB) applySchema() error {
 	schema, err := schemaFS.ReadFile("schema.sql")
 	if err != nil {
@@ -96,9 +96,13 @@ func (d *DB) applySchema() error {
 		return fmt.Errorf("schema_version count: %w", err)
 	}
 	if n == 0 {
+		// Fresh DB: tables already match latest schema.sql; record current version.
 		if _, err := d.SQL.Exec(`INSERT INTO schema_version (version) VALUES (?)`, schemaVersion); err != nil {
 			return fmt.Errorf("insert schema_version: %w", err)
 		}
+	}
+	if err := d.migrate(); err != nil {
+		return err
 	}
 	return nil
 }

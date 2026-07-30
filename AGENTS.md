@@ -25,7 +25,7 @@ api/openapi.yaml        REST contract (source of truth)
 internal/api/gen/       oapi-codegen output (committed; do not hand-edit)
 internal/api/           handler impl, SSE, route mounting
 internal/config/        env bootstrap + settings bridge
-internal/db/            SQLite open + schema
+internal/db/            SQLite open + schema + stepwise migrations (`schema_version`)
 internal/domain/        series, source, video types
 internal/library/       series/videos/files, pack, remux, import, NFO
 internal/queue/         per-domain task queue, cooldown, History (finished tasks)

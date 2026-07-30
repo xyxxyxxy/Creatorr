@@ -146,7 +146,7 @@
         "ID" "add-source-scan-cron"
         "CronDescriptors" .ScanCronDescriptors
       )}}
-      {{template "source_filter_fields" (dict "CutoffID" "add-source-scan-cutoff")}}
+      {{template "source_filter_fields" (dict "FullScanLimitID" "add-source-full-scan-limit")}}
       <div class="modal-action">
         <label for="modal-add-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
@@ -213,10 +213,9 @@
       )}}
       {{end}}
       {{if ne .Kind "single"}}
-      {{$cutoff := ""}}{{if .ScanCutoff.Valid}}{{$cutoff = .ScanCutoff.String}}{{end}}
       {{template "source_filter_fields" (dict
-        "Cutoff" $cutoff
-        "CutoffID" (printf "edit-source-scan-cutoff-%d" .ID)
+        "FullScanLimit" .FullScanLimit
+        "FullScanLimitID" (printf "edit-source-full-scan-limit-%d" .ID)
         "IndexAsIgnored" .IndexAsIgnored
         "TitleRegexpInclude" .TitleRegexpInclude
         "TitleRegexpIncludeID" (printf "edit-source-title-include-%d" .ID)

@@ -42,17 +42,17 @@ func NormalizeSourceKind(k string) string {
 
 // Source is a feed or single URL on a series.
 type Source struct {
-	ID                int64
-	SeriesID          int64
-	URL               string
-	Label             sql.NullString
-	Kind              string
-	ScanCron          string // empty = never (Scan schedule); feed default weekly
-	IndexAsIgnored    bool   // new videos → ignored instead of wanted
+	ID                 int64
+	SeriesID           int64
+	URL                string
+	Label              sql.NullString
+	Kind               string
+	ScanCron           string // empty = never (Scan schedule); feed default weekly
+	IndexAsIgnored     bool   // new videos → ignored instead of wanted
 	TitleRegexpInclude string // empty = no include filter; Go regexp must match to index
 	TitleRegexpExclude string // empty = no exclude filter; matching titles are not indexed (wins over include)
-	ScanCutoff        sql.NullString
-	FullScanDone      bool
+	FullScanLimit      int    // 0 = unlimited; yt-dlp --playlist-end on full scan only
+	FullScanDone       bool
 }
 
 // IsSingle reports kind=single (one-shot index; no tip Scan).
@@ -104,7 +104,7 @@ type CreateSeriesParams struct {
 	QualityProfileID int64
 	Monitored        bool
 	DeliveryMode     string
-	ScanCutoff    string
+	FullScanLimit    int // first source full-scan playlist cap; 0 = unlimited
 	ScanCron         string // feed default weekly when SourceURL set and empty
 	IndexAsIgnored   bool
 	TitleRegexpInclude string
@@ -336,10 +336,10 @@ func (s *Store) CreateSeries(p CreateSeriesParams) (*Series, error) {
 	sid, _ := res.LastInsertId()
 	if sourceURL != "" {
 		if _, err := s.AddSource(sid, AddSourceParams{
-			URL:            sourceURL,
-			Label:          p.SourceLabel,
-			ScanCutoff:     p.ScanCutoff,
-			ScanCron:       p.ScanCron,
+			URL:                sourceURL,
+			Label:              p.SourceLabel,
+			FullScanLimit:      p.FullScanLimit,
+			ScanCron:           p.ScanCron,
 			IndexAsIgnored:     p.IndexAsIgnored,
 			TitleRegexpInclude: p.TitleRegexpInclude,
 			TitleRegexpExclude: p.TitleRegexpExclude,
@@ -539,7 +539,7 @@ func scanSource(scanner interface {
 	var titleInclude, titleExclude sql.NullString
 	err := scanner.Scan(
 		&src.ID, &src.SeriesID, &src.URL, &src.Label, &src.Kind,
-		&src.ScanCron, &indexAsIgnored, &titleInclude, &titleExclude, &src.ScanCutoff, &fullScanDone,
+		&src.ScanCron, &indexAsIgnored, &titleInclude, &titleExclude, &src.FullScanLimit, &fullScanDone,
 	)
 	src.Kind = NormalizeSourceKind(src.Kind)
 	src.IndexAsIgnored = indexAsIgnored != 0
@@ -557,7 +557,7 @@ func scanSource(scanner interface {
 }
 
 const sourceSelectCols = `id, series_id, url, label, kind, scan_cron, index_as_ignored,
-		       title_regexp_include, title_regexp_exclude, scan_cutoff, full_scan_done`
+		       title_regexp_include, title_regexp_exclude, full_scan_limit, full_scan_done`
 
 func (s *Store) listSources(seriesID int64) ([]Source, error) {
 	rows, err := s.DB.SQL.Query(`
@@ -653,7 +653,7 @@ type AddSourceParams struct {
 	IndexAsIgnored     bool
 	TitleRegexpInclude string
 	TitleRegexpExclude string
-	ScanCutoff         string
+	FullScanLimit      int // 0 = unlimited; ignored for single
 }
 
 func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
@@ -673,11 +673,14 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 		return nil, err
 	}
 	kind := NormalizeSourceKind(p.Kind)
-	cutoff := strings.TrimSpace(p.ScanCutoff)
+	limit := p.FullScanLimit
+	if limit < 0 {
+		return nil, fmt.Errorf("%w: full_scan_limit must be >= 0", ErrInvalid)
+	}
 	scanCron := strings.TrimSpace(p.ScanCron)
 	if kind == SourceKindSingle {
 		scanCron = ""
-		cutoff = ""
+		limit = 0
 		titleInclude = ""
 		titleExclude = ""
 		p.IndexAsIgnored = false
@@ -690,10 +693,6 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 	if strings.TrimSpace(p.Label) != "" {
 		label = strings.TrimSpace(p.Label)
 	}
-	var cutoffVal any
-	if cutoff != "" {
-		cutoffVal = cutoff
-	}
 	var titleIncludeVal, titleExcludeVal any
 	if titleInclude != "" {
 		titleIncludeVal = titleInclude
@@ -705,7 +704,7 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 	if p.IndexAsIgnored {
 		idx = 1
 	}
-	res, err := s.insertSource(seriesID, url, label, kind, scanCron, idx, titleIncludeVal, titleExcludeVal, cutoffVal)
+	res, err := s.insertSource(seriesID, url, label, kind, scanCron, idx, titleIncludeVal, titleExcludeVal, limit)
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return nil, fmt.Errorf("%w: source URL already on this series", ErrConflict)
@@ -723,11 +722,11 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 }
 
 // insertSource writes a sources row.
-func (s *Store) insertSource(seriesID int64, url string, label any, kind, scanCron string, indexAsIgnored int, titleInclude, titleExclude, cutoff any) (sql.Result, error) {
+func (s *Store) insertSource(seriesID int64, url string, label any, kind, scanCron string, indexAsIgnored int, titleInclude, titleExclude any, fullScanLimit int) (sql.Result, error) {
 	return s.DB.SQL.Exec(`
-		INSERT INTO sources (series_id, url, label, kind, scan_cron, index_as_ignored, title_regexp_include, title_regexp_exclude, scan_cutoff)
+		INSERT INTO sources (series_id, url, label, kind, scan_cron, index_as_ignored, title_regexp_include, title_regexp_exclude, full_scan_limit)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, seriesID, url, label, kind, scanCron, indexAsIgnored, titleInclude, titleExclude, cutoff)
+	`, seriesID, url, label, kind, scanCron, indexAsIgnored, titleInclude, titleExclude, fullScanLimit)
 }
 
 func (s *Store) GetSource(seriesID, sourceID int64) (*Source, error) {
@@ -746,15 +745,14 @@ func (s *Store) GetSource(seriesID, sourceID int64) (*Source, error) {
 }
 
 // UpdateSourceParams patches a source; nil pointers mean unchanged.
-// Kind and URL are immutable after create. Single sources force scan_cron empty and ignore cutoff.
+// Kind and URL are immutable after create. Single sources force scan_cron empty and clear limit/filters.
 type UpdateSourceParams struct {
 	Label              *string
 	ScanCron           *string
 	IndexAsIgnored     *bool
 	TitleRegexpInclude *string
 	TitleRegexpExclude *string
-	ScanCutoff         *string
-	ClearCutoff        bool
+	FullScanLimit      *int
 }
 
 func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*Source, error) {
@@ -767,7 +765,7 @@ func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*S
 	indexAsIgnored := cur.IndexAsIgnored
 	titleInclude := cur.TitleRegexpInclude
 	titleExclude := cur.TitleRegexpExclude
-	cutoff := cur.ScanCutoff
+	limit := cur.FullScanLimit
 	if p.Label != nil {
 		if strings.TrimSpace(*p.Label) == "" {
 			label = sql.NullString{}
@@ -790,9 +788,15 @@ func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*S
 			return nil, err
 		}
 	}
+	if p.FullScanLimit != nil {
+		if *p.FullScanLimit < 0 {
+			return nil, fmt.Errorf("%w: full_scan_limit must be >= 0", ErrInvalid)
+		}
+		limit = *p.FullScanLimit
+	}
 	if cur.IsSingle() {
 		scanCron = ""
-		cutoff = sql.NullString{}
+		limit = 0
 		indexAsIgnored = false
 		titleInclude = ""
 		titleExclude = ""
@@ -805,23 +809,10 @@ func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*S
 				scanCron = c
 			}
 		}
-		if p.ClearCutoff {
-			cutoff = sql.NullString{}
-		} else if p.ScanCutoff != nil {
-			c := strings.TrimSpace(*p.ScanCutoff)
-			if c == "" {
-				cutoff = sql.NullString{}
-			} else {
-				cutoff = sql.NullString{String: c, Valid: true}
-			}
-		}
 	}
-	var labelVal, cutoffVal, titleIncludeVal, titleExcludeVal any
+	var labelVal, titleIncludeVal, titleExcludeVal any
 	if label.Valid {
 		labelVal = label.String
-	}
-	if cutoff.Valid {
-		cutoffVal = cutoff.String
 	}
 	if titleInclude != "" {
 		titleIncludeVal = titleInclude
@@ -834,33 +825,15 @@ func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*S
 		idx = 1
 	}
 	_, err = s.DB.SQL.Exec(`
-		UPDATE sources SET label = ?, scan_cron = ?, index_as_ignored = ?, title_regexp_include = ?, title_regexp_exclude = ?, scan_cutoff = ?
+		UPDATE sources SET label = ?, scan_cron = ?, index_as_ignored = ?, title_regexp_include = ?, title_regexp_exclude = ?, full_scan_limit = ?
 		WHERE id = ? AND series_id = ?
-	`, labelVal, scanCron, idx, titleIncludeVal, titleExcludeVal, cutoffVal, sourceID, seriesID)
+	`, labelVal, scanCron, idx, titleIncludeVal, titleExcludeVal, limit, sourceID, seriesID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	becameNever := !cur.IsSingle() && p.ScanCron != nil && scanCron == "" && !cur.ScanCronNever()
 	if becameNever && s.Queue != nil {
 		_, _ = s.Queue.CancelPendingScansForSource(sourceID)
-	}
-	oldCutoff := ""
-	if cur.ScanCutoff.Valid {
-		oldCutoff = cur.ScanCutoff.String
-	}
-	newCutoff := ""
-	if cutoff.Valid {
-		newCutoff = cutoff.String
-	}
-	cutoffExpanded := !cur.IsSingle() && CutoffExpanded(oldCutoff, newCutoff)
-	if cutoffExpanded {
-		_ = s.ResetFullScan(sourceID)
-	}
-	if s.Queue != nil && cutoffExpanded {
-		domOK, _ := domains.IsActive(s.DB, queue.DomainFromURL(cur.URL))
-		if domOK {
-			_, _ = s.EnqueueScanSource(sourceID)
-		}
 	}
 	return s.GetSource(seriesID, sourceID)
 }

@@ -1655,10 +1655,11 @@ components:
           description: >
             Optional Go regexp; matching titles are not indexed. Empty = no exclude filter.
             Takes priority over title_regexp_include when both match.
-        scan_cutoff:
-          type: string
-          nullable: true
-          description: Optional date cutoff; empty = index all videos from source (ignored for kind=single)
+        full_scan_limit:
+          type: integer
+          description: >
+            Cap playlist entries on full scan (yt-dlp --playlist-end). 0 = unlimited.
+            Ignored for kind=single. Tip Scan is uncapped.
         last_error_code:
           type: string
           nullable: true
@@ -1686,7 +1687,7 @@ components:
           type: string
           enum: [feed, single]
           default: feed
-          description: feed = channel/playlist; single = one video URL (forces monitored, no cutoff)
+          description: feed = channel/playlist; single = one video URL (forces monitored; full_scan_limit ignored)
         monitored:
           type: boolean
           default: true
@@ -1696,9 +1697,9 @@ components:
         title_regexp_exclude:
           type: string
           description: Empty = no exclude filter; invalid patterns rejected; wins over include when both match
-        scan_cutoff:
-          type: string
-          description: Empty = index all videos
+        full_scan_limit:
+          type: integer
+          description: Cap full-scan playlist entries; 0 = unlimited
 
     UpdateSourceRequest:
       type: object
@@ -1718,10 +1719,10 @@ components:
           type: string
           nullable: true
           description: Empty clears the exclude filter
-        scan_cutoff:
-          type: string
+        full_scan_limit:
+          type: integer
           nullable: true
-          description: Ignored for kind=single
+          description: Cap full-scan playlist entries; 0 = unlimited; ignored for kind=single
 
     Video:
       type: object
@@ -1879,9 +1880,9 @@ components:
           type: boolean
           default: true
           description: Applied to the optional first source
-        scan_cutoff:
-          type: string
-          description: Cutoff for first source; empty = index all
+        full_scan_limit:
+          type: integer
+          description: Full-scan playlist cap for first source; 0 = unlimited
         title_regexp_include:
           type: string
           description: Title include filter for first source; empty = no filter

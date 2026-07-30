@@ -1,22 +1,28 @@
 {{define "source_filter_fields"}}
 {{/*
-  Feed-only index filters: cutoff + title include/exclude + discovered status.
-  Expects optional: Cutoff (YYYY-MM-DD), CutoffID, IndexAsIgnored,
+  Feed-only index filters: full-scan limit + title include/exclude + discovered status.
+  Expects optional: FullScanLimit (int; 0/empty = unlimited), FullScanLimitID, IndexAsIgnored,
     TitleRegexpInclude, TitleRegexpIncludeID,
     TitleRegexpExclude, TitleRegexpExcludeID.
 */}}
-{{$cutoffID := .CutoffID}}{{if not $cutoffID}}{{$cutoffID = "scan-cutoff"}}{{end}}
+{{$limitID := .FullScanLimitID}}{{if not $limitID}}{{$limitID = "full-scan-limit"}}{{end}}
 <div class="space-y-2">
   <h4 class="font-semibold text-base">Filter</h4>
   <p class="text-sm opacity-60">Only matching videos will be indexed.</p>
   <div class="w-full">
     <fieldset class="fieldset bg-base-200 border border-base-300 rounded-box p-4">
-      <legend class="fieldset-legend">Cutoff</legend>
-      <input type="date" name="scan_cutoff" id="{{$cutoffID}}"
-             class="input w-full"
-             value="{{.Cutoff}}"
-             max="{{today}}" />
-      <p class="label whitespace-pre-line">Stop at the first listing with an upload date before this UTC day (that day is still indexed). Listings with no upload date are not stopped by cutoff. Empty = no cutoff.</p>
+      <legend class="fieldset-legend">Stop full scan after</legend>
+      <div class="join w-full">
+        <input type="number" name="full_scan_limit" id="{{$limitID}}"
+               class="input join-item grow min-w-0"
+               min="1"
+               step="1"
+               placeholder="all"
+               {{if .FullScanLimit}}value="{{.FullScanLimit}}"{{end}} />
+        <span class="btn join-item no-animation pointer-events-none">videos</span>
+      </div>
+      <p class="label whitespace-pre-line">Full scan only. Caps how many entries yt-dlp lists. Usually this means the N latest videos, but not guaranteed: depends on the yt-dlp site-specific extractor.</p>
+      <p class="label whitespace-pre-line">Use this on large channels with a big backlog if only the latest videos are of interest.</p>
     </fieldset>
   </div>
   <fieldset class="fieldset bg-base-200 border border-base-300 rounded-box p-4">
