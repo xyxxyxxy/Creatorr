@@ -2,10 +2,9 @@
 {{/*
   Join-items for series source row. Wrapper uses display:contents so OOB swap
   still targets this id while buttons participate in the parent .join.
-  Disabled: tip wraps the control - daisyUI .btn-disabled / :disabled set
-  pointer-events:none, so tip on the same host never receives hover.
-  Tip host keeps join-item for seam layout but border-0 so .join-item's solid
-  border does not double-outline the inner .btn.
+  Disabled: tip must stay on a real .btn.join-item (same chrome as enabled) -
+  daisyUI .btn-disabled sets pointer-events:none so tip cannot sit on that class.
+  Use aria-disabled + cursor-not-allowed; mute the icon only (tip-safe).
 */}}
 <span id="source-scan-actions-{{.ID}}" class="contents source-scan-actions" {{if .OOB}}hx-swap-oob="true"{{end}}>
   {{if and (ne .Kind "single") .FullScanDone}}
@@ -16,10 +15,8 @@
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     <input type="hidden" name="source_id" value="{{.ID}}" />
     {{if $scanOff}}
-    <span class="tooltip tooltip-top join-item inline-flex border-0" data-tip="{{$tipScan}}">
-      <span class="btn btn-soft btn-primary btn-xs btn-square btn-disabled" aria-label="Scan for new videos" aria-disabled="true" role="button" tabindex="-1">
-        <i data-lucide="scan-line" class="size-3.5" aria-hidden="true"></i>
-      </span>
+    <span class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="{{$tipScan}}" aria-label="Scan for new videos" aria-disabled="true" role="button" tabindex="-1">
+      <i data-lucide="scan-line" class="size-3.5 opacity-50" aria-hidden="true"></i>
     </span>
     {{else}}
     <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="{{$tipScan}}" aria-label="Scan for new videos">
@@ -35,10 +32,8 @@
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     <input type="hidden" name="source_id" value="{{.ID}}" />
     {{if $fullOff}}
-    <span class="tooltip tooltip-top join-item inline-flex border-0" data-tip="{{$tipFull}}">
-      <span class="btn btn-soft btn-primary btn-xs btn-square btn-disabled" aria-label="Start full scan" aria-disabled="true" role="button" tabindex="-1">
-        <i data-lucide="scan-text" class="size-3.5" aria-hidden="true"></i>
-      </span>
+    <span class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="{{$tipFull}}" aria-label="Start full scan" aria-disabled="true" role="button" tabindex="-1">
+      <i data-lucide="scan-text" class="size-3.5 opacity-50" aria-hidden="true"></i>
     </span>
     {{else}}
     <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="{{$tipFull}}" aria-label="Start full scan">

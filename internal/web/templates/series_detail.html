@@ -69,10 +69,12 @@
     {{template "source_status_cell" .StatusInd}}
     <td class="whitespace-nowrap text-end">
       <div class="join">
-      {{template "source_scan_actions" .}}
       {{if .HasRetryable}}
-      <label for="modal-retry-source-{{.ID}}" class="btn btn-ghost btn-xs join-item tooltip tooltip-top" data-tip="Clear error hold: wanted_download_error and wanted_source_error → wanted. Does not enqueue downloads.">Retry</label>
+      <label for="modal-retry-source-{{.ID}}" class="btn btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Clear 'wanted_download_error' and 'wanted_source_error' status from videos of this source and put them back to 'wanted'" aria-label="Retry">
+        <i data-lucide="rotate-ccw" class="size-3.5"></i>
+      </label>
       {{end}}
+      {{template "source_scan_actions" .}}
       <label for="modal-edit-source-{{.ID}}" class="btn btn-secondary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
         <i data-lucide="pencil" class="size-3.5"></i>
       </label>

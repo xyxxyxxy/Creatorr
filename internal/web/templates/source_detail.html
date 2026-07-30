@@ -32,7 +32,7 @@
     </form>
     {{end}}
     {{if .HasRetryable}}
-    <label for="modal-retry-source" class="btn btn-outline tooltip tooltip-top" data-tip="Clear error hold for this source’s videos.">Retry</label>
+    <label for="modal-retry-source" class="btn btn-outline tooltip tooltip-top" data-tip="Clear 'wanted_download_error' and 'wanted_source_error' status from videos of this source and put them back to 'wanted'">Retry</label>
     {{end}}
     {{$fullOff := or .ScanActive (not .DomainActive)}}
     {{$tipFull := "Start 'Full scan'"}}
