@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -732,16 +733,35 @@ func DownloadHandler(d Deps) TaskHandler {
 			if err != nil {
 				return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "SponsorBlock staging failed"), err.Error())
 			}
-			aired := ""
+			upload := ""
 			if dlctx.Video.UploadDate.Valid {
-				aired = dlctx.Video.UploadDate.String
+				upload = dlctx.Video.UploadDate.String
 			}
+			if filled, ferr := d.Library.SoftFillUploadDateFromInfoJSON(t.VideoID.Int64, infoSrc); ferr != nil {
+				return ferr
+			} else if filled != "" {
+				upload = filled
+				dlctx.Video.UploadDate = sql.NullString{String: filled, Valid: true}
+			}
+			aired := upload
 			season, episode := 0, 0
 			if dlctx.Video.Season.Valid {
 				season = int(dlctx.Video.Season.Int64)
 			}
 			if dlctx.Video.Episode.Valid {
 				episode = int(dlctx.Video.Episode.Int64)
+			}
+			if season == 0 || episode == 0 {
+				s, e, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
+				if aerr != nil {
+					return aerr
+				}
+				if season == 0 {
+					season = s
+				}
+				if episode == 0 {
+					episode = e
+				}
 			}
 			staged.PageURL = dlctx.URL
 			staged.RemoteID = dlctx.Video.RemoteID
@@ -832,6 +852,20 @@ func finishArchivePack(
 	sbPlanPath, sbWarn string,
 	progress func(msg string, pct *float64),
 ) error {
+	// Soft-fill upload_date from download info.json before season assign / pack.
+	// Index rows often lack dates (flat playlist); packing then used S0000, and the
+	// post-pack rename in CompleteDownload was skipped while this download task ran.
+	upload := ""
+	if dlctx.Video.UploadDate.Valid {
+		upload = dlctx.Video.UploadDate.String
+	}
+	if filled, ferr := d.Library.SoftFillUploadDateFromInfoJSON(t.VideoID.Int64, infoSrc); ferr != nil {
+		return ferr
+	} else if filled != "" {
+		upload = filled
+		dlctx.Video.UploadDate = sql.NullString{String: filled, Valid: true}
+	}
+
 	season, episode := 0, 0
 	if dlctx.Video.Season.Valid {
 		season = int(dlctx.Video.Season.Int64)
@@ -840,10 +874,6 @@ func finishArchivePack(
 		episode = int(dlctx.Video.Episode.Int64)
 	}
 	if season == 0 || episode == 0 {
-		upload := ""
-		if dlctx.Video.UploadDate.Valid {
-			upload = dlctx.Video.UploadDate.String
-		}
 		s, e, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
 		if aerr != nil {
 			return aerr
@@ -855,8 +885,8 @@ func finishArchivePack(
 			episode = e
 		}
 	}
-	aired := ""
-	if dlctx.Video.UploadDate.Valid {
+	aired := upload
+	if aired == "" && dlctx.Video.UploadDate.Valid {
 		aired = dlctx.Video.UploadDate.String
 	}
 	thumbURL := ""

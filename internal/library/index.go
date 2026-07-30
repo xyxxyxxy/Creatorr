@@ -358,7 +358,7 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		fps = infoMeta.FPS
 	}
 	acquired := nowRFC3339()
-	uploadFromInfo := uploadDateFromInfoJSON(infoPath)
+	uploadFromInfo := UploadDateFromInfoJSON(infoPath)
 
 	// Disk work outside the write tx so `_txlock=immediate` is not held across Remove/Stat.
 	oldRows, err := s.DB.SQL.Query(`SELECT path FROM files WHERE video_id = ?`, videoID)
@@ -530,8 +530,8 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 }
 
 
-// uploadDateFromInfoJSON reads upload_date from a packed info.json (RFC3339 or YYYYMMDD).
-func uploadDateFromInfoJSON(path string) string {
+// UploadDateFromInfoJSON reads upload_date from a packed info.json (RFC3339 or YYYYMMDD).
+func UploadDateFromInfoJSON(path string) string {
 	if path == "" || !fileExists(path) {
 		return ""
 	}
@@ -548,6 +548,29 @@ func uploadDateFromInfoJSON(path string) string {
 		return sidecarUploadTime(v)
 	}
 	return ""
+}
+
+// SoftFillUploadDateFromInfoJSON sets videos.upload_date from info.json when empty.
+// Does not reindex or rename; callers assign season/episode before pack.
+// Returns the effective upload_date (existing or newly filled), or "" if still unset.
+func (s *Store) SoftFillUploadDateFromInfoJSON(videoID int64, infoPath string) (string, error) {
+	var cur sql.NullString
+	if err := s.DB.SQL.QueryRow(`SELECT upload_date FROM videos WHERE id = ?`, videoID).Scan(&cur); err != nil {
+		return "", err
+	}
+	if cur.Valid {
+		if u := NormalizeUploadTime(cur.String); u != "" {
+			return u, nil
+		}
+	}
+	fromInfo := UploadDateFromInfoJSON(infoPath)
+	if fromInfo == "" {
+		return "", nil
+	}
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET upload_date = ? WHERE id = ? AND (upload_date IS NULL OR trim(upload_date) = '')`, fromInfo, videoID); err != nil {
+		return "", err
+	}
+	return fromInfo, nil
 }
 
 // DurationSecondsFromInfoJSON reads yt-dlp-style duration (seconds) from a packed info.json.
