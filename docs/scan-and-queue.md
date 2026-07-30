@@ -45,7 +45,7 @@ Flat listing only (newest-first). No full metadata extract during scan. YouTube 
 
 | Mode | When | Behavior |
 |---|---|---|
-| **Full scan** (`mode=full`) | Source `full_scan_done` is false | One task lists the whole feed (uncapped, newest-first), upserts entries **until scan cutoff** (days **before** cutoff are **not** indexed; cutoff day is included; walk stops), then sets `full_scan_done`. Domain must be active; series monitored **not** required. Status: **scanning** / **queued** while a task runs; **pending** if domain inactive with no task; **incomplete** if domain active but no task queued. |
+| **Full scan** (`mode=full`) | Source `full_scan_done` is false | One task lists the whole feed (uncapped, newest-first), upserts entries **until scan cutoff** (dated days **before** cutoff are **not** indexed; cutoff day is included; undated listings are not stopped by cutoff; walk stops on first pre-cutoff dated entry), then sets `full_scan_done`. Domain must be active; series monitored **not** required. Status: **scanning** / **queued** while a task runs; **pending** if domain inactive with no task; **incomplete** if domain active but no task queued. |
 | **Scan** (`mode=scan`) | Source `full_scan_done` is true **and** `kind=feed` | One task walks newest → **stop at first already-known** `remote_id` **or scan cutoff**. Status shows how many **new** videos found. **`kind=single` never tip Scan.** Idle Status label: last-scan summary or **indexed**. |
 | **Full scan** (restart) | Series or source action; feed and single | Keep indexed videos/files. Clear `full_scan_done`. Next full scan walks again and **adds** newly found videos only. |
 

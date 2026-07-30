@@ -4,6 +4,8 @@
   still targets this id while buttons participate in the parent .join.
   Disabled: tip wraps the control - daisyUI .btn-disabled / :disabled set
   pointer-events:none, so tip on the same host never receives hover.
+  Tip host keeps join-item for seam layout but border-0 so .join-item's solid
+  border does not double-outline the inner .btn.
 */}}
 <span id="source-scan-actions-{{.ID}}" class="contents" {{if .OOB}}hx-swap-oob="true"{{end}}>
   {{if and (ne .Kind "single") .FullScanDone}}
@@ -14,7 +16,7 @@
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     <input type="hidden" name="source_id" value="{{.ID}}" />
     {{if $scanOff}}
-    <span class="tooltip tooltip-top join-item inline-flex" data-tip="{{$tipScan}}">
+    <span class="tooltip tooltip-top join-item inline-flex border-0" data-tip="{{$tipScan}}">
       <span class="btn btn-soft btn-primary btn-xs btn-square btn-disabled" aria-label="Scan for new videos" aria-disabled="true" role="button" tabindex="-1">
         <i data-lucide="scan-line" class="size-3.5" aria-hidden="true"></i>
       </span>
@@ -33,7 +35,7 @@
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     <input type="hidden" name="source_id" value="{{.ID}}" />
     {{if $fullOff}}
-    <span class="tooltip tooltip-top join-item inline-flex" data-tip="{{$tipFull}}">
+    <span class="tooltip tooltip-top join-item inline-flex border-0" data-tip="{{$tipFull}}">
       <span class="btn btn-soft btn-primary btn-xs btn-square btn-disabled" aria-label="Start full scan" aria-disabled="true" role="button" tabindex="-1">
         <i data-lucide="scan-text" class="size-3.5" aria-hidden="true"></i>
       </span>

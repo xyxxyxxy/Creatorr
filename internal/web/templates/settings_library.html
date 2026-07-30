@@ -124,7 +124,7 @@
           <i data-lucide="pencil" class="size-3.5"></i>
         </label>
         {{if gt .SeriesCount 0}}
-        <span class="tooltip tooltip-top join-item inline-flex" data-tip="{{if eq .SeriesCount 1}}Used by 1 series{{else}}Used by {{.SeriesCount}} series{{end}}">
+        <span class="tooltip tooltip-top join-item inline-flex border-0" data-tip="{{if eq .SeriesCount 1}}Used by 1 series{{else}}Used by {{.SeriesCount}} series{{end}}">
           <span class="btn btn-soft btn-error btn-xs btn-square btn-disabled" aria-label="{{if eq .SeriesCount 1}}Used by 1 series{{else}}Used by {{.SeriesCount}} series{{end}}" aria-disabled="true" role="button" tabindex="-1">
             <i data-lucide="trash-2" class="size-3.5" aria-hidden="true"></i>
           </span>

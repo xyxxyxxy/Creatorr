@@ -5,7 +5,7 @@
 {{$formClass := ""}}{{if .FormClass}}{{$formClass = .FormClass}}{{end}}
 {{$icon := "size-4"}}{{if .Icons}}{{$icon = "size-5"}}{{end}}
 {{$live := .LiveSwap}}
-{{$queuedTitle := "Download task already queued for this video"}}
+{{$queuedTitle := "Download already queued"}}
 {{if or (eq .Status "wanted") (eq .Status "wanted_source_error") (eq .Status "wanted_download_error") (eq .Status "verify_failed") (eq .Status "deleted") (eq .Status "missing")}}
 {{$tip := ""}}
 {{if not .DomainActive}}{{$tip = .DomainDisabledTitle}}

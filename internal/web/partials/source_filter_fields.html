@@ -16,7 +16,7 @@
              class="input w-full"
              value="{{.Cutoff}}"
              max="{{today}}" />
-      <p class="label whitespace-pre-line">Only videos on or after this date will be indexed. Empty = no cutoff.</p>
+      <p class="label whitespace-pre-line">Stop at the first listing with an upload date before this UTC day (that day is still indexed). Listings with no upload date are not stopped by cutoff. Empty = no cutoff.</p>
     </fieldset>
   </div>
   <fieldset class="fieldset bg-base-200 border border-base-300 rounded-box p-4">
