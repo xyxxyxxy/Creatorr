@@ -1497,6 +1497,77 @@ func TestEnqueueDownloadWantedRoundRobinFair(t *testing.T) {
 	}
 }
 
+func TestEnqueueDownloadWantedContinuesOtherDomainsWhenOneFull(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	_ = settings.SetDomainDefault(s.DB, 0, 8, 1, "10M", "0", false)
+	_ = settings.Set(s.DB, settings.KeyDownloadWantedOrder, settings.DownloadWantedOrderOldest)
+
+	makeSer := func(title, host string) (seriesID, srcID int64) {
+		t.Helper()
+		ser, err := s.CreateSeries(library.CreateSeriesParams{
+			Title: title, SourceURL: "https://" + host + "/@x", RootID: rootID,
+			QualityProfileID: profileID, Monitored: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ser.ID, ser.Sources[0].ID
+	}
+	// Create A first so equal active-counts prefer series A before B in fair RR.
+	sA, srcA := makeSer("FullHost", "a.example.com")
+	sB, srcB := makeSer("OpenHost", "b.example.com")
+	if err := domains.UpdateHostOverrides(s.DB, "a.example.com", "", "1", "1", "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	// Fill A's download cap without tying series_id (keeps fair RR equal so A stays first).
+	if _, err := s.DB.SQL.Exec(`
+		INSERT INTO tasks (kind, status, domain, message, created_at)
+		VALUES (?, ?, 'a.example.com', 'filler', datetime('now'))
+	`, queue.KindDownload, queue.StatusPending); err != nil {
+		t.Fatal(err)
+	}
+	for i, rid := range []string{"a1", "a2"} {
+		if _, err := s.UpsertListed(sA, library.ListedVideo{
+			RemoteID: rid, Title: rid, WebpageURL: "https://a.example.com/" + rid,
+			SourceID: srcA, UploadDate: time.Date(2024, 1, i+1, 12, 0, 0, 0, time.UTC).Format(time.RFC3339),
+		}, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i, rid := range []string{"b1", "b2"} {
+		if _, err := s.UpsertListed(sB, library.ListedVideo{
+			RemoteID: rid, Title: rid, WebpageURL: "https://b.example.com/" + rid,
+			SourceID: srcB, UploadDate: time.Date(2024, 2, i+1, 12, 0, 0, 0, time.UTC).Format(time.RFC3339),
+		}, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n, err := s.EnqueueDownloadWanted()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("want 2 enqueues on open domain B, got %d", n)
+	}
+	var aPending, bPending int
+	_ = s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM tasks
+		WHERE kind = 'download' AND status = 'pending' AND domain = 'a.example.com' AND message != 'filler'
+	`).Scan(&aPending)
+	_ = s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM tasks
+		WHERE kind = 'download' AND status = 'pending' AND domain = 'b.example.com'
+	`).Scan(&bPending)
+	if aPending != 0 {
+		t.Fatalf("domain A already at cap: want 0 new A downloads, got %d", aPending)
+	}
+	if bPending != 2 {
+		t.Fatalf("want both B videos queued despite A full, got %d", bPending)
+	}
+}
+
 func TestMarkDownloadFailedStage(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)

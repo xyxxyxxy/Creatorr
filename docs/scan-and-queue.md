@@ -67,7 +67,7 @@ Flat listing only (newest-first). No full metadata extract during scan. YouTube 
 | Field | Default | Role |
 |---|---|---|
 | `task_cooldown_seconds` | `30` | Pause after a task **starts** before another may start within the queue on that host domain (still applies with parallel tasks). Interactive prefetch kinds do not start cooldown. Does not apply to the `system` lane. |
-| `max_download_queue` | `8` | **Max download tasks** UI label. Max pending+running download tasks **for this hostname**. Auto-enqueue stops when full; **Queue download** bypasses. Upper bound for max parallel tasks. |
+| `max_download_queue` | `8` | **Max download tasks** UI label. Max pending+running download tasks **for this hostname**. Auto-enqueue (download-wanted / maturity media) stops filling **that hostname** when full; other hostnames keep filling until their caps (or all active candidate domains are full). **Queue download** bypasses. Upper bound for max parallel tasks. |
 | `max_parallel_tasks` | `1` | Max concurrent **running** non-interactive tasks on this hostname (scan, download, …). Set ≥ 2 so a tip scan can start while a download runs. Must be ≤ max download tasks (`max_download_queue`). |
 | `download_rate_limit` | `10M` | Passed to yt-dlp as `--limit-rate` for archive download and scan/list. UI: number + unit join (`K`/`M`/`G`, or Unlimited → `off`). `off` / `0` / `none` = unlimited. Not used for **interactive** metadata prefetch (`prefetch_*`). |
 | `sleep_requests` | `1` | Seconds for yt-dlp pacing: `--sleep-requests`, `--sleep-subtitles`, and `--sleep-interval` (same value). `0` = off. Applies to archive/scan; **not** to interactive metadata prefetch. |
