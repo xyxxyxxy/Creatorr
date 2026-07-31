@@ -5,7 +5,7 @@
 
 <section class="card bg-base-100 border border-base-300 mb-4">
   <div class="card-body gap-6">
-    {{template "list_header" (dict "level" "section" "title" "Notifications" "help" "Creatorr in-app channel (fixed, all events) plus optional Apprise channels. Each Apprise channel has a URL and event subscriptions. Successful Apprise delivery marks the matching in-app alert or warning as read." "add_modal" "modal-add-notify-channel" "add_label" "Add channel")}}
+    {{template "list_header" (dict "level" "section" "title" "Notifications" "help" "Creatorr in-app channel (fixed, all events) plus optional Apprise channels. Each Apprise channel has a URL and event subscriptions. Alerts and warnings stay unread until acknowledged in-app; Apprise delivery does not mark them read." "add_modal" "modal-add-notify-channel" "add_label" "Add channel")}}
     {{if not .NotifyChannels}}
     {{template "list_empty" "No notification channels yet."}}
     {{else}}

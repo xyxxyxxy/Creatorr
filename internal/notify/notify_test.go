@@ -128,8 +128,8 @@ func TestChannelCRUDAndSendEvent(t *testing.T) {
 	if err != nil || len(items) != 1 {
 		t.Fatalf("items=%v err=%v", items, err)
 	}
-	if !items[0].ExternalOK || items[0].Unread() {
-		t.Fatalf("cookie with channel should auto-read: %#v", items[0])
+	if !items[0].ExternalOK || !items[0].Unread() {
+		t.Fatalf("cookie with channel: want external_ok + still unread: %#v", items[0])
 	}
 
 	if err := notify.DownloadDigest(context.Background(), d, []notify.DigestItem{

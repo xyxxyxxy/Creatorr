@@ -6,7 +6,7 @@
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Notifications" "id" "notifications" "help" "In-app log of every notify event. Opening History marks all unread alerts and warnings as read. Info digests are stored already-read. Apprise delivery also marks matching alerts and warnings read.")}}
+{{template "list_header" (dict "level" "section" "title" "Notifications" "id" "notifications" "help" "In-app log of every notify event. Opening History marks all unread alerts and warnings as read. Info digests are stored already-read. Apprise delivery does not mark alerts or warnings read.")}}
 <div id="notification-history-live">
 {{template "list_filters" (dict
   "HideQuery" true

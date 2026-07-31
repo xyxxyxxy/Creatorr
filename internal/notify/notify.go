@@ -77,7 +77,8 @@ func Send(ctx context.Context, urls []string, title, body string) error {
 // notifications row; Apprise channels call sendFn. taskID is required (>0) for
 // unread events (alert + warning); may be 0 for info digests (stored NULL).
 // Info events like live_skipped may still pass task_id so the detail page links the task.
-// Successful Apprise delivery sets external_ok and marks unread notifications read.
+// Successful Apprise delivery sets external_ok only; unread alerts/warnings stay
+// unread until acknowledged in-app (History open, detail open, or mark-read).
 func SendEvent(ctx context.Context, database *db.DB, event, title, body string, taskID int64) error {
 	if database == nil {
 		return nil
@@ -136,11 +137,7 @@ func SendEvent(ctx context.Context, database *db.DB, event, title, body string, 
 		notifID = id
 	}
 	if anyAppriseOK {
-		markRead := ""
-		if IsUnreadEvent(event) {
-			markRead = now
-		}
-		_ = MarkExternalOK(database, notifID, markRead)
+		_ = MarkExternalOK(database, notifID)
 	}
 	publishCreated(database, notifID, event)
 	return first
