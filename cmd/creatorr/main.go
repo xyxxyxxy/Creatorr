@@ -153,7 +153,18 @@ func main() {
 	r.Get("/api/events", srvImpl.EventsSSE)
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Timeout(60 * time.Second))
+		// Import folder WalkDir can exceed 60s on slow disks; skip timeout for that route only.
+		timeout := middleware.Timeout(60 * time.Second)
+		r.Use(func(next http.Handler) http.Handler {
+			timed := timeout(next)
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if req.Method == http.MethodPost && req.URL.Path == "/api/import/scan" {
+					next.ServeHTTP(w, req)
+					return
+				}
+				timed.ServeHTTP(w, req)
+			})
+		})
 
 		r.Get("/api/openapi.json", func(w http.ResponseWriter, req *http.Request) {
 			swagger, err := gen.GetSwagger()

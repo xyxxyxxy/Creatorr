@@ -58,6 +58,10 @@
   <span id="status-match" class="text-right"></span>
 </div>
 <div id="import-empty" class="alert mt-2 hidden" role="status"><span></span></div>
+<div id="import-scan-busy" class="hidden flex flex-col items-center justify-center gap-3 py-12 mt-2" role="status" aria-live="polite" aria-busy="true">
+  <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
+  <span class="text-sm opacity-70">Scanning folder…</span>
+</div>
 <div id="import-full-scan-note" role="alert" class="alert alert-warning text-sm mt-2{{if not .IncompleteFullScan}} hidden{{end}}">
   <i data-lucide="triangle-alert" class="size-5 shrink-0" aria-hidden="true"></i>
   <span>'Full scan' is incomplete on one or more sources. Not all videos may be indexed yet for auto-match.</span>
@@ -139,6 +143,8 @@ const importUIState = new Map();
 let pendingImportJobs = [];
 /** True after user edits/clears a match; false after scan or Auto-match (suggestions already applied). */
 let autoMatchStale = false;
+/** @type {AbortController|null} */
+let importScanAbort = null;
 
 function showImportMsg(title, body, opts) {
   // Close Add series / Add video so the toast is not trapped under them.
@@ -1575,8 +1581,20 @@ function pruneImportUIState(candidates) {
 function setImportScanBusy(busy) {
   const scope = document.getElementById('import-scan-scope');
   const rescan = document.getElementById('btn-import-rescan');
+  const spinner = document.getElementById('import-scan-busy');
+  const list = importListEl();
+  const pager = document.getElementById('import-pager');
+  const empty = document.getElementById('import-empty');
   if (scope) scope.disabled = !!busy;
   if (rescan) rescan.disabled = !!busy;
+  if (spinner) spinner.classList.toggle('hidden', !busy);
+  if (busy) {
+    if (list) list.classList.add('hidden');
+    if (pager) pager.classList.add('hidden');
+    if (empty) empty.classList.add('hidden');
+  } else if (list) {
+    list.classList.remove('hidden');
+  }
 }
 
 function buildImportBundleItem(b) {
@@ -1838,6 +1856,9 @@ async function runImportScan(opts) {
   const notifyAutoMatch = !(opts && opts.notifyAutoMatch === false);
   const scope = document.getElementById('import-scan-scope');
   const rootId = scope ? String(scope.value || '0') : '0';
+  if (importScanAbort) importScanAbort.abort();
+  const ac = new AbortController();
+  importScanAbort = ac;
   closeMatchModal();
   setStatusScan('Scanning…');
   setImportScanBusy(true);
@@ -1856,7 +1877,7 @@ async function runImportScan(opts) {
   }
   const url = rootId === '0' ? '/api/import/scan' : '/api/import/scan?root_id=' + encodeURIComponent(rootId);
   try {
-    const res = await fetch(url, { method: 'POST' });
+    const res = await fetch(url, { method: 'POST', signal: ac.signal });
     if (!res.ok) {
       setStatusScan('Scan failed: ' + await res.text());
       return;
@@ -1885,8 +1906,14 @@ async function runImportScan(opts) {
     if (!preserveMatches) autoMatchStale = false;
     renderImportPage();
     if (notifyAutoMatch) notifyAutoMatchCount(countSuggestedAutoMatches());
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    setStatusScan('Scan failed: ' + (err && err.message ? err.message : String(err)));
   } finally {
-    setImportScanBusy(false);
+    if (importScanAbort === ac) {
+      importScanAbort = null;
+      setImportScanBusy(false);
+    }
   }
 }
 
