@@ -14,6 +14,7 @@ Sonarr-shaped daemon for creator VOD: mirror channels and playlists, download wi
 - **SponsorBlock** - mark and/or remove categories per quality profile (Creatorr-owned cut pipeline, not yt-dlp flags)
 - **Domains & queues** - per-host limits, Access (cookies/credentials), soft pause
 - **FlareSolverr & PO tokens** - Compose sidecars out of the box for challenge pre-solve and proof-of-origin minting
+- **Automatic yt-dlp updates** - scheduled GitHub release checks, SHA2-256 verify, and managed binary updates (Settings → Connect / Scheduler)
 - **Web UI & API** - library overview, stats, and notifications in the browser; public OpenAPI REST for automation
 
 Product behavior: [`docs/`](docs/README.md). REST contract: [`api/openapi.yaml`](api/openapi.yaml). Agent/contributor contract: [`AGENTS.md`](AGENTS.md).
