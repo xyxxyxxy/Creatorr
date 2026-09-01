@@ -28,7 +28,7 @@ docker compose up -d
 
 | | |
 | --- | --- |
-| Image | `ghcr.io/xyxxyxxy/creatorr:latest` (`main`); `:develop`; `:sha-<short>` for pins |
+| Image | `ghcr.io/xyxxyxxy/creatorr:latest` (`main`); `:sha-<short>` for pins |
 | UI | `http://127.0.0.1:8787/` (first visit: **Setup** account, then login) |
 | Health | `GET /api/health` (`ok` \| `degraded` \| `down`; no auth) |
 | OpenAPI | `GET /api/openapi.json` (requires API key or session after setup) |
@@ -131,7 +131,7 @@ make sbom       # CycloneDX SBOM (needs syft); CI also license-gates it
 
 Skip hooks for one commit: `SKIP_GITHOOKS=1 git commit ...` or `git commit --no-verify`.
 
-CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on `main` and `develop`. Images: [`.github/workflows/docker.yml`](.github/workflows/docker.yml) (`:latest` on `main`, `:develop` on `develop`, plus `:sha-<short>`).
+CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on `main` and pull requests. Images: [`.github/workflows/docker.yml`](.github/workflows/docker.yml) (`:latest` on `main`, plus `:sha-<short>`).
 
 ## Concepts
 
