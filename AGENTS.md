@@ -70,7 +70,7 @@ New domain term → matching docs file (domain-model by default).
 ## Ship
 
 - **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker` (in-process heartbeat, not SQLite), `ytdlp`, `disk`, `flaresolverr`, `pot_provider` (last two skipped if URL unset). Compose healthcheck should use it.
-- **Images:** `ghcr.io/xyxxyxxy/creatorr:latest` from `main`, `:sha-<short>` for pins. Compose: [`docker-compose.yml`](docker-compose.yml).
+- **Images:** `ghcr.io/xyxxyxxy/creatorr:latest` and `:vX.Y.Z` from version tags (`v*`) on `main`; `:sha-<short>` on every `main` push for pins and pre-release testing. Compose: [`docker-compose.yml`](docker-compose.yml).
 - **Tests:** unit (domain/settings), yt-dlp fixtures (no live net), integration (temp SQLite + worker/queue), API httptest + schema. Prefer golden fixtures; add tests for behavior changes.
 - **Branching:** GitHub Flow - `main` is the only long-lived branch; use short-lived branches and pull requests into `main`.
 - **Commits:** Conventional Commits; one logical step each; subject ≤72 chars; body explains why when not obvious.
