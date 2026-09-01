@@ -2,6 +2,7 @@ package queue
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 )
 
@@ -245,4 +246,38 @@ func sqlPlaceholders(n int) string {
 		b = append(b, '?')
 	}
 	return string(b)
+}
+
+// LastFinishedAt returns finished_at (RFC3339Nano UTC) of the newest task for kind, domain, and status.
+// Empty string when none. domain may be empty to match any domain.
+func (s *Store) LastFinishedAt(kind, domain, status string) (string, error) {
+	kind = strings.TrimSpace(kind)
+	domain = strings.TrimSpace(domain)
+	status = strings.TrimSpace(status)
+	if kind == "" || status == "" {
+		return "", fmt.Errorf("kind and status required")
+	}
+	args := []any{status, kind}
+	domainSQL := ""
+	if domain != "" {
+		domainSQL = " AND domain = ?"
+		args = append(args, domain)
+	}
+	var finished sql.NullString
+	err := s.DB.SQL.QueryRow(`
+		SELECT finished_at FROM tasks
+		WHERE status = ? AND kind = ?`+domainSQL+`
+		ORDER BY COALESCE(finished_at, created_at) DESC, id DESC
+		LIMIT 1
+	`, args...).Scan(&finished)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if !finished.Valid {
+		return "", nil
+	}
+	return strings.TrimSpace(finished.String), nil
 }

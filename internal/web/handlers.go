@@ -132,4 +132,5 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/regenerate-nfos", h.actionRegenerateNFOs)
 	r.Post("/actions/apply-episode-naming", h.actionApplyEpisodeNaming)
 	r.Post("/actions/sync-files", h.actionSyncFiles)
+	r.Post("/actions/ytdlp-update", h.actionYtDlpUpdate)
 }

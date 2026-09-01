@@ -16,8 +16,8 @@ type Config struct {
 	FlareSolverrURL   string // CREATORR_FLARESOLVERR_URL; empty skips FlareSolverr health + pre-solve
 	InitialRootFolder string // first root_folders seed path (/library in container; var/library local)
 	ImportRoot        string
-	// YtDlpBin is the yt-dlp executable. Empty after Load; main sets via ytdlp.ResolveBin
-	// (Docker image: /usr/local/bin/yt-dlp; local: PATH fallback).
+	// YtDlpBin is the managed yt-dlp executable (/data/bin/yt-dlp or var/data/bin/yt-dlp).
+	// main sets via ytdlp.PrepareManagedBin after boot copy from image bootstrap.
 	YtDlpBin string
 	// YtDlpPluginsDir is always passed as --plugin-dirs (operator mounts).
 	YtDlpPluginsDir string
@@ -40,7 +40,7 @@ func Load() Config {
 		DBPath:                paths.db,
 		InitialRootFolder:     paths.library,
 		ImportRoot:            paths.importRoot,
-		YtDlpBin:              "", // main: ytdlp.ResolveBin
+		YtDlpBin:              "", // main: PrepareManagedBin
 		YtDlpPluginsDir:       paths.plugins,
 		YtDlpSystemPluginsDir: paths.systemPlugins,
 		FlareSolverrURL:       strings.TrimRight(strings.TrimSpace(os.Getenv("CREATORR_FLARESOLVERR_URL")), "/"),

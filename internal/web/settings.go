@@ -17,6 +17,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/stats"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 type settingsRowView struct {
@@ -146,18 +147,44 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) ytdlpConnectPageData() (managedPath, installedVer, lastCheckedAt string, updatesEnabled, updateBusy bool) {
+	updatesEnabled, _ = settings.YtDlpUpdatesEnabled(h.Queue.DB)
+	updateBusy, _ = h.Queue.HasPendingOrRunningKind(queue.KindYtDlpUpdate, queue.SystemDomain)
+	installedVer, _ = settings.Get(h.Queue.DB, settings.KeyYtDlpInstalledVersion)
+	lastCheckedAt, _ = h.Queue.LastFinishedAt(queue.KindYtDlpUpdate, queue.SystemDomain, queue.StatusDone)
+	if h.YtDlp != nil {
+		managedPath = h.YtDlp.BinPath()
+		if installedVer == "" {
+			installedVer, _ = ytdlp.VerifyBinary(managedPath)
+		}
+	}
+	return managedPath, installedVer, lastCheckedAt, updatesEnabled, updateBusy
+}
+
 func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 	entries, err := settings.Connect(h.Queue.DB)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	managedPath, installedVer, lastCheckedAt, updatesEnabled, updateBusy := h.ytdlpConnectPageData()
 	rows := make([]settingsRowView, 0, len(entries))
 	potURLSet := strings.TrimSpace(h.PotProviderURL) != ""
 	for _, e := range entries {
 		row := settingsRowView{
 			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
 			Cron: settings.CronKeys[e.Key],
+		}
+		if e.Key == settings.KeyYtDlpUpdateChannel {
+			row.Select = true
+			row.Value = settings.NormalizeYtDlpUpdateChannel(e.Value)
+			for _, o := range settings.YtDlpUpdateChannelOptions() {
+				row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
+			}
+			if !updatesEnabled {
+				row.Disabled = true
+				row.DisabledTitle = "Set yt-dlp update schedule under Settings → Scheduler first."
+			}
 		}
 		if e.Key == settings.KeyPotFetch {
 			row.Select = true
@@ -206,20 +233,34 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	render(w, "settings_connect", struct {
 		pageBase
-		FlareService   externalServiceURLView
-		PotService     externalServiceURLView
-		Settings       []settingsRowView
-		NotifyChannels []notifyChannelView
-		EventOptions   []notifyEventOption
-		DefaultEvents  []string
+		FlareService       externalServiceURLView
+		PotService         externalServiceURLView
+		Settings           []settingsRowView
+		NotifyChannels     []notifyChannelView
+		EventOptions       []notifyEventOption
+		DefaultEvents      []string
+		YtDlpManagedPath   string
+		YtDlpInstalledVer  string
+		YtDlpLastCheckedAt string
+		YtDlpUpdatesOn     bool
+		YtDlpUpdateBusy    bool
+		YtDlpUpdateOffTip  string
+		YtDlpUpdateBusyTip string
 	}{
-		pageBase:       newSettingsPage("Settings · Connect", "connect", flashFromQuery(r)),
-		FlareService:   flareJoin,
-		PotService:     potJoin,
-		Settings:       rows,
-		NotifyChannels: chViews,
-		EventOptions:   evOpts,
-		DefaultEvents:  append([]string(nil), notify.AllEvents...),
+		pageBase:           newSettingsPage("Settings · Connect", "connect", flashFromQuery(r)),
+		FlareService:       flareJoin,
+		PotService:         potJoin,
+		Settings:           rows,
+		NotifyChannels:     chViews,
+		EventOptions:       evOpts,
+		DefaultEvents:      append([]string(nil), notify.AllEvents...),
+		YtDlpManagedPath:   managedPath,
+		YtDlpInstalledVer:  installedVer,
+		YtDlpLastCheckedAt: lastCheckedAt,
+		YtDlpUpdatesOn:     updatesEnabled,
+		YtDlpUpdateBusy:    updateBusy,
+		YtDlpUpdateOffTip:  "Automatic updates disabled. Set yt-dlp update schedule under Settings → Scheduler.",
+		YtDlpUpdateBusyTip: "yt-dlp update already queued or running",
 	})
 }
 
@@ -236,12 +277,12 @@ func externalServiceJoinViews(h *Handler) (flare, pot externalServiceURLView) {
 	flare = externalServiceURLView{
 		Label: "FlareSolverr URL",
 		Value: strings.TrimSpace(h.FlareSolverrURL),
-		Hint:  "Set CREATORR_FLARESOLVERR_URL and restart. Compose default http://creatorr-flaresolverr:8191.\nEnable 'Use FlareSolverr' On a host 'Domain override' ('Settings → Queue / Domains').",
+		Hint:  "Set CREATORR_FLARESOLVERR_URL and restart.\nEnable 'Use FlareSolverr' On a host 'Domain override' ('Settings → Queue / Domains').",
 	}
 	pot = externalServiceURLView{
 		Label: "PO token provider URL",
 		Value: strings.TrimSpace(h.PotProviderURL),
-		Hint:  "Set CREATORR_POT_PROVIDER_URL and restart. Compose default http://creatorr-po-token:4416.\nEnable 'PO token fetch' below when the URL is set (forced to 'Never' while unset).",
+		Hint:  "Set CREATORR_POT_PROVIDER_URL and restart.\nEnable 'PO token fetch' below when the URL is set (forced to 'Never' while unset).",
 	}
 	if h.Health == nil {
 		flare.Status, flare.StatusLabel, flare.StatusTip = externalServiceStatusFromCheck(health.Check{Status: health.StatusSkipped, Message: "URL unset"})
@@ -494,6 +535,8 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 		settings.KeySyncFilesCron,
 		settings.KeyRetentionDeleteCron,
 		settings.KeyStatsRetentionDays,
+		settings.KeyYtDlpUpdateCron,
+		settings.KeyYtDlpUpdateChannel,
 		settings.KeySourceDownloadErrorThreshold,
 		settings.KeyEpisodeFormat,
 	} {
@@ -1065,4 +1108,35 @@ func (h *Handler) actionSyncFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirectSettings(w, r, "/settings/maintenance", "ok=sync-files-queued")
+}
+
+func (h *Handler) actionYtDlpUpdate(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	if h.Library == nil {
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("library unavailable"))
+		return
+	}
+	enabled, err := settings.YtDlpUpdatesEnabled(h.Queue.DB)
+	if err != nil {
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(err.Error()))
+		return
+	}
+	if !enabled {
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("Automatic yt-dlp updates disabled"))
+		return
+	}
+	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindYtDlpUpdate, queue.SystemDomain); busy {
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("yt-dlp update already queued or running"))
+		return
+	}
+	id, err := h.Library.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, "manual")
+	if err != nil {
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(err.Error()))
+		return
+	}
+	if id == 0 {
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("yt-dlp update not enqueued"))
+		return
+	}
+	redirectSettings(w, r, "/settings/connect", "ok=ytdlp-update-queued")
 }

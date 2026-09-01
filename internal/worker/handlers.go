@@ -53,6 +53,7 @@ func DefaultHandlers(d Deps) map[string]TaskHandler {
 	out[queue.KindDeleteFiles] = DeleteFilesHandler(d)
 	out[queue.KindSponsorblockCut] = SponsorblockCutHandler(d)
 	out[queue.KindMediaVerify] = MediaVerifyHandler(d)
+	out[queue.KindYtDlpUpdate] = YtDlpUpdateHandler(d)
 	return out
 }
 
@@ -75,6 +76,62 @@ func DeleteFilesHandler(d Deps) TaskHandler {
 			return err
 		}
 		d.Library.RecordFileDeleteActivity(t)
+		return nil
+	}
+}
+
+// YtDlpUpdateHandler fetches and installs yt-dlp from GitHub when newer.
+func YtDlpUpdateHandler(d Deps) TaskHandler {
+	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
+		if d.YtDlp == nil || d.Library == nil {
+			return apperrors.New(apperrors.CodeInternal, "yt-dlp update deps missing")
+		}
+		channel, err := settings.Get(d.Library.DB, settings.KeyYtDlpUpdateChannel)
+		if err != nil {
+			return err
+		}
+		channel = settings.NormalizeYtDlpUpdateChannel(channel)
+		trigger := "manual"
+		if strings.TrimSpace(t.Payload) != "" {
+			var pl map[string]any
+			if json.Unmarshal([]byte(t.Payload), &pl) == nil {
+				if s, ok := pl["trigger"].(string); ok && strings.TrimSpace(s) != "" {
+					trigger = strings.TrimSpace(s)
+				}
+			}
+		}
+		managed := d.YtDlp.BinPath()
+		res, err := ytdlp.Update(ctx, ytdlp.UpdateOpts{
+			ManagedPath: managed,
+			Channel:     channel,
+			Progress:    func(msg string) { progress(msg, nil) },
+		})
+		if err != nil {
+			return err
+		}
+		var detail map[string]any
+		if res.Skipped {
+			detail = map[string]any{
+				"version": res.ToVersion,
+				"channel": res.Channel,
+				"trigger": trigger,
+				"skipped": true,
+			}
+			_ = d.Library.Queue.MergeDetailJSON(t.ID, detail)
+			return nil
+		}
+		detail = map[string]any{
+			"from":    res.FromVersion,
+			"to":      res.ToVersion,
+			"channel": res.Channel,
+			"trigger": trigger,
+		}
+		d.YtDlp.SetBin(managed)
+		if err := settings.RecordYtDlpInstall(d.Library.DB, res.ToVersion); err != nil {
+			return err
+		}
+		progress("Updated to "+res.ToVersion, nil)
+		_ = d.Library.Queue.MergeDetailJSON(t.ID, detail)
 		return nil
 	}
 }

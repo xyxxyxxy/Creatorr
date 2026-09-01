@@ -319,6 +319,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if strings.Contains(body, "External services") || strings.Contains(body, "FlareSolverr URL") || strings.Contains(body, "modal-add-notify-channel") {
 				t.Fatalf("%s still has Connect content", path)
 			}
+			if strings.Contains(body, "fieldset-legend") && strings.Contains(body, "yt-dlp") {
+				t.Fatalf("%s still has yt-dlp settings", path)
+			}
 			if strings.Contains(body, `id="theme-menu"`) || strings.Contains(body, `data-theme-toggle`) {
 				t.Fatalf("%s still has navbar theme controls", path)
 			}
@@ -326,6 +329,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		}
 		if path == "/settings/connect" {
 			body := rec.Body.String()
+			if !strings.Contains(body, "fieldset-legend") || !strings.Contains(body, "yt-dlp") || !strings.Contains(body, "ytdlp_update_channel") {
+				t.Fatalf("%s missing yt-dlp settings", path)
+			}
 			if !strings.Contains(body, "External services") || !strings.Contains(body, "FlareSolverr URL") || !strings.Contains(body, "PO token provider URL") {
 				t.Fatalf("%s missing external service URL joins", path)
 			}
@@ -375,7 +381,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		}
 		if path == "/settings/scheduler" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "/settings/scheduler") || !strings.Contains(body, "download_wanted_cron") || !strings.Contains(body, "sync_files_cron") || !strings.Contains(body, "retention_delete_cron") {
+			if !strings.Contains(body, "/settings/scheduler") || !strings.Contains(body, "download_wanted_cron") || !strings.Contains(body, "sync_files_cron") || !strings.Contains(body, "retention_delete_cron") || !strings.Contains(body, "ytdlp_update_cron") {
 				t.Fatalf("%s missing scheduler form", path)
 			}
 			if strings.Contains(body, "download_new_on_scan") {

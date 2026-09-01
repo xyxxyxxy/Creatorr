@@ -1,0 +1,4 @@
+{{define "local_date"}}
+{{/* . is RFC3339 UTC string. app.js rewrites to browser locale date (no time). */}}
+<time datetime="{{.}}" data-local-date>{{.}}</time>
+{{end}}

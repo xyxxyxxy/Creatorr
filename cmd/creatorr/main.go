@@ -68,17 +68,18 @@ func main() {
 		log.Error("yt-dlp plugins dir", "err", err)
 		os.Exit(1)
 	}
-	ytBin, err := ytdlp.ResolveBin()
+	ytPaths := ytdlp.PathsForLayout(ytdlp.DataDirExists())
+	updateChannel, _ := settings.Get(database, settings.KeyYtDlpUpdateChannel)
+	ytVersion, err := ytdlp.PrepareManagedBin(context.Background(), ytdlp.PrepareOpts{
+		Bootstrap: ytPaths.Bootstrap,
+		Managed:   ytPaths.Managed,
+		Channel:   settings.NormalizeYtDlpUpdateChannel(updateChannel),
+	})
 	if err != nil {
-		log.Error("yt-dlp resolve", "err", err)
+		log.Error("yt-dlp prepare", "err", err)
 		os.Exit(1)
 	}
-	cfg.YtDlpBin = ytBin
-	ytVersion, err := ytdlp.VerifyBinary(cfg.YtDlpBin)
-	if err != nil {
-		log.Error("yt-dlp verify", "err", err)
-		os.Exit(1)
-	}
+	cfg.YtDlpBin = ytPaths.Managed
 	log.Info("yt-dlp ready", "bin", cfg.YtDlpBin, "version", ytVersion)
 	ytClient := &ytdlp.Client{
 		Bin:              cfg.YtDlpBin,
@@ -113,6 +114,18 @@ func main() {
 		log.Error("requeue stale tasks", "err", err)
 	} else if n > 0 {
 		log.Info("requeued interrupted tasks", "count", n)
+	}
+
+	if enabled, err := settings.YtDlpUpdatesEnabled(database); err != nil {
+		log.Error("yt-dlp updates enabled check", "err", err)
+	} else if enabled {
+		if id, err := lib.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateBoot, "boot"); err != nil {
+			log.Warn("yt-dlp boot update enqueue", "err", err)
+		} else if id > 0 {
+			log.Info("yt-dlp boot update enqueued", "task", id)
+		}
+	} else {
+		log.Info("yt-dlp automatic updates disabled; skipping boot update")
 	}
 
 	go (&worker.Runner{

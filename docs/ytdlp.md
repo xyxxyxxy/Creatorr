@@ -8,20 +8,22 @@ Creatorr invokes **yt-dlp in-process** (`internal/ytdlp`). There is no external 
 
 | Path | Role |
 | --- | --- |
-| `/usr/local/bin/yt-dlp` | Runtime binary in the Docker image (build-time latest release). Creatorr prefers this path, then falls back to `yt-dlp` on `PATH` (local Go). |
+| `/data/bin/yt-dlp` (container) or `var/data/bin/yt-dlp` (local Go) | **Managed runtime** binary on the data volume. Creatorr always execs this path. |
+| `/usr/local/share/creatorr/yt-dlp` (container image only) | **Bootstrap** copy baked at image build (SHA2-256 verified). First boot copies to the managed path when missing; not the runtime path. |
 | `/yt-dlp-plugins` (container) or `var/yt-dlp-plugins` (local) | Operator plugin mounts; always passed as `--plugin-dirs` (subdirs with a `yt_dlp_plugins` package are included). |
 | `/usr/local/share/yt-dlp-plugins/bgutil` (container) or `var/yt-dlp-plugins/bgutil` (local after `make pot-plugin`) | Baked / seeded **PO Token provider plugin** (GPL-3.0; separate package). Creatorr passes the **parent** (`…/yt-dlp-plugins`) as `--plugin-dirs` so yt-dlp discovers the `bgutil` package. Survives mounting over `/yt-dlp-plugins`. |
 
-There is **no** in-app yt-dlp update schedule. Bump yt-dlp by rebuilding the image. Boot runs the resolved binary with `--version` and exits if missing or broken.
+Boot runs `PrepareManagedBin`: when the managed file is missing or fails `--version`, Creatorr copies the image bootstrap (or, local dev only, GitHub-downloads once when no bootstrap exists). Startup **exits** if yt-dlp cannot be established at the managed path.
 
-**Custom yt-dlp (Docker):** bind-mount over the image path:
+### Automatic updates
 
-```yaml
-volumes:
-  - /path/to/your/yt-dlp:/usr/local/bin/yt-dlp:ro
-```
+When **`ytdlp_update_cron`** is non-empty (Settings → Scheduler; seed `@weekly`), Creatorr enqueues a **`ytdlp_update`** task on the **`system`** lane on boot, on schedule, and via Settings → Connect → **Update now**. The worker downloads from GitHub (`stable` or `nightly` via **`ytdlp_update_channel`**), verifies **SHA2-256** against the release `SHA2-256SUMS`, runs `--version` on the temp file, then atomically replaces the managed binary and hot-swaps the in-process client path.
 
-Operator plugins keep working under `/yt-dlp-plugins` (`--plugin-dirs`).
+**Empty `ytdlp_update_cron`** disables boot, cron, and manual GitHub updates so you can pin a **custom binary**: stop Creatorr, replace the managed path, restart. Set a schedule again to re-enable managed updates.
+
+Failed updates leave the prior binary intact and do **not** soft-pause domain lanes.
+
+Image rebuild refreshes the bootstrap baseline; a running instance updates via `ytdlp_update`, not rebuild.
 
 Image also ships **ffmpeg** (remux) and **Deno** (yt-dlp EJS challenge solver).
 

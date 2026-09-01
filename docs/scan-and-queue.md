@@ -14,6 +14,7 @@ Index: [README.md](README.md). Terminology: [`AGENTS.md`](../AGENTS.md).
 | Download wanted (global cron) | **Download tasks** for wanted videos. Same no-catch-up-on-boot rule as Scan |
 | File sync (`sync_files_cron`) | Enqueues **`sync_files`** on the **`system`** lane when the library has videos (not inline). No catch-up on boot |
 | Retention delete (`retention_delete_cron`) | Enqueues **`retention_delete`** on the **`system`** lane when any root has TTL (not inline). No catch-up on boot |
+| yt-dlp update (`ytdlp_update_cron`, non-empty) | Enqueues **`ytdlp_update`** on boot and on schedule; Settings → Connect → **Update now** when enabled. Empty cron disables all GitHub updates |
 
 There is **no** global Settings `scan_cron`.
 
@@ -30,6 +31,7 @@ There is **no** global Settings `scan_cron`.
 | `delete_sidecar` | `system` | Sync bookkeeping only (InsertRunning + Finish); per-file `sub`/`thumb`/`other` delete; history `sidecar_deleted` |
 | `sponsorblock_cut` | `system` | Per-video dup; **low priority** (`PrioritySponsorblockCut`); archive remove/cut + pack after download staging. Not one-per-kind (many may queue). |
 | `media_verify` | `system` | Per-video dup; **lowest** system priority (`PriorityMediaVerify=-20`, below cut). Null-decode packed library media after pack when profile `verify_media` (mature-only gate when maturity hours set). Import confirm `verify` always enqueues. Fail → `verify_failed` (keep files). |
+| `ytdlp_update` | `system` | One pending/running; boot (when cron set), cron, or General → Update now; GitHub fetch + SHA2-256 verify + atomic install to managed path |
 | `prefetch_series_meta` | fetch URL hostname | **Interactive:** ClaimInteractive + concurrent run; ignores soft Pause (and domain busy/cooldown); Finish does not start cooldown; still requires domain active; **no** `download_rate_limit` / `sleep_requests` |
 | `prefetch_video_meta` | fetch URL hostname | **Interactive:** same as prefetch_series_meta; resolve into video Metadata modal draft (+ soft-download thumb into `cache/video-meta/{id}/` when URL present) |
 | `prefetch_add_series` | fetch URL hostname | **Interactive:** Add series wizard fetch; draft under `cache/add-series/{token}/` (no series row yet); ignores soft Pause; Finish does not start cooldown; no rate/sleep |

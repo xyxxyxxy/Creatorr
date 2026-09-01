@@ -4,18 +4,40 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"sync"
 
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
 )
 
 // Client invokes yt-dlp in-process for Creatorr.
 type Client struct {
-	Bin              string // path to yt-dlp binary; empty uses YTDLP_BIN / "yt-dlp"
+	mu               sync.RWMutex
+	Bin              string // managed yt-dlp path (/data/bin/yt-dlp or var/data/bin/yt-dlp)
 	PluginsDir       string // operator plugin mounts; always passed as --plugin-dirs when non-empty
 	SystemPluginsDir string // baked POT plugin path; always passed in addition to PluginsDir
 	PotProviderURL   string // CREATORR_POT_PROVIDER_URL; empty forces fetch_pot=never
 	// PotFetch returns Settings pot_fetch (or never when URL unset). Optional; defaults apply when nil.
 	PotFetch func() string
+}
+
+// BinPath returns the current managed yt-dlp binary path.
+func (c *Client) BinPath() string {
+	if c == nil {
+		return ""
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return strings.TrimSpace(c.Bin)
+}
+
+// SetBin hot-swaps the managed yt-dlp path after a successful update.
+func (c *Client) SetBin(path string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.Bin = strings.TrimSpace(path)
+	c.mu.Unlock()
 }
 
 // ListOpts controls List (flat playlist / channel index).
@@ -76,7 +98,7 @@ func (c *Client) fill(o *options) {
 	if c == nil {
 		return
 	}
-	o.ytdlpPath = strings.TrimSpace(c.Bin)
+	o.ytdlpPath = c.BinPath()
 	o.pluginDirs = strings.TrimSpace(c.PluginsDir)
 	o.systemPluginDirs = strings.TrimSpace(c.SystemPluginsDir)
 	o.potProviderURL = strings.TrimSpace(c.PotProviderURL)

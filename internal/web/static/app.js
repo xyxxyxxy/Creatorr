@@ -1301,16 +1301,32 @@
       scope = (id && document.getElementById(id)) || document.body;
     }
     const nodes = [];
-    if (scope.matches && scope.matches("time[data-local-time]")) nodes.push(scope);
+    if (scope.matches && scope.matches("time[data-local-time], time[data-local-date]")) nodes.push(scope);
     if (scope.querySelectorAll) {
-      scope.querySelectorAll("time[data-local-time]").forEach((el) => nodes.push(el));
+      scope.querySelectorAll("time[data-local-time], time[data-local-date]").forEach((el) => nodes.push(el));
     }
     nodes.forEach((el) => {
       const raw = el.getAttribute("datetime");
       if (!raw) return;
       const d = new Date(raw);
       if (Number.isNaN(d.getTime())) return;
+      if (el.hasAttribute("data-local-date")) {
+        el.textContent = d.toLocaleDateString(undefined, { dateStyle: "medium" });
+        return;
+      }
       el.textContent = d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    });
+    const dateInputs = [];
+    if (scope.matches && scope.matches("input[data-local-date]")) dateInputs.push(scope);
+    if (scope.querySelectorAll) {
+      scope.querySelectorAll("input[data-local-date]").forEach((el) => dateInputs.push(el));
+    }
+    dateInputs.forEach((el) => {
+      const raw = el.getAttribute("data-datetime");
+      if (!raw) return;
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return;
+      el.value = d.toLocaleDateString(undefined, { dateStyle: "medium" });
     });
   }
 

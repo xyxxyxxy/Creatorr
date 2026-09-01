@@ -5,6 +5,82 @@
 
 <section class="card bg-base-100 border border-base-300 mb-4">
   <div class="card-body gap-6">
+    <fieldset class="fieldset gap-3">
+      <legend class="fieldset-legend text-lg font-semibold">yt-dlp</legend>
+      <p class="text-sm opacity-60">
+        {{if .YtDlpUpdatesOn}}
+        Creatorr checks GitHub for new releases on boot and on the schedule under Settings → Scheduler.
+        {{else}}
+        Automatic GitHub updates are off (empty update schedule under Settings → Scheduler). Replace the binary at the managed path while Creatorr is stopped to run a custom build; set a schedule again to re-enable managed updates.
+        {{end}}
+      </p>
+      <form method="post" action="/actions/save-settings" class="flex flex-col gap-3">
+        <input type="hidden" name="redirect" value="/settings/connect" />
+        <div class="grid gap-3 sm:grid-cols-3 w-full items-end">
+          <div class="form-control w-full min-w-0 gap-2">
+            <span class="label-text">Installed version</span>
+            <input type="text" class="input input-bordered font-mono text-sm w-full" disabled value="{{if .YtDlpInstalledVer}}{{.YtDlpInstalledVer}}{{else}}-{{end}}" />
+          </div>
+          <div class="form-control w-full min-w-0 gap-2">
+            <span class="label-text">Last checked</span>
+            <input type="text" class="input input-bordered text-sm w-full" disabled
+              {{if .YtDlpLastCheckedAt}}data-local-date data-datetime="{{.YtDlpLastCheckedAt}}" value="{{.YtDlpLastCheckedAt}}"{{else}}value="-"{{end}} />
+          </div>
+          {{range .Settings}}
+          {{if eq .Key "ytdlp_update_channel"}}
+          {{$channel := .}}
+          <div class="form-control w-full min-w-0 gap-2">
+            <span class="label-text">{{$channel.Label}}</span>
+            <div class="join w-full">
+              {{if $channel.Disabled}}
+              <input type="hidden" name="{{$channel.Key}}" value="{{$channel.Value}}" />
+              <span class="tooltip tooltip-top join-item grow min-w-0" {{if $channel.DisabledTitle}}data-tip="{{$channel.DisabledTitle}}"{{end}}>
+                <select id="setting-{{$channel.Key}}" class="select select-bordered join-item grow min-w-0 w-full pointer-events-none" disabled>
+                  {{range $channel.Options}}
+                  <option value="{{.Value}}" {{if eq .Value $channel.Value}}selected{{end}}>{{.Label}}</option>
+                  {{end}}
+                </select>
+              </span>
+              {{else}}
+              <select name="{{$channel.Key}}" id="setting-{{$channel.Key}}" class="select select-bordered join-item grow min-w-0">
+                {{range $channel.Options}}
+                <option value="{{.Value}}" {{if eq .Value $channel.Value}}selected{{end}}>{{.Label}}</option>
+                {{end}}
+              </select>
+              {{end}}
+              {{if $.YtDlpUpdateBusy}}
+              <span class="tooltip tooltip-top join-item shrink-0" data-tip="{{$.YtDlpUpdateBusyTip}}">
+                <button type="button" class="btn btn-warning btn-square join-item pointer-events-none" disabled aria-label="Update queued">
+                  <i data-lucide="refresh-cw" class="size-4"></i>
+                </button>
+              </span>
+              {{else if not $.YtDlpUpdatesOn}}
+              <span class="tooltip tooltip-top join-item shrink-0" data-tip="{{$.YtDlpUpdateOffTip}}">
+                <button type="button" class="btn btn-square join-item pointer-events-none" disabled aria-label="Update now">
+                  <i data-lucide="refresh-cw" class="size-4"></i>
+                </button>
+              </span>
+              {{else}}
+              <button type="submit" form="ytdlp-update-form" class="btn btn-secondary btn-square join-item shrink-0 tooltip tooltip-top" data-tip="Update now" aria-label="Update now">
+                <i data-lucide="refresh-cw" class="size-4"></i>
+              </button>
+              {{end}}
+            </div>
+          </div>
+          {{end}}
+          {{end}}
+        </div>
+        <div class="card-actions px-0"><button type="submit" class="btn btn-primary">Save</button></div>
+      </form>
+      <form id="ytdlp-update-form" method="post" action="/actions/ytdlp-update" class="hidden" aria-hidden="true">
+        <input type="hidden" name="redirect" value="/settings/connect" />
+      </form>
+    </fieldset>
+  </div>
+</section>
+
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <div class="card-body gap-6">
     {{template "list_header" (dict "level" "section" "title" "Notifications" "help" "Creatorr in-app channel (fixed, all events) plus optional Apprise channels. Each Apprise channel has a URL and event subscriptions. Alerts and warnings stay unread until acknowledged in-app; Apprise delivery does not mark them read." "add_modal" "modal-add-notify-channel" "add_label" "Add channel")}}
     {{if not .NotifyChannels}}
     {{template "list_empty" "No notification channels yet."}}

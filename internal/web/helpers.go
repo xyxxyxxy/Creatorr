@@ -197,6 +197,8 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("File sync queued.")
 	case "sync-files-empty":
 		return flashWarn("No videos to sync.")
+	case "ytdlp-update-queued":
+		return flashOK("yt-dlp update queued.")
 	case "nfo-regen":
 		rewrote := r.URL.Query().Get("rewrote")
 		failed := r.URL.Query().Get("failed")

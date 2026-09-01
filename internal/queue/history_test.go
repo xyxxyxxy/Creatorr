@@ -6,6 +6,40 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
+func TestLastFinishedAt(t *testing.T) {
+	s := openStore(t)
+	_ = insertFinished(t, s, queue.KindDownload, queue.StatusDone, queue.SystemDomain)
+	got, err := s.LastFinishedAt(queue.KindYtDlpUpdate, queue.SystemDomain, queue.StatusDone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Fatalf("got %q want empty", got)
+	}
+
+	_, err = s.DB.SQL.Exec(`
+		INSERT INTO tasks (kind, status, domain, message, created_at, finished_at)
+		VALUES (?, ?, ?, 'Already up to date', datetime('now'), '2026-08-19T10:00:00Z')
+	`, queue.KindYtDlpUpdate, queue.StatusDone, queue.SystemDomain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.DB.SQL.Exec(`
+		INSERT INTO tasks (kind, status, domain, message, created_at, finished_at)
+		VALUES (?, ?, ?, 'Already up to date', datetime('now'), '2026-09-01T12:00:00Z')
+	`, queue.KindYtDlpUpdate, queue.StatusDone, queue.SystemDomain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.LastFinishedAt(queue.KindYtDlpUpdate, queue.SystemDomain, queue.StatusDone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "2026-09-01T12:00:00Z" {
+		t.Fatalf("got %q want newest finished_at", got)
+	}
+}
+
 func insertFinished(t *testing.T, s *queue.Store, kind, status, domain string) int64 {
 	t.Helper()
 	res, err := s.DB.SQL.Exec(`

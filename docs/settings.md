@@ -2,7 +2,7 @@
 
 Index: [README.md](README.md). Terminology: [`AGENTS.md`](../AGENTS.md).
 
-Most knobs are Settings keys (UI / SQLite). Process bootstrap env is only `CREATORR_PORT`, `CREATORR_POT_PROVIDER_URL`, `CREATORR_FLARESOLVERR_URL`, `CREATORR_TRUST_PROXY`, `CREATORR_WEB_*`, `TZ` (see [`config.Load`](../internal/config/config.go)). Compose-only: `CREATORR_LIBRARY_ROOT` (host bind → container `/library`), `PUID`/`PGID`. Paths: container `/data` (DB + cache), `/library` (initial root folder seed), `/import`, `/yt-dlp-plugins`, baked POT plugin under `/usr/local/share/yt-dlp-plugins/bgutil`; local `var/...`. HTTP bind is always `0.0.0.0` (not configurable). yt-dlp binary is `/usr/local/bin/yt-dlp` (Docker) or `PATH`; plugins: see [`ytdlp.md`](ytdlp.md).
+Most knobs are Settings keys (UI / SQLite). Process bootstrap env is only `CREATORR_PORT`, `CREATORR_POT_PROVIDER_URL`, `CREATORR_FLARESOLVERR_URL`, `CREATORR_TRUST_PROXY`, `CREATORR_WEB_*`, `TZ` (see [`config.Load`](../internal/config/config.go)). Compose-only: `CREATORR_LIBRARY_ROOT` (host bind → container `/library`), `PUID`/`PGID`. Paths: container `/data` (DB + cache + managed yt-dlp at `/data/bin/yt-dlp`), `/library` (initial root folder seed), `/import`, `/yt-dlp-plugins`, baked POT plugin under `/usr/local/share/yt-dlp-plugins/bgutil`; local `var/...`. HTTP bind is always `0.0.0.0` (not configurable). yt-dlp runtime and updates: see [`ytdlp.md`](ytdlp.md).
 
 **External service URLs (env only, not Settings):** `CREATORR_FLARESOLVERR_URL` and `CREATORR_POT_PROVIDER_URL`. Settings → Connect shows both as disabled URL inputs with a colored status icon beside each with a one-shot health probe on page load. Empty Flare URL skips the health probe and FlareSolverr pre-solve, and clears Use FlareSolverr flags on boot (defaults always off; enable On per host override; override checkbox disabled while URL unset). Empty PO URL disables **PO token fetch** (UI + runtime `never`). Compose defaults `http://creatorr-flaresolverr:8191` / `http://creatorr-po-token:4416` when the env key is omitted; an explicitly empty value disables. Flare sidecar uses headless Chrome (notable RAM). `CREATORR_TRUST_PROXY=1` trusts `X-Forwarded-Proto` for Secure session cookies (only behind a proxy that overwrites client headers).
 
@@ -26,6 +26,9 @@ Editable settings (examples):
 | `subtitle_auto` | `1` = also `--write-auto-subs`; default `0`. Auto is used only when no custom track exists for that language (yt-dlp preference). Auto-only sidecars are packed as `.lang.auto.srt` (e.g. `.en.auto.srt`). Settings → Library → Subtitles. |
 | `metadata_domain_tag` | `1` = prepend source domain to video tags on download and Metadata Save when `source_url` is known (default on). Locked in the video Metadata Tags editor. Settings → Library → Metadata. Not retroactive until next pack or Save. |
 | `metadata_genres_from_categories` | `1` = add yt-dlp categories as video genres on download and Metadata Save when categories are known (default on). Locked rows in the video Metadata Genres editor. Settings → Library → Metadata. Not retroactive until next pack or Save. |
+| `ytdlp_update_cron` | yt-dlp GitHub update schedule. Settings → Scheduler. Seed `@weekly`. **Empty = updates off** (custom binary mode: replace managed path while stopped). When set, boot + cron + Update now are enabled |
+| `ytdlp_update_channel` | `stable` (default) or `nightly` GitHub release channel when updates are enabled. Settings → Connect → yt-dlp. Disabled in UI when cron empty |
+| `ytdlp_installed_version` / `ytdlp_installed_at` | Internal; written on successful `ytdlp_update` only (shown read-only on Connect) |
 
 Sidecars are always converted to SRT via yt-dlp `--convert-subs srt` (no format setting).
 

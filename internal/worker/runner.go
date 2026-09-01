@@ -351,5 +351,6 @@ func StubHandlers() map[string]TaskHandler {
 		queue.KindDeleteFiles:        stub(queue.KindDeleteFiles),
 		queue.KindSponsorblockCut:    stub(queue.KindSponsorblockCut),
 		queue.KindMediaVerify:        stub(queue.KindMediaVerify),
+		queue.KindYtDlpUpdate:        stub(queue.KindYtDlpUpdate),
 	}
 }

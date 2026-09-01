@@ -21,6 +21,10 @@ const (
 	KeySourceDownloadErrorThreshold = "source_download_error_threshold"
 	KeyMetadataDomainTag            = "metadata_domain_tag"
 	KeyMetadataGenresFromCategories = "metadata_genres_from_categories"
+	KeyYtDlpUpdateCron              = "ytdlp_update_cron"
+	KeyYtDlpUpdateChannel           = "ytdlp_update_channel"
+	KeyYtDlpInstalledVersion        = "ytdlp_installed_version"
+	KeyYtDlpInstalledAt             = "ytdlp_installed_at"
 	// Auth keys: see auth.go (seeded separately; not on generalOrder).
 )
 
@@ -38,6 +42,10 @@ var Help = map[string]string{
 	KeySubtitleAuto:                 "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",
 	KeyMetadataDomainTag:            "On download and metadata rescan, prepend the source domain to video tags when source_url is known.",
 	KeyMetadataGenresFromCategories: "On download and metadata rescan, add yt-dlp categories as video genres when categories are known.",
+	KeyYtDlpUpdateChannel:           "GitHub release channel when automatic updates are enabled (set yt-dlp update schedule under Scheduler).",
+	KeyYtDlpUpdateCron:              "When set, Creatorr checks GitHub on boot and on this schedule. Configure update channel under 'Settings → Connect'. Empty disables all GitHub updates so you can pin a custom binary at the managed path while Creatorr is stopped.",
+	KeyYtDlpInstalledVersion:        "", // internal; written by ytdlp_update task
+	KeyYtDlpInstalledAt:             "", // internal; written by ytdlp_update task
 	KeyAuthUsername:                 "Single operator account username for Forms login.",
 	KeyAuthPasswordHash:             "", // internal; never shown
 	KeyAPIKey:                       "API key for X-Api-Key header (Settings → General).",
@@ -59,6 +67,10 @@ var Labels = map[string]string{
 	KeySubtitleAuto:                 "Include auto-generated subtitles",
 	KeyMetadataDomainTag:            "Add source domain as video tag",
 	KeyMetadataGenresFromCategories: "Add genres from yt-dlp categories",
+	KeyYtDlpUpdateChannel:           "yt-dlp update channel",
+	KeyYtDlpUpdateCron:              "yt-dlp update schedule",
+	KeyYtDlpInstalledVersion:        "yt-dlp installed version",
+	KeyYtDlpInstalledAt:             "yt-dlp installed at",
 	KeyAuthUsername:                 "Username",
 	KeyAuthPasswordHash:             "Password hash",
 	KeyAPIKey:                       "API key",
@@ -73,6 +85,7 @@ var generalOrder = []string{
 
 // connectOrder is Settings → Connect (outbound integrations).
 var connectOrder = []string{
+	KeyYtDlpUpdateChannel,
 	KeyPotFetch,
 }
 
@@ -81,6 +94,7 @@ var schedulerOrder = []string{
 	KeyDownloadWantedCron,
 	KeySyncFilesCron,
 	KeyRetentionDeleteCron,
+	KeyYtDlpUpdateCron,
 }
 
 // queueOrder is Settings → Queue / Domains (order, source error threshold).
@@ -100,6 +114,7 @@ var CronKeys = map[string]bool{
 	KeyDownloadWantedCron:  true,
 	KeySyncFilesCron:       true,
 	KeyRetentionDeleteCron: true,
+	KeyYtDlpUpdateCron:     true,
 }
 
 // Entry is one settings row for API/UI.
@@ -131,6 +146,8 @@ func SeedDefaults(database *db.DB) error {
 		KeySubtitleAuto:                 DefaultSubtitleAuto,
 		KeyMetadataDomainTag:            DefaultMetadataDomainTag,
 		KeyMetadataGenresFromCategories: DefaultMetadataGenresFromCategories,
+		KeyYtDlpUpdateCron:              "@weekly",
+		KeyYtDlpUpdateChannel:           YtDlpChannelStable,
 	}
 	allKeys := append([]string{}, generalOrder...)
 	allKeys = append(allKeys, schedulerOrder...)
@@ -279,6 +296,8 @@ func Set(database *db.DB, key, value string) error {
 	switch key {
 	case KeyAuthPasswordHash, KeyAuthCookieSecret, KeyAuthSessionEpoch, KeyAPIKey:
 		return fmt.Errorf("setting %q is not writable via Set", key)
+	case KeyYtDlpInstalledVersion, KeyYtDlpInstalledAt:
+		return fmt.Errorf("setting %q is not writable via Set", key)
 	}
 	if key == KeySubtitleLangs {
 		value = SubtitleLangsJSON(ParseSubtitleLangsJSON(value))
@@ -291,6 +310,12 @@ func Set(database *db.DB, key, value string) error {
 	}
 	if key == KeySourceDownloadErrorThreshold {
 		value = NormalizeSourceDownloadErrorThreshold(value)
+	}
+	if key == KeyYtDlpUpdateChannel {
+		if err := validateYtDlpUpdateChannel(value); err != nil {
+			return err
+		}
+		value = NormalizeYtDlpUpdateChannel(value)
 	}
 	if err := validateValue(key, value); err != nil {
 		return err

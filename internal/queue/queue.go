@@ -46,6 +46,7 @@ const (
 	KindDeleteSidecar      = "delete_sidecar"
 	KindSponsorblockCut    = "sponsorblock_cut"
 	KindMediaVerify        = "media_verify"
+	KindYtDlpUpdate        = "ytdlp_update"
 
 	// SystemDomain is the queue lane for maintenance tasks.
 	SystemDomain = "system"
@@ -79,6 +80,12 @@ const PrioritySponsorblockCut = -10
 
 // PriorityMediaVerify is lowest on the system lane (below SponsorBlock cut/reencode).
 const PriorityMediaVerify = -20
+
+// PriorityYtDlpUpdateBoot enqueues boot yt-dlp update ahead of default system work.
+const PriorityYtDlpUpdateBoot = 40
+
+// PriorityYtDlpUpdateDue is cron/manual yt-dlp update priority.
+const PriorityYtDlpUpdateDue = 50
 
 // Task is a queued unit of work.
 type Task struct {
@@ -286,7 +293,7 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 	// System lane: at most one pending/running task per kind (except import keeps per-video).
 	if p.Domain == SystemDomain {
 		switch p.Kind {
-		case KindSyncFiles, KindRetentionDelete, KindRenameEpisodes, KindRegenerateNFO:
+		case KindSyncFiles, KindRetentionDelete, KindRenameEpisodes, KindRegenerateNFO, KindYtDlpUpdate:
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE domain = ? AND kind = ? AND status IN (?, ?) LIMIT 1
 			`, SystemDomain, p.Kind, StatusPending, StatusRunning)
