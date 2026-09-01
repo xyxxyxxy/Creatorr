@@ -136,3 +136,19 @@ func TestFindMediaSkipsHLSPlaylist(t *testing.T) {
 		t.Fatalf("got %q want %q", got, real)
 	}
 }
+
+func TestUpgradeCodeAgeRestricted(t *testing.T) {
+	ageMsg := "ERROR: [youtube] zHLscLwx0rM: Take a few minutes to verify your age. To view this video, please provide more info so we can be sure you're an adult."
+	got := upgradeCode("DownloadFailed", ageMsg)
+	if got != "AgeRestricted" {
+		t.Fatalf("upgradeCode age=%q want AgeRestricted", got)
+	}
+	got = upgradeCode("DownloadFailed", "Sign in to confirm your age")
+	if got != "AgeRestricted" {
+		t.Fatalf("upgradeCode youtube sign-in age=%q want AgeRestricted", got)
+	}
+	got = upgradeCode("DownloadFailed", "HTTP Error 403: Please sign in")
+	if got != "CookieInvalid" {
+		t.Fatalf("generic sign-in must stay cookie, got %q", got)
+	}
+}

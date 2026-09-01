@@ -273,11 +273,14 @@ func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task 
 	if task.Domain == "" || task.Domain == "unknown" || task.Domain == "system" {
 		return
 	}
+	if code == apperrors.CodeAgeRestricted {
+		return
+	}
 	switch code {
 	case apperrors.CodeCookieInvalid, apperrors.CodeRateLimited,
 		apperrors.CodeRemuxFailed, apperrors.CodePackFailed, apperrors.CodeMediaVerifyFailed,
-		apperrors.CodeMediaTypeExcluded, apperrors.CodeLiveBroadcastSkipped:
-		// keep classified code (do not re-detect remux/pack/verify into pause)
+		apperrors.CodeMediaTypeExcluded, apperrors.CodeLiveBroadcastSkipped, apperrors.CodeAgeRestricted:
+		// keep classified code (do not re-detect remux/pack/verify/age into pause)
 	default:
 		if d := apperrors.DetectPauseCode(runErr.Error()); d != "" {
 			code = d

@@ -250,6 +250,109 @@ func TestRunnerRemuxFailedDoesNotPause(t *testing.T) {
 	testRunnerDomainIssueNotify(t, apperrors.CodeRemuxFailed, "muxer exploded", false)
 }
 
+func TestRunnerAgeRestrictedDoesNotPauseOrNotify(t *testing.T) {
+	var notified atomic.Bool
+
+	d, err := db.Open(filepath.Join(t.TempDir(), "age.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+
+	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
+		if title != "" {
+			notified.Store(true)
+		}
+		return nil
+	})
+	defer notify.SetSendFnForTest(old)
+
+	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{
+		notify.EventCookieInvalid, notify.EventRateLimited, notify.EventYtDlpFailed,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_ = domains.EnsureHost(d, "example.com")
+
+	lib := &library.Store{DB: d, Queue: queue.NewStore(d)}
+	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, err := lib.CreateProfile("default", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Show", SourceURL: "https://example.com/s", RootID: root.ID, QualityProfileID: prof.ID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := lib.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "v1", Title: "V1", WebpageURL: "https://example.com/v1", SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	store := lib.Queue
+	id, err := store.Enqueue(queue.EnqueueParams{
+		Kind: queue.KindDownload, Domain: "example.com", SeriesID: ser.ID, VideoID: res.VideoID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ageMsg := "ERROR: [youtube] zHLscLwx0rM: Take a few minutes to verify your age."
+	handlers := worker.StubHandlers()
+	handlers[queue.KindDownload] = func(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) error {
+		return apperrors.WithDetail(apperrors.New(apperrors.CodeAgeRestricted, "Age restricted"), ageMsg)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go (&worker.Runner{
+		Queue:    store,
+		Library:  lib,
+		Handlers: handlers,
+		Interval: 20 * time.Millisecond,
+	}).Run(ctx)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var status string
+		if err := d.SQL.QueryRow(`SELECT status FROM tasks WHERE id = ?`, id).Scan(&status); err != nil {
+			t.Fatal(err)
+		}
+		if status != queue.StatusFailed {
+			time.Sleep(30 * time.Millisecond)
+			continue
+		}
+		paused, err := domains.IsPaused(d, "example.com")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if paused {
+			t.Fatal("age restricted must not soft-pause domain")
+		}
+		if notified.Load() {
+			t.Fatal("age restricted must not notify")
+		}
+		v, err := lib.GetVideo(res.VideoID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v.Status != "wanted_download_error" {
+			t.Fatalf("video status=%s want wanted_download_error", v.Status)
+		}
+		return
+	}
+	t.Fatal("timeout waiting for age-restricted failure")
+}
+
 func TestRunnerDownloadsDoneDigest(t *testing.T) {
 	prev := worker.SetDigestDebounceForTest(50 * time.Millisecond)
 	defer worker.SetDigestDebounceForTest(prev)

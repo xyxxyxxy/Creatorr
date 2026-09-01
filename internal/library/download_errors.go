@@ -22,11 +22,19 @@ func (s *Store) SourceDownloadErrorThreshold() int {
 	return n
 }
 
-// CountDownloadErrors returns videos with status wanted_download_error for a source.
+// CountDownloadErrors returns videos with status wanted_download_error for a source,
+// excluding per-video gates (e.g. AgeRestricted) that do not count toward threshold.
 func (s *Store) CountDownloadErrors(sourceID int64) (int, error) {
 	var n int
 	err := s.DB.SQL.QueryRow(`
-		SELECT COUNT(*) FROM videos WHERE source_id = ? AND status = 'wanted_download_error'
+		SELECT COUNT(*) FROM videos v
+		WHERE v.source_id = ? AND v.status = 'wanted_download_error'
+		AND COALESCE((
+			SELECT json_extract(h.detail, '$.code')
+			FROM video_history h
+			WHERE h.video_id = v.id AND h.event = 'download_failed'
+			ORDER BY h.id DESC LIMIT 1
+		), '') NOT IN ('AgeRestricted')
 	`, sourceID).Scan(&n)
 	return n, err
 }
@@ -82,7 +90,7 @@ func (s *Store) MarkDownloadFailed(videoID, taskID int64, code, message string) 
 		histMsg = "Pack failed"
 	}
 	_ = s.AddVideoHistory(videoID, "download_failed", histMsg, detail, taskID)
-	if cur.SourceID.Valid {
+	if cur.SourceID.Valid && apperrors.IsSourceCountableDownloadError(code) {
 		return s.applySourceErrorHold(cur.SourceID.Int64, taskID)
 	}
 	return nil

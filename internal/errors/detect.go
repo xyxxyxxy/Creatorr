@@ -5,6 +5,15 @@ import (
 	"strings"
 )
 
+// Per-video age gates (not domain cookie/session failure).
+var ageRestrictRe = regexp.MustCompile(`(?i)(` +
+	`verify\s+your\s+age|` +
+	`confirm\s+your\s+age|` +
+	`confirm\s+you.?re\s+an\s+adult|` +
+	`age[-\s]?restricted|` +
+	`sign\s+in\s+to\s+confirm\s+your\s+age` +
+	`)`)
+
 // Pause-worthy external-service failures (domain queue should stop).
 var (
 	cookieAuthRe = regexp.MustCompile(`(?i)(` +
@@ -42,10 +51,27 @@ var (
 		`)`)
 )
 
+// DetectAgeRestricted reports per-video age-gate failures in yt-dlp stderr.
+func DetectAgeRestricted(message string) bool {
+	if strings.TrimSpace(message) == "" {
+		return false
+	}
+	return ageRestrictRe.MatchString(message)
+}
+
+// IsSourceCountableDownloadError reports whether a download failure code
+// counts toward source_download_error_threshold.
+func IsSourceCountableDownloadError(code string) bool {
+	return code != CodeAgeRestricted
+}
+
 // DetectPauseCode inspects external-tool stderr / error text.
 // Returns CookieInvalid, RateLimited, or "" if not a pause trigger.
 func DetectPauseCode(message string) string {
 	if strings.TrimSpace(message) == "" {
+		return ""
+	}
+	if DetectAgeRestricted(message) {
 		return ""
 	}
 	if cookieAuthRe.MatchString(message) || cookieHTTPRe.MatchString(message) {
@@ -62,8 +88,11 @@ func DetectPauseCode(message string) string {
 func UpgradeCode(code, message string) string {
 	switch code {
 	case CodeCookieInvalid, CodeRateLimited, CodeCookieMissing, CodeRemuxFailed, CodePackFailed, CodeMediaVerifyFailed,
-		CodeMediaTypeExcluded, CodeLiveBroadcastSkipped:
+		CodeMediaTypeExcluded, CodeLiveBroadcastSkipped, CodeAgeRestricted:
 		return code
+	}
+	if DetectAgeRestricted(message) {
+		return CodeAgeRestricted
 	}
 	if d := DetectPauseCode(message); d != "" {
 		return d
@@ -78,6 +107,8 @@ func PauseMessage(code string) string {
 		return "Cookies invalid"
 	case CodeRateLimited:
 		return "Rate limited or IP blocked"
+	case CodeAgeRestricted:
+		return "Age restricted"
 	default:
 		return "Domain issue"
 	}

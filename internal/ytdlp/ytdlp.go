@@ -472,9 +472,12 @@ func classifyMatchFilterReject(stderr, matchFilter string) (code, message string
 	}
 }
 
-// upgradeCode reclassifies a generic failure as CookieInvalid / RateLimited
-// when yt-dlp's own error text matches well-known site responses.
+// upgradeCode reclassifies a generic failure as AgeRestricted / CookieInvalid /
+// RateLimited when yt-dlp's own error text matches well-known site responses.
 func upgradeCode(code, text string) string {
+	if apperrors.DetectAgeRestricted(text) {
+		return apperrors.CodeAgeRestricted
+	}
 	low := strings.ToLower(text)
 	switch {
 	case strings.Contains(low, "sign in") ||
@@ -500,6 +503,8 @@ func pauseMessage(code string) string {
 		return "site rejected cookies or requires sign-in"
 	case apperrors.CodeRateLimited:
 		return "site rate limited the request"
+	case apperrors.CodeAgeRestricted:
+		return "Age restricted"
 	default:
 		return ""
 	}

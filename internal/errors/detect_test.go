@@ -23,6 +23,9 @@ func TestDetectPauseCode(t *testing.T) {
 		{"got rate-limited by the site", apperrors.CodeRateLimited},
 		{"status code 429 from CDN", apperrors.CodeRateLimited},
 		{"quota exceeded for this key", apperrors.CodeRateLimited},
+		// Age gate: per-video, not domain cookie failure.
+		{"ERROR: [youtube] zHLscLwx0rM: Take a few minutes to verify your age. To view this video, please provide more info so we can be sure you're an adult.", ""},
+		{"Sign in to confirm your age", ""},
 	}
 	for _, tc := range cases {
 		if got := apperrors.DetectPauseCode(tc.msg); got != tc.want {
@@ -48,6 +51,31 @@ func TestUpgradeCode(t *testing.T) {
 	if got != apperrors.CodePackFailed {
 		t.Fatalf("must keep PackFailed, got %q", got)
 	}
+	ageMsg := "ERROR: [youtube] zHLscLwx0rM: Take a few minutes to verify your age."
+	got = apperrors.UpgradeCode(apperrors.CodeDownloadFailed, ageMsg)
+	if got != apperrors.CodeAgeRestricted {
+		t.Fatalf("age restrict upgrade=%q want AgeRestricted", got)
+	}
+	got = apperrors.UpgradeCode(apperrors.CodeDownloadFailed, "Sign in to confirm your age")
+	if got != apperrors.CodeAgeRestricted {
+		t.Fatalf("youtube age sign-in upgrade=%q want AgeRestricted", got)
+	}
+}
+
+func TestDetectAgeRestricted(t *testing.T) {
+	msg := "ERROR: [youtube] zHLscLwx0rM: Take a few minutes to verify your age."
+	if !apperrors.DetectAgeRestricted(msg) {
+		t.Fatal("expected age restricted")
+	}
+}
+
+func TestIsSourceCountableDownloadError(t *testing.T) {
+	if apperrors.IsSourceCountableDownloadError(apperrors.CodeAgeRestricted) {
+		t.Fatal("AgeRestricted must not count toward threshold")
+	}
+	if !apperrors.IsSourceCountableDownloadError(apperrors.CodeDownloadFailed) {
+		t.Fatal("DownloadFailed must count")
+	}
 }
 
 func TestIsYtDlpPauseCode(t *testing.T) {
@@ -61,8 +89,9 @@ func TestIsYtDlpPauseCode(t *testing.T) {
 		apperrors.IsYtDlpPauseCode(apperrors.CodePackFailed) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodeMediaVerifyFailed) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodeLiveBroadcastSkipped) ||
-		apperrors.IsYtDlpPauseCode(apperrors.CodeMediaTypeExcluded) {
-		t.Fatal("remux/pack/verify/live-skip/media-type must not pause")
+		apperrors.IsYtDlpPauseCode(apperrors.CodeMediaTypeExcluded) ||
+		apperrors.IsYtDlpPauseCode(apperrors.CodeAgeRestricted) {
+		t.Fatal("remux/pack/verify/live-skip/media-type/age-restrict must not pause")
 	}
 }
 

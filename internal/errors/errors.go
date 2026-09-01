@@ -60,6 +60,7 @@ const (
 	CodeHandlerCapabilityMissing = "HandlerCapabilityMissing"
 	CodeMediaTypeExcluded = "MediaTypeExcluded"
 	CodeLiveBroadcastSkipped = "LiveBroadcastSkipped"
+	CodeAgeRestricted        = "AgeRestricted"
 	CodeMediaVerifyFailed = "MediaVerifyFailed"
 	CodeUnauthorized = "Unauthorized"
 	CodeSetupRequired = "SetupRequired"
