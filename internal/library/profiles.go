@@ -313,3 +313,56 @@ func (s *Store) UpdateProfileParams(id int64, p UpdateProfileParams) (*QualityPr
 	}
 	return s.GetProfile(id)
 }
+
+// CountSeriesUsingProfile returns how many series reference this quality profile.
+func (s *Store) CountSeriesUsingProfile(id int64) (int, error) {
+	var n int
+	err := s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM series WHERE quality_profile_id = ?
+	`, id).Scan(&n)
+	return n, err
+}
+
+// SeriesCountsByProfile returns series counts keyed by quality_profile_id.
+func (s *Store) SeriesCountsByProfile() (map[int64]int, error) {
+	rows, err := s.DB.SQL.Query(`
+		SELECT quality_profile_id, COUNT(*) FROM series GROUP BY quality_profile_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[int64]int)
+	for rows.Next() {
+		var id int64
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}
+
+// DeleteProfile removes a quality profile. Fails with ErrConflict when series still use it.
+func (s *Store) DeleteProfile(id int64) error {
+	if _, err := s.GetProfile(id); err != nil {
+		return err
+	}
+	n, err := s.CountSeriesUsingProfile(id)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return fmt.Errorf("%w: quality profile is used by %d series", ErrConflict, n)
+	}
+	res, err := s.DB.SQL.Exec(`DELETE FROM quality_profiles WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

@@ -45,7 +45,7 @@ func NormalizeUploadTime(raw string) string {
 	return t.UTC().Format(time.RFC3339)
 }
 
-// UploadCalendarDate returns YYYY-MM-DD (UTC) for NFO/cutoff day math.
+// UploadCalendarDate returns YYYY-MM-DD (UTC) for NFO aired / season-day math.
 func UploadCalendarDate(raw string) string {
 	t, ok := ParseUploadTime(raw)
 	if !ok {
@@ -69,64 +69,9 @@ func ParseUploadTime(raw string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// ParseCutoffDate parses a UI cutoff (YYYY-MM-DD) as UTC midnight that day.
-func ParseCutoffDate(raw string) (time.Time, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return time.Time{}, false
-	}
-	t, err := time.ParseInLocation("2006-01-02", raw, time.UTC)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return t, true
-}
-
-// BeforeCutoff reports whether upload falls strictly before the cutoff calendar day (UTC).
-// Cutoff day itself is indexed; older days are not. cutoff is YYYY-MM-DD from the UI
-// date picker; upload must be RFC3339.
-func BeforeCutoff(upload, cutoff string) bool {
-	if cutoff == "" || upload == "" {
-		return false
-	}
-	u, ok1 := ParseUploadTime(upload)
-	c, ok2 := ParseCutoffDate(cutoff)
-	if !ok1 || !ok2 {
-		return false
-	}
-	uy, um, ud := u.UTC().Date()
-	cy, cm, cd := c.UTC().Date()
-	return time.Date(uy, um, ud, 0, 0, 0, 0, time.UTC).Before(time.Date(cy, cm, cd, 0, 0, 0, 0, time.UTC))
-}
-
-// CutoffExpanded reports whether the new cutoff reaches further into the past
-// (or clears a previous cutoff), so full scan should walk older videos.
-// Moving cutoff toward today, or leaving it unchanged, returns false.
-func CutoffExpanded(oldCutoff, newCutoff string) bool {
-	oldCutoff = strings.TrimSpace(oldCutoff)
-	newCutoff = strings.TrimSpace(newCutoff)
-	if oldCutoff == newCutoff {
-		return false
-	}
-	if oldCutoff == "" {
-		// Already indexing all history; a new finite cutoff only shrinks scope.
-		return false
-	}
-	if newCutoff == "" {
-		return true // clear = index everything older
-	}
-	oldT, ok1 := ParseCutoffDate(oldCutoff)
-	newT, ok2 := ParseCutoffDate(newCutoff)
-	if !ok1 || !ok2 {
-		return false
-	}
-	return newT.Before(oldT)
-}
-
 // UpsertListed inserts or updates a video from a scan listing (index-only).
 // taskID links episode repack history when season/episode shift; list-pass
 // discover/update facts live on source_history, not video_history.
-// Callers must not pass videos older than source scan cutoff - the scanner stops there.
 func (s *Store) UpsertListed(seriesID int64, li ListedVideo, taskID int64) (UpsertResult, error) {
 	var out UpsertResult
 	if li.RemoteID == "" {
@@ -413,32 +358,34 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		fps = infoMeta.FPS
 	}
 	acquired := nowRFC3339()
-	uploadFromInfo := uploadDateFromInfoJSON(infoPath)
-	tx, err := s.DB.SQL.Begin()
+	uploadFromInfo := UploadDateFromInfoJSON(infoPath)
+
+	// Disk work outside the write tx so `_txlock=immediate` is not held across Remove/Stat.
+	oldRows, err := s.DB.SQL.Query(`SELECT path FROM files WHERE video_id = ?`, videoID)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	// Remove prior pack artifacts from disk before replacing rows.
-	oldRows, _ := tx.Query(`SELECT path FROM files WHERE video_id = ?`, videoID)
-	if oldRows != nil {
-		var oldPaths []string
-		for oldRows.Next() {
-			var p string
-			if oldRows.Scan(&p) == nil && p != "" {
-				oldPaths = append(oldPaths, p)
-			}
-		}
-		_ = oldRows.Close()
-		for _, p := range oldPaths {
-			_ = os.Remove(p)
+	var oldPaths []string
+	for oldRows.Next() {
+		var p string
+		if oldRows.Scan(&p) == nil && p != "" {
+			oldPaths = append(oldPaths, p)
 		}
 	}
-
-	if _, err := tx.Exec(`DELETE FROM files WHERE video_id = ? AND kind IN ('video','nfo','json','thumb','sub','sponsorblock')`, videoID); err != nil {
+	_ = oldRows.Close()
+	if err := oldRows.Err(); err != nil {
 		return err
 	}
+	for _, p := range oldPaths {
+		_ = os.Remove(p)
+	}
+
+	type fileRow struct {
+		kind string
+		path string
+		size any
+	}
+	var files []fileRow
 	for kind, path := range map[string]string{"video": mediaPath, "nfo": nfoPath, "json": infoPath, "thumb": thumbPath} {
 		if path == "" || !fileExists(path) {
 			continue
@@ -449,19 +396,36 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 				size = fi.Size()
 			}
 		}
-		if _, err := tx.Exec(`
-			INSERT INTO files (video_id, path, kind, acquired_at, size_bytes) VALUES (?, ?, ?, ?, ?)
-		`, videoID, path, kind, acquired, size); err != nil {
-			return err
-		}
+		files = append(files, fileRow{kind: kind, path: path, size: size})
 	}
 	for _, p := range subPaths {
 		if p == "" || !fileExists(p) {
 			continue
 		}
+		files = append(files, fileRow{kind: "sub", path: p})
+	}
+
+	tx, err := s.DB.SQL.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(`DELETE FROM files WHERE video_id = ? AND kind IN ('video','nfo','json','thumb','sub','sponsorblock')`, videoID); err != nil {
+		return err
+	}
+	for _, f := range files {
+		if f.kind == "sub" {
+			if _, err := tx.Exec(`
+				INSERT INTO files (video_id, path, kind, acquired_at) VALUES (?, ?, 'sub', ?)
+			`, videoID, f.path, acquired); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := tx.Exec(`
-			INSERT INTO files (video_id, path, kind, acquired_at) VALUES (?, ?, 'sub', ?)
-		`, videoID, p, acquired); err != nil {
+			INSERT INTO files (video_id, path, kind, acquired_at, size_bytes) VALUES (?, ?, ?, ?, ?)
+		`, videoID, f.path, f.kind, acquired, f.size); err != nil {
 			return err
 		}
 	}
@@ -565,8 +529,9 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 	return tx.Commit()
 }
 
-// uploadDateFromInfoJSON reads upload_date from a packed info.json (RFC3339 or YYYYMMDD).
-func uploadDateFromInfoJSON(path string) string {
+
+// UploadDateFromInfoJSON reads upload_date from a packed info.json (RFC3339 or YYYYMMDD).
+func UploadDateFromInfoJSON(path string) string {
 	if path == "" || !fileExists(path) {
 		return ""
 	}
@@ -583,6 +548,29 @@ func uploadDateFromInfoJSON(path string) string {
 		return sidecarUploadTime(v)
 	}
 	return ""
+}
+
+// SoftFillUploadDateFromInfoJSON sets videos.upload_date from info.json when empty.
+// Does not reindex or rename; callers assign season/episode before pack.
+// Returns the effective upload_date (existing or newly filled), or "" if still unset.
+func (s *Store) SoftFillUploadDateFromInfoJSON(videoID int64, infoPath string) (string, error) {
+	var cur sql.NullString
+	if err := s.DB.SQL.QueryRow(`SELECT upload_date FROM videos WHERE id = ?`, videoID).Scan(&cur); err != nil {
+		return "", err
+	}
+	if cur.Valid {
+		if u := NormalizeUploadTime(cur.String); u != "" {
+			return u, nil
+		}
+	}
+	fromInfo := UploadDateFromInfoJSON(infoPath)
+	if fromInfo == "" {
+		return "", nil
+	}
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET upload_date = ? WHERE id = ? AND (upload_date IS NULL OR trim(upload_date) = '')`, fromInfo, videoID); err != nil {
+		return "", err
+	}
+	return fromInfo, nil
 }
 
 // DurationSecondsFromInfoJSON reads yt-dlp-style duration (seconds) from a packed info.json.

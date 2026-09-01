@@ -4,6 +4,7 @@
   Pending poll lives on this root; Fetch button already shows the spinner.
 */}}
 <div id="video-metadata-body"
+     data-meta-reset="/series/{{.Series.ID}}/videos/{{.Video.ID}}/metadata/body"
      {{if .PrefetchPending}}hx-get="/series/{{.Series.ID}}/videos/{{.Video.ID}}/metadata/prefetch/{{.PrefetchTaskID}}" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
   {{if .PrefetchDraft.Error}}
   <div class="alert alert-error mb-4"><span>{{.PrefetchDraft.Error}}</span></div>

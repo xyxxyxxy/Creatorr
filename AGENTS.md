@@ -2,7 +2,7 @@
 
 Mandatory reading for AI agents. Creatorr is a Sonarr-shaped Go daemon for creator VOD: mirror channels/playlists, download via in-tree yt-dlp (+ optional plugins), track videos + packed `info.json`, pack TV libraries (video + NFO).
 
-**Stack:** Go only (`github.com/xyxxyxxy/Creatorr`). SQLite for app state; published images on GHCR (`:latest` / `:develop`).
+**Stack:** Go only (`github.com/xyxxyxxy/Creatorr`). SQLite for app state; published images on GHCR (`:latest` / `:sha-<short>`).
 
 ## Hard rules
 
@@ -25,7 +25,7 @@ api/openapi.yaml        REST contract (source of truth)
 internal/api/gen/       oapi-codegen output (committed; do not hand-edit)
 internal/api/           handler impl, SSE, route mounting
 internal/config/        env bootstrap + settings bridge
-internal/db/            SQLite open + schema
+internal/db/            SQLite open + schema + stepwise migrations (`schema_version`)
 internal/domain/        series, source, video types
 internal/library/       series/videos/files, pack, remux, import, NFO
 internal/queue/         per-domain task queue, cooldown, History (finished tasks)
@@ -69,8 +69,8 @@ New domain term → matching docs file (domain-model by default).
 
 ## Ship
 
-- **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker`, `ytdlp`, `disk`, `flaresolverr`, `pot_provider` (last two skipped if URL unset). Compose healthcheck should use it.
-- **Images:** `ghcr.io/xyxxyxxy/creatorr:latest` from `main`, `:develop` from `develop`, `:sha-<short>` for pins. Compose: [`docker-compose.yml`](docker-compose.yml).
+- **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker` (in-process heartbeat, not SQLite), `ytdlp`, `disk`, `flaresolverr`, `pot_provider` (last two skipped if URL unset). Compose healthcheck should use it.
+- **Images:** `ghcr.io/xyxxyxxy/creatorr:latest` and `:vX.Y.Z` from version tags (`v*`) on `main`; `:sha-<short>` on every `main` push for pins and pre-release testing. Compose: [`docker-compose.yml`](docker-compose.yml).
 - **Tests:** unit (domain/settings), yt-dlp fixtures (no live net), integration (temp SQLite + worker/queue), API httptest + schema. Prefer golden fixtures; add tests for behavior changes.
-- **Branching:** git-flow (`feature/*`, `develop`, `main`).
+- **Branching:** GitHub Flow - `main` is the only long-lived branch; use short-lived branches and pull requests into `main`.
 - **Commits:** Conventional Commits; one logical step each; subject ≤72 chars; body explains why when not obvious.

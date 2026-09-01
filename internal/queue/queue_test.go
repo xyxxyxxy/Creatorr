@@ -313,11 +313,30 @@ func TestAppendCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	task, err := s.ClaimNext()
+	if err != nil || task == nil {
+		t.Fatalf("claim: %v %#v", err, task)
+	}
 	if err := s.AppendCommand(id, "yt-dlp -J https://example.com/v"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.AppendCommand(id, `ffmpeg -i "a b.mkv" out.mkv`); err != nil {
 		t.Fatal(err)
+	}
+	// Live overlay while running (not yet in SQLite).
+	live, err := s.GetTask(id)
+	if err != nil || live == nil {
+		t.Fatalf("GetTask live: %v", err)
+	}
+	if len(live.Commands) != 2 {
+		t.Fatalf("live commands=%v", live.Commands)
+	}
+	var dbRaw string
+	if err := s.DB.SQL.QueryRow(`SELECT COALESCE(commands,'') FROM tasks WHERE id = ?`, id).Scan(&dbRaw); err != nil {
+		t.Fatal(err)
+	}
+	if dbRaw != "" && dbRaw != "[]" {
+		t.Fatalf("expected DB commands empty while running, got %q", dbRaw)
 	}
 	if err := s.Finish(id, queue.StatusDone, "ok", "", ""); err != nil {
 		t.Fatal(err)

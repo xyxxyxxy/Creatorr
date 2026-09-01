@@ -29,11 +29,11 @@ func TestStepProgressDualFormatWithDest(t *testing.T) {
 	}
 	wantMsgs := []string{
 		"Downloading video (1/2)",
-		"Downloading video (1/2) 42%",
+		"Downloading video (1/2) 42% · 1.00MiB/s",
 		"Downloading video (1/2) 100%",
 		"Downloading audio (2/2)",
 		"Downloading audio (2/2)",
-		"Downloading audio (2/2) 50%",
+		"Downloading audio (2/2) 50% · 500.00KiB/s",
 		"Merging…",
 	}
 	if len(msgs) != len(wantMsgs) {

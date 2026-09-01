@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
@@ -232,10 +234,15 @@ func (s *Store) FileDeletePass(ctx context.Context, task *queue.Task, progress f
 				return err
 			}
 		}
+		seriesDir := SeriesDir(root.Path, ser.Title)
+		if err := removeSeriesFolder(root.Path, seriesDir); err != nil {
+			return err
+		}
+		s.clearSeriesMetaCache(sid)
 		if _, err := s.DB.SQL.Exec(`DELETE FROM series WHERE id = ?`, sid); err != nil {
 			return err
 		}
-		pruneEmptyDirsUnder(root.Path, SeriesDir(root.Path, ser.Title))
+		pruneEmptyDirsUnder(root.Path, seriesDir)
 		p.SeriesIndex++
 		_ = persist()
 		if progress != nil {
@@ -279,6 +286,38 @@ func pruneEmptyDirsUnder(root, seriesDir string) {
 	if parent != "" && filepath.Clean(parent) != filepath.Clean(root) {
 		_ = PruneEmptyDir(parent)
 	}
+}
+
+// removeSeriesFolder deletes the whole series directory (episodes, poster, tvshow.nfo, …).
+// Refuses paths that are not a strict subdirectory of root.
+func removeSeriesFolder(root, seriesDir string) error {
+	root = filepath.Clean(strings.TrimSpace(root))
+	seriesDir = filepath.Clean(strings.TrimSpace(seriesDir))
+	if root == "" || seriesDir == "" || seriesDir == "." || seriesDir == string(filepath.Separator) {
+		return fmt.Errorf("%w: refuse series folder remove", ErrInvalid)
+	}
+	if seriesDir == root {
+		return fmt.Errorf("%w: refuse removing library root", ErrInvalid)
+	}
+	rel, err := filepath.Rel(root, seriesDir)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("%w: series folder outside root", ErrInvalid)
+	}
+	if err := os.RemoveAll(seriesDir); err != nil {
+		return fmt.Errorf("remove series folder: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) clearSeriesMetaCache(seriesID int64) {
+	if seriesID <= 0 {
+		return
+	}
+	root := strings.TrimSpace(s.CacheDir)
+	if root == "" {
+		root = filepath.Join("data", "cache")
+	}
+	_ = os.RemoveAll(filepath.Join(root, "series-meta", strconv.FormatInt(seriesID, 10)))
 }
 
 // FileDeleteMessage formats the finish message.

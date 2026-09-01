@@ -4,19 +4,28 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 type pageBase struct {
-	Title       string
-	Nav         string
-	Icon        string // lucide icon for page title headers
-	SettingsTab string // set when Nav == "settings" (general|library|scheduler|queue|domains|handlers)
-	Flash       *flash
+	Title        string
+	Nav          string
+	Icon         string // lucide icon for page title headers
+	SettingsTab  string // set when Nav == "settings" (general|library|connect|queue|scheduler|maintenance)
+	Flash        *flash
+	AuthUsername string // operator account; for navbar account menu
+}
+
+// usernameForPage returns the operator username for shell chrome (set from Handler.Mount).
+var usernameForPage func() string
+
+// SetUsernameForPage wires the operator username lookup used by newPage.
+func SetUsernameForPage(fn func() string) {
+	usernameForPage = fn
 }
 
 // EpisodeLucideIcon is the Lucide name for indexed episodes (library videos).
@@ -25,7 +34,11 @@ const EpisodeLucideIcon = "square-play"
 
 // newPage builds pageBase with a nav-matched lucide icon.
 func newPage(title, nav string, flash *flash) pageBase {
-	return pageBase{Title: title, Nav: nav, Icon: pageIcon(nav), Flash: flash}
+	p := pageBase{Title: title, Nav: nav, Icon: pageIcon(nav), Flash: flash}
+	if usernameForPage != nil {
+		p.AuthUsername = usernameForPage()
+	}
+	return p
 }
 
 func newSettingsPage(title, tab string, flash *flash) pageBase {
@@ -62,6 +75,8 @@ func settingsTabIcon(tab string) string {
 	switch tab {
 	case "general":
 		return "sliders-horizontal"
+	case "connect":
+		return "plug"
 	case "library":
 		return "folder"
 	case "maintenance":
@@ -151,7 +166,7 @@ func flashFromQuery(r *http.Request) *flash {
 	case "video-metadata-busy":
 		return flashOK("Episode metadata saved. Rename skipped while a download or pack task is busy - run Apply episode format later.")
 	case "download":
-		return flashOK("Download now enqueued.")
+		return flashOK("Queue download enqueued.")
 	case "video-deleted":
 		return flashOK("Video delete queued - files remove in the background.")
 	case "sidecar-deleted":
@@ -174,12 +189,16 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Quality profile added.")
 	case "profile-updated":
 		return flashOK("Quality profile updated.")
+	case "profile-deleted":
+		return flashOK("Quality profile deleted.")
 	case "nfo-regen-queued":
 		return flashOK("NFO regenerate queued.")
 	case "sync-files-queued":
 		return flashOK("File sync queued.")
 	case "sync-files-empty":
 		return flashWarn("No videos to sync.")
+	case "ytdlp-update-queued":
+		return flashOK("yt-dlp update queued.")
 	case "nfo-regen":
 		rewrote := r.URL.Query().Get("rewrote")
 		failed := r.URL.Query().Get("failed")
@@ -214,17 +233,21 @@ func formDomain(r *http.Request) string {
 	return settings.NormalizeDomain(r.FormValue("domain"))
 }
 
-// clampPastDate keeps YYYY-MM-DD on or before today UTC; empty stays empty.
-func clampPastDate(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
+// parseFullScanLimitForm reads full_scan_limit (empty = unlimited / stored 0).
+// Values must be >= 1 when set; do not post 0 - leave the field empty instead.
+func parseFullScanLimitForm(r *http.Request) (int, error) {
+	raw := strings.TrimSpace(r.FormValue("full_scan_limit"))
+	if raw == "" {
+		return 0, nil
 	}
-	today := time.Now().UTC().Format("2006-01-02")
-	if s > today {
-		return today
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid full_scan_limit")
 	}
-	return s
+	if n < 1 {
+		return 0, fmt.Errorf("full_scan_limit must be >= 1 (leave empty for all)")
+	}
+	return n, nil
 }
 
 func urlQuery(s string) string {

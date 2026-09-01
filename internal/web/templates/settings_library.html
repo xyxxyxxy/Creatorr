@@ -118,9 +118,24 @@
         <i data-lucide="{{.SponsorBlockLucideIcon}}" class="size-4 {{if .SponsorBlockEnabled}}text-primary{{else}}opacity-40{{end}}" aria-label="{{.SponsorBlockIconTip}}"></i>
       </span>
     </td>
-    <td><label for="modal-edit-profile-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
-      <i data-lucide="pencil" class="size-3.5"></i>
-    </label></td>
+    <td class="whitespace-nowrap text-end">
+      <div class="join">
+        <label for="modal-edit-profile-{{.ID}}" class="btn btn-secondary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+          <i data-lucide="pencil" class="size-3.5"></i>
+        </label>
+        {{if gt .SeriesCount 0}}
+        <span class="tooltip tooltip-top join-item inline-flex border-0" data-tip="{{if eq .SeriesCount 1}}Used by 1 series{{else}}Used by {{.SeriesCount}} series{{end}}">
+          <span class="btn btn-soft btn-error btn-xs btn-square btn-disabled" aria-label="{{if eq .SeriesCount 1}}Used by 1 series{{else}}Used by {{.SeriesCount}} series{{end}}" aria-disabled="true" role="button" tabindex="-1">
+            <i data-lucide="trash-2" class="size-3.5" aria-hidden="true"></i>
+          </span>
+        </span>
+        {{else}}
+        <label for="modal-delete-profile-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+          <i data-lucide="trash-2" class="size-3.5"></i>
+        </label>
+        {{end}}
+      </div>
+    </td>
   </tr>
   {{end}}
 </tbody>
@@ -348,6 +363,24 @@
   </div>
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
+{{if eq .SeriesCount 0}}
+<input type="checkbox" id="modal-delete-profile-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Delete quality profile - {{.Name}}</h3>
+    <p class="text-sm mb-4">Removes this profile.</p>
+    <form method="post" action="/actions/delete-profile">
+      <input type="hidden" name="redirect" value="/settings/library" />
+      <input type="hidden" name="id" value="{{.ID}}" />
+      <div class="modal-action">
+        <label for="modal-delete-profile-{{.ID}}" class="btn modal-cancel">Keep</label>
+        <button type="submit" class="btn btn-error">Delete</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
 {{end}}
 
 {{template "foot" .}}

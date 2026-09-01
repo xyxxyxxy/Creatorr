@@ -152,7 +152,7 @@ func (s *Store) repackEpisodeNumberChanges(videoIDs []int64, taskID int64) error
 }
 
 func (s *Store) repackOneEpisodeNumbers(videoID int64, cfg NamingConfig, taskID int64) error {
-	busy, err := s.videoBusyForRename(videoID)
+	busy, err := s.videoBusyForRename(videoID, taskID)
 	if err != nil || busy {
 		return err
 	}

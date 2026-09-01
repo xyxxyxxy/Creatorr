@@ -345,7 +345,13 @@
    * without a full #tasks-live swap (which otherwise leaves a Idle flash).
    */
   function applyInferredLaneStatus(wrap) {
-    if (!wrap || wrap.hasAttribute("data-paused")) return;
+    if (!wrap) return;
+    // Soft-pause: keep Paused label; bar is indeterminate warning while
+    // tasks are still running, full warning when the lane is quiet.
+    if (wrap.hasAttribute("data-paused")) {
+      showCooldownPaused(wrap);
+      return;
+    }
     const endsAttr = wrap.getAttribute("data-ends-at");
     if (endsAttr) {
       const ends = Date.parse(endsAttr);
@@ -393,16 +399,37 @@
     wrap.removeAttribute("data-slots-full");
     wrap.removeAttribute("data-lane-active");
     clearCooldownBusyTip(wrap);
-    wrap.setAttribute("aria-label", "Paused");
+    const { running } = inferLaneActivity(wrap);
+    const busy = running > 0;
+    const tipText = "Some active tasks remain";
+    wrap.setAttribute(
+      "aria-label",
+      busy ? "Paused; tasks still running" : "Paused"
+    );
     const label = wrap.querySelector("[data-cd-label]");
     const bar = wrap.querySelector("[data-cd-bar]");
-    if (
-      label &&
-      bar &&
-      label.textContent === "Paused" &&
-      bar.hasAttribute("value") &&
-      Number(bar.value) === 100
-    ) {
+    if (label && bar && label.textContent === "Paused") {
+      const warning = bar.classList.contains("progress-warning");
+      const indeterminate = !bar.hasAttribute("value");
+      const full =
+        bar.hasAttribute("value") && Number(bar.value) === 100;
+      if (busy && warning && indeterminate) {
+        const tip = label.closest(".tooltip");
+        if (tip) {
+          tip.classList.add("tooltip", "tooltip-top");
+          tip.setAttribute("data-tip", tipText);
+        }
+        return;
+      }
+      if (!busy && warning && full) return;
+    }
+    if (busy) {
+      wrap.innerHTML =
+        '<span class="tooltip tooltip-top" data-tip="' +
+        tipText +
+        '">' +
+        '<span data-cd-label class="shrink-0 leading-none text-warning">Paused</span></span>' +
+        '<progress data-cd-bar class="progress progress-warning w-24 sm:w-32 h-2 shrink-0" max="100" aria-hidden="true"></progress>';
       return;
     }
     wrap.innerHTML =
@@ -494,6 +521,34 @@
       '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="0" max="100" aria-hidden="true"></progress>';
   }
 
+  /** Short span like "3min 2sec" (at most two units). Matches Go formatDurationCompact. */
+  function formatDurationCompact(totalSec) {
+    let sec = Math.max(0, Math.floor(Number(totalSec) || 0));
+    if (sec < 1) return "1sec";
+    const days = Math.floor(sec / 86400);
+    sec -= days * 86400;
+    const hours = Math.floor(sec / 3600);
+    sec -= hours * 3600;
+    const minutes = Math.floor(sec / 60);
+    sec -= minutes * 60;
+    const parts = [];
+    const add = (n, u) => {
+      if (n > 0) parts.push(n + u);
+    };
+    add(days, "d");
+    add(hours, "h");
+    add(minutes, "min");
+    if (days === 0) add(sec, "sec");
+    if (!parts.length) return "1sec";
+    if (parts.length > 2) parts.length = 2;
+    return parts.join(" ");
+  }
+
+  function cooldownWaitTip(remSec) {
+    const n = Math.max(1, Math.ceil(Number(remSec) || 0));
+    return "Waiting " + formatDurationCompact(n);
+  }
+
   function tickDomainCooldowns() {
     let anyActive = false;
     document.querySelectorAll("[data-domain-cooldown]").forEach((wrap) => {
@@ -529,7 +584,7 @@
       clearCooldownBusyTip(wrap);
       let bar = wrap.querySelector("[data-cd-bar]");
       let label = wrap.querySelector("[data-cd-label]");
-      const tipText = "Waiting " + remSec + "s before the next task on this lane";
+      const tipText = cooldownWaitTip(remSec);
       if (!bar || !label) {
         wrap.innerHTML =
           '<span class="tooltip tooltip-top" data-tip="' +
@@ -603,7 +658,7 @@
     const tips = {
       wanted_source_error: "Source has too many download errors - Retry on the source",
       wanted_download_error: "Last download failed",
-      verify_failed: "Post-pack media verify failed - file kept; Want or Download now",
+      verify_failed: "Post-pack media verify failed - file kept; Want or Queue download",
       missing: "File path recorded but media not on disk - file sync may restore",
     };
     const icons = {
@@ -977,6 +1032,16 @@
     return taskIndicatorFingerprint(el) + "|" + label + "|" + tipBody;
   }
 
+  /** Scan/Full-scan join buttons: skip identical OOB so hover tips do not flicker on download SSE. */
+  function sourceScanActionsFingerprint(el) {
+    if (!el || !el.querySelectorAll) return "";
+    const tips = [...el.querySelectorAll("[data-tip]")].map((n) => n.getAttribute("data-tip") || "");
+    const icons = [...el.querySelectorAll("[data-lucide]")].map((n) => n.getAttribute("data-lucide") || "");
+    const disabled = el.querySelectorAll(".btn-disabled, [aria-disabled='true']").length;
+    const enabled = el.querySelectorAll("button[type='submit']:not(:disabled)").length;
+    return [tips.join(";"), icons.join(";"), disabled, enabled].join("|");
+  }
+
   // Poll/SSE OOB-replaces every task-indicator; identical swaps reset :hover and tip flickers.
   document.body.addEventListener("htmx:oobBeforeSwap", (ev) => {
     const detail = ev.detail || {};
@@ -989,6 +1054,15 @@
       incoming.classList.contains("source-status-cell")
     ) {
       if (sourceStatusFingerprint(target) === sourceStatusFingerprint(incoming)) {
+        detail.shouldSwap = false;
+      }
+      return;
+    }
+    if (
+      target.classList.contains("source-scan-actions") &&
+      incoming.classList.contains("source-scan-actions")
+    ) {
+      if (sourceScanActionsFingerprint(target) === sourceScanActionsFingerprint(incoming)) {
         detail.shouldSwap = false;
       }
       return;
@@ -1227,16 +1301,32 @@
       scope = (id && document.getElementById(id)) || document.body;
     }
     const nodes = [];
-    if (scope.matches && scope.matches("time[data-local-time]")) nodes.push(scope);
+    if (scope.matches && scope.matches("time[data-local-time], time[data-local-date]")) nodes.push(scope);
     if (scope.querySelectorAll) {
-      scope.querySelectorAll("time[data-local-time]").forEach((el) => nodes.push(el));
+      scope.querySelectorAll("time[data-local-time], time[data-local-date]").forEach((el) => nodes.push(el));
     }
     nodes.forEach((el) => {
       const raw = el.getAttribute("datetime");
       if (!raw) return;
       const d = new Date(raw);
       if (Number.isNaN(d.getTime())) return;
+      if (el.hasAttribute("data-local-date")) {
+        el.textContent = d.toLocaleDateString(undefined, { dateStyle: "medium" });
+        return;
+      }
       el.textContent = d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    });
+    const dateInputs = [];
+    if (scope.matches && scope.matches("input[data-local-date]")) dateInputs.push(scope);
+    if (scope.querySelectorAll) {
+      scope.querySelectorAll("input[data-local-date]").forEach((el) => dateInputs.push(el));
+    }
+    dateInputs.forEach((el) => {
+      const raw = el.getAttribute("data-datetime");
+      if (!raw) return;
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return;
+      el.value = d.toLocaleDateString(undefined, { dateStyle: "medium" });
     });
   }
 
@@ -1770,17 +1860,6 @@
     });
   }
 
-  function existingAddSeriesSourceURLs() {
-    const el = document.getElementById("add-series-all-source-urls");
-    if (!el) return [];
-    try {
-      const v = JSON.parse(el.textContent || "[]");
-      return Array.isArray(v) ? v.map(normalizeSourceURLClient) : [];
-    } catch (_) {
-      return [];
-    }
-  }
-
   /** daisyUI validator hint sibling (https://daisyui.com/components/validator/). */
   function controlValidatorHint(el) {
     if (!el) return null;
@@ -1856,14 +1935,6 @@
   }
   window.clearFormControlValidity = clearFormControlValidity;
 
-  function addSeriesURLClash(form) {
-    if (!form) return false;
-    const urlEl = form.querySelector("#add-series-url");
-    const typed = normalizeSourceURLClient(urlEl && urlEl.value);
-    if (!typed) return false;
-    return existingAddSeriesSourceURLs().some((u) => u === typed);
-  }
-
   function addSeriesURLInvalid(form) {
     if (!form) return false;
     const urlEl = form.querySelector("#add-series-url");
@@ -1877,13 +1948,10 @@
     if (!urlEl) return;
     const has = String(urlEl.value || "").trim() !== "";
     const invalid = addSeriesURLInvalid(form);
-    const clash = !invalid && addSeriesURLClash(form);
     const blocked = form.querySelector("[data-add-series-submit]")?.getAttribute("data-blocked") === "1";
-    if (cont) cont.disabled = blocked || !has || clash || invalid || cont.dataset.busy === "1";
+    if (cont) cont.disabled = blocked || !has || invalid || cont.dataset.busy === "1";
     if (invalid) {
       setControlValidity(urlEl, "Enter a valid http(s) URL with a host.");
-    } else if (clash) {
-      setControlValidity(urlEl, "This URL is already a source on another series.");
     } else {
       clearControlValidity(urlEl);
     }
@@ -1910,7 +1978,7 @@
     let field = null;
     if (/\btitle\b/.test(lower) && /required|already exists|same root/.test(lower)) {
       field = form.querySelector("#add-series-title");
-    } else if (/source url|url already|valid http|with a host|already used by series/.test(lower)) {
+    } else if (/source url|url already|valid http|with a host/.test(lower)) {
       field = form.querySelector("#add-series-url");
     } else if (/\broot\b/.test(lower)) {
       field = form.querySelector('select[name="root_id"]');
@@ -2200,7 +2268,7 @@
     const form = btn.closest("form.js-add-series-form");
     if (!form) return;
     const urlEl = form.querySelector("#add-series-url");
-    if (!urlEl || !String(urlEl.value || "").trim() || addSeriesURLClash(form)) {
+    if (!urlEl || !String(urlEl.value || "").trim() || addSeriesURLInvalid(form)) {
       syncAddSeriesSourceNav(form);
       return;
     }
@@ -2354,11 +2422,44 @@
   });
 
   // Cancel discards draft; closing via toggle (not backdrop - inert) keeps form state.
+  // Metadata Fetch HTMX-swaps the body with draft values as new defaults, so form.reset()
+  // cannot restore saved fields - reload a clean body from the server instead.
   document.body.addEventListener("click", (ev) => {
     const cancel = ev.target.closest("label.modal-cancel");
     if (!cancel) return;
     const modal = cancel.closest(".modal");
     if (!modal) return;
+
+    const metaBody = modal.querySelector("[data-meta-reset]");
+    if (metaBody && metaBody.dataset.metaReset && window.htmx) {
+      let url = metaBody.dataset.metaReset;
+      const tidEl = metaBody.querySelector('input[name="prefetch_task_id"]');
+      const tid = tidEl && String(tidEl.value || "").trim();
+      if (tid) {
+        url += (url.indexOf("?") >= 0 ? "&" : "?") + "discard=" + encodeURIComponent(tid);
+      } else {
+        const poll = metaBody.getAttribute("hx-get") || "";
+        const m = poll.match(/\/metadata\/prefetch\/(\d+)/);
+        if (m) {
+          url += (url.indexOf("?") >= 0 ? "&" : "?") + "discard=" + encodeURIComponent(m[1]);
+        }
+      }
+      window.htmx.ajax("GET", url, { target: metaBody, swap: "outerHTML" });
+      try {
+        const u = new URL(location.href);
+        if (u.searchParams.has("prefetch_task") || u.searchParams.has("meta_prefetch") || u.searchParams.get("meta") === "1") {
+          u.searchParams.delete("prefetch_task");
+          u.searchParams.delete("meta_prefetch");
+          u.searchParams.delete("meta");
+          const qs = u.searchParams.toString();
+          history.replaceState({}, "", u.pathname + (qs ? "?" + qs : "") + u.hash);
+        }
+      } catch (_) {
+        /* ignore */
+      }
+      return;
+    }
+
     modal.querySelectorAll("form").forEach((form) => {
       form.reset();
       resetArtSlots(form);
@@ -2838,6 +2939,75 @@
         if (pass && !pass.disabled) pass.focus();
       } catch (_) {}
     }
+  });
+
+  function utf8ByteLength(s) {
+    try {
+      return new TextEncoder().encode(String(s || "")).length;
+    } catch (_) {
+      return String(s || "").length;
+    }
+  }
+
+  /** Client rules for Settings → General change-credentials modal (matches auth.ValidatePassword when set). */
+  function syncChangeCredentialsForm(form) {
+    if (!form || !form.classList.contains("js-change-credentials-form")) return "";
+    const user = form.querySelector(".js-auth-username");
+    const pass = form.querySelector(".js-auth-password");
+    const confirm = form.querySelector(".js-auth-password-confirm");
+    if (user) clearControlValidity(user);
+    if (pass) clearControlValidity(pass);
+    if (confirm) clearControlValidity(confirm);
+    if (user && !String(user.value || "").trim()) {
+      setControlValidity(user, "Username is required");
+      return "username";
+    }
+    const p = pass ? String(pass.value || "") : "";
+    const c = confirm ? String(confirm.value || "") : "";
+    if (!p && !c) return "";
+    if (Array.from(p).length < 4) {
+      setControlValidity(pass, "Password must be at least 4 characters");
+      return "password";
+    }
+    if (utf8ByteLength(p) > 72) {
+      setControlValidity(pass, "Password must be at most 72 bytes");
+      return "password";
+    }
+    if (p !== c) {
+      setControlValidity(confirm, "Passwords do not match");
+      return "confirm";
+    }
+    return "";
+  }
+
+  document.body.addEventListener("input", (ev) => {
+    const form = ev.target.closest(".js-change-credentials-form");
+    if (!form) return;
+    if (
+      !ev.target.closest(".js-auth-username") &&
+      !ev.target.closest(".js-auth-password") &&
+      !ev.target.closest(".js-auth-password-confirm")
+    ) {
+      return;
+    }
+    syncChangeCredentialsForm(form);
+  });
+  document.body.addEventListener("submit", (ev) => {
+    const form = ev.target.closest(".js-change-credentials-form");
+    if (!form) return;
+    const which = syncChangeCredentialsForm(form);
+    if (!which) return;
+    ev.preventDefault();
+    const sel =
+      which === "username"
+        ? ".js-auth-username"
+        : which === "confirm"
+          ? ".js-auth-password-confirm"
+          : ".js-auth-password";
+    const el = form.querySelector(sel);
+    try {
+      if (el) el.focus();
+    } catch (_) {}
   });
 
   document.body.addEventListener("change", (ev) => {

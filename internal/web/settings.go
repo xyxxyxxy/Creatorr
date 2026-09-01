@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xyxxyxxy/Creatorr/internal/auth"
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/health"
@@ -16,6 +17,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/stats"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 type settingsRowView struct {
@@ -32,6 +34,12 @@ type settingsRowView struct {
 	Wide          bool
 	Disabled      bool
 	DisabledTitle string
+}
+
+// profileSettingsRow is a quality profile plus series usage for Settings → Library.
+type profileSettingsRow struct {
+	library.QualityProfile
+	SeriesCount int
 }
 
 type notifyChannelView struct {
@@ -110,7 +118,6 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows := make([]settingsRowView, 0, len(entries))
-	potURLSet := strings.TrimSpace(h.PotProviderURL) != ""
 	for _, e := range entries {
 		row := settingsRowView{
 			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
@@ -121,6 +128,62 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 			row.Value = settings.NormalizeStatsRetention(e.Value)
 			for _, o := range settings.StatsRetentionOptions() {
 				row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
+			}
+		}
+		rows = append(rows, row)
+	}
+	authUser, _ := settings.AuthUsername(h.Queue.DB)
+	apiKey, _ := settings.APIKey(h.Queue.DB)
+	render(w, "settings_general", struct {
+		pageBase
+		Settings     []settingsRowView
+		AuthUsername string
+		APIKey       string
+	}{
+		pageBase:     newSettingsPage("Settings · General", "general", flashFromQuery(r)),
+		Settings:     rows,
+		AuthUsername: authUser,
+		APIKey:       apiKey,
+	})
+}
+
+func (h *Handler) ytdlpConnectPageData() (managedPath, installedVer, lastCheckedAt string, updatesEnabled, updateBusy bool) {
+	updatesEnabled, _ = settings.YtDlpUpdatesEnabled(h.Queue.DB)
+	updateBusy, _ = h.Queue.HasPendingOrRunningKind(queue.KindYtDlpUpdate, queue.SystemDomain)
+	installedVer, _ = settings.Get(h.Queue.DB, settings.KeyYtDlpInstalledVersion)
+	lastCheckedAt, _ = h.Queue.LastFinishedAt(queue.KindYtDlpUpdate, queue.SystemDomain, queue.StatusDone)
+	if h.YtDlp != nil {
+		managedPath = h.YtDlp.BinPath()
+		if installedVer == "" {
+			installedVer, _ = ytdlp.VerifyBinary(managedPath)
+		}
+	}
+	return managedPath, installedVer, lastCheckedAt, updatesEnabled, updateBusy
+}
+
+func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
+	entries, err := settings.Connect(h.Queue.DB)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	managedPath, installedVer, lastCheckedAt, updatesEnabled, updateBusy := h.ytdlpConnectPageData()
+	rows := make([]settingsRowView, 0, len(entries))
+	potURLSet := strings.TrimSpace(h.PotProviderURL) != ""
+	for _, e := range entries {
+		row := settingsRowView{
+			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
+			Cron: settings.CronKeys[e.Key],
+		}
+		if e.Key == settings.KeyYtDlpUpdateChannel {
+			row.Select = true
+			row.Value = settings.NormalizeYtDlpUpdateChannel(e.Value)
+			for _, o := range settings.YtDlpUpdateChannelOptions() {
+				row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
+			}
+			if !updatesEnabled {
+				row.Disabled = true
+				row.DisabledTitle = "Set yt-dlp update schedule under Settings → Scheduler first."
 			}
 		}
 		if e.Key == settings.KeyPotFetch {
@@ -134,7 +197,6 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 				row.Label = row.Label + " (disabled)"
 				row.Value = settings.PotFetchNever
 				row.DisabledTitle = "Set CREATORR_POT_PROVIDER_URL first (Compose default http://creatorr-po-token:4416)."
-				row.Help = "" // tip is DisabledTitle; no field_info when unset
 			}
 		}
 		rows = append(rows, row)
@@ -169,22 +231,36 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 	for _, id := range notify.EventsSortedByLevel() {
 		evOpts = append(evOpts, notifyEventOption{ID: id, Label: notify.EventLabels[id]})
 	}
-	render(w, "settings_general", struct {
+	render(w, "settings_connect", struct {
 		pageBase
-		FlareService   externalServiceURLView
-		PotService     externalServiceURLView
-		Settings       []settingsRowView
-		NotifyChannels []notifyChannelView
-		EventOptions   []notifyEventOption
-		DefaultEvents  []string
+		FlareService       externalServiceURLView
+		PotService         externalServiceURLView
+		Settings           []settingsRowView
+		NotifyChannels     []notifyChannelView
+		EventOptions       []notifyEventOption
+		DefaultEvents      []string
+		YtDlpManagedPath   string
+		YtDlpInstalledVer  string
+		YtDlpLastCheckedAt string
+		YtDlpUpdatesOn     bool
+		YtDlpUpdateBusy    bool
+		YtDlpUpdateOffTip  string
+		YtDlpUpdateBusyTip string
 	}{
-		pageBase:       newSettingsPage("Settings · General", "general", flashFromQuery(r)),
-		FlareService:   flareJoin,
-		PotService:     potJoin,
-		Settings:       rows,
-		NotifyChannels: chViews,
-		EventOptions:   evOpts,
-		DefaultEvents:  append([]string(nil), notify.AllEvents...),
+		pageBase:           newSettingsPage("Settings · Connect", "connect", flashFromQuery(r)),
+		FlareService:       flareJoin,
+		PotService:         potJoin,
+		Settings:           rows,
+		NotifyChannels:     chViews,
+		EventOptions:       evOpts,
+		DefaultEvents:      append([]string(nil), notify.AllEvents...),
+		YtDlpManagedPath:   managedPath,
+		YtDlpInstalledVer:  installedVer,
+		YtDlpLastCheckedAt: lastCheckedAt,
+		YtDlpUpdatesOn:     updatesEnabled,
+		YtDlpUpdateBusy:    updateBusy,
+		YtDlpUpdateOffTip:  "Automatic updates disabled. Set yt-dlp update schedule under Settings → Scheduler.",
+		YtDlpUpdateBusyTip: "yt-dlp update already queued or running",
 	})
 }
 
@@ -201,12 +277,12 @@ func externalServiceJoinViews(h *Handler) (flare, pot externalServiceURLView) {
 	flare = externalServiceURLView{
 		Label: "FlareSolverr URL",
 		Value: strings.TrimSpace(h.FlareSolverrURL),
-		Hint:  "Set CREATORR_FLARESOLVERR_URL and restart. Compose default http://creatorr-flaresolverr:8191.\nEnable 'Use FlareSolverr' On a host 'Domain override' ('Settings → Queue / Domains').",
+		Hint:  "Set CREATORR_FLARESOLVERR_URL and restart.\nEnable 'Use FlareSolverr' On a host 'Domain override' ('Settings → Queue / Domains').",
 	}
 	pot = externalServiceURLView{
 		Label: "PO token provider URL",
 		Value: strings.TrimSpace(h.PotProviderURL),
-		Hint:  "Set CREATORR_POT_PROVIDER_URL and restart. Compose default http://creatorr-po-token:4416.\nEnable 'PO token fetch' below when the URL is set (forced to 'Never' while unset).",
+		Hint:  "Set CREATORR_POT_PROVIDER_URL and restart.\nEnable 'PO token fetch' below when the URL is set (forced to 'Never' while unset).",
 	}
 	if h.Health == nil {
 		flare.Status, flare.StatusLabel, flare.StatusTip = externalServiceStatusFromCheck(health.Check{Status: health.StatusSkipped, Message: "URL unset"})
@@ -325,8 +401,16 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 	applyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain)
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
+	seriesByProfile, _ := h.Library.SeriesCountsByProfile()
 	pageRoots, rootsPage := SlicePage(r, "page", roots)
 	pageProfiles, profilesPage := SlicePage(r, "profiles_page", profiles)
+	profileRows := make([]profileSettingsRow, 0, len(pageProfiles))
+	for _, p := range pageProfiles {
+		profileRows = append(profileRows, profileSettingsRow{
+			QualityProfile: p,
+			SeriesCount:    seriesByProfile[p.ID],
+		})
+	}
 	entries, err := settings.LibrarySettings(h.Queue.DB)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -361,7 +445,7 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		NamingLocked                 bool
 		Roots                        []library.RootFolder
 		RootsPage                    PageInfo
-		Profiles                     []library.QualityProfile
+		Profiles                     []profileSettingsRow
 		ProfilesPage                 PageInfo
 		SubtitleLangs                []string
 		SubtitleLangOptions          []string
@@ -375,7 +459,7 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		NamingLocked:                 applyBusy,
 		Roots:                        pageRoots,
 		RootsPage:                    rootsPage,
-		Profiles:                     pageProfiles,
+		Profiles:                     profileRows,
 		ProfilesPage:                 profilesPage,
 		SubtitleLangs:                subtitleLangs,
 		SubtitleLangOptions:          settings.SubtitleLangSeed,
@@ -439,6 +523,10 @@ func (h *Handler) actionSetDomainActive(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
+	if r.FormValue("auth_settings") == "1" {
+		h.actionSaveAuthSettings(w, r)
+		return
+	}
 	vals := map[string]string{}
 	for _, e := range []string{
 		settings.KeyPotFetch,
@@ -447,6 +535,8 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 		settings.KeySyncFilesCron,
 		settings.KeyRetentionDeleteCron,
 		settings.KeyStatsRetentionDays,
+		settings.KeyYtDlpUpdateCron,
+		settings.KeyYtDlpUpdateChannel,
 		settings.KeySourceDownloadErrorThreshold,
 		settings.KeyEpisodeFormat,
 	} {
@@ -514,6 +604,47 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	redirectSettings(w, r, redir, "ok=saved")
 }
 
+func (h *Handler) actionSaveAuthSettings(w http.ResponseWriter, r *http.Request) {
+	username := strings.TrimSpace(r.FormValue("auth_username"))
+	password := r.FormValue("auth_password")
+	confirm := r.FormValue("auth_password_confirm")
+	if username == "" {
+		redirectSettings(w, r, "/settings/general", "err="+urlQuery("username required"))
+		return
+	}
+	var hash string
+	if password != "" || confirm != "" {
+		if err := auth.ValidatePassword(password, confirm); err != nil {
+			redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+			return
+		}
+		var err error
+		hash, err = auth.HashPassword(password)
+		if err != nil {
+			redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+			return
+		}
+	}
+	if _, err := settings.UpdateAuthCredentials(h.Queue.DB, username, hash, true); err != nil {
+		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+		return
+	}
+	if err := auth.IssueSession(w, r, h.Queue.DB, username); err != nil {
+		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+		return
+	}
+	redirectSettings(w, r, "/settings/general", "ok=saved")
+}
+
+func (h *Handler) actionRegenerateAPIKey(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	if _, err := settings.RegenerateAPIKey(h.Queue.DB); err != nil {
+		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+		return
+	}
+	redirectSettings(w, r, "/settings/general", "ok="+urlQuery("API key regenerated"))
+}
+
 func (h *Handler) actionUpsertNotifyChannel(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	htmx := r.Header.Get("HX-Request") == "true"
@@ -525,7 +656,7 @@ func (h *Handler) actionUpsertNotifyChannel(w http.ResponseWriter, r *http.Reque
 				h.writeNotifyURLFieldError(w, r, "invalid channel id")
 				return
 			}
-			redirectSettings(w, r, "/settings/general", "err="+urlQuery("invalid channel id"))
+			redirectSettings(w, r, "/settings/connect", "err="+urlQuery("invalid channel id"))
 			return
 		}
 		id = n
@@ -536,7 +667,7 @@ func (h *Handler) actionUpsertNotifyChannel(w http.ResponseWriter, r *http.Reque
 			h.writeNotifyURLFieldError(w, r, msg)
 			return
 		}
-		redirectSettings(w, r, "/settings/general", "err="+urlQuery(msg))
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(msg))
 		return
 	}
 	events := r.Form["events"]
@@ -546,14 +677,14 @@ func (h *Handler) actionUpsertNotifyChannel(w http.ResponseWriter, r *http.Reque
 			h.writeNotifyURLFieldError(w, r, err.Error())
 			return
 		}
-		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(err.Error()))
 		return
 	}
 	ok := "notify-channel"
 	if id > 0 {
 		ok = "notify-channel-saved"
 	}
-	redir := settingsFormRedirect(r, "/settings/general")
+	redir := settingsFormRedirect(r, "/settings/connect")
 	sep := "?"
 	if strings.Contains(redir, "?") {
 		sep = "&"
@@ -587,14 +718,14 @@ func (h *Handler) actionDeleteNotifyChannel(w http.ResponseWriter, r *http.Reque
 	_ = r.ParseForm()
 	id, err := strconv.ParseInt(strings.TrimSpace(r.FormValue("id")), 10, 64)
 	if err != nil || id <= 0 {
-		redirectSettings(w, r, "/settings/general", "err="+urlQuery("invalid channel id"))
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("invalid channel id"))
 		return
 	}
 	if err := notify.Delete(h.Queue.DB, id); err != nil {
-		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(err.Error()))
 		return
 	}
-	redirectSettings(w, r, "/settings/general", "ok=notify-channel-deleted")
+	redirectSettings(w, r, "/settings/connect", "ok=notify-channel-deleted")
 }
 
 func (h *Handler) actionTestNotifyChannel(w http.ResponseWriter, r *http.Request) {
@@ -916,6 +1047,16 @@ func (h *Handler) actionUpdateProfile(w http.ResponseWriter, r *http.Request) {
 	redirectSettings(w, r, "/settings/library", "ok=profile-updated")
 }
 
+func (h *Handler) actionDeleteProfile(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	if err := h.Library.DeleteProfile(id); err != nil {
+		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+		return
+	}
+	redirectSettings(w, r, "/settings/library", "ok=profile-deleted")
+}
+
 func (h *Handler) actionRegenerateNFOs(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if h.Library == nil {
@@ -967,4 +1108,35 @@ func (h *Handler) actionSyncFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirectSettings(w, r, "/settings/maintenance", "ok=sync-files-queued")
+}
+
+func (h *Handler) actionYtDlpUpdate(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	if h.Library == nil {
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("library unavailable"))
+		return
+	}
+	enabled, err := settings.YtDlpUpdatesEnabled(h.Queue.DB)
+	if err != nil {
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(err.Error()))
+		return
+	}
+	if !enabled {
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("Automatic yt-dlp updates disabled"))
+		return
+	}
+	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindYtDlpUpdate, queue.SystemDomain); busy {
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("yt-dlp update already queued or running"))
+		return
+	}
+	id, err := h.Library.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, "manual")
+	if err != nil {
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(err.Error()))
+		return
+	}
+	if id == 0 {
+		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("yt-dlp update not enqueued"))
+		return
+	}
+	redirectSettings(w, r, "/settings/connect", "ok=ytdlp-update-queued")
 }

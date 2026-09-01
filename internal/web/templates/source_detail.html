@@ -19,21 +19,31 @@
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
     {{if and (ne .Source.Kind "single") .Source.FullScanDone}}
+    {{$scanOff := or .ScanActive (not .DomainActive)}}
+    {{$tipScan := "Scan for new videos"}}
+    {{if .ScanActive}}{{$tipScan = "'Scan' already queued or running"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{end}}
     <form method="post" action="/actions/scan-source">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <button type="submit" class="btn btn-outline tooltip tooltip-top" {{if or .ScanActive (not .DomainActive)}}disabled{{end}} data-tip="{{if .ScanActive}}'Scan' already queued or running{{else if and (not .DomainActive) .DomainDisabledTitle}}{{.DomainDisabledTitle}}{{else}}Scan for new videos{{end}}">Scan</button>
+      <span class="tooltip tooltip-top inline-flex" data-tip="{{$tipScan}}">
+        <button type="submit" class="btn btn-outline" {{if $scanOff}}disabled{{end}}>Scan</button>
+      </span>
     </form>
     {{end}}
     {{if .HasRetryable}}
-    <label for="modal-retry-source" class="btn btn-outline tooltip tooltip-top" data-tip="Clear error hold for this source’s videos.">Retry</label>
+    <label for="modal-retry-source" class="btn btn-outline tooltip tooltip-top" data-tip="Clear 'wanted_download_error' and 'wanted_source_error' status from videos of this source and put them back to 'wanted'">Retry</label>
     {{end}}
+    {{$fullOff := or .ScanActive (not .DomainActive)}}
+    {{$tipFull := "Start 'Full scan'"}}
+    {{if .ScanActive}}{{$tipFull = "'Full scan' already queued or running"}}{{else if not .DomainActive}}{{$tipFull = .DomainDisabledTitle}}{{if not $tipFull}}{{$tipFull = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{else if .Source.FullScanDone}}{{$tipFull = "Start 'Full scan'. Keeps videos; adds new findings."}}{{end}}
     <form method="post" action="/actions/full-rescan-source">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <button type="submit" class="btn btn-outline tooltip tooltip-top" {{if or .ScanActive (not .DomainActive)}}disabled{{end}} data-tip="{{if .ScanActive}}'Full scan' already queued or running{{else if and (not .DomainActive) .DomainDisabledTitle}}{{.DomainDisabledTitle}}{{else if .Source.FullScanDone}}Start 'Full scan'. Keeps videos; adds new findings.{{else}}Start 'Full scan'{{end}}">Full scan</button>
+      <span class="tooltip tooltip-top inline-flex" data-tip="{{$tipFull}}">
+        <button type="submit" class="btn btn-outline" {{if $fullOff}}disabled{{end}}>Full scan</button>
+      </span>
     </form>
     <label for="modal-edit-source" class="btn btn-outline">Edit</label>
     <label for="modal-delete-source" class="btn btn-soft btn-error">Delete</label>
@@ -42,7 +52,7 @@
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Source settings" "help" "URL, domain, Scan schedule, title filter / media-type exclude / mark-new-as-ignored (feeds), cutoff, and last scan outcome.")}}
+{{template "list_header" (dict "level" "section" "title" "Source settings" "help" "URL, domain, Scan schedule, title filter / media-type exclude / mark-new-as-ignored (feeds), full-scan limit, and last scan outcome.")}}
 {{template "list_table"}}
 <tbody>
   <tr><th class="w-40">URL</th><td class="text-xs break-all"><a class="link" href="{{.Source.URL}}" target="_blank" rel="noopener">{{.Source.URL}}</a></td></tr>
@@ -56,10 +66,10 @@
   <tr><th class="w-40">Domain</th><td class="font-mono text-xs">{{.DomainHost}}{{if not .DomainActive}} <span class="badge badge-warning badge-sm">inactive</span>{{end}}</td></tr>
   {{if ne .Source.Kind "single"}}
   <tr><th class="w-40">Scan</th><td class="text-sm">{{.ScanCronLabel}}</td></tr>
-  {{if .Source.ScanCutoff.Valid}}
-  <tr><th class="w-40">Cutoff</th><td>{{.Source.ScanCutoff.String}}</td></tr>
+  {{if gt .Source.FullScanLimit 0}}
+  <tr><th class="w-40">Full scan limit</th><td>{{.Source.FullScanLimit}}</td></tr>
   {{else}}
-  {{template "detail_row" (dict "Label" "Cutoff")}}
+  {{template "detail_row" (dict "Label" "Full scan limit" "EmptyText" "all")}}
   {{end}}
   {{if .Source.TitleRegexpInclude}}
   <tr><th class="w-40">Title include</th><td class="font-mono text-xs break-all">{{.Source.TitleRegexpInclude}}</td></tr>
@@ -112,24 +122,17 @@
 <div class="modal">
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Edit {{if eq .Source.Kind "single"}}single{{else}}feed{{end}}</h3>
-        <form method="post" action="/actions/update-source" class="space-y-2 js-source-url-form" data-current-url="{{.Source.URL}}">
+        <form method="post" action="/actions/update-source" class="space-y-2">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <fieldset class="fieldset">
-  <legend class="fieldset-legend">
-    <span class="inline-flex items-center gap-1">
-      URL
-      {{if eq .Source.Kind "single"}}
-          {{template "field_info" (dict "Info" "Changing URL re-detects the domain (hostname). For singles, also restarts indexing.")}}
-          {{else}}
-          {{template "field_info" (dict "Info" "Changing URL re-detects the domain (hostname).")}}
-          {{end}}
-    </span>
-  </legend>
-  <input name="url" class="input w-full js-source-url validator" required value="{{.Source.URL}}" />
-  <p class="validator-hint hidden">Enter a valid http(s) URL with a host.</p>
-</fieldset>
+      {{template "field_input" (dict
+        "Label" "URL"
+        "Value" .Source.URL
+        "Disabled" true
+        "DisabledTitle" "Source URL cannot be changed later. Create a different source instead."
+        "NoPlaceholder" true
+      )}}
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Name (optional)</legend>
         <input name="label" class="input w-full" value="{{if .Source.Label.Valid}}{{.Source.Label.String}}{{end}}" />
@@ -143,10 +146,9 @@
       )}}
       {{end}}
       {{if ne .Source.Kind "single"}}
-      {{$cutoff := ""}}{{if .Source.ScanCutoff.Valid}}{{$cutoff = .Source.ScanCutoff.String}}{{end}}
       {{template "source_filter_fields" (dict
-        "Cutoff" $cutoff
-        "CutoffID" "edit-source-scan-cutoff"
+        "FullScanLimit" .Source.FullScanLimit
+        "FullScanLimitID" "edit-source-full-scan-limit"
         "IndexAsIgnored" .Source.IndexAsIgnored
         "TitleRegexpInclude" .Source.TitleRegexpInclude
         "TitleRegexpIncludeID" "edit-source-title-include"
@@ -156,7 +158,7 @@
       {{end}}
       <div class="modal-action">
         <label for="modal-edit-source" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary js-source-url-submit">Save</button>
+        <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
   </div>

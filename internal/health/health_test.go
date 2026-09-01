@@ -18,9 +18,6 @@ func TestHealthDBAndWorker(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	defer func() { _ = d.Close() }()
-	if err := d.TouchWorkerHeartbeat(time.Now()); err != nil {
-		t.Fatalf("heartbeat: %v", err)
-	}
 
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "yt-dlp")
@@ -28,12 +25,19 @@ func TestHealthDBAndWorker(t *testing.T) {
 		t.Fatalf("write yt-dlp: %v", err)
 	}
 	cfg := config.Config{
-		DBPath:      filepath.Join(dir, "creatorr.db"),
+		DBPath:            filepath.Join(dir, "creatorr.db"),
 		InitialRootFolder: filepath.Join(dir, "library"),
-		ImportRoot:  filepath.Join(dir, "import"),
-		YtDlpBin:    bin,
+		ImportRoot:        filepath.Join(dir, "import"),
+		YtDlpBin:          bin,
 	}
-	rep := (&health.Checker{DB: d, Cfg: cfg}).Run(context.Background())
+	now := time.Now()
+	rep := (&health.Checker{
+		DB:  d,
+		Cfg: cfg,
+		WorkerAt: func() time.Time {
+			return now
+		},
+	}).Run(context.Background())
 	if rep.Status == health.StatusDown {
 		t.Fatalf("unexpected down: %+v", rep)
 	}

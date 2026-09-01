@@ -53,7 +53,6 @@ func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
 	}
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
-	allSourceURLs, _ := h.Library.ListAllSourceURLs()
 	render(w, "series_list", struct {
 		pageBase
 		Live                       seriesListLiveData
@@ -61,7 +60,6 @@ func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
 		Profiles                   []library.QualityProfile
 		ScanCronDescriptors        []string
 		AutoIgnoreMediaTypeOptions []string
-		AllSourceURLs              []string
 	}{
 		pageBase:                   newPage("Series", "series", flashFromQuery(r)),
 		Live:                       live,
@@ -69,7 +67,6 @@ func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
 		Profiles:                   profiles,
 		ScanCronDescriptors:        scanCronDescriptors(),
 		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
-		AllSourceURLs:              allSourceURLs,
 	})
 }
 
@@ -681,10 +678,15 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	thumbURL := ""
+	if _, ok, _ := h.Library.VideoThumbPath(vid); ok {
+		thumbURL = fmt.Sprintf("/series/%d/videos/%d/thumb", sid, vid)
+	}
 	render(w, "video_detail", struct {
 		pageBase
 		Series              *library.Series
 		Video               *library.Video
+		ThumbURL            string
 		SizeLabel           string
 		Files               []videoFileView
 		DetailRows          []videoDetailRow
@@ -703,6 +705,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		pageBase:            newPage(video.Title, "series", flashFromQuery(r)),
 		Series:              ser,
 		Video:               video,
+		ThumbURL:            thumbURL,
 		SizeLabel:           sizeLabel,
 		Files:               fileRows,
 		DetailRows:          detailRows,
@@ -730,19 +733,6 @@ func (h *Handler) actionFetchAddSeries(w http.ResponseWriter, r *http.Request) {
 	}
 	if sourceURL == "" {
 		writeJSON(http.StatusBadRequest, map[string]string{"error": "URL is required"})
-		return
-	}
-	if sid, ok, err := h.Library.FindSeriesIDBySourceURL(sourceURL); err != nil {
-		writeJSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	} else if ok {
-		name := fmt.Sprintf("#%d", sid)
-		if ser, err := h.Library.GetSeries(sid, false); err == nil && ser != nil {
-			name = ser.Title
-		}
-		writeJSON(http.StatusConflict, map[string]string{
-			"error": fmt.Sprintf("source URL already used by series %q", name),
-		})
 		return
 	}
 	if h.Queue == nil {
@@ -1014,6 +1004,11 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		scanCron := sched
+		fullScanLimit, err := parseFullScanLimitForm(r)
+		if err != nil {
+			redirErr(err.Error())
+			return
+		}
 
 		ser, err := h.Library.CreateSeries(library.CreateSeriesParams{
 			Title:                title,
@@ -1022,7 +1017,7 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 			QualityProfileID:     qpID,
 			Monitored:            true,
 			DeliveryMode:         delivery,
-			ScanCutoff:           clampPastDate(strings.TrimSpace(r.FormValue("scan_cutoff"))),
+			FullScanLimit:        fullScanLimit,
 			ScanCron:             scanCron,
 			IndexAsIgnored:       r.FormValue("index_as_ignored") == "1",
 			TitleRegexpInclude:   strings.TrimSpace(r.FormValue("title_regexp_include")),
@@ -1123,10 +1118,17 @@ func (h *Handler) actionAddSource(w http.ResponseWriter, r *http.Request) {
 	titleInclude := ""
 	titleExclude := ""
 	indexAsIgnored := false
+	fullScanLimit := 0
 	if kind != library.SourceKindSingle {
 		titleInclude = strings.TrimSpace(r.FormValue("title_regexp_include"))
 		titleExclude = strings.TrimSpace(r.FormValue("title_regexp_exclude"))
 		indexAsIgnored = r.FormValue("index_as_ignored") == "1"
+		var err error
+		fullScanLimit, err = parseFullScanLimitForm(r)
+		if err != nil {
+			http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
+			return
+		}
 	}
 	_, err := h.Library.AddSource(sid, library.AddSourceParams{
 		URL:                strings.TrimSpace(r.FormValue("url")),
@@ -1136,7 +1138,7 @@ func (h *Handler) actionAddSource(w http.ResponseWriter, r *http.Request) {
 		IndexAsIgnored:     indexAsIgnored,
 		TitleRegexpInclude: titleInclude,
 		TitleRegexpExclude: titleExclude,
-		ScanCutoff:         clampPastDate(strings.TrimSpace(r.FormValue("scan_cutoff"))),
+		FullScanLimit:      fullScanLimit,
 	})
 	if err != nil {
 		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
@@ -1150,7 +1152,6 @@ func (h *Handler) actionUpdateSource(w http.ResponseWriter, r *http.Request) {
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
 	srcID, _ := strconv.ParseInt(r.FormValue("source_id"), 10, 64)
 	label := strings.TrimSpace(r.FormValue("label"))
-	cutoff := clampPastDate(strings.TrimSpace(r.FormValue("scan_cutoff")))
 	redir := seriesSourceRedirect(r, sid, srcID)
 	cur, err := h.Library.GetSource(sid, srcID)
 	if err != nil {
@@ -1158,11 +1159,15 @@ func (h *Handler) actionUpdateSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := library.UpdateSourceParams{
-		Label:       &label,
-		ScanCutoff:  &cutoff,
-		ClearCutoff: cutoff == "",
+		Label: &label,
 	}
 	if !cur.IsSingle() {
+		limit, err := parseFullScanLimitForm(r)
+		if err != nil {
+			http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
+			return
+		}
+		p.FullScanLimit = &limit
 		if _, ok := r.Form["scan_cron"]; ok {
 			cron, err := cronexpr.NormalizeScanCron(r.FormValue("scan_cron"))
 			if err != nil {

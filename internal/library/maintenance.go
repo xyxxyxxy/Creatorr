@@ -44,7 +44,7 @@ func (s *Store) SeriesIDsWithMonitoredSources() ([]int64, error) {
 
 // SeriesIsMonitored reports whether series.monitored is on.
 // When false, scheduled tip Scan and auto download-wanted stay off; manual tip
-// Scan / full scan / Download now may still enqueue. Already-queued tasks are
+// Scan / full scan / Queue download may still enqueue. Already-queued tasks are
 // left alone except CancelPendingTipScansForSeries on unmonitor.
 func (s *Store) SeriesIsMonitored(seriesID int64) (bool, error) {
 	var n int
@@ -171,7 +171,9 @@ func (s *Store) EnqueueFullScansForMonitored() (int, error) {
 // EnqueueDownloadWanted enqueues downloads for wanted videos lacking a file.
 // Requires series monitored and domain active. Videos with no source are skipped.
 // Order: fair round-robin across series (fewest active downloads first), within
-// each series by download_wanted_order (upload_date; undated by id). Per-domain max_download_queue cap.
+// each series by download_wanted_order (upload_date; undated by id).
+// Per-domain max_download_queue caps that hostname only; other domains keep
+// filling until their caps (or all active candidate domains are full).
 func (s *Store) EnqueueDownloadWanted() (int, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
@@ -200,6 +202,7 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 		url          string
 		sourceID     sql.NullInt64
 		sourceURL    string
+		domain       string
 	}
 	bySeries := map[int64][]row{}
 	var seriesIDs []int64
@@ -208,6 +211,10 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 		var r row
 		if err := rows.Scan(&r.id, &r.seriesID, &r.url, &r.sourceID, &r.sourceURL); err != nil {
 			return 0, err
+		}
+		r.domain = queueDomain(r.url)
+		if r.domain == "unknown" {
+			r.domain = queueDomain(r.sourceURL)
 		}
 		if !seenSeries[r.seriesID] {
 			seenSeries[r.seriesID] = true
@@ -274,8 +281,32 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 		}
 	}
 
+	activeOK := map[string]bool{}
+	seenActive := map[string]bool{}
+	openDomainCount := 0
+	for _, r := range list {
+		ok, cached := activeOK[r.domain]
+		if !cached {
+			var err error
+			ok, err = domains.IsActive(s.DB, r.domain)
+			if err != nil {
+				return 0, err
+			}
+			activeOK[r.domain] = ok
+		}
+		if ok && !seenActive[r.domain] {
+			seenActive[r.domain] = true
+			openDomainCount++
+		}
+	}
+
+	fullDomains := map[string]bool{}
+	fullCount := 0
 	n := 0
 	for _, r := range list {
+		if !activeOK[r.domain] || fullDomains[r.domain] {
+			continue
+		}
 		if _, ok, err := s.HasVideoFile(r.id); err != nil {
 			return n, err
 		} else if ok {
@@ -288,21 +319,17 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 		if busy {
 			continue
 		}
-		domain := queueDomain(r.url)
-		if domain == "unknown" {
-			domain = queueDomain(r.sourceURL)
-		}
-		ok, err := domains.IsActive(s.DB, domain)
-		if err != nil {
-			return n, err
-		}
-		if !ok {
-			continue
-		}
-		_, err = s.Queue.Enqueue(enqueueDownloadParams(r.id, r.seriesID, domain))
+		_, err = s.Queue.Enqueue(enqueueDownloadParams(r.id, r.seriesID, r.domain))
 		if err != nil {
 			if errors.Is(err, queue.ErrQueueFull) {
-				return n, nil
+				if !fullDomains[r.domain] {
+					fullDomains[r.domain] = true
+					fullCount++
+					if fullCount == openDomainCount {
+						break
+					}
+				}
+				continue
 			}
 			if errors.Is(err, queue.ErrDuplicate) {
 				continue

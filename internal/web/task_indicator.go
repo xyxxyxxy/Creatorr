@@ -334,7 +334,7 @@ func buildSeriesHealthStatus(errs library.SeriesVideoErrorFlags, warn library.Se
 type sourceStatusView struct {
 	SourceID int64
 	Kind     string
-	Title    string // tooltip (schedule, cutoff, last scan, guidance)
+	Title    string // tooltip (schedule, full-scan limit, last scan, guidance)
 	Label    string // short visible text
 	Href     string // optional /task/{id}
 	Progress *float64
@@ -423,9 +423,9 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 			scheduleTip += " (domain inactive)"
 		}
 	}
-	cutoffTip := ""
-	if src.ScanCutoff.Valid {
-		cutoffTip = "cutoff " + src.ScanCutoff.String + " (older days not indexed)"
+	limitTip := ""
+	if src.FullScanLimit > 0 {
+		limitTip = fmt.Sprintf("full scan limit %d", src.FullScanLimit)
 	}
 	lastTip := ""
 	if p.HasScanned && p.Summary != "" {
@@ -443,7 +443,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 			if p.Best.Message != "" {
 				v.Label = truncateStatusLabel(p.Best.Message, 40)
 			}
-			v.Title = joinStatusTip(title, scheduleTip, cutoffTip)
+			v.Title = joinStatusTip(title, scheduleTip, limitTip)
 			if p.Best.Progress.Valid {
 				prog := p.Best.Progress.Float64
 				v.Progress = &prog
@@ -454,7 +454,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 		if p.Best.Status == queue.StatusPending {
 			v.Kind = "pending"
 			v.Label = "queued"
-			v.Title = joinStatusTip(title, scheduleTip, cutoffTip)
+			v.Title = joinStatusTip(title, scheduleTip, limitTip)
 			v.Href = fmt.Sprintf("/task/%d", p.Best.ID)
 			return v
 		}
@@ -470,7 +470,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 		if errTip == "" {
 			errTip = "Scan error"
 		}
-		v.Title = joinStatusTip(errTip, scheduleTip, cutoffTip, lastTip)
+		v.Title = joinStatusTip(errTip, scheduleTip, limitTip, lastTip)
 		if p.HistoryID > 0 {
 			v.Href = fmt.Sprintf("/task/%d", p.HistoryID)
 		}
@@ -533,10 +533,10 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 		} else {
 			v.Label = "indexed"
 		}
-		// Full scan complete: "Scanned until <cutoff>. Next scan …" (no schedule label).
+		// Full scan complete: optional limit tip + next scan.
 		untilTip := ""
-		if src.ScanCutoff.Valid {
-			untilTip = "Scanned until " + src.ScanCutoff.String
+		if src.FullScanLimit > 0 {
+			untilTip = fmt.Sprintf("Full scan limited to %d entries", src.FullScanLimit)
 		}
 		timeTip := lastTip
 		if !src.ScanCronNever() {
@@ -558,12 +558,12 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 	if src.IsSingle() || src.ScanCronNever() {
 		v.Kind = "incomplete"
 		v.Label = "scanning"
-		v.Title = joinStatusTip("Full scan in progress", scheduleTip, cutoffTip, lastTip)
+		v.Title = joinStatusTip("Full scan in progress", scheduleTip, limitTip, lastTip)
 		return v
 	}
 	v.Kind = "scheduled"
 	v.Label = "scanning"
-	v.Title = joinStatusTip("Full scan in progress", scheduleTip, cutoffTip, lastTip)
+	v.Title = joinStatusTip("Full scan in progress", scheduleTip, limitTip, lastTip)
 	return v
 }
 

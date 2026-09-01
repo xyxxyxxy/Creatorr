@@ -1,0 +1,90 @@
+{{define "setup"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{.Title}} - Creatorr</title>
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("creatorr-theme");
+        if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "emerald";
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body class="min-h-screen bg-base-200 flex items-center justify-center p-4">
+  <div class="card bg-base-100 border border-base-300 w-full max-w-md shadow">
+    <form method="post" action="/setup" class="card-body gap-4">
+      <h1 class="card-title text-2xl">Creatorr</h1>
+      <p class="text-sm opacity-70">Create the operator account to continue.</p>
+      {{if .Error}}
+      <div class="alert alert-error text-sm">{{.Error}}</div>
+      {{end}}
+      <label class="form-control w-full">
+        <span class="label-text">Username</span>
+        <input type="text" name="username" class="input input-bordered w-full" required autocomplete="username" value="{{.Username}}" />
+      </label>
+      <label class="form-control w-full">
+        <span class="label-text">Password</span>
+        <input type="password" name="password" class="input input-bordered w-full" required minlength="4" autocomplete="new-password" />
+      </label>
+      <label class="form-control w-full">
+        <span class="label-text">Confirm password</span>
+        <input type="password" name="password_confirm" class="input input-bordered w-full" required minlength="4" autocomplete="new-password" />
+      </label>
+      <button type="submit" class="btn btn-primary">Create account</button>
+    </form>
+  </div>
+</body>
+</html>
+{{end}}
+
+{{define "login"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{.Title}} - Creatorr</title>
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("creatorr-theme");
+        if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "emerald";
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body class="min-h-screen bg-base-200 flex items-center justify-center p-4">
+  <div class="card bg-base-100 border border-base-300 w-full max-w-md shadow">
+    <form method="post" action="/login" class="card-body gap-4">
+      <h1 class="card-title text-2xl">Creatorr</h1>
+      <p class="text-sm opacity-70">Sign in to continue.</p>
+      {{if .Error}}
+      <div class="alert alert-error text-sm">{{.Error}}</div>
+      {{end}}
+      {{if .Next}}<input type="hidden" name="next" value="{{.Next}}" />{{end}}
+      <label class="form-control w-full">
+        <span class="label-text">Username</span>
+        <input type="text" name="username" class="input input-bordered w-full" required autocomplete="username" />
+      </label>
+      <label class="form-control w-full">
+        <span class="label-text">Password</span>
+        <input type="password" name="password" class="input input-bordered w-full" required autocomplete="current-password" />
+      </label>
+      <button type="submit" class="btn btn-primary">Sign in</button>
+    </form>
+  </div>
+</body>
+</html>
+{{end}}

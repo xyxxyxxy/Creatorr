@@ -42,7 +42,7 @@
             <fieldset class="fieldset">
               <legend class="fieldset-legend">Max download tasks</legend>
               <input type="number" min="1" name="max_download_queue" class="input w-full" value="{{.DefaultLimits.MaxDownloadQueue}}" required />
-              <p class="label whitespace-normal">Maximum number of download tasks to be queued for the given domain. 'Download now' user action bypasses this limit.</p>
+              <p class="label whitespace-normal">Maximum number of download tasks to be queued for the given domain. 'Queue download' user action bypasses this limit.</p>
             </fieldset>
             <fieldset class="fieldset">
               <legend class="fieldset-legend">Max parallel tasks</legend>
@@ -114,7 +114,7 @@
     <td>{{if .QueueOverride}}{{.QueueOverride}}{{else}}{{template "empty_value"}}{{end}}</td>
     <td>{{if .ParallelOverride}}{{.ParallelOverride}}{{else}}{{template "empty_value"}}{{end}}</td>
     <td>{{if .CooldownOverride}}{{.CooldownOverride}}{{else}}{{template "empty_value"}}{{end}}</td>
-    <td>{{if .RateOverride}}<span class="font-mono text-xs">{{.RateOverride}}</span>{{else}}{{template "empty_value"}}{{end}}</td>
+    <td>{{if .RateOverride}}<span class="font-mono text-xs">{{formatRateLimit .RateOverride}}</span>{{else}}{{template "empty_value"}}{{end}}</td>
     <td>{{if .SleepOverride}}{{.SleepOverride}}{{else}}{{template "empty_value"}}{{end}}</td>
     <td>{{if .HasCookies}}<span class="tooltip tooltip-top inline-flex" data-tip="Set" aria-label="Cookies set"><i data-lucide="cookie" class="size-4 text-amber-800"></i></span>{{else}}{{template "empty_value"}}{{end}}</td>
     <td>{{if eq .FlareOverride "on"}}<span class="tooltip tooltip-top inline-flex" data-tip="On" aria-label="FlareSolverr on"><i data-lucide="flame" class="size-4 text-error"></i></span>{{else}}{{template "empty_value"}}{{end}}</td>

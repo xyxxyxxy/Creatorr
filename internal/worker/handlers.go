@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -52,6 +53,7 @@ func DefaultHandlers(d Deps) map[string]TaskHandler {
 	out[queue.KindDeleteFiles] = DeleteFilesHandler(d)
 	out[queue.KindSponsorblockCut] = SponsorblockCutHandler(d)
 	out[queue.KindMediaVerify] = MediaVerifyHandler(d)
+	out[queue.KindYtDlpUpdate] = YtDlpUpdateHandler(d)
 	return out
 }
 
@@ -74,6 +76,62 @@ func DeleteFilesHandler(d Deps) TaskHandler {
 			return err
 		}
 		d.Library.RecordFileDeleteActivity(t)
+		return nil
+	}
+}
+
+// YtDlpUpdateHandler fetches and installs yt-dlp from GitHub when newer.
+func YtDlpUpdateHandler(d Deps) TaskHandler {
+	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
+		if d.YtDlp == nil || d.Library == nil {
+			return apperrors.New(apperrors.CodeInternal, "yt-dlp update deps missing")
+		}
+		channel, err := settings.Get(d.Library.DB, settings.KeyYtDlpUpdateChannel)
+		if err != nil {
+			return err
+		}
+		channel = settings.NormalizeYtDlpUpdateChannel(channel)
+		trigger := "manual"
+		if strings.TrimSpace(t.Payload) != "" {
+			var pl map[string]any
+			if json.Unmarshal([]byte(t.Payload), &pl) == nil {
+				if s, ok := pl["trigger"].(string); ok && strings.TrimSpace(s) != "" {
+					trigger = strings.TrimSpace(s)
+				}
+			}
+		}
+		managed := d.YtDlp.BinPath()
+		res, err := ytdlp.Update(ctx, ytdlp.UpdateOpts{
+			ManagedPath: managed,
+			Channel:     channel,
+			Progress:    func(msg string) { progress(msg, nil) },
+		})
+		if err != nil {
+			return err
+		}
+		var detail map[string]any
+		if res.Skipped {
+			detail = map[string]any{
+				"version": res.ToVersion,
+				"channel": res.Channel,
+				"trigger": trigger,
+				"skipped": true,
+			}
+			_ = d.Library.Queue.MergeDetailJSON(t.ID, detail)
+			return nil
+		}
+		detail = map[string]any{
+			"from":    res.FromVersion,
+			"to":      res.ToVersion,
+			"channel": res.Channel,
+			"trigger": trigger,
+		}
+		d.YtDlp.SetBin(managed)
+		if err := settings.RecordYtDlpInstall(d.Library.DB, res.ToVersion); err != nil {
+			return err
+		}
+		progress("Updated to "+res.ToVersion, nil)
+		_ = d.Library.Queue.MergeDetailJSON(t.ID, detail)
 		return nil
 	}
 }
@@ -460,17 +518,14 @@ func ScanHandler(d Deps) TaskHandler {
 		domain := queue.DomainFromURL(src.URL)
 		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
 
-		cutoff := ""
-		if src.ScanCutoff.Valid {
-			cutoff = src.ScanCutoff.String
-		}
-
 		fullScan := !src.FullScanDone
 		mode := library.SourceHistModeScan
+		playlistEnd := 0
 		if fullScan {
 			mode = library.SourceHistModeFull
+			playlistEnd = src.FullScanLimit
 		}
-		entries, err := listEntries(ctx, d, src.URL, jar, 0, lim)
+		entries, err := listEntries(ctx, d, src.URL, jar, playlistEnd, lim)
 		if err != nil {
 			code, msg := classify(err)
 			_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, msg+": "+err.Error(), map[string]any{
@@ -485,7 +540,6 @@ func ScanHandler(d Deps) TaskHandler {
 		var ignoredMediaTypeIDs, ignoredIndexAsIgnoredIDs []int64
 		var skippedTitleInclude, skippedTitleExclude []map[string]string
 		var created, updated int
-		hitCutoff := false
 		hitKnown := false
 
 		recordSkipTitle := func(dest *[]map[string]string, remoteID, title string) {
@@ -524,11 +578,6 @@ func ScanHandler(d Deps) TaskHandler {
 			progress(fmt.Sprintf("Full scan (listed=%d)", len(entries)), ptrFloat(0.2))
 			nEntries := len(entries)
 			for i, e := range entries {
-				upload := library.NormalizeUploadTime(e.UploadDate)
-				if library.BeforeCutoff(upload, cutoff) {
-					hitCutoff = true
-					break // discard this and older; do not index
-				}
 				li := library.EntryFromYtDlp(e, src.ID)
 				res, err := d.Library.UpsertListed(seriesID, li, t.ID)
 				if err != nil {
@@ -547,11 +596,6 @@ func ScanHandler(d Deps) TaskHandler {
 			var news []ytdlp.Entry
 			nEntries := len(entries)
 			for i, e := range entries {
-				upload := library.NormalizeUploadTime(e.UploadDate)
-				if library.BeforeCutoff(upload, cutoff) {
-					hitCutoff = true
-					break // past cutoff; nothing newer left in newest-first list
-				}
 				if ok, reason := library.TitlePassesFilters(src.TitleRegexpInclude, src.TitleRegexpExclude, e.Title); !ok {
 					switch reason {
 					case library.SkipReasonTitleRegexpInclude:
@@ -615,14 +659,11 @@ func ScanHandler(d Deps) TaskHandler {
 			"ignored_media_type_ids":       ignoredMediaTypeIDs,
 			"ignored_index_as_ignored_ids": ignoredIndexAsIgnoredIDs,
 			"hit_known":                    hitKnown,
-			"hit_cutoff":                   hitCutoff,
+			"full_scan_limit":              playlistEnd,
 		}
 		_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanned, scanMsg, histDetail, t.ID)
 
 		msg := scanMsg
-		if hitCutoff {
-			msg += ", cutoff reached"
-		}
 		detailBytes, _ := json.Marshal(map[string]any{
 			"created":                      created,
 			"updated":                      updated,
@@ -635,7 +676,7 @@ func ScanHandler(d Deps) TaskHandler {
 			"source_id":                    src.ID,
 			"full":                         fullScan,
 			"hit_known":                    hitKnown,
-			"hit_cutoff":                   hitCutoff,
+			"full_scan_limit":              playlistEnd,
 		})
 		_ = d.Library.Queue.UpdateProgress(t.ID, msg, ptrFloat(1))
 		_ = d.Library.Queue.SetDetail(t.ID, string(detailBytes))
@@ -749,16 +790,35 @@ func DownloadHandler(d Deps) TaskHandler {
 			if err != nil {
 				return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "SponsorBlock staging failed"), err.Error())
 			}
-			aired := ""
+			upload := ""
 			if dlctx.Video.UploadDate.Valid {
-				aired = dlctx.Video.UploadDate.String
+				upload = dlctx.Video.UploadDate.String
 			}
+			if filled, ferr := d.Library.SoftFillUploadDateFromInfoJSON(t.VideoID.Int64, infoSrc); ferr != nil {
+				return ferr
+			} else if filled != "" {
+				upload = filled
+				dlctx.Video.UploadDate = sql.NullString{String: filled, Valid: true}
+			}
+			aired := upload
 			season, episode := 0, 0
 			if dlctx.Video.Season.Valid {
 				season = int(dlctx.Video.Season.Int64)
 			}
 			if dlctx.Video.Episode.Valid {
 				episode = int(dlctx.Video.Episode.Int64)
+			}
+			if season == 0 || episode == 0 {
+				s, e, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
+				if aerr != nil {
+					return aerr
+				}
+				if season == 0 {
+					season = s
+				}
+				if episode == 0 {
+					episode = e
+				}
 			}
 			staged.PageURL = dlctx.URL
 			staged.RemoteID = dlctx.Video.RemoteID
@@ -849,6 +909,20 @@ func finishArchivePack(
 	sbPlanPath, sbWarn string,
 	progress func(msg string, pct *float64),
 ) error {
+	// Soft-fill upload_date from download info.json before season assign / pack.
+	// Index rows often lack dates (flat playlist); packing then used S0000, and the
+	// post-pack rename in CompleteDownload was skipped while this download task ran.
+	upload := ""
+	if dlctx.Video.UploadDate.Valid {
+		upload = dlctx.Video.UploadDate.String
+	}
+	if filled, ferr := d.Library.SoftFillUploadDateFromInfoJSON(t.VideoID.Int64, infoSrc); ferr != nil {
+		return ferr
+	} else if filled != "" {
+		upload = filled
+		dlctx.Video.UploadDate = sql.NullString{String: filled, Valid: true}
+	}
+
 	season, episode := 0, 0
 	if dlctx.Video.Season.Valid {
 		season = int(dlctx.Video.Season.Int64)
@@ -857,10 +931,6 @@ func finishArchivePack(
 		episode = int(dlctx.Video.Episode.Int64)
 	}
 	if season == 0 || episode == 0 {
-		upload := ""
-		if dlctx.Video.UploadDate.Valid {
-			upload = dlctx.Video.UploadDate.String
-		}
 		s, e, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
 		if aerr != nil {
 			return aerr
@@ -872,8 +942,8 @@ func finishArchivePack(
 			episode = e
 		}
 	}
-	aired := ""
-	if dlctx.Video.UploadDate.Valid {
+	aired := upload
+	if aired == "" && dlctx.Video.UploadDate.Valid {
 		aired = dlctx.Video.UploadDate.String
 	}
 	thumbURL := ""

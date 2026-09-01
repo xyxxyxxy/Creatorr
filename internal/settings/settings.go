@@ -21,22 +21,36 @@ const (
 	KeySourceDownloadErrorThreshold = "source_download_error_threshold"
 	KeyMetadataDomainTag            = "metadata_domain_tag"
 	KeyMetadataGenresFromCategories = "metadata_genres_from_categories"
+	KeyYtDlpUpdateCron              = "ytdlp_update_cron"
+	KeyYtDlpUpdateChannel           = "ytdlp_update_channel"
+	KeyYtDlpInstalledVersion        = "ytdlp_installed_version"
+	KeyYtDlpInstalledAt             = "ytdlp_installed_at"
+	// Auth keys: see auth.go (seeded separately; not on generalOrder).
 )
 
 // Help is one-line UI help text per key.
 var Help = map[string]string{
-	KeyPotFetch:                     "When the PO token provider URL is set: Auto (when needed), Always, or Never. Disabled and forced to Never while CREATORR_POT_PROVIDER_URL is unset.",
+	KeyPotFetch: "A PO token (proof of origin) is an attestation token yt-dlp can attach so media hosts treat traffic as more legitimate when an IP is flagged for bot checks. It may help, but does not guarantee avoiding blocks. Creatorr fetches tokens from the provider sidecar above.",
 	KeyEpisodeFormat:                "Relative path under the series folder for packed episodes (no extension). Saving does not rename existing files - use Apply episode format.",
 	KeyDownloadWantedCron:           "Schedule to enqueue wanted videos for monitored series.",
 	KeyDownloadWantedOrder:          "Which wanted videos to download first inside each series (by upload date; no date uses id). Series take turns so one series does not fill the whole queue.",
 	KeySyncFilesCron:                "Library scan will detect changed files in the root folders and cache directories.",
 	KeyRetentionDeleteCron:          "Deleting old data according to root folder retention ('Settings → Library').",
-	KeyStatsRetentionDays:           "",
+	KeyStatsRetentionDays:           "Shorter windows delete older samples immediately on Save.",
 	KeySourceDownloadErrorThreshold: "When this many videos of a source enter an error state, other videos from that source are held until the issue is resolved.\nSet to 1 so the first error stops further downloads from that source.",
 	KeySubtitleLangs:                "Supports all, regex (en.*), and -TAG exclusions. Saving does not re-fetch existing episodes.",
 	KeySubtitleAuto:                 "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",
 	KeyMetadataDomainTag:            "On download and metadata rescan, prepend the source domain to video tags when source_url is known.",
 	KeyMetadataGenresFromCategories: "On download and metadata rescan, add yt-dlp categories as video genres when categories are known.",
+	KeyYtDlpUpdateChannel:           "GitHub release channel when automatic updates are enabled (set yt-dlp update schedule under Scheduler).",
+	KeyYtDlpUpdateCron:              "When set, Creatorr checks GitHub on boot and on this schedule. Configure update channel under 'Settings → Connect'. Empty disables all GitHub updates so you can pin a custom binary at the managed path while Creatorr is stopped.",
+	KeyYtDlpInstalledVersion:        "", // internal; written by ytdlp_update task
+	KeyYtDlpInstalledAt:             "", // internal; written by ytdlp_update task
+	KeyAuthUsername:                 "Single operator account username for Forms login.",
+	KeyAuthPasswordHash:             "", // internal; never shown
+	KeyAPIKey:                       "API key for X-Api-Key header (Settings → General).",
+	KeyAuthCookieSecret:             "", // internal
+	KeyAuthSessionEpoch:             "", // internal
 }
 
 // Labels are human-readable Settings titles (DB/API keys are snake_case).
@@ -53,12 +67,26 @@ var Labels = map[string]string{
 	KeySubtitleAuto:                 "Include auto-generated subtitles",
 	KeyMetadataDomainTag:            "Add source domain as video tag",
 	KeyMetadataGenresFromCategories: "Add genres from yt-dlp categories",
+	KeyYtDlpUpdateChannel:           "yt-dlp update channel",
+	KeyYtDlpUpdateCron:              "yt-dlp update schedule",
+	KeyYtDlpInstalledVersion:        "yt-dlp installed version",
+	KeyYtDlpInstalledAt:             "yt-dlp installed at",
+	KeyAuthUsername:                 "Username",
+	KeyAuthPasswordHash:             "Password hash",
+	KeyAPIKey:                       "API key",
+	KeyAuthCookieSecret:             "Cookie secret",
+	KeyAuthSessionEpoch:             "Session epoch",
 }
 
-// generalOrder is Settings → General (not schedules).
+// generalOrder is Settings → General (not schedules / connect).
 var generalOrder = []string{
-	KeyPotFetch,
 	KeyStatsRetentionDays,
+}
+
+// connectOrder is Settings → Connect (outbound integrations).
+var connectOrder = []string{
+	KeyYtDlpUpdateChannel,
+	KeyPotFetch,
 }
 
 // schedulerOrder is Settings → Scheduler (cron schedules).
@@ -66,6 +94,7 @@ var schedulerOrder = []string{
 	KeyDownloadWantedCron,
 	KeySyncFilesCron,
 	KeyRetentionDeleteCron,
+	KeyYtDlpUpdateCron,
 }
 
 // queueOrder is Settings → Queue / Domains (order, source error threshold).
@@ -85,6 +114,7 @@ var CronKeys = map[string]bool{
 	KeyDownloadWantedCron:  true,
 	KeySyncFilesCron:       true,
 	KeyRetentionDeleteCron: true,
+	KeyYtDlpUpdateCron:     true,
 }
 
 // Entry is one settings row for API/UI.
@@ -116,6 +146,8 @@ func SeedDefaults(database *db.DB) error {
 		KeySubtitleAuto:                 DefaultSubtitleAuto,
 		KeyMetadataDomainTag:            DefaultMetadataDomainTag,
 		KeyMetadataGenresFromCategories: DefaultMetadataGenresFromCategories,
+		KeyYtDlpUpdateCron:              "@weekly",
+		KeyYtDlpUpdateChannel:           YtDlpChannelStable,
 	}
 	allKeys := append([]string{}, generalOrder...)
 	allKeys = append(allKeys, schedulerOrder...)
@@ -132,6 +164,9 @@ func SeedDefaults(database *db.DB) error {
 		if err != nil {
 			return fmt.Errorf("seed setting %s: %w", key, err)
 		}
+	}
+	if err := SeedAuthSecrets(database); err != nil {
+		return fmt.Errorf("seed auth: %w", err)
 	}
 	if err := EnsureDefaultDomain(database); err != nil {
 		return fmt.Errorf("seed default domain: %w", err)
@@ -188,9 +223,10 @@ func migrateLegacyTaskKinds(database *db.DB) error {
 	return nil
 }
 
-// All returns General + Scheduler + Queue + Library keys (API listing).
+// All returns Connect + General + Scheduler + Queue + Library keys (API listing).
 func All(database *db.DB) ([]Entry, error) {
-	keys := append(append([]string{}, generalOrder...), schedulerOrder...)
+	keys := append(append([]string{}, connectOrder...), generalOrder...)
+	keys = append(keys, schedulerOrder...)
 	keys = append(keys, queueOrder...)
 	keys = append(keys, libraryOrder...)
 	keys = append(keys, KeyEpisodeFormat)
@@ -200,6 +236,11 @@ func All(database *db.DB) ([]Entry, error) {
 // General returns Settings → General rows.
 func General(database *db.DB) ([]Entry, error) {
 	return entriesFor(database, generalOrder)
+}
+
+// Connect returns Settings → Connect rows.
+func Connect(database *db.DB) ([]Entry, error) {
+	return entriesFor(database, connectOrder)
 }
 
 // Scheduler returns Settings → Scheduler rows.
@@ -252,6 +293,12 @@ func Set(database *db.DB, key, value string) error {
 	if _, ok := Help[key]; !ok {
 		return fmt.Errorf("unknown setting key %q", key)
 	}
+	switch key {
+	case KeyAuthPasswordHash, KeyAuthCookieSecret, KeyAuthSessionEpoch, KeyAPIKey:
+		return fmt.Errorf("setting %q is not writable via Set", key)
+	case KeyYtDlpInstalledVersion, KeyYtDlpInstalledAt:
+		return fmt.Errorf("setting %q is not writable via Set", key)
+	}
 	if key == KeySubtitleLangs {
 		value = SubtitleLangsJSON(ParseSubtitleLangsJSON(value))
 	}
@@ -263,6 +310,12 @@ func Set(database *db.DB, key, value string) error {
 	}
 	if key == KeySourceDownloadErrorThreshold {
 		value = NormalizeSourceDownloadErrorThreshold(value)
+	}
+	if key == KeyYtDlpUpdateChannel {
+		if err := validateYtDlpUpdateChannel(value); err != nil {
+			return err
+		}
+		value = NormalizeYtDlpUpdateChannel(value)
 	}
 	if err := validateValue(key, value); err != nil {
 		return err
@@ -284,6 +337,10 @@ func SetMany(database *db.DB, values map[string]string) error {
 	for k, v := range values {
 		if _, ok := Help[k]; !ok {
 			return fmt.Errorf("unknown setting key %q", k)
+		}
+		switch k {
+		case KeyAuthPasswordHash, KeyAuthCookieSecret, KeyAuthSessionEpoch, KeyAPIKey:
+			return fmt.Errorf("setting %q is not writable via SetMany", k)
 		}
 		if k == KeySubtitleLangs {
 			v = SubtitleLangsJSON(ParseSubtitleLangsJSON(v))

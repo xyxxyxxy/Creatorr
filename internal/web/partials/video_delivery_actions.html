@@ -5,19 +5,19 @@
 {{$formClass := ""}}{{if .FormClass}}{{$formClass = .FormClass}}{{end}}
 {{$icon := "size-4"}}{{if .Icons}}{{$icon = "size-5"}}{{end}}
 {{$live := .LiveSwap}}
-{{$queuedTitle := "Download task already queued for this video"}}
+{{$queuedTitle := "Download already queued"}}
 {{if or (eq .Status "wanted") (eq .Status "wanted_source_error") (eq .Status "wanted_download_error") (eq .Status "verify_failed") (eq .Status "deleted") (eq .Status "missing")}}
 {{$tip := ""}}
 {{if not .DomainActive}}{{$tip = .DomainDisabledTitle}}
 {{else if .DeliveryQueued}}{{$tip = $queuedTitle}}
-{{else if .Icons}}{{$tip = "Download now"}}
+{{else if .Icons}}{{$tip = "Queue download"}}
 {{end}}
 <form method="post" action="/actions/download-video"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/download-video" hx-target="#series-videos-live" hx-swap="outerHTML"{{end}}>
   <input type="hidden" name="video_id" value="{{.VideoID}}" />
   <input type="hidden" name="series_id" value="{{.SeriesID}}" />
   {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
-  <button type="submit" class="{{$primary}}{{if $tip}} tooltip tooltip-top{{end}}" aria-label="Download now" {{if or (not .DomainActive) .DeliveryQueued}}disabled{{end}}{{if $tip}} data-tip="{{$tip}}"{{end}}>
-    {{if .Icons}}<i data-lucide="download" class="{{$icon}}"></i>{{else}}Download now{{end}}
+  <button type="submit" class="{{$primary}}{{if $tip}} tooltip tooltip-top{{end}}" aria-label="Queue download" {{if or (not .DomainActive) .DeliveryQueued}}disabled{{end}}{{if $tip}} data-tip="{{$tip}}"{{end}}>
+    {{if .Icons}}<i data-lucide="download" class="{{$icon}}"></i>{{else}}Queue download{{end}}
   </button>
 </form>
 {{end}}

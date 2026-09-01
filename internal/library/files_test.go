@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 func TestFormatBytes(t *testing.T) {
@@ -339,5 +340,140 @@ func TestDeleteVideoSidecar(t *testing.T) {
 
 	if err := s.DeleteVideoSidecar(videoID, 999999); !errors.Is(err, library.ErrNotFound) {
 		t.Fatalf("wrong id: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestSoftFillUploadDateFromInfoJSON(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "FillDate", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.DB.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, status)
+		VALUES (?, 'fd1', 'Ep', 'wanted')
+	`, ser.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var videoID int64
+	_ = s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'fd1'`).Scan(&videoID)
+
+	info := filepath.Join(t.TempDir(), "x.info.json")
+	if err := os.WriteFile(info, []byte(`{"upload_date":"20250212"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.SoftFillUploadDateFromInfoJSON(videoID, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got, "2025-02-12") {
+		t.Fatalf("filled=%q", got)
+	}
+	v, err := s.GetVideo(videoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.UploadDate.Valid || !strings.HasPrefix(v.UploadDate.String, "2025-02-12") {
+		t.Fatalf("db upload_date=%v", v.UploadDate)
+	}
+	// Second call must not clobber.
+	info2 := filepath.Join(t.TempDir(), "y.info.json")
+	_ = os.WriteFile(info2, []byte(`{"upload_date":"20200101"}`), 0o644)
+	got2, err := s.SoftFillUploadDateFromInfoJSON(videoID, info2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got2 != got {
+		t.Fatalf("clobber: got %q want %q", got2, got)
+	}
+}
+
+func TestCompleteDownloadRenamesAfterInfoJSONDateWhileDownloadRunning(t *testing.T) {
+	// Regression: CompleteDownload soft-filled upload_date from info.json then tried to
+	// rename off S0000, but videoBusyForRename skipped because the download task was still running.
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	root, err := s.GetRoot(rootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Backrooms", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.DB.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, status)
+		VALUES (?, 'ZbPaWvqAEq4', 'Static Dead End', 'wanted')
+	`, ser.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var videoID int64
+	_ = s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'ZbPaWvqAEq4'`).Scan(&videoID)
+
+	dlTask, err := s.Queue.InsertRunning(queue.EnqueueParams{
+		Kind:    queue.KindDownload,
+		Domain:  "youtube.com",
+		VideoID: videoID,
+		Message: "download",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seasonDir := filepath.Join(root.Path, "Backrooms", "S0000")
+	if err := os.MkdirAll(seasonDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stem := "S0000E000000 [ZbPaWvqAEq4]"
+	media := filepath.Join(seasonDir, stem+".mkv")
+	nfo := filepath.Join(seasonDir, stem+".nfo")
+	info := filepath.Join(seasonDir, stem+".info.json")
+	if err := os.WriteFile(media, []byte("media"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nfo, []byte("<episodedetails><episode>0</episode></episodedetails>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(info, []byte(`{"id":"ZbPaWvqAEq4","upload_date":"20250212","title":"Static Dead End"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.CompleteDownload(videoID, media, nfo, info, "", nil, library.MediaCompleteMeta{Tool: "yt-dlp"}, dlTask); err != nil {
+		t.Fatal(err)
+	}
+
+	v, err := s.GetVideo(videoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.UploadDate.Valid || !strings.HasPrefix(v.UploadDate.String, "2025-02-12") {
+		t.Fatalf("upload_date=%v", v.UploadDate)
+	}
+	if !v.Season.Valid || v.Season.Int64 != 2025 {
+		t.Fatalf("season=%v want 2025", v.Season)
+	}
+	if !v.Episode.Valid || v.Episode.Int64 != 21200 {
+		t.Fatalf("episode=%v want 21200", v.Episode)
+	}
+
+	var path string
+	if err := s.DB.SQL.QueryRow(`SELECT path FROM files WHERE video_id = ? AND kind = 'video'`, videoID).Scan(&path); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(path, "S0000") {
+		t.Fatalf("still under S0000: %s", path)
+	}
+	if !strings.Contains(path, "S2025") || !strings.Contains(path, "E021200") {
+		t.Fatalf("path=%s want S2025…E021200", path)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
 	}
 }

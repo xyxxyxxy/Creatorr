@@ -149,7 +149,7 @@ func (s *Store) ApplyEpisodeNamingPass(ctx context.Context, task *queue.Task, pr
 			progress(fmt.Sprintf("Renaming %d/%d…", i+1, total), &pct)
 		}
 
-		busy, err := s.videoBusyForRename(r.ID)
+		busy, err := s.videoBusyForRename(r.ID, task.ID)
 		if err != nil {
 			failed++
 			continue
@@ -175,14 +175,15 @@ func (s *Store) ApplyEpisodeNamingPass(ctx context.Context, task *queue.Task, pr
 	return renamed, skippedBusy, failed, nil
 }
 
-func (s *Store) videoBusyForRename(videoID int64) (bool, error) {
+func (s *Store) videoBusyForRename(videoID, exceptTaskID int64) (bool, error) {
 	var one int
 	err := s.DB.SQL.QueryRow(`
 		SELECT 1 FROM tasks
 		WHERE video_id = ? AND kind IN (?, ?, ?) AND status IN (?, ?)
+		  AND (? = 0 OR id != ?)
 		LIMIT 1
 	`, videoID, queue.KindDownload, queue.KindSponsorblockCut, queue.KindMediaVerify,
-		queue.StatusPending, queue.StatusRunning).Scan(&one)
+		queue.StatusPending, queue.StatusRunning, exceptTaskID, exceptTaskID).Scan(&one)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
@@ -193,7 +194,7 @@ func (s *Store) videoBusyForRename(videoID int64) (bool, error) {
 }
 
 func (s *Store) renameVideoEpisodeSet(taskID, videoID int64, seriesTitle, title, remoteID string, season, episode int, aired, domain, root string, cfg NamingConfig) (renamed, skipped, failed bool) {
-	busy, _ := s.videoBusyForRename(videoID)
+	busy, _ := s.videoBusyForRename(videoID, taskID)
 	if busy {
 		return false, true, false
 	}

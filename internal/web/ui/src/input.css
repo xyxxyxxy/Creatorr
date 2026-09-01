@@ -119,6 +119,17 @@
 }
 
 /*
+  Disabled tip hosts: daisyUI sets pointer-events:none on .btn:disabled /
+  .btn-disabled / [aria-disabled=true], so tip on the same host never receives
+  hover. Prefer wrapping tip outside the control (docs/ui.md); this restores
+  hover for leftover tip-on-disabled buttons.
+*/
+.btn.tooltip:is(:disabled, [disabled], .btn-disabled, [aria-disabled="true"]) {
+  pointer-events: auto;
+  cursor: not-allowed;
+}
+
+/*
   daisyUI tooltips wrap at max-width 20rem (white-space:normal). Long yt-dlp
   --format selectors on quality profile names must stay one line.
   https://daisyui.com/components/tooltip/
@@ -135,4 +146,39 @@
 */
 .series-health-badge {
   min-width: var(--size);
+}
+
+/*
+  Video detail Details: thumb column follows page breakpoints (Tailwind md/lg:
+  48rem / 64rem - same as main md:p-6, lg:drawer-open).
+  Below md: collapse cell so colspan value rows keep full width; no fixed w-80 overflow.
+*/
+.list-table td.video-detail-thumb {
+  vertical-align: top;
+  min-width: 0;
+  width: min(6.5rem, 22%);
+  max-width: 6.5rem;
+}
+.list-table td.video-detail-thumb > .video-detail-thumb-frame {
+  width: 100%;
+}
+@media (width < 64rem) {
+  .list-table td.video-detail-thumb {
+    width: min(4.5rem, 18%);
+    max-width: 4.5rem;
+  }
+}
+@media (width < 48rem) {
+  .list-table td.video-detail-thumb {
+    width: 0;
+    max-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+    overflow: hidden;
+  }
+  .list-table td.video-detail-thumb > .video-detail-thumb-frame {
+    display: none;
+  }
 }

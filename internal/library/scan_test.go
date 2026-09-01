@@ -47,52 +47,52 @@ func TestFullRescanResetsBackfill(t *testing.T) {
 	}
 }
 
-func TestUpdateSourceCutoffExpandedRescans(t *testing.T) {
+func TestUpdateSourceFullScanLimit(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
-		Title: "Cut", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+		Title: "Limit", RootID: rootID, QualityProfileID: profileID, Monitored: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cut := "2024-06-01"
 	src, err := s.AddSource(ser.ID, library.AddSourceParams{
-		URL: "https://www.example.com/@cut", ScanCutoff: cut,
+		URL: "https://www.example.com/@lim", FullScanLimit: 10,
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if src.FullScanLimit != 10 {
+		t.Fatalf("full_scan_limit=%d", src.FullScanLimit)
 	}
 	_ = s.MarkFullScanDone(src.ID)
 	_, _ = s.DB.SQL.Exec(`DELETE FROM tasks WHERE kind = 'scan'`)
 
-	older := "2020-01-01"
-	got, err := s.UpdateSource(ser.ID, src.ID, library.UpdateSourceParams{ScanCutoff: &older})
+	raised := 100
+	got, err := s.UpdateSource(ser.ID, src.ID, library.UpdateSourceParams{FullScanLimit: &raised})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.FullScanDone {
-		t.Fatal("want history reset after cutoff expand")
+	if got.FullScanLimit != 100 {
+		t.Fatalf("full_scan_limit=%d", got.FullScanLimit)
+	}
+	// Raising limit does not auto-reset full scan (operator Full scan restart).
+	if !got.FullScanDone {
+		t.Fatal("raising limit must not reset full_scan_done")
 	}
 	var n int
-	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = 'scan' AND status = 'pending' AND json_extract(payload, '$.source_id') = ?`, src.ID).Scan(&n)
-	if n != 1 {
-		t.Fatalf("want 1 pending full scan, got %d", n)
+	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = 'scan' AND status = 'pending'`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("want 0 auto scans after limit raise, got %d", n)
 	}
 
-	_, _ = s.DB.SQL.Exec(`DELETE FROM tasks WHERE kind = 'scan'`)
-	_ = s.MarkFullScanDone(src.ID)
-	newer := "2023-01-01" // later than 2020 → shrink toward present
-	got, err = s.UpdateSource(ser.ID, src.ID, library.UpdateSourceParams{ScanCutoff: &newer})
+	cleared := 0
+	got, err = s.UpdateSource(ser.ID, src.ID, library.UpdateSourceParams{FullScanLimit: &cleared})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.FullScanDone {
-		t.Fatal("shrinking cutoff toward present must not reset history")
-	}
-	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = 'scan' AND status = 'pending'`).Scan(&n)
-	if n != 0 {
-		t.Fatalf("want 0 scans after shrink, got %d", n)
+	if got.FullScanLimit != 0 {
+		t.Fatalf("cleared limit want 0, got %d", got.FullScanLimit)
 	}
 }
 
@@ -192,8 +192,8 @@ func TestSingleSourceSkipsCatchup(t *testing.T) {
 	if src.Kind != library.SourceKindSingle {
 		t.Fatalf("want single: %+v", src)
 	}
-	if src.ScanCutoff.Valid {
-		t.Fatalf("single must clear cutoff: %+v", src)
+	if src.FullScanLimit != 0 {
+		t.Fatalf("single must clear full_scan_limit: %+v", src)
 	}
 	// Initial scan enqueued on add.
 	var pending int

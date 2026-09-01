@@ -26,6 +26,7 @@ type Scheduler struct {
 	lastDownload        time.Time
 	lastSyncFiles       time.Time
 	lastRetentionDelete time.Time
+	lastYtDlpUpdate     time.Time
 }
 
 // Run blocks until ctx is cancelled.
@@ -46,6 +47,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 	s.lastDownload = now
 	s.lastSyncFiles = now
 	s.lastRetentionDelete = now
+	s.lastYtDlpUpdate = now
 	t := time.NewTicker(s.Tick)
 	defer t.Stop()
 	s.TickOnce(ctx, log)
@@ -112,6 +114,18 @@ func (s *Scheduler) TickOnce(_ context.Context, log *slog.Logger) {
 			log.Info("scheduled retention purge", "task", id)
 		}
 		s.lastRetentionDelete = now
+	}
+
+	if enabled, err := settings.YtDlpUpdatesEnabled(database); err != nil {
+		log.Error("yt-dlp updates enabled check", "err", err)
+	} else if enabled && cronDue(database, settings.KeyYtDlpUpdateCron, s.lastYtDlpUpdate, now, log, "yt-dlp update") {
+		id, err := s.Library.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, "cron")
+		if err != nil {
+			log.Debug("schedule yt-dlp update enqueue", "err", err)
+		} else if id > 0 {
+			log.Info("scheduled yt-dlp update", "task", id)
+		}
+		s.lastYtDlpUpdate = now
 	}
 }
 

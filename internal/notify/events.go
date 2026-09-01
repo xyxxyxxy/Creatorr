@@ -86,7 +86,7 @@ func IsWarningEvent(event string) bool {
 	return slices.Contains(WarningEvents, event)
 }
 
-// IsUnreadEvent reports whether event stays unread until read / Apprise OK.
+// IsUnreadEvent reports whether event stays unread until in-app acknowledgment.
 func IsUnreadEvent(event string) bool {
 	return IsAlertEvent(event) || IsWarningEvent(event)
 }

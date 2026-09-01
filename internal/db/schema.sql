@@ -1,4 +1,4 @@
--- Creatorr fresh schema (Go). No migration from older databases.
+-- Creatorr fresh schema (Go). Open applies schema.sql then stepwise migrations (see migrate.go).
 
 PRAGMA foreign_keys = ON;
 
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS sources (
   index_as_ignored INTEGER NOT NULL DEFAULT 0,
   title_regexp_include TEXT,
   title_regexp_exclude TEXT,
-  scan_cutoff TEXT,
+  full_scan_limit INTEGER NOT NULL DEFAULT 0,
   full_scan_done INTEGER NOT NULL DEFAULT 0,
   UNIQUE(series_id, url)
 );

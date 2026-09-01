@@ -16,13 +16,11 @@ services:
     volumes:
       - ./var/data:/data
       - ./var/import:/import
-      # Initial root folder: host CREATORR_INITIAL_ROOT_FOLDER.
+      # Library root: host CREATORR_LIBRARY_ROOT.
       # Override the host path in .env before first boot. Add more roots in Settings → Library.
-      - ${CREATORR_INITIAL_ROOT_FOLDER:-./var/library}:/library
+      - ${CREATORR_LIBRARY_ROOT:-./var/library}:/library
       # Optional yt-dlp plugins:
       # - ./var/yt-dlp-plugins:/yt-dlp-plugins:ro
-      # Optional custom yt-dlp binary:
-      # - /path/to/your/yt-dlp:/usr/local/bin/yt-dlp:ro
     environment:
       # PO Token provider (creatorr-po-token sidecar). Empty disables Settings pot_fetch.
       # Use ${VAR-default} (no colon) so an empty .env value disables instead of restoring the default.

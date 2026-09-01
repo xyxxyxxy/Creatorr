@@ -90,7 +90,8 @@
 {{template "list_header" (dict "level" "section" "title" "Details" "help" "Index metadata and Creatorr-owned download state.")}}
 {{template "list_table"}}
 <tbody>
-  <tr><th class="w-40">Status</th>
+  <tr>
+    <th class="w-40">Status</th>
     <td>
       <div class="inline-flex items-center gap-2 flex-wrap">
         {{template "task_indicator" .TaskInd}}
@@ -103,32 +104,47 @@
         {{end}}
       </div>
     </td>
+    <td class="align-top video-detail-thumb" rowspan="5">
+      <div class="relative video-detail-thumb-frame aspect-video">
+        {{if .ThumbURL}}
+        <img class="size-full rounded object-cover border border-base-300" src="{{.ThumbURL}}" alt="" />
+        {{else}}
+        <div class="bg-base-200 w-full h-full rounded border border-base-300 flex items-center justify-center" aria-hidden="true">
+          <i data-lucide="square-play" class="size-4 opacity-40"></i>
+        </div>
+        {{end}}
+      </div>
+    </td>
   </tr>
-  {{template "detail_row" (dict "Label" "Media type" "Value" .Video.MediaType)}}
+  {{if .Video.MediaType}}
+  <tr><th class="w-40">Media type</th><td>{{.Video.MediaType}}</td></tr>
+  {{else}}
+  <tr><th class="w-40">Media type</th><td class="opacity-60">none</td></tr>
+  {{end}}
   {{if .Video.UploadDate.Valid}}
   <tr><th class="w-40">Upload date</th><td>{{template "local_time" .Video.UploadDate.String}}</td></tr>
   {{else}}
-  {{template "detail_row" (dict "Label" "Upload date")}}
+  <tr><th class="w-40">Upload date</th><td class="opacity-60">none</td></tr>
   {{end}}
   {{if .Video.AcquiredAt.Valid}}
   <tr><th class="w-40">Acquired</th><td>{{template "local_time" .Video.AcquiredAt.String}}</td></tr>
   {{else}}
-  {{template "detail_row" (dict "Label" "Acquired")}}
+  <tr><th class="w-40">Acquired</th><td class="opacity-60">none</td></tr>
   {{end}}
   {{if eq .SizeLabel "-"}}
-  {{template "detail_row" (dict "Label" "Size")}}
+  <tr><th class="w-40">Size</th><td class="opacity-60">none</td></tr>
   {{else}}
   <tr><th class="w-40">Size</th><td>{{.SizeLabel}}</td></tr>
   {{end}}
   {{if .Video.SourceURL.Valid}}
-  <tr><th class="w-40">Source URL</th><td class="text-xs break-all"><a class="link" href="{{.Video.SourceURL.String}}" target="_blank" rel="noopener">{{.Video.SourceURL.String}}</a></td></tr>
+  <tr><th class="w-40">Source URL</th><td class="text-xs break-all" colspan="2"><a class="link" href="{{.Video.SourceURL.String}}" target="_blank" rel="noopener">{{.Video.SourceURL.String}}</a></td></tr>
   {{else}}
-  {{template "detail_row" (dict "Label" "Source URL" "TdClass" "text-xs break-all")}}
+  <tr><th class="w-40">Source URL</th><td class="opacity-60 text-xs break-all" colspan="2">none</td></tr>
   {{end}}
   {{range .DetailRows}}
   <tr>
     <th class="w-40">{{.Label}}</th>
-    <td class="text-sm break-all">
+    <td class="text-sm break-all" colspan="2">
       {{if .IsURL}}<a class="link" href="{{.Value}}" target="_blank" rel="noopener">{{displayURL .Value}}</a>
       {{else if .IsPath}}<code class="text-xs">{{.Value}}</code>
       {{else}}{{.Value}}{{end}}

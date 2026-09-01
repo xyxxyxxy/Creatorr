@@ -10,6 +10,7 @@ import (
 
 	"github.com/xyxxyxxy/Creatorr/internal/config"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 // Status is overall or per-check health.
@@ -39,6 +40,8 @@ type Report struct {
 type Checker struct {
 	DB  *db.DB
 	Cfg config.Config
+	// WorkerAt returns the last in-process worker heartbeat (zero if unset).
+	WorkerAt func() time.Time
 }
 
 // Run executes all checks and rolls up overall status.
@@ -94,15 +97,11 @@ func (c *Checker) checkDB(ctx context.Context) Check {
 }
 
 func (c *Checker) checkWorker(ctx context.Context) Check {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	at, err := c.DB.WorkerHeartbeatContext(ctx)
-	if err != nil {
-		if ctx.Err() != nil {
-			return Check{Name: "worker", Status: StatusDegraded, Message: "heartbeat timeout"}
-		}
-		return Check{Name: "worker", Status: StatusDegraded, Message: err.Error()}
+	_ = ctx
+	if c.WorkerAt == nil {
+		return Check{Name: "worker", Status: StatusDegraded, Message: "no heartbeat source"}
 	}
+	at := c.WorkerAt()
 	if at.IsZero() {
 		return Check{Name: "worker", Status: StatusDegraded, Message: "no heartbeat yet"}
 	}
@@ -116,7 +115,7 @@ func (c *Checker) checkYtDlp(ctx context.Context) Check {
 	_ = ctx
 	bin := strings.TrimSpace(c.Cfg.YtDlpBin)
 	if bin == "" {
-		bin = "/usr/local/bin/yt-dlp"
+		return Check{Name: "ytdlp", Status: StatusDegraded, Message: "yt-dlp managed path unset"}
 	}
 	fi, err := os.Stat(bin)
 	if err != nil {
@@ -125,7 +124,11 @@ func (c *Checker) checkYtDlp(ctx context.Context) Check {
 	if fi.IsDir() {
 		return Check{Name: "ytdlp", Status: StatusDegraded, Message: "yt-dlp path is a directory: " + bin}
 	}
-	return Check{Name: "ytdlp", Status: StatusOK, Message: bin}
+	ver, err := ytdlp.VerifyBinary(bin)
+	if err != nil {
+		return Check{Name: "ytdlp", Status: StatusDegraded, Message: err.Error()}
+	}
+	return Check{Name: "ytdlp", Status: StatusOK, Message: ver + " (" + bin + ")"}
 }
 
 func (c *Checker) checkDisk() Check {

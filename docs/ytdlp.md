@@ -8,20 +8,22 @@ Creatorr invokes **yt-dlp in-process** (`internal/ytdlp`). There is no external 
 
 | Path | Role |
 | --- | --- |
-| `/usr/local/bin/yt-dlp` | Runtime binary in the Docker image (build-time latest release). Creatorr prefers this path, then falls back to `yt-dlp` on `PATH` (local Go). |
+| `/data/bin/yt-dlp` (container) or `var/data/bin/yt-dlp` (local Go) | **Managed runtime** binary on the data volume. Creatorr always execs this path. |
+| `/usr/local/share/creatorr/yt-dlp` (container image only) | **Bootstrap** copy baked at image build (SHA2-256 verified). First boot copies to the managed path when missing; not the runtime path. |
 | `/yt-dlp-plugins` (container) or `var/yt-dlp-plugins` (local) | Operator plugin mounts; always passed as `--plugin-dirs` (subdirs with a `yt_dlp_plugins` package are included). |
 | `/usr/local/share/yt-dlp-plugins/bgutil` (container) or `var/yt-dlp-plugins/bgutil` (local after `make pot-plugin`) | Baked / seeded **PO Token provider plugin** (GPL-3.0; separate package). Creatorr passes the **parent** (`…/yt-dlp-plugins`) as `--plugin-dirs` so yt-dlp discovers the `bgutil` package. Survives mounting over `/yt-dlp-plugins`. |
 
-There is **no** in-app yt-dlp update schedule. Bump yt-dlp by rebuilding the image. Boot runs the resolved binary with `--version` and exits if missing or broken.
+Boot runs `PrepareManagedBin`: when the managed file is missing or fails `--version`, Creatorr copies the image bootstrap (or, local dev only, GitHub-downloads once when no bootstrap exists). Startup **exits** if yt-dlp cannot be established at the managed path.
 
-**Custom yt-dlp (Docker):** bind-mount over the image path:
+### Automatic updates
 
-```yaml
-volumes:
-  - /path/to/your/yt-dlp:/usr/local/bin/yt-dlp:ro
-```
+When **`ytdlp_update_cron`** is non-empty (Settings → Scheduler; seed `@weekly`), Creatorr enqueues a **`ytdlp_update`** task on the **`system`** lane on boot, on schedule, and via Settings → Connect → **Update now**. The worker downloads from GitHub (`stable` or `nightly` via **`ytdlp_update_channel`**), verifies **SHA2-256** against the release `SHA2-256SUMS`, runs `--version` on the temp file, then atomically replaces the managed binary and hot-swaps the in-process client path.
 
-Operator plugins keep working under `/yt-dlp-plugins` (`--plugin-dirs`).
+**Empty `ytdlp_update_cron`** disables boot, cron, and manual GitHub updates so you can pin a **custom binary**: stop Creatorr, replace the managed path, restart. Set a schedule again to re-enable managed updates.
+
+Failed updates leave the prior binary intact and do **not** soft-pause domain lanes.
+
+Image rebuild refreshes the bootstrap baseline; a running instance updates via `ytdlp_update`, not rebuild.
 
 Image also ships **ffmpeg** (remux) and **Deno** (yt-dlp EJS challenge solver).
 
@@ -37,7 +39,7 @@ Compose service **`creatorr-flaresolverr`** (`ghcr.io/flaresolverr/flaresolverr`
 | Session | One browser session per hostname (`sessions.create`) while that domain lane has pending/running work; destroyed when the lane drains. `session_ttl_minutes` safety net on each get. |
 | Cookie cache | Successful clearance cookies are cached in-process (2–30 min) so warm lanes often skip Flare HTTP; cache miss still hits the warm session when open. |
 | Tasks UI | Lane header shield icon when Flare is effective: muted = enabled, `text-info` = session warm. |
-| Health | `/api/health` check `flaresolverr` probes the env URL (skipped if unset). Settings → General shows the same probe once on page load (Healthy join). |
+| Health | `/api/health` check `flaresolverr` probes the env URL (skipped if unset). Settings → Connect shows the same probe once on page load (Healthy join). |
 
 ## PO Token provider
 
@@ -49,7 +51,7 @@ Compose service **`creatorr-po-token`** (`brainicism/bgutil-ytdlp-pot-provider:*
 | Settings | `pot_fetch`: `auto` (default) / `always` / `never` → `youtube:fetch_pot=…` when URL is set. |
 | Trace | When URL is set and fetch is not `never`, Creatorr also passes `youtube:pot_trace=true` so mint/provider lines appear in task logs. |
 | Detect | yt-dlp output is scanned for provider failures (`Providers: none`, HTTP ping/mint errors) and successful mints (`Retrieved a … PO Token`). The task still succeeds on provider problems; Creatorr emits warning notification `pot_provider` (unread like alerts). Outcome is stored on the task as detail JSON `po-token` (`issued` / `failed` / `skipped` / `off`) and shown on the task Details row **PO token**. |
-| Health | `/api/health` check `pot_provider` probes `GET {URL}/ping` (skipped if URL unset). Settings → General shows the same probe once on page load (Healthy join). |
+| Health | `/api/health` check `pot_provider` probes `GET {URL}/ping` (skipped if URL unset). Settings → Connect shows the same probe once on page load (Healthy join). |
 | Local Go | `make pot-plugin` installs the zip under `var/yt-dlp-plugins/bgutil`; run a provider yourself and set `CREATORR_POT_PROVIDER_URL`. |
 
 Creatorr passes `--extractor-args youtubepot-bgutilhttp:base_url=…` when the env URL is set and fetch is not `never`.
@@ -66,7 +68,7 @@ Creatorr passes `--extractor-args youtubepot-bgutilhttp:base_url=…` when the e
 - Archive downloads **always** pass `--match-filters` `is_live!=?1` (soft-skip while broadcasting; missing `is_live` passes). Series `auto_ignore_media_types` → additional `media_type!=…` clauses AND'd into the same filter; media-type reject → `MediaTypeExcluded` (ignored, not download error). Live reject → `LiveBroadcastSkipped` (stay `wanted`).
 - Remux (ffmpeg → MKV video / MKA audio) and pack after download.
 
-`CookieInvalid` / `RateLimited` / `DownloadFailed` / `ResolveFailed` → auto soft-pause the hostname lane + notify alert events (`cookie_invalid` / `rate_limited` / `ytdlp_failed`; never auto-unmonitor or deactivate). Video → `wanted_download_error` when the failing task is a download. Scan/list failures also immediately hold the source (`wanted` → `wanted_source_error`). Remux/pack/verify do not auto-pause. Other failed non-system domain tasks → alert `ytdlp_failed`. PO token provider problems while yt-dlp continues → warning `pot_provider` (no soft-pause, task not failed). Every event is always recorded in-app (alerts/warnings unread until History open / read / Apprise OK; digests are info); Apprise is optional fan-out.
+`CookieInvalid` / `RateLimited` / `DownloadFailed` / `ResolveFailed` → auto soft-pause the hostname lane + notify alert events (`cookie_invalid` / `rate_limited` / `ytdlp_failed`; never auto-unmonitor or deactivate). Video → `wanted_download_error` when the failing task is a download. Scan/list failures also immediately hold the source (`wanted` → `wanted_source_error`). Remux/pack/verify do not auto-pause. Other failed non-system domain tasks → alert `ytdlp_failed`. PO token provider problems while yt-dlp continues → warning `pot_provider` (no soft-pause, task not failed). Every event is always recorded in-app (alerts/warnings unread until History open / in-app read; digests are info); Apprise is optional fan-out and does not clear unread.
 
 ## Plugins (site extractors)
 
@@ -89,8 +91,8 @@ Downloads/imports set Creatorr-owned columns (`tool`, `download_format_selector`
 
 ## Entry `upload_date`
 
-RFC3339 UTC only (full timestamp). Same rules as before for cutoff / season / episode / NFO `<aired>` (UTC calendar day).
+RFC3339 UTC only (full timestamp). Same rules as before for season / episode / NFO `<aired>` (UTC calendar day).
 
-**List order:** newest-first (yt-dlp flat playlist / plugin extractors must match).
+**List order:** newest-first assumed (yt-dlp flat playlist / plugin extractors must match). Order is site-specific; `--playlist-end` (source `full_scan_limit`) takes the first N entries in that extractor order.
 
 **Channel URLs:** yt-dlp `--flat-playlist` on a channel root returns tab playlists (Videos / Live / Shorts) with videos nested inside. Creatorr expands the **Videos** tab when listing; use a `/videos` URL (or a playlist URL) when you want that catalog explicitly. Metadata prefetch still uses the channel root for art/title.

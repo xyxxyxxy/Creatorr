@@ -505,7 +505,7 @@ func (s *Store) EnqueueDownload(videoID int64) (int64, error) {
 	return s.enqueueDownload(videoID, false)
 }
 
-// EnqueueDownloadNow queues at the front of the domain lane, bypasses max_download_queue,
+// EnqueueDownloadNow (Queue download UI action) queues at the front of the domain lane, bypasses max_download_queue,
 // and allows enqueue when the series is unmonitored. Domain must still be active.
 func (s *Store) EnqueueDownloadNow(videoID int64) (int64, error) {
 	return s.enqueueDownload(videoID, true)
@@ -790,7 +790,7 @@ func (s *Store) ListVideoHistoryByTaskID(taskID int64) ([]VideoHistoryEvent, err
 }
 
 // WantVideo sets status to wanted from ignored, deleted, missing, or verify_failed.
-// Does not enqueue a download - download_wanted_cron or Download now picks it up.
+// Does not enqueue a download - download_wanted_cron or Queue download picks it up.
 func (s *Store) WantVideo(id int64) (*Video, error) {
 	cur, err := s.GetVideo(id)
 	if err != nil {

@@ -11,7 +11,6 @@
     {{end}}
     <form method="post" action="/actions/add-series" class="space-y-3 js-add-series-form">
       <input type="hidden" name="draft_token" id="add-series-draft-token" value="" />
-      <script type="application/json" id="add-series-all-source-urls">{{toJSON .AllSourceURLs}}</script>
 
       <div data-add-series-choice>
         <p class="text-sm opacity-70 mb-4">Pick how to start.</p>
@@ -62,7 +61,7 @@
           "ID" "add-series-scan-cron"
           "CronDescriptors" .ScanCronDescriptors
         )}}
-        {{template "source_filter_fields" (dict "CutoffID" "add-series-scan-cutoff")}}
+        {{template "source_filter_fields" (dict "FullScanLimitID" "add-series-full-scan-limit")}}
       </div>
 
       <div class="hidden" data-add-series-step="fetching">

@@ -7,21 +7,8 @@
   "icon" .Icon
   "help" "Scan lists every untracked file under the chosen folder. Media and sidecars show as one list item. Match media to an indexed video or create a new one before import."
 )}}
-{{if not .Series}}
-<div role="alert" class="alert alert-info text-sm">
-  <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
-  <span>It is recommended to create the series first and add relevant sources with 'Mark new videos as ignored' enabled before importing, so a video index is available to match the files automatically.</span>
-</div>
-<div class="flex w-full max-w-xl flex-col gap-4 py-6">
-  <div role="alert" class="alert">
-    <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
-    <span>Create a series first. Import needs a series to match or create videos under.</span>
-  </div>
-  <label for="modal-add-series" class="btn btn-primary w-full sm:w-auto">Add series</label>
-</div>
-{{else}}
-<div class="flex flex-col gap-3 w-full">
-  {{template "list_header" (dict "level" "section" "title" "File matching")}}
+<fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4 w-full">
+  <legend class="fieldset-legend">File matching</legend>
   <ol class="list-decimal pl-5 space-y-1 text-sm">
     <li>
       Media auto-match.
@@ -35,9 +22,9 @@
   </ol>
   <div role="alert" class="alert alert-info text-sm">
     <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
-    <span>It is recommended to create the series first and add relevant sources with 'Mark new videos as ignored' enabled before importing, so a video index is available to match the files automatically.</span>
+    <span>It is recommended to create the series first and add relevant sources with 'Mark new videos as ignored' before importing, so a video index is available to match the files automatically.</span>
   </div>
-</div>
+</fieldset>
 <label class="form-control w-full min-w-0">
   <div class="label py-1"><span class="label-text text-sm opacity-70">Scan folder</span></div>
   <div class="join w-full">
@@ -70,6 +57,11 @@
   <span id="status-scan">Scanning…</span>
   <span id="status-match" class="text-right"></span>
 </div>
+<div id="import-empty" class="alert mt-2 hidden" role="status"><span></span></div>
+<div id="import-scan-busy" class="hidden flex flex-col items-center justify-center gap-3 py-12 mt-2" role="status" aria-live="polite" aria-busy="true">
+  <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
+  <span class="text-sm opacity-70">Scanning folder…</span>
+</div>
 <div id="import-full-scan-note" role="alert" class="alert alert-warning text-sm mt-2{{if not .IncompleteFullScan}} hidden{{end}}">
   <i data-lucide="triangle-alert" class="size-5 shrink-0" aria-hidden="true"></i>
   <span>'Full scan' is incomplete on one or more sources. Not all videos may be indexed yet for auto-match.</span>
@@ -83,10 +75,8 @@
     <button type="button" class="join-item btn" id="import-next">Next</button>
   </div>
 </div>
-{{end}}
 {{template "list_panel_end"}}
 
-{{if .Series}}
 <input type="checkbox" id="modal-import-summary" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box max-w-3xl w-11/12">
@@ -153,6 +143,8 @@ const importUIState = new Map();
 let pendingImportJobs = [];
 /** True after user edits/clears a match; false after scan or Auto-match (suggestions already applied). */
 let autoMatchStale = false;
+/** @type {AbortController|null} */
+let importScanAbort = null;
 
 function showImportMsg(title, body, opts) {
   // Close Add series / Add video so the toast is not trapped under them.
@@ -1467,7 +1459,29 @@ function lucideRefresh(root) {
   }
 }
 
+function setImportEmpty(msg) {
+  const empty = document.getElementById('import-empty');
+  const status = document.getElementById('status');
+  if (!empty || !status) return;
+  const text = String(msg || '').trim();
+  if (text) {
+    const span = empty.querySelector('span');
+    if (span) span.textContent = text;
+    empty.classList.remove('hidden');
+    status.classList.add('hidden');
+    const matchEl = document.getElementById('status-match');
+    if (matchEl) {
+      matchEl.textContent = '';
+      matchEl.classList.add('hidden');
+    }
+    return;
+  }
+  empty.classList.add('hidden');
+  status.classList.remove('hidden');
+}
+
 function setStatusScan(text) {
+  setImportEmpty('');
   const el = document.getElementById('status-scan');
   if (el) el.textContent = text;
 }
@@ -1475,6 +1489,12 @@ function setStatusScan(text) {
 function updateMatchStatus() {
   const el = document.getElementById('status-match');
   if (!el) return;
+  if (!importCandidates.length || !importBundles.length) {
+    el.textContent = '';
+    el.classList.add('hidden');
+    return;
+  }
+  el.classList.remove('hidden');
   const videoIds = new Set();
   const seriesIds = new Set();
   importBundles.forEach((b) => {
@@ -1561,8 +1581,20 @@ function pruneImportUIState(candidates) {
 function setImportScanBusy(busy) {
   const scope = document.getElementById('import-scan-scope');
   const rescan = document.getElementById('btn-import-rescan');
+  const spinner = document.getElementById('import-scan-busy');
+  const list = importListEl();
+  const pager = document.getElementById('import-pager');
+  const empty = document.getElementById('import-empty');
   if (scope) scope.disabled = !!busy;
   if (rescan) rescan.disabled = !!busy;
+  if (spinner) spinner.classList.toggle('hidden', !busy);
+  if (busy) {
+    if (list) list.classList.add('hidden');
+    if (pager) pager.classList.add('hidden');
+    if (empty) empty.classList.add('hidden');
+  } else if (list) {
+    list.classList.remove('hidden');
+  }
 }
 
 function buildImportBundleItem(b) {
@@ -1807,9 +1839,7 @@ async function runImportQueue(verifyMedia) {
   pendingImportJobs = [];
   removePaths(removed);
   if (!importCandidates.length) {
-    setStatusScan('All pending imports queued.');
-    const matchEl = document.getElementById('status-match');
-    if (matchEl) matchEl.textContent = '';
+    setImportEmpty('All pending imports queued.');
   }
   renderImportPage();
   const queuedMsg = 'Queued ' + ok + ' item(s)' + (fail ? '; ' + fail + ' failed' : '') +
@@ -1826,6 +1856,9 @@ async function runImportScan(opts) {
   const notifyAutoMatch = !(opts && opts.notifyAutoMatch === false);
   const scope = document.getElementById('import-scan-scope');
   const rootId = scope ? String(scope.value || '0') : '0';
+  if (importScanAbort) importScanAbort.abort();
+  const ac = new AbortController();
+  importScanAbort = ac;
   closeMatchModal();
   setStatusScan('Scanning…');
   setImportScanBusy(true);
@@ -1844,7 +1877,7 @@ async function runImportScan(opts) {
   }
   const url = rootId === '0' ? '/api/import/scan' : '/api/import/scan?root_id=' + encodeURIComponent(rootId);
   try {
-    const res = await fetch(url, { method: 'POST' });
+    const res = await fetch(url, { method: 'POST', signal: ac.signal });
     if (!res.ok) {
       setStatusScan('Scan failed: ' + await res.text());
       return;
@@ -1861,9 +1894,9 @@ async function runImportScan(opts) {
       importBundles = [];
       importListEl().innerHTML = '';
       document.getElementById('import-pager').classList.add('hidden');
-      setStatusScan(rootId === '0'
-        ? 'No untracked files in the import inbox.'
-        : 'No unmanaged files in this library root.');
+      setImportEmpty(rootId === '0'
+        ? 'No untracked files found.'
+        : 'No unmanaged files found.');
       updateMatchStatus();
       updateAutoMatchBtn();
       updateImportBtn();
@@ -1873,8 +1906,14 @@ async function runImportScan(opts) {
     if (!preserveMatches) autoMatchStale = false;
     renderImportPage();
     if (notifyAutoMatch) notifyAutoMatchCount(countSuggestedAutoMatches());
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    setStatusScan('Scan failed: ' + (err && err.message ? err.message : String(err)));
   } finally {
-    setImportScanBusy(false);
+    if (importScanAbort === ac) {
+      importScanAbort = null;
+      setImportScanBusy(false);
+    }
   }
 }
 
@@ -2045,10 +2084,7 @@ window.refreshImportFullScanNote = refreshImportFullScanNote;
 
 runImportScan({ notifyAutoMatch: false });
 </script>
-{{end}}
 {{template "add_series_modal" .}}
-{{if .Series}}
 {{template "add_video_modal" .}}
-{{end}}
 {{template "foot" .}}
 {{end}}

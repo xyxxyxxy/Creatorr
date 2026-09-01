@@ -141,7 +141,7 @@ func TestCreateSeriesPassesSourceOptions(t *testing.T) {
 		IndexAsIgnored:   true,
 		TitleRegexpInclude: `(?i)show`,
 		AutoIgnoreMediaTypes: []string{"short"},
-		ScanCutoff:       "2020-01-01",
+		FullScanLimit:    50,
 		SourceLabel:      "My feed",
 	})
 	if err != nil {
@@ -166,12 +166,12 @@ func TestCreateSeriesPassesSourceOptions(t *testing.T) {
 	if !src.Label.Valid || src.Label.String != "My feed" {
 		t.Fatalf("label=%v", src.Label)
 	}
-	if !src.ScanCutoff.Valid || src.ScanCutoff.String != "2020-01-01" {
-		t.Fatalf("cutoff=%v", src.ScanCutoff)
+	if src.FullScanLimit != 50 {
+		t.Fatalf("full_scan_limit=%d", src.FullScanLimit)
 	}
 }
 
-func TestCreateSeriesRejectsDuplicateSourceURL(t *testing.T) {
+func TestCreateSeriesAllowsDuplicateSourceURLAcrossSeries(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	_, err := s.CreateSeries(library.CreateSeriesParams{
@@ -181,12 +181,15 @@ func TestCreateSeriesRejectsDuplicateSourceURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.CreateSeries(library.CreateSeriesParams{
+	ser2, err := s.CreateSeries(library.CreateSeriesParams{
 		Title: "Two", SourceURL: "https://example.com/@dup",
 		RootID: rootID, QualityProfileID: profileID, Monitored: true,
 	})
-	if !errors.Is(err, library.ErrConflict) {
-		t.Fatalf("want conflict, got %v", err)
+	if err != nil {
+		t.Fatalf("same URL on another series should succeed: %v", err)
+	}
+	if ser2 == nil || len(ser2.Sources) != 1 {
+		t.Fatalf("want one source on second series, got %#v", ser2)
 	}
 }
 
@@ -553,18 +556,18 @@ func TestEnqueueDownloadWantedSkipsUnmonitoredSeries(t *testing.T) {
 	}
 }
 
-func TestUpsertListedNoLongerIgnoresByCutoff(t *testing.T) {
-	// Cutoff stop/discard is handled in the scan worker, not UpsertListed.
+func TestUpsertListedIgnoresFullScanLimit(t *testing.T) {
+	// Full-scan limit is enforced at list time (yt-dlp --playlist-end), not UpsertListed.
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
-		Title: "CutIgn", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+		Title: "LimIgn", RootID: rootID, QualityProfileID: profileID, Monitored: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	src, err := s.AddSource(ser.ID, library.AddSourceParams{
-		URL: "https://www.example.com/@cutign", ScanCutoff: "2024-01-01",
+		URL: "https://www.example.com/@limign", FullScanLimit: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -574,7 +577,7 @@ func TestUpsertListedNoLongerIgnoresByCutoff(t *testing.T) {
 		SourceID: src.ID, UploadDate: "2020-06-01T12:00:00Z",
 	}, 0)
 	if err != nil || !res.Created || res.Status != "wanted" {
-		t.Fatalf("upsert past-cutoff date must not force ignored: %+v err=%v", res, err)
+		t.Fatalf("upsert must index regardless of full_scan_limit: %+v err=%v", res, err)
 	}
 }
 
@@ -1014,6 +1017,14 @@ func TestDeleteSeriesKeepsOrRemovesFiles(t *testing.T) {
 	if err := os.WriteFile(purgeMedia, []byte("data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	poster := filepath.Join(libRoot, "PurgeFiles", "poster.jpg")
+	nfo := filepath.Join(libRoot, "PurgeFiles", "tvshow.nfo")
+	if err := os.WriteFile(poster, []byte("img"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nfo, []byte("<tvshow/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.CompleteImport(resPurge.VideoID, purgeMedia, "", "", library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
@@ -1029,6 +1040,15 @@ func TestDeleteSeriesKeepsOrRemovesFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(purgeMedia); !os.IsNotExist(err) {
 		t.Fatalf("library file should be gone when deleteFiles=true, err=%v", err)
+	}
+	if _, err := os.Stat(poster); !os.IsNotExist(err) {
+		t.Fatalf("poster should be gone with series folder, err=%v", err)
+	}
+	if _, err := os.Stat(nfo); !os.IsNotExist(err) {
+		t.Fatalf("tvshow.nfo should be gone with series folder, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(libRoot, "PurgeFiles")); !os.IsNotExist(err) {
+		t.Fatalf("series folder should be gone, err=%v", err)
 	}
 }
 
@@ -1299,7 +1319,7 @@ func TestEnqueueDownloadNowAllowsUnmonitoredSeries(t *testing.T) {
 	}
 	id, err := s.EnqueueDownloadNow(res.VideoID)
 	if err != nil || id == 0 {
-		t.Fatalf("download now: %v id=%d", err, id)
+		t.Fatalf("queue download: %v id=%d", err, id)
 	}
 }
 
@@ -1360,7 +1380,7 @@ func TestEnqueueDownloadNowBypassesCap(t *testing.T) {
 	}
 	id, err := s.EnqueueDownloadNow(vids[1])
 	if err != nil || id == 0 {
-		t.Fatalf("download now: %v id=%d", err, id)
+		t.Fatalf("queue download: %v id=%d", err, id)
 	}
 }
 
@@ -1474,6 +1494,77 @@ func TestEnqueueDownloadWantedRoundRobinFair(t *testing.T) {
 	`, pre).Scan(&firstSeries)
 	if firstSeries != s2 {
 		t.Fatalf("fair RR: want series %d (zero active) before series %d, got %d", s2, s1, firstSeries)
+	}
+}
+
+func TestEnqueueDownloadWantedContinuesOtherDomainsWhenOneFull(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	_ = settings.SetDomainDefault(s.DB, 0, 8, 1, "10M", "0", false)
+	_ = settings.Set(s.DB, settings.KeyDownloadWantedOrder, settings.DownloadWantedOrderOldest)
+
+	makeSer := func(title, host string) (seriesID, srcID int64) {
+		t.Helper()
+		ser, err := s.CreateSeries(library.CreateSeriesParams{
+			Title: title, SourceURL: "https://" + host + "/@x", RootID: rootID,
+			QualityProfileID: profileID, Monitored: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ser.ID, ser.Sources[0].ID
+	}
+	// Create A first so equal active-counts prefer series A before B in fair RR.
+	sA, srcA := makeSer("FullHost", "a.example.com")
+	sB, srcB := makeSer("OpenHost", "b.example.com")
+	if err := domains.UpdateHostOverrides(s.DB, "a.example.com", "", "1", "1", "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	// Fill A's download cap without tying series_id (keeps fair RR equal so A stays first).
+	if _, err := s.DB.SQL.Exec(`
+		INSERT INTO tasks (kind, status, domain, message, created_at)
+		VALUES (?, ?, 'a.example.com', 'filler', datetime('now'))
+	`, queue.KindDownload, queue.StatusPending); err != nil {
+		t.Fatal(err)
+	}
+	for i, rid := range []string{"a1", "a2"} {
+		if _, err := s.UpsertListed(sA, library.ListedVideo{
+			RemoteID: rid, Title: rid, WebpageURL: "https://a.example.com/" + rid,
+			SourceID: srcA, UploadDate: time.Date(2024, 1, i+1, 12, 0, 0, 0, time.UTC).Format(time.RFC3339),
+		}, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i, rid := range []string{"b1", "b2"} {
+		if _, err := s.UpsertListed(sB, library.ListedVideo{
+			RemoteID: rid, Title: rid, WebpageURL: "https://b.example.com/" + rid,
+			SourceID: srcB, UploadDate: time.Date(2024, 2, i+1, 12, 0, 0, 0, time.UTC).Format(time.RFC3339),
+		}, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n, err := s.EnqueueDownloadWanted()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("want 2 enqueues on open domain B, got %d", n)
+	}
+	var aPending, bPending int
+	_ = s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM tasks
+		WHERE kind = 'download' AND status = 'pending' AND domain = 'a.example.com' AND message != 'filler'
+	`).Scan(&aPending)
+	_ = s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM tasks
+		WHERE kind = 'download' AND status = 'pending' AND domain = 'b.example.com'
+	`).Scan(&bPending)
+	if aPending != 0 {
+		t.Fatalf("domain A already at cap: want 0 new A downloads, got %d", aPending)
+	}
+	if bPending != 2 {
+		t.Fatalf("want both B videos queued despite A full, got %d", bPending)
 	}
 }
 

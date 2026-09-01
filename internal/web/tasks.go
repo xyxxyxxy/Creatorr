@@ -42,6 +42,7 @@ type laneView struct {
 	CooldownEndsAt      string  // RFC3339Nano for JS tick
 	CooldownTotalSec    int     // configured task_cooldown_seconds (progress max)
 	CooldownRemSec      int     // remaining seconds at render
+	CooldownTip         string  // human wait tip for tooltip / aria-label
 	TaskCooldownSeconds int     // effective cooldown setting (host lanes)
 	MaxDownloadQueue    int     // effective max download queue (host lanes)
 	RateLimit           string  // effective yt-dlp --limit-rate display (download)
@@ -290,6 +291,7 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 				lv.CooldownEndsAt = until.UTC().Format(time.RFC3339Nano)
 				lv.CooldownTotalSec = total
 				lv.CooldownRemSec = rem
+				lv.CooldownTip = cooldownWaitTip(rem)
 			}
 			if !lv.Paused && !lv.ShowCooldown && lv.MaxParallelTasks > 0 && lv.RunningCount >= lv.MaxParallelTasks {
 				lv.ShowBusy = true

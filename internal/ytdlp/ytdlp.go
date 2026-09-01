@@ -15,8 +15,6 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/exectrace"
 )
 
-const defaultYtdlpBin = "yt-dlp"
-
 func appendCookiesAndAuth(args []string, cookiesPath string, o options) []string {
 	if cookiesPath != "" {
 		args = append(args, "--cookies", cookiesPath)
@@ -31,13 +29,8 @@ func appendCookiesAndAuth(args []string, cookiesPath string, o options) []string
 }
 
 func (o options) resolveYtdlpBin() string {
-	if v := strings.TrimSpace(o.ytdlpPath); v != "" {
-		return v
-	}
-	return ytdlpBin()
+	return strings.TrimSpace(o.ytdlpPath)
 }
-
-// withPluginDirs prepends --plugin-dirs for each resolved plugin search parent
 // (system POT plugin + operator mounts). yt-dlp accepts the flag multiple times
 // - not a PATH-style joined string.
 func withPluginDirs(args []string, pluginRoots ...string) []string {
@@ -116,14 +109,6 @@ func expandPluginDirs(root string) []string {
 func hasYtDlpPluginsPkg(dir string) bool {
 	st, err := os.Stat(filepath.Join(dir, "yt_dlp_plugins"))
 	return err == nil && st.IsDir()
-}
-
-// ytdlpBin resolves the yt-dlp binary: env YTDLP_BIN, else PATH lookup of "yt-dlp".
-func ytdlpBin() string {
-	if v := strings.TrimSpace(os.Getenv("YTDLP_BIN")); v != "" {
-		return v
-	}
-	return defaultYtdlpBin
 }
 
 // appendPaceFlags forwards --limit-rate and Creatorr sleep_requests to yt-dlp.

@@ -140,7 +140,7 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (Sav
 			}
 			changed = append(changed, c...)
 		}
-		if busy, berr := s.videoBusyForRename(videoID); berr == nil && busy {
+		if busy, berr := s.videoBusyForRename(videoID, 0); berr == nil && busy {
 			out.RenameSkippedBusy = true
 		}
 		_ = s.repackEpisodeNumberChanges(uniqInt64(changed), 0)

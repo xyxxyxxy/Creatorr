@@ -77,7 +77,8 @@ func Send(ctx context.Context, urls []string, title, body string) error {
 // notifications row; Apprise channels call sendFn. taskID is required (>0) for
 // unread events (alert + warning); may be 0 for info digests (stored NULL).
 // Info events like live_skipped may still pass task_id so the detail page links the task.
-// Successful Apprise delivery sets external_ok and marks unread notifications read.
+// Successful Apprise delivery sets external_ok only; unread alerts/warnings stay
+// unread until acknowledged in-app (History open, detail open, or mark-read).
 func SendEvent(ctx context.Context, database *db.DB, event, title, body string, taskID int64) error {
 	if database == nil {
 		return nil
@@ -136,11 +137,7 @@ func SendEvent(ctx context.Context, database *db.DB, event, title, body string, 
 		notifID = id
 	}
 	if anyAppriseOK {
-		markRead := ""
-		if IsUnreadEvent(event) {
-			markRead = now
-		}
-		_ = MarkExternalOK(database, notifID, markRead)
+		_ = MarkExternalOK(database, notifID)
 	}
 	publishCreated(database, notifID, event)
 	return first
@@ -156,11 +153,21 @@ func RateLimited(ctx context.Context, database *db.DB, taskID int64, domain, det
 	return DomainAlert(ctx, database, taskID, domain, EventRateLimited, detail)
 }
 
+// maxAlertDetail caps failure detail on alert/warning bodies (in-app + Apprise).
+const maxAlertDetail = 2000
+
+// truncateDetailTail keeps the end of detail. yt-dlp/ffmpeg put the real ERROR
+// after progress noise; head-truncation made notification bodies look incomplete.
+func truncateDetailTail(detail string) string {
+	if len(detail) <= maxAlertDetail {
+		return detail
+	}
+	return "…" + detail[len(detail)-maxAlertDetail:]
+}
+
 // DomainAlert sends a domain problem alert without changing monitored flags.
 func DomainAlert(ctx context.Context, database *db.DB, taskID int64, domain, reason, detail string) error {
-	if len(detail) > 500 {
-		detail = detail[:500]
-	}
+	detail = truncateDetailTail(detail)
 	title := fmt.Sprintf("Domain issue (%s)", domain)
 	body := fmt.Sprintf("Domain %s reported %s. Videos may be in wanted_download_error / wanted_source_error. Fix cookies or wait, then Retry on the source.\n\n%s", domain, reason, detail)
 	return SendEvent(ctx, database, reason, title, body, taskID)
@@ -168,9 +175,7 @@ func DomainAlert(ctx context.Context, database *db.DB, taskID int64, domain, rea
 
 // YtDlpFailed notifies a site/yt-dlp (or media-task remux/pack) failure that is not cookie/rate.
 func YtDlpFailed(ctx context.Context, database *db.DB, taskID int64, domain, detail string) error {
-	if len(detail) > 500 {
-		detail = detail[:500]
-	}
+	detail = truncateDetailTail(detail)
 	title := fmt.Sprintf("yt-dlp / site failure (%s)", domain)
 	body := fmt.Sprintf("Domain %s: yt-dlp or related media task failed.\n\n%s", domain, detail)
 	return SendEvent(ctx, database, EventYtDlpFailed, title, body, taskID)
@@ -178,9 +183,7 @@ func YtDlpFailed(ctx context.Context, database *db.DB, taskID int64, domain, det
 
 // VerifyFailed notifies that packed media failed post-pack verify (file kept).
 func VerifyFailed(ctx context.Context, database *db.DB, taskID int64, series, title, detail string) error {
-	if len(detail) > 500 {
-		detail = detail[:500]
-	}
+	detail = truncateDetailTail(detail)
 	label := strings.TrimSpace(series)
 	if label == "" {
 		label = "library"
@@ -197,9 +200,7 @@ func VerifyFailed(ctx context.Context, database *db.DB, taskID int64, series, ti
 // POTProvider notifies that the PO token sidecar/plugin had a problem while
 // yt-dlp continued (warning level; download is not failed for this alone).
 func POTProvider(ctx context.Context, database *db.DB, taskID int64, domain, detail string) error {
-	if len(detail) > 500 {
-		detail = detail[:500]
-	}
+	detail = truncateDetailTail(detail)
 	dom := strings.TrimSpace(domain)
 	if dom == "" {
 		dom = "unknown"

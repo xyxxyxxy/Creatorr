@@ -16,6 +16,7 @@ import (
 
 	"github.com/xyxxyxxy/Creatorr/internal/api"
 	"github.com/xyxxyxxy/Creatorr/internal/api/gen"
+	"github.com/xyxxyxxy/Creatorr/internal/auth"
 	"github.com/xyxxyxxy/Creatorr/internal/config"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/events"
@@ -36,6 +37,7 @@ func main() {
 	slog.SetDefault(log)
 
 	cfg := config.Load()
+	auth.SetTrustForwardedProto(cfg.TrustProxy)
 	if err := os.MkdirAll(cfg.ImportRoot, 0o755); err != nil {
 		log.Warn("mkdir import root", "path", cfg.ImportRoot, "err", err)
 	}
@@ -66,17 +68,18 @@ func main() {
 		log.Error("yt-dlp plugins dir", "err", err)
 		os.Exit(1)
 	}
-	ytBin, err := ytdlp.ResolveBin()
+	ytPaths := ytdlp.PathsForLayout(ytdlp.DataDirExists())
+	updateChannel, _ := settings.Get(database, settings.KeyYtDlpUpdateChannel)
+	ytVersion, err := ytdlp.PrepareManagedBin(context.Background(), ytdlp.PrepareOpts{
+		Bootstrap: ytPaths.Bootstrap,
+		Managed:   ytPaths.Managed,
+		Channel:   settings.NormalizeYtDlpUpdateChannel(updateChannel),
+	})
 	if err != nil {
-		log.Error("yt-dlp resolve", "err", err)
+		log.Error("yt-dlp prepare", "err", err)
 		os.Exit(1)
 	}
-	cfg.YtDlpBin = ytBin
-	ytVersion, err := ytdlp.VerifyBinary(cfg.YtDlpBin)
-	if err != nil {
-		log.Error("yt-dlp verify", "err", err)
-		os.Exit(1)
-	}
+	cfg.YtDlpBin = ytPaths.Managed
 	log.Info("yt-dlp ready", "bin", cfg.YtDlpBin, "version", ytVersion)
 	ytClient := &ytdlp.Client{
 		Bin:              cfg.YtDlpBin,
@@ -95,7 +98,8 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go (&worker.Heartbeat{DB: database, Log: log}).Run(ctx)
+	hb := &worker.HeartbeatState{}
+	go (&worker.Heartbeat{State: hb, Log: log}).Run(ctx)
 
 	hub := events.NewHub()
 	notify.SetEventsHub(hub)
@@ -112,6 +116,18 @@ func main() {
 		log.Info("requeued interrupted tasks", "count", n)
 	}
 
+	if enabled, err := settings.YtDlpUpdatesEnabled(database); err != nil {
+		log.Error("yt-dlp updates enabled check", "err", err)
+	} else if enabled {
+		if id, err := lib.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateBoot, "boot"); err != nil {
+			log.Warn("yt-dlp boot update enqueue", "err", err)
+		} else if id > 0 {
+			log.Info("yt-dlp boot update enqueued", "task", id)
+		}
+	} else {
+		log.Info("yt-dlp automatic updates disabled; skipping boot update")
+	}
+
 	go (&worker.Runner{
 		Queue:   q,
 		Library: lib,
@@ -126,7 +142,13 @@ func main() {
 	go (&scheduler.Scheduler{Library: lib, Log: log}).Run(ctx)
 	go (&stats.Sampler{DB: database, Log: log}).Run(ctx)
 
-	healthChecker := &health.Checker{DB: database, Cfg: cfg}
+	healthChecker := &health.Checker{
+		DB:  database,
+		Cfg: cfg,
+		WorkerAt: func() time.Time {
+			return hb.At()
+		},
+	}
 	srvImpl := &api.Server{
 		Health:  healthChecker,
 		Queue:   q,
@@ -138,12 +160,24 @@ func main() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
+	r.Use(auth.Middleware(database))
 
 	// SSE must not use the global request timeout.
 	r.Get("/api/events", srvImpl.EventsSSE)
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Timeout(60 * time.Second))
+		// Import folder WalkDir can exceed 60s on slow disks; skip timeout for that route only.
+		timeout := middleware.Timeout(60 * time.Second)
+		r.Use(func(next http.Handler) http.Handler {
+			timed := timeout(next)
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if req.Method == http.MethodPost && req.URL.Path == "/api/import/scan" {
+					next.ServeHTTP(w, req)
+					return
+				}
+				timed.ServeHTTP(w, req)
+			})
+		})
 
 		r.Get("/api/openapi.json", func(w http.ResponseWriter, req *http.Request) {
 			swagger, err := gen.GetSwagger()

@@ -89,3 +89,22 @@ func TestCombineDownloadRateLimitOverride(t *testing.T) {
 	}
 }
 
+func TestFormatDownloadRateLimitDisplay(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"10M", "10MiB/s"},
+		{"500K", "500KiB/s"},
+		{"1.5G", "1.5GiB/s"},
+		{"off", "Unlimited"},
+		{"0", "Unlimited"},
+		{"bogus", ""},
+	}
+	for _, tc := range tests {
+		if got := FormatDownloadRateLimitDisplay(tc.in); got != tc.want {
+			t.Errorf("FormatDownloadRateLimitDisplay(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+

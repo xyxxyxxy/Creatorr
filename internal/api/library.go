@@ -138,6 +138,14 @@ func (s *Server) UpdateQualityProfile(w http.ResponseWriter, r *http.Request, id
 	writeJSON(w, http.StatusOK, mapProfile(*p))
 }
 
+func (s *Server) DeleteQualityProfile(w http.ResponseWriter, r *http.Request, id gen.QualityProfileId) {
+	if err := s.Library.DeleteProfile(int64(id)); err != nil {
+		writeLibraryErr(w, err, "delete profile failed")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) ListSeries(w http.ResponseWriter, r *http.Request) {
 	list, err := s.Library.ListSeries()
 	if err != nil {
@@ -171,8 +179,8 @@ func (s *Server) CreateSeries(w http.ResponseWriter, r *http.Request) {
 	if body.Monitored != nil {
 		p.Monitored = *body.Monitored
 	}
-	if body.ScanCutoff != nil {
-		p.ScanCutoff = *body.ScanCutoff
+	if body.FullScanLimit != nil {
+		p.FullScanLimit = *body.FullScanLimit
 	}
 	if body.TitleRegexpInclude != nil {
 		p.TitleRegexpInclude = *body.TitleRegexpInclude
@@ -301,8 +309,8 @@ func (s *Server) AddSource(w http.ResponseWriter, r *http.Request, id gen.Series
 	if body.Kind != nil {
 		p.Kind = string(*body.Kind)
 	}
-	if body.ScanCutoff != nil {
-		p.ScanCutoff = *body.ScanCutoff
+	if body.FullScanLimit != nil {
+		p.FullScanLimit = *body.FullScanLimit
 	}
 	if body.TitleRegexpInclude != nil {
 		p.TitleRegexpInclude = *body.TitleRegexpInclude
@@ -326,7 +334,7 @@ func (s *Server) UpdateSource(w http.ResponseWriter, r *http.Request, id gen.Ser
 	}
 	p := library.UpdateSourceParams{
 		Label:              body.Label,
-		ScanCutoff:         body.ScanCutoff,
+		FullScanLimit:      body.FullScanLimit,
 		TitleRegexpInclude: body.TitleRegexpInclude,
 		TitleRegexpExclude: body.TitleRegexpExclude,
 	}
@@ -424,9 +432,9 @@ func mapSource(lib *library.Store, src library.Source) gen.Source {
 		s := src.Label.String
 		out.Label = &s
 	}
-	if src.ScanCutoff.Valid {
-		s := src.ScanCutoff.String
-		out.ScanCutoff = &s
+	if src.FullScanLimit > 0 {
+		n := src.FullScanLimit
+		out.FullScanLimit = &n
 	}
 	if src.TitleRegexpInclude != "" {
 		s := src.TitleRegexpInclude

@@ -24,7 +24,7 @@ const (
 // SeedDefaults inserts the shipped root folder and quality profiles when tables are empty.
 // Root path comes from cfg.InitialRootFolder (/library in container; var/library local),
 // stored as an absolute path. Seeded root name is the last path segment (operator create may leave name empty).
-// Profiles: best (bv*+ba/b merge with progressive fallback), HD 1080p, HD 720p, SD 480p (soft unrestricted tails).
+// Profiles: best (bv*+ba/b merge with progressive fallback, verify_media on), HD 1080p, HD 720p, SD 480p (soft unrestricted tails).
 // Seed insert order is unrelated to UI order (ListProfiles sorts by name).
 // Remux is always MKV (library.RemuxContainer; not a Setting).
 // Bare yt-dlp "best" alone is avoided as the primary selector (soft progressive on DASH sites).
@@ -61,16 +61,19 @@ func SeedDefaults(database *db.DB, cfg config.Config) error {
 		return err
 	}
 	if profiles == 0 {
-		seeds := []struct{ name, format string }{
-			{DefaultProfileName, DefaultFormat},
-			{Profile1080Name, Profile1080Format},
-			{Profile720Name, Profile720Format},
-			{Profile480Name, Profile480Format},
+		seeds := []struct {
+			name, format string
+			verifyMedia  int
+		}{
+			{DefaultProfileName, DefaultFormat, 1},
+			{Profile1080Name, Profile1080Format, 0},
+			{Profile720Name, Profile720Format, 0},
+			{Profile480Name, Profile480Format, 0},
 		}
 		for _, s := range seeds {
 			_, err := database.SQL.Exec(`
-				INSERT INTO quality_profiles (name, format_selector) VALUES (?, ?)
-			`, s.name, s.format)
+				INSERT INTO quality_profiles (name, format_selector, verify_media) VALUES (?, ?, ?)
+			`, s.name, s.format, s.verifyMedia)
 			if err != nil {
 				return fmt.Errorf("seed quality profile %q: %w", s.name, err)
 			}

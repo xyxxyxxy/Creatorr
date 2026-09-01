@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -538,13 +539,24 @@ func TestRunnerLiveBroadcastSkippedStaysWanted(t *testing.T) {
 			if histN != 1 {
 				t.Fatalf("live_skipped history count=%d", histN)
 			}
+			// Finish marks done before notify; wait for the in-app row.
 			var nEvent string
 			var nTask sql.NullInt64
-			err = d.SQL.QueryRow(`
-				SELECT event, task_id FROM notifications WHERE event = ? ORDER BY id DESC LIMIT 1
-			`, notify.EventLiveSkipped).Scan(&nEvent, &nTask)
-			if err != nil {
-				t.Fatalf("live_skipped notification: %v", err)
+			notifDeadline := time.Now().Add(2 * time.Second)
+			for {
+				err = d.SQL.QueryRow(`
+					SELECT event, task_id FROM notifications WHERE event = ? ORDER BY id DESC LIMIT 1
+				`, notify.EventLiveSkipped).Scan(&nEvent, &nTask)
+				if err == nil {
+					break
+				}
+				if !errors.Is(err, sql.ErrNoRows) {
+					t.Fatalf("live_skipped notification: %v", err)
+				}
+				if time.Now().After(notifDeadline) {
+					t.Fatalf("live_skipped notification: %v", err)
+				}
+				time.Sleep(20 * time.Millisecond)
 			}
 			if !nTask.Valid || nTask.Int64 != id {
 				t.Fatalf("notification task_id=%v want %d", nTask, id)

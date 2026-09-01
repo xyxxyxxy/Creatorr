@@ -128,8 +128,8 @@ func TestChannelCRUDAndSendEvent(t *testing.T) {
 	if err != nil || len(items) != 1 {
 		t.Fatalf("items=%v err=%v", items, err)
 	}
-	if !items[0].ExternalOK || items[0].Unread() {
-		t.Fatalf("cookie with channel should auto-read: %#v", items[0])
+	if !items[0].ExternalOK || !items[0].Unread() {
+		t.Fatalf("cookie with channel: want external_ok + still unread: %#v", items[0])
 	}
 
 	if err := notify.DownloadDigest(context.Background(), d, []notify.DigestItem{
@@ -318,6 +318,43 @@ func TestYtDlpFailedExternalFailStaysUnread(t *testing.T) {
 	}
 	if !items[0].Unread() || items[0].ExternalOK {
 		t.Fatalf("want unread: %#v", items[0])
+	}
+}
+
+func TestYtDlpFailedKeepsDetailTail(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "tail.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	taskID := seedTask(t, d)
+	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
+		return nil
+	})
+	defer notify.SetSendFnForTest(old)
+
+	suffix := "ERROR: BitChute media API returned 403 Forbidden"
+	detail := strings.Repeat("Downloading media API page\n", 200) + suffix
+	if err := notify.YtDlpFailed(context.Background(), d, taskID, "example.com", detail); err != nil {
+		t.Fatal(err)
+	}
+	items, err := notify.ListNotifications(d, notify.ListFilter{}, 10, 0)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%v err=%v", items, err)
+	}
+	body := items[0].Body
+	if !strings.Contains(body, suffix) {
+		t.Fatalf("want ERROR tail in body, got %q", body)
+	}
+	_, detailPart, ok := strings.Cut(body, "\n\n")
+	if !ok {
+		t.Fatalf("body missing detail split: %q", body)
+	}
+	if !strings.HasPrefix(detailPart, "…") {
+		t.Fatalf("want ellipsis on truncated detail, got %q", detailPart)
+	}
+	if !strings.HasSuffix(detailPart, suffix) {
+		t.Fatalf("want body detail to end with ERROR, got %q", detailPart)
 	}
 }
 

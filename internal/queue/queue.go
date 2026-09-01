@@ -46,6 +46,7 @@ const (
 	KindDeleteSidecar      = "delete_sidecar"
 	KindSponsorblockCut    = "sponsorblock_cut"
 	KindMediaVerify        = "media_verify"
+	KindYtDlpUpdate        = "ytdlp_update"
 
 	// SystemDomain is the queue lane for maintenance tasks.
 	SystemDomain = "system"
@@ -71,7 +72,7 @@ const PrioritySyncFilesDue = 50
 // PriorityRetentionDeleteDue bumps cron retention_delete ahead of pending apply naming.
 const PriorityRetentionDeleteDue = 50
 
-// PriorityDownloadNow places a download at the front of the domain lane.
+// PriorityDownloadNow places a Queue download at the front of the domain lane.
 const PriorityDownloadNow = 100
 
 // PrioritySponsorblockCut keeps SponsorBlock cut/encode behind other system work.
@@ -79,6 +80,12 @@ const PrioritySponsorblockCut = -10
 
 // PriorityMediaVerify is lowest on the system lane (below SponsorBlock cut/reencode).
 const PriorityMediaVerify = -20
+
+// PriorityYtDlpUpdateBoot enqueues boot yt-dlp update ahead of default system work.
+const PriorityYtDlpUpdateBoot = 40
+
+// PriorityYtDlpUpdateDue is cron/manual yt-dlp update priority.
+const PriorityYtDlpUpdateDue = 50
 
 // Task is a queued unit of work.
 type Task struct {
@@ -111,7 +118,7 @@ type EnqueueParams struct {
 	Payload           map[string]any
 	Priority          int
 	Message           string
-	BypassDownloadCap bool // Download now: skip max_download_queue
+	BypassDownloadCap bool // Queue download: skip max_download_queue
 }
 
 // Store wraps queue operations.
@@ -124,6 +131,10 @@ type Store struct {
 
 	// Logs holds in-memory progress lines for running tasks (not persisted).
 	Logs *TaskLogs
+	// Live holds latest message + progress fraction for running tasks (not persisted).
+	Live *LiveState
+	// Commands holds yt-dlp/ffmpeg argv lines while running; flushed to SQLite on Finish/Cancel.
+	Commands *TaskCommands
 
 	// OnCancelled is invoked after a task is marked cancelled (pending or running).
 	// Optional; library.NewStore wires source/video history recording.
@@ -131,7 +142,13 @@ type Store struct {
 }
 
 func NewStore(database *db.DB) *Store {
-	return &Store{DB: database, cooldown: make(map[string]time.Time), Logs: newTaskLogs()}
+	return &Store{
+		DB:       database,
+		cooldown: make(map[string]time.Time),
+		Logs:     newTaskLogs(),
+		Live:     newLiveState(),
+		Commands: newTaskCommands(),
+	}
 }
 
 func (s *Store) notifyCancelled(tasks ...Task) {
@@ -276,7 +293,7 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 	// System lane: at most one pending/running task per kind (except import keeps per-video).
 	if p.Domain == SystemDomain {
 		switch p.Kind {
-		case KindSyncFiles, KindRetentionDelete, KindRenameEpisodes, KindRegenerateNFO:
+		case KindSyncFiles, KindRetentionDelete, KindRenameEpisodes, KindRegenerateNFO, KindYtDlpUpdate:
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE domain = ? AND kind = ? AND status IN (?, ?) LIMIT 1
 			`, SystemDomain, p.Kind, StatusPending, StatusRunning)
@@ -464,7 +481,7 @@ func (s *Store) ClaimInteractive() (*Task, error) {
 func (s *Store) claimFromRows(rows *sql.Rows, now time.Time, respectCooldown bool) (*Task, error) {
 	var candidates []*Task
 	for rows.Next() {
-		t, err := scanTask(rows)
+		t, err := s.scanTask(rows)
 		if err != nil {
 			_ = rows.Close()
 			return nil, err
@@ -611,6 +628,9 @@ func (s *Store) Finish(id int64, status, message, errCode, errMsg string) error 
 		return fmt.Errorf("invalid finish status %q", status)
 	}
 
+	if err := s.persistCommands(id); err != nil {
+		return err
+	}
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.DB.SQL.Exec(`
 		UPDATE tasks SET status = ?, finished_at = ?, message = ?, error_code = NULLIF(?, ''), error_message = NULLIF(?, '')
@@ -619,7 +639,7 @@ func (s *Store) Finish(id int64, status, message, errCode, errMsg string) error 
 	if err != nil {
 		return err
 	}
-	s.Logs.Clear(id)
+	s.clearLive(id)
 	return nil
 }
 
@@ -639,15 +659,15 @@ func (s *Store) CooldownUntil(domain string) time.Time {
 	return until
 }
 
-// UpdateProgress sets message/progress on a running task.
-// When progress is nil, clears the progress column (message-only / spinner UI).
+// UpdateProgress sets in-memory message/progress for a running task (not written to SQLite).
+// When progress is nil, live progress is cleared (message-only / spinner UI).
+// Final message is persisted on Finish/Cancel. Restart requeues running tasks anyway.
 func (s *Store) UpdateProgress(id int64, message string, progress *float64) error {
-	if progress == nil {
-		_, err := s.DB.SQL.Exec(`UPDATE tasks SET message = ?, progress = NULL WHERE id = ? AND status = ?`, message, id, StatusRunning)
-		return err
+	if s == nil || id <= 0 {
+		return nil
 	}
-	_, err := s.DB.SQL.Exec(`UPDATE tasks SET message = ?, progress = ? WHERE id = ? AND status = ?`, message, *progress, id, StatusRunning)
-	return err
+	s.Live.Set(id, message, progress)
+	return nil
 }
 
 // UpdatePayload replaces the JSON payload on a running or pending task (cursor resume).
@@ -693,27 +713,35 @@ func (s *Store) MergeDetailJSON(id int64, patch map[string]any) error {
 	return s.SetDetail(id, string(b))
 }
 
-const taskCommandsCap = 100
-
-// AppendCommand appends a shell-formatted external command line to tasks.commands.
-// No-op when at cap (taskCommandsCap). Persists across finish for History.
+// AppendCommand appends a shell-formatted external command line in memory.
+// No-op when at cap (taskCommandsCap). Flushed to tasks.commands on Finish/Cancel for History.
 func (s *Store) AppendCommand(id int64, line string) error {
 	if s == nil || id <= 0 {
 		return nil
 	}
-	line = strings.TrimSpace(line)
-	if line == "" {
+	s.Commands.Append(id, line)
+	return nil
+}
+
+// persistCommands writes buffered command lines to SQLite once (History).
+func (s *Store) persistCommands(id int64) error {
+	if s == nil || id <= 0 {
 		return nil
 	}
-	_, err := s.DB.SQL.Exec(`
-		UPDATE tasks
-		SET commands = CASE
-			WHEN json_array_length(COALESCE(NULLIF(commands, ''), '[]')) >= ? THEN commands
-			ELSE json_insert(COALESCE(NULLIF(commands, ''), '[]'), '$[#]', ?)
-		END
-		WHERE id = ?
-	`, taskCommandsCap, line, id)
-	return err
+	lines := s.Commands.Snapshot(id)
+	if len(lines) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(lines)
+	if err != nil {
+		return err
+	}
+	_, err = s.DB.SQL.Exec(`UPDATE tasks SET commands = ? WHERE id = ?`, string(b), id)
+	if err != nil {
+		return err
+	}
+	s.Commands.Clear(id)
+	return nil
 }
 
 // Cancel marks pending/running task cancelled and aborts a running worker if registered.
@@ -751,7 +779,8 @@ func (s *Store) CancelWithMessage(id int64, message string) (prevStatus string, 
 	if n == 0 {
 		return prevStatus, fmt.Errorf("task %d not cancellable", id)
 	}
-	s.Logs.Clear(id)
+	_ = s.persistCommands(id)
+	s.clearLive(id)
 	s.abortRunning(id)
 	if t, err := s.GetTask(id); err == nil && t != nil {
 		s.notifyCancelled(*t)
@@ -783,7 +812,7 @@ func (s *Store) CancelDownloadsForVideo(videoID int64, message string) ([]Task, 
 	var ids []int64
 	var out []Task
 	for rows.Next() {
-		t, err := scanTask(rows)
+		t, err := s.scanTask(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -809,6 +838,8 @@ func (s *Store) CancelDownloadsForVideo(videoID int64, message string) ([]Task, 
 		if err != nil {
 			return out, err
 		}
+		_ = s.persistCommands(id)
+		s.clearLive(id)
 		s.abortRunning(id)
 	}
 	s.notifyCancelled(out...)
@@ -824,7 +855,7 @@ func (s *Store) GetTask(id int64) (*Task, error) {
 		       COALESCE(NULLIF(commands, ''), '[]')
 		FROM tasks WHERE id = ?
 	`, id)
-	t, err := scanTaskWithCommands(row)
+	t, err := s.scanTaskWithCommands(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -858,7 +889,7 @@ func (s *Store) CancelAll() ([]Task, error) {
 	defer func() { _ = rows.Close() }()
 	var out []Task
 	for rows.Next() {
-		t, err := scanTask(rows)
+		t, err := s.scanTask(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -932,7 +963,7 @@ func (s *Store) cancelDomain(domain, message string, statuses ...string) ([]Task
 	var ids []int64
 	var out []Task
 	for rows.Next() {
-		t, err := scanTask(rows)
+		t, err := s.scanTask(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -958,6 +989,8 @@ func (s *Store) cancelDomain(domain, message string, statuses ...string) ([]Task
 		if err != nil {
 			return out, err
 		}
+		_ = s.persistCommands(id)
+		s.clearLive(id)
 		s.abortRunning(id)
 	}
 	s.notifyCancelled(out...)
@@ -1018,7 +1051,7 @@ func (s *Store) cancelPendingScans(where, message string, args ...any) (int64, e
 	var ids []int64
 	var out []Task
 	for rows.Next() {
-		t, err := scanTask(rows)
+		t, err := s.scanTask(rows)
 		if err != nil {
 			return 0, err
 		}
@@ -1066,7 +1099,7 @@ func (s *Store) ListActive() ([]Task, error) {
 	var out []Task
 	pos := map[string]int{}
 	for rows.Next() {
-		t, err := scanTask(rows)
+		t, err := s.scanTask(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -1093,7 +1126,7 @@ func (s *Store) ListActiveFileDelete() ([]Task, error) {
 	defer func() { _ = rows.Close() }()
 	var out []Task
 	for rows.Next() {
-		t, err := scanTask(rows)
+		t, err := s.scanTask(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -1118,7 +1151,7 @@ func (s *Store) ListActiveForSeries(seriesID int64) ([]Task, error) {
 	defer func() { _ = rows.Close() }()
 	var out []Task
 	for rows.Next() {
-		t, err := scanTask(rows)
+		t, err := s.scanTask(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -1139,7 +1172,7 @@ func (s *Store) ActiveTaskForVideo(videoID int64) (*Task, error) {
 		ORDER BY CASE status WHEN ? THEN 0 ELSE 1 END, id DESC
 		LIMIT 1
 	`, videoID, StatusRunning, StatusPending, StatusRunning)
-	t, err := scanTask(row)
+	t, err := s.scanTask(row)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
@@ -1242,7 +1275,7 @@ func (s *Store) ActiveScanForSeries(seriesID int64) (*Task, error) {
 		ORDER BY CASE status WHEN ? THEN 0 ELSE 1 END, id DESC
 		LIMIT 1
 	`, KindScan, seriesID, StatusRunning, StatusPending, StatusRunning)
-	t, err := scanTask(row)
+	t, err := s.scanTask(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -1252,7 +1285,7 @@ func (s *Store) ActiveScanForSeries(seriesID int64) (*Task, error) {
 	return t, nil
 }
 
-func scanTask(scanner interface {
+func (s *Store) scanTask(scanner interface {
 	Scan(dest ...any) error
 }) (*Task, error) {
 	var t Task
@@ -1264,10 +1297,11 @@ func scanTask(scanner interface {
 	if err != nil {
 		return nil, err
 	}
+	s.applyLive(&t)
 	return &t, nil
 }
 
-func scanTaskWithCommands(scanner interface {
+func (s *Store) scanTaskWithCommands(scanner interface {
 	Scan(dest ...any) error
 }) (*Task, error) {
 	var t Task
@@ -1282,6 +1316,8 @@ func scanTaskWithCommands(scanner interface {
 		return nil, err
 	}
 	t.Commands = parseCommandsJSON(commandsJSON)
+	s.applyLive(&t)
+	s.applyCommands(&t)
 	return &t, nil
 }
 
@@ -1300,7 +1336,7 @@ func parseCommandsJSON(raw string) []string {
 // RequeueStaleRunning marks interrupted running tasks as pending after process restart.
 func (s *Store) RequeueStaleRunning() (int64, error) {
 	res, err := s.DB.SQL.Exec(`
-		UPDATE tasks SET status = ?, started_at = NULL, message = 'Requeued after restart'
+		UPDATE tasks SET status = ?, started_at = NULL, message = 'Requeued after restart', progress = NULL
 		WHERE status = ?
 	`, StatusPending, StatusRunning)
 	if err != nil {

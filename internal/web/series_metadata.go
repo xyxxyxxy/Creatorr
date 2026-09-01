@@ -206,6 +206,41 @@ func (h *Handler) seriesMetadataPrefetchStatus(w http.ResponseWriter, r *http.Re
 	}))
 }
 
+// seriesMetadataBody returns the Metadata modal body from saved series state (no draft).
+// Optional ?discard=<task_id> cancels a pending prefetch and clears its cache draft.
+func (h *Handler) seriesMetadataBody(w http.ResponseWriter, r *http.Request) {
+	sid, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	ser, err := h.Library.GetSeries(sid, false)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if discardStr := strings.TrimSpace(r.URL.Query().Get("discard")); discardStr != "" {
+		if tid, err := strconv.ParseInt(discardStr, 10, 64); err == nil && tid > 0 {
+			h.discardSeriesMetaPrefetch(sid, tid)
+		}
+	}
+	render(w, "series_metadata_body", h.withMetaSuggestions(seriesMetadataView{
+		Series: ser, Art: h.seriesArtFlags(ser), PrefetchArt: map[string]string{},
+	}))
+}
+
+func (h *Handler) discardSeriesMetaPrefetch(seriesID, taskID int64) {
+	if h.Queue != nil {
+		if task, err := h.Queue.GetTask(taskID); err == nil && task != nil {
+			if task.SeriesID.Valid && task.SeriesID.Int64 == seriesID {
+				switch task.Status {
+				case queue.StatusPending, queue.StatusRunning:
+					_, _ = h.Queue.CancelWithMessage(taskID, "Metadata fetch discarded")
+				}
+			}
+		}
+	}
+	if h.Library != nil {
+		_ = h.Library.ClearPrefetchDraft(seriesID, taskID)
+	}
+}
+
 type seriesMetadataView struct {
 	Series          *library.Series
 	Art             library.SeriesArtFlags

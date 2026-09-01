@@ -2,6 +2,7 @@ package queue
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 )
 
@@ -44,7 +45,7 @@ func (s *Store) ListHistory(f HistoryFilter, limit, offset int) ([]Task, error) 
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	return scanTaskRows(rows)
+	return s.scanTaskRows(rows)
 }
 
 // CountHistory returns how many finished tasks match the filter.
@@ -164,7 +165,7 @@ func (s *Store) ListHistoryForSource(sourceID int64, limit, offset int) ([]Task,
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	return scanTaskRows(rows)
+	return s.scanTaskRows(rows)
 }
 
 // CountHistoryForSource counts finished tasks for a source.
@@ -198,10 +199,10 @@ func (s *Store) LatestHistoryIDForSource(sourceID int64) (int64, error) {
 	return id.Int64, nil
 }
 
-func scanTaskRows(rows *sql.Rows) ([]Task, error) {
+func (s *Store) scanTaskRows(rows *sql.Rows) ([]Task, error) {
 	var out []Task
 	for rows.Next() {
-		t, err := scanTask(rows)
+		t, err := s.scanTask(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -245,4 +246,38 @@ func sqlPlaceholders(n int) string {
 		b = append(b, '?')
 	}
 	return string(b)
+}
+
+// LastFinishedAt returns finished_at (RFC3339Nano UTC) of the newest task for kind, domain, and status.
+// Empty string when none. domain may be empty to match any domain.
+func (s *Store) LastFinishedAt(kind, domain, status string) (string, error) {
+	kind = strings.TrimSpace(kind)
+	domain = strings.TrimSpace(domain)
+	status = strings.TrimSpace(status)
+	if kind == "" || status == "" {
+		return "", fmt.Errorf("kind and status required")
+	}
+	args := []any{status, kind}
+	domainSQL := ""
+	if domain != "" {
+		domainSQL = " AND domain = ?"
+		args = append(args, domain)
+	}
+	var finished sql.NullString
+	err := s.DB.SQL.QueryRow(`
+		SELECT finished_at FROM tasks
+		WHERE status = ? AND kind = ?`+domainSQL+`
+		ORDER BY COALESCE(finished_at, created_at) DESC, id DESC
+		LIMIT 1
+	`, args...).Scan(&finished)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if !finished.Valid {
+		return "", nil
+	}
+	return strings.TrimSpace(finished.String), nil
 }

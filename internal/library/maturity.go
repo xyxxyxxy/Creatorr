@@ -59,30 +59,56 @@ func (s *Store) enqueueMaturityMedia(limit int) (int, error) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	n := 0
+	type cand struct {
+		id, seriesID int64
+		status       string
+		domain       string
+	}
+	var list []cand
+	activeOK := map[string]bool{}
+	seenActive := map[string]bool{}
+	openDomainCount := 0
 	for rows.Next() {
-		if n >= limit {
-			break
-		}
 		var id, seriesID int64
 		var status, url, sourceURL string
 		if err := rows.Scan(&id, &seriesID, &status, &url, &sourceURL); err != nil {
-			return n, err
+			return 0, err
 		}
 		domain := queueDomain(url)
 		if domain == "unknown" {
 			domain = queueDomain(sourceURL)
 		}
-		ok, err := domains.IsActive(s.DB, domain)
-		if err != nil {
-			return n, err
+		ok, cached := activeOK[domain]
+		if !cached {
+			ok, err = domains.IsActive(s.DB, domain)
+			if err != nil {
+				return 0, err
+			}
+			activeOK[domain] = ok
 		}
-		if !ok {
+		if ok && !seenActive[domain] {
+			seenActive[domain] = true
+			openDomainCount++
+		}
+		list = append(list, cand{id: id, seriesID: seriesID, status: status, domain: domain})
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	fullDomains := map[string]bool{}
+	fullCount := 0
+	n := 0
+	for _, r := range list {
+		if n >= limit {
+			break
+		}
+		if !activeOK[r.domain] || fullDomains[r.domain] {
 			continue
 		}
-		switch status {
+		switch r.status {
 		case "downloaded":
-			busy, err := s.hasPendingDownload(id)
+			busy, err := s.hasPendingDownload(r.id)
 			if err != nil {
 				return n, err
 			}
@@ -91,15 +117,22 @@ func (s *Store) enqueueMaturityMedia(limit int) (int, error) {
 			}
 			_, err = s.Queue.Enqueue(queue.EnqueueParams{
 				Kind:     queue.KindDownload,
-				Domain:   domain,
-				SeriesID: seriesID,
-				VideoID:  id,
+				Domain:   r.domain,
+				SeriesID: r.seriesID,
+				VideoID:  r.id,
 				Message:  "Maturity re-download",
-				Payload:  map[string]any{"video_id": id, "maturity": true},
+				Payload:  map[string]any{"video_id": r.id, "maturity": true},
 			})
 			if err != nil {
 				if errors.Is(err, queue.ErrQueueFull) {
-					return n, nil
+					if !fullDomains[r.domain] {
+						fullDomains[r.domain] = true
+						fullCount++
+						if fullCount == openDomainCount {
+							return n, nil
+						}
+					}
+					continue
 				}
 				if errors.Is(err, queue.ErrDuplicate) {
 					continue
@@ -109,7 +142,7 @@ func (s *Store) enqueueMaturityMedia(limit int) (int, error) {
 			n++
 		}
 	}
-	return n, rows.Err()
+	return n, nil
 }
 
 func (s *Store) enqueueMaturitySidecars(limit int) (int, error) {

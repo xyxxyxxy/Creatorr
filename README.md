@@ -28,10 +28,26 @@ docker compose up -d
 
 | | |
 | --- | --- |
-| Image | `ghcr.io/xyxxyxxy/creatorr:latest` (`main`); `:develop`; `:sha-<short>` for pins |
-| UI | `http://127.0.0.1:8787/` |
-| Health | `GET /api/health` (`ok` \| `degraded` \| `down`) |
-| OpenAPI | `GET /api/openapi.json` |
+| Image | `ghcr.io/xyxxyxxy/creatorr:latest` (version tag `v*` on `main`); `:sha-<short>` on every `main` push for pins |
+| UI | `http://127.0.0.1:8787/` (first visit: **Setup** account, then login) |
+| Health | `GET /api/health` (`ok` \| `degraded` \| `down`; no auth) |
+| OpenAPI | `GET /api/openapi.json` (requires API key or session after setup) |
+
+### Authentication
+
+First boot: **Setup** (username + password). After that: Forms login (7-day sliding cookie) for the UI; API / SSE need the same cookie or `X-Api-Key` (Settings → General). `GET /api/health` stays public. Proxy TLS: set `CREATORR_TRUST_PROXY=1`. Details: [`docs/settings.md`](docs/settings.md).
+
+**Recover access** (forgot password): stop Creatorr, clear the password hash in SQLite, start again, complete Setup.
+
+CLI:
+
+```bash
+sqlite3 ./var/data/creatorr.db <<'SQL'
+UPDATE settings SET value = '' WHERE key = 'auth_password_hash';
+SQL
+```
+
+Or use [DB Browser for SQLite](https://sqlitebrowser.org/): open `creatorr.db` → Browse Data → `settings` → clear `value` on `auth_password_hash` → Write Changes.
 
 **Volumes** (host `./var` mirrors the container layout):
 
@@ -39,38 +55,33 @@ docker compose up -d
 | --- | --- |
 | `./var/data` | `/data` (SQLite `creatorr.db` + cache) |
 | `./var/import` | `/import` |
-| `CREATORR_INITIAL_ROOT_FOLDER` (default `./var/library`) | `/library` (fixed; initial root folder) |
+| `CREATORR_LIBRARY_ROOT` (default `./var/library`) | `/library` (fixed; initial root folder) |
 
-Compose comments show optional mounts: extra library roots, `/yt-dlp-plugins`, custom yt-dlp binary.
+Compose comments show optional mounts: extra library roots, `/yt-dlp-plugins`.
 
-Image includes the Creatorr binary plus **yt-dlp**, **ffmpeg**, and **Deno**. Runtime yt-dlp is `/usr/local/bin/yt-dlp`.
+Image includes the Creatorr binary plus **yt-dlp** (bootstrap at `/usr/local/share/creatorr/yt-dlp`, runtime at `/data/bin/yt-dlp`), **ffmpeg**, and **Deno**. See [`docs/ytdlp.md`](docs/ytdlp.md) for managed updates vs custom binary mode.
 
-First boot seeds one root at `/library` (local Go: `var/library`) and quality profiles `best`, `HD 1080p`, `HD 720p`, `SD 480p`. Override the host bind in `.env` (`CREATORR_INITIAL_ROOT_FOLDER`) before first boot; add more roots later in Settings → Library.
+First boot seeds one root at `/library` (local Go: `var/library`) and quality profiles `best` (with media verify on), `HD 1080p`, `HD 720p`, `SD 480p`. Override the host bind in `.env` (`CREATORR_LIBRARY_ROOT`) before first boot; add more roots later in Settings → Library.
 
 ### Sidecars
 
 - **FlareSolverr** - Compose service `creatorr-flaresolverr` (headless Chrome; notable RAM). Set `CREATORR_FLARESOLVERR_URL` (Compose default `http://creatorr-flaresolverr:8191`). Enable **Use FlareSolverr** on a host under Settings → Queue / Domains.
-- **PO tokens** - Compose service `creatorr-po-token`. Set `CREATORR_POT_PROVIDER_URL` (Compose default `http://creatorr-po-token:4416`) and **PO token fetch** under Settings → General. See [`docs/ytdlp.md`](docs/ytdlp.md).
+- **PO tokens** - Compose service `creatorr-po-token`. Set `CREATORR_POT_PROVIDER_URL` (Compose default `http://creatorr-po-token:4416`) and **PO token fetch** under Settings → Connect. See [`docs/ytdlp.md`](docs/ytdlp.md).
 
-### Custom yt-dlp
+### yt-dlp updates
 
-Bind-mount over the image path (`:ro`). Rebuild the image to bump the baked binary. Plugins stay under `/yt-dlp-plugins`.
-
-```yaml
-volumes:
-  - /path/to/your/yt-dlp:/usr/local/bin/yt-dlp:ro
-```
+Managed runtime: `/data/bin/yt-dlp` (persists on `./var/data`). Settings → Scheduler **`ytdlp_update_cron`** (default `@weekly`) enables boot + scheduled + **Update now** GitHub updates. **Empty cron** disables GitHub updates: stop Creatorr, replace `/data/bin/yt-dlp`, restart. Channel (`stable` / `nightly`) under Settings → Connect. Details: [`docs/ytdlp.md`](docs/ytdlp.md).
 
 ## Configuration
 
-Paths are fixed (not env) except the Compose host bind for the initial root folder. When `/data` exists (container): SQLite `/data/creatorr.db`, cache `/data/cache`, import `/import`, plugins `/yt-dlp-plugins`; initial root folder is always `/library`. Local Go mirrors under `var/`.
+Paths are fixed (not env) except the Compose host bind for the initial root folder. When `/data` exists (container): SQLite `/data/creatorr.db`, cache `/data/cache`, managed yt-dlp `/data/bin/yt-dlp`, import `/import`, plugins `/yt-dlp-plugins`; initial root folder is always `/library`. Local Go mirrors under `var/`.
 
 HTTP always binds `0.0.0.0`. Most runtime knobs live in Settings (SQLite / UI). FlareSolverr and PO token provider URLs are env-only. Apprise channels are Settings.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PUID` / `PGID` | `1000` | Host uid/gid for Compose `user:` on the Creatorr service (volume ownership). See `.env.example`. |
-| `CREATORR_INITIAL_ROOT_FOLDER` | `./var/library` | Compose-only host path bind-mounted to fixed container `/library` (seeded as the initial root folder when `root_folders` is empty). |
+| `CREATORR_LIBRARY_ROOT` | `./var/library` | Compose-only host path bind-mounted to fixed container `/library` (seeded as the initial root folder when `root_folders` is empty). |
 | `CREATORR_PORT` | `8787` | HTTP port |
 | `CREATORR_POT_PROVIDER_URL` | *(empty)* | bgutil PO token provider base URL. Compose default `http://creatorr-po-token:4416`. Empty disables Settings **PO token fetch**. |
 | `CREATORR_FLARESOLVERR_URL` | *(empty)* | FlareSolverr base URL. Compose default `http://creatorr-flaresolverr:8191`. Empty skips Flare health/pre-solve. |
@@ -120,7 +131,7 @@ make sbom       # CycloneDX SBOM (needs syft); CI also license-gates it
 
 Skip hooks for one commit: `SKIP_GITHOOKS=1 git commit ...` or `git commit --no-verify`.
 
-CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on `main` and `develop`. Images: [`.github/workflows/docker.yml`](.github/workflows/docker.yml) (`:latest` on `main`, `:develop` on `develop`, plus `:sha-<short>`).
+CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on `main` and pull requests. Images: [`.github/workflows/docker.yml`](.github/workflows/docker.yml) (`:sha-<short>` on every `main` push; `:latest`, `:X.Y.Z`, and `:X.Y` when you push a `v*` tag).
 
 ## Concepts
 

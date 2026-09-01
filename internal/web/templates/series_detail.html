@@ -68,15 +68,17 @@
     </td>
     {{template "source_status_cell" .StatusInd}}
     <td class="whitespace-nowrap text-end">
-      <div class="flex items-center justify-end gap-0.5">
-      {{template "source_scan_actions" .}}
+      <div class="join">
       {{if .HasRetryable}}
-      <label for="modal-retry-source-{{.ID}}" class="btn btn-ghost btn-xs tooltip tooltip-top" data-tip="Clear error hold: wanted_download_error and wanted_source_error → wanted. Does not enqueue downloads.">Retry</label>
+      <label for="modal-retry-source-{{.ID}}" class="btn btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Clear 'wanted_download_error' and 'wanted_source_error' status from videos of this source and put them back to 'wanted'" aria-label="Retry">
+        <i data-lucide="rotate-ccw" class="size-3.5"></i>
+      </label>
       {{end}}
-      <label for="modal-edit-source-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+      {{template "source_scan_actions" .}}
+      <label for="modal-edit-source-{{.ID}}" class="btn btn-secondary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
         <i data-lucide="pencil" class="size-3.5"></i>
       </label>
-      <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+      <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
         <i data-lucide="trash-2" class="size-3.5"></i>
       </label>
       </div>
@@ -146,7 +148,7 @@
         "ID" "add-source-scan-cron"
         "CronDescriptors" .ScanCronDescriptors
       )}}
-      {{template "source_filter_fields" (dict "CutoffID" "add-source-scan-cutoff")}}
+      {{template "source_filter_fields" (dict "FullScanLimitID" "add-source-full-scan-limit")}}
       <div class="modal-action">
         <label for="modal-add-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
@@ -190,23 +192,16 @@
 <div class="modal">
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Edit {{if eq .Kind "single"}}single{{else}}feed{{end}}</h3>
-        <form method="post" action="/actions/update-source" class="space-y-2 js-source-url-form" data-current-url="{{.URL}}">
+        <form method="post" action="/actions/update-source" class="space-y-2">
       <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.ID}}" />
-      <fieldset class="fieldset">
-  <legend class="fieldset-legend">
-    <span class="inline-flex items-center gap-1">
-      URL
-      {{if eq .Kind "single"}}
-          {{template "field_info" (dict "Info" "Changing URL re-detects the domain (hostname). For singles, also restarts indexing.")}}
-          {{else}}
-          {{template "field_info" (dict "Info" "Changing URL re-detects the domain (hostname).")}}
-          {{end}}
-    </span>
-  </legend>
-  <input name="url" class="input w-full js-source-url validator" required value="{{.URL}}" />
-  <p class="validator-hint hidden">Enter a valid http(s) URL with a host.</p>
-</fieldset>
+      {{template "field_input" (dict
+        "Label" "URL"
+        "Value" .URL
+        "Disabled" true
+        "DisabledTitle" "Source URL cannot be changed later. Create a different source instead."
+        "NoPlaceholder" true
+      )}}
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Name (optional)</legend>
         <input name="label" class="input w-full" value="{{if .Label.Valid}}{{.Label.String}}{{end}}" />
@@ -220,10 +215,9 @@
       )}}
       {{end}}
       {{if ne .Kind "single"}}
-      {{$cutoff := ""}}{{if .ScanCutoff.Valid}}{{$cutoff = .ScanCutoff.String}}{{end}}
       {{template "source_filter_fields" (dict
-        "Cutoff" $cutoff
-        "CutoffID" (printf "edit-source-scan-cutoff-%d" .ID)
+        "FullScanLimit" .FullScanLimit
+        "FullScanLimitID" (printf "edit-source-full-scan-limit-%d" .ID)
         "IndexAsIgnored" .IndexAsIgnored
         "TitleRegexpInclude" .TitleRegexpInclude
         "TitleRegexpIncludeID" (printf "edit-source-title-include-%d" .ID)
@@ -233,7 +227,7 @@
       {{end}}
       <div class="modal-action">
         <label for="modal-edit-source-{{.ID}}" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary js-source-url-submit">Save</button>
+        <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
   </div>

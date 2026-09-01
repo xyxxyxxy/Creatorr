@@ -26,8 +26,13 @@ RUN apt-get update \
        arm64) YTDLP=yt-dlp_linux_aarch64; DENO=deno-aarch64-unknown-linux-gnu.zip ;; \
        *) echo "unsupported TARGETARCH=$TARGETARCH (need amd64 or arm64)" >&2; exit 1 ;; \
      esac \
+  && curl -fsSL -o /tmp/SHA2-256SUMS \
+       "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS" \
   && curl -fsSL -o /out/yt-dlp \
        "https://github.com/yt-dlp/yt-dlp/releases/latest/download/${YTDLP}" \
+  && expected=$(grep " ${YTDLP}$" /tmp/SHA2-256SUMS | awk '{print $1}') \
+  && actual=$(sha256sum /out/yt-dlp | awk '{print $1}') \
+  && test -n "$expected" && test "$expected" = "$actual" \
   && chmod a+rx /out/yt-dlp \
   && curl -fsSL -o /tmp/deno.zip \
        "https://github.com/denoland/deno/releases/latest/download/${DENO}" \
@@ -53,12 +58,12 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --gid 1000 creatorr \
   && useradd --uid 1000 --gid 1000 --home-dir /app --no-create-home --shell /usr/sbin/nologin creatorr \
-  && mkdir -p /data /library /import /yt-dlp-plugins \
-       /usr/local/share/yt-dlp-plugins \
+  && mkdir -p /data /library /import /yt-dlp-plugins /data/bin \
+       /usr/local/share/creatorr /usr/local/share/yt-dlp-plugins \
   && chown -R creatorr:creatorr /data /library /import /yt-dlp-plugins
 
 COPY --from=build /out/creatorr /usr/local/bin/creatorr
-COPY --from=tools /out/yt-dlp /usr/local/bin/yt-dlp
+COPY --from=tools /out/yt-dlp /usr/local/share/creatorr/yt-dlp
 COPY --from=tools /out/deno /usr/local/bin/deno
 COPY --from=tools /out/yt-dlp-plugins/bgutil /usr/local/share/yt-dlp-plugins/bgutil
 

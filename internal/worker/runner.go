@@ -107,9 +107,8 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 	progress := func(msg string, pct *float64) {
 		if err := r.Queue.UpdateProgress(task.ID, msg, pct); err != nil {
 			log.Warn("progress update", "task", task.ID, "err", err)
-		} else {
-			r.Queue.Logs.Append(task.ID, msg)
 		}
+		r.Queue.Logs.Append(task.ID, msg)
 		r.Events.TaskUpdated(task.ID, task.Kind, task.Domain, queue.StatusRunning, msg, sid, vid, pct)
 	}
 
@@ -197,7 +196,7 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 					seriesTitle = ser.Title
 				}
 			}
-			if err := notify.LiveSkipped(ctx, r.Queue.DB, task.ID, seriesTitle, videoTitle); err != nil {
+			if err := notify.LiveSkipped(context.WithoutCancel(ctx), r.Queue.DB, task.ID, seriesTitle, videoTitle); err != nil {
 				log.Warn("live_skipped notify", "task", task.ID, "err", err)
 			}
 			r.Events.TaskDone(task.ID, task.Kind, task.Domain, doneMsg, sid, vid)
@@ -352,5 +351,6 @@ func StubHandlers() map[string]TaskHandler {
 		queue.KindDeleteFiles:        stub(queue.KindDeleteFiles),
 		queue.KindSponsorblockCut:    stub(queue.KindSponsorblockCut),
 		queue.KindMediaVerify:        stub(queue.KindMediaVerify),
+		queue.KindYtDlpUpdate:        stub(queue.KindYtDlpUpdate),
 	}
 }

@@ -68,16 +68,10 @@ func InsertNotification(database *db.DB, event, title, body string, taskID int64
 	return res.LastInsertId()
 }
 
-// MarkExternalOK sets external_ok=1 and optionally read_at when readAt non-empty.
-func MarkExternalOK(database *db.DB, id int64, readAt string) error {
+// MarkExternalOK sets external_ok=1. Does not change read_at; in-app ack only.
+func MarkExternalOK(database *db.DB, id int64) error {
 	if database == nil || id <= 0 {
 		return nil
-	}
-	if strings.TrimSpace(readAt) != "" {
-		_, err := database.SQL.Exec(`
-			UPDATE notifications SET external_ok = 1, read_at = COALESCE(read_at, ?) WHERE id = ?
-		`, readAt, id)
-		return err
 	}
 	_, err := database.SQL.Exec(`UPDATE notifications SET external_ok = 1 WHERE id = ?`, id)
 	return err
