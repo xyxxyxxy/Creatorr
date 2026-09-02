@@ -222,9 +222,9 @@
 <thead><tr><th>When</th><th>Event</th><th>Message</th></tr></thead>
 <tbody>
   {{range .History}}
-  <tr{{if .HistoryID}} class="hover cursor-pointer" onclick="location.href='/task/{{.HistoryID}}'"{{end}}>
+  <tr>
     <td class="text-xs whitespace-nowrap align-top">{{template "rel_time" .}}</td>
-    <td class="align-top">{{template "history_event" .Event}}</td>
+    <td class="align-top">{{if .HistoryID}}<a class="link link-hover" href="/task/{{.HistoryID}}">{{template "history_event" .Event}}</a>{{else}}{{template "history_event" .Event}}{{end}}</td>
     <td class="text-sm align-top{{if .HasError}} text-error{{end}}">
       {{if .Grouped}}
       <ul class="list-none space-y-1 m-0 p-0">
