@@ -3,22 +3,11 @@ package web
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/stats"
 )
 
 func (h *Handler) statsPage(w http.ResponseWriter, r *http.Request) {
-	retention, _ := settings.Get(h.Queue.DB, settings.KeyStatsRetentionDays)
-	retention = settings.NormalizeStatsRetention(retention)
-	retentionLabel := retention + " days"
-	for _, o := range settings.StatsRetentionOptions() {
-		if o.Value == retention {
-			retentionLabel = strings.ToLower(o.Label)
-			break
-		}
-	}
 	rootCount := 0
 	if roots, err := h.Library.ListRoots(); err == nil {
 		rootCount = len(roots)
@@ -26,12 +15,10 @@ func (h *Handler) statsPage(w http.ResponseWriter, r *http.Request) {
 
 	render(w, "stats", struct {
 		pageBase
-		RetentionLabel string
-		RootCount      int
+		RootCount int
 	}{
-		pageBase:       newPage("Stats", "stats", nil),
-		RetentionLabel: retentionLabel,
-		RootCount:      rootCount,
+		pageBase:  newPage("Stats", "stats", nil),
+		RootCount: rootCount,
 	})
 }
 

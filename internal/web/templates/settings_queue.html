@@ -4,7 +4,7 @@
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 
 <section class="card bg-base-100 border border-base-300 mb-4">
-  <form method="post" action="/actions/save-settings" class="card-body gap-3">
+  <form method="post" action="/actions/save-settings" class="card-body gap-3 js-settings-autosave">
     <input type="hidden" name="redirect" value="/settings/queue" />
     <h2 class="text-lg font-semibold">Queue</h2>
     <p class="text-sm opacity-60">Download order and source error threshold.</p>
@@ -19,18 +19,18 @@
         "Value" .Value
         "Hint" .Help
         "Options" .Options
+        "AutosaveChange" true
       )}}
       {{else}}
       {{template "settings_row" .}}
       {{end}}
       {{end}}
     </div>
-    <div class="card-actions"><button type="submit" class="btn btn-primary">Save</button></div>
   </form>
 </section>
 
 <section class="card bg-base-100 border border-base-300 mb-4">
-  <form method="post" action="/actions/save-domain-default" class="card-body gap-3">
+  <form method="post" action="/actions/save-domain-default" class="card-body gap-3 js-settings-autosave" data-autosave-action="/actions/save-domain-default">
     <input type="hidden" name="redirect" value="/settings/queue" />
     <h2 class="text-lg font-semibold">Domain defaults</h2>
     <p class="text-sm opacity-60">Per-hostname queue depth and concurrency. Overrides below replace these for individual domains.</p>
@@ -85,15 +85,11 @@
         </div>
       </fieldset>
     </div>
-    <div class="card-actions"><button type="submit" class="btn btn-primary">Save</button></div>
   </form>
 </section>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Domain overrides" "help" "Per-host limit and Access overrides. Empty limit fields inherit 'Domain defaults'." "add_modal" "modal-add-domain-override" "add_label" "Add override")}}
-{{if not .DomainOverrides}}
-{{template "list_empty" "No domain overrides yet."}}
-{{else}}
+{{template "list_header" (dict "level" "section" "title" "Domain overrides" "help" "Per-host limit and Access overrides. Empty limit fields inherit the default row." "add_modal" "modal-add-domain-override" "add_label" "Add override")}}
 {{template "list_table"}}
 <thead><tr>
   <th>Domain</th>
@@ -108,6 +104,18 @@
   <th></th>
 </tr></thead>
 <tbody>
+  <tr class="text-base-content/70">
+    <td class="font-mono"><span class="tooltip tooltip-top" data-tip="Edit in the form above" aria-label="Edit in the form above">default</span></td>
+    <td>{{.DefaultLimits.MaxDownloadQueue}}</td>
+    <td>{{.DefaultLimits.MaxParallelTasks}}</td>
+    <td>{{.DefaultLimits.TaskCooldownSeconds}}</td>
+    <td><span class="font-mono text-xs">{{formatRateLimit .DefaultLimits.DownloadRateLimit}}</span></td>
+    <td>{{.DefaultLimits.SleepRequests}}</td>
+    <td>{{template "empty_value"}}</td>
+    <td>{{template "empty_value"}}</td>
+    <td>{{template "empty_value"}}</td>
+    <td></td>
+  </tr>
   {{range .DomainOverrides}}
   <tr>
     <td class="font-mono">{{.Domain}}</td>
@@ -134,7 +142,6 @@
 </tbody>
 {{template "list_table_end"}}
 {{template "pagination" .Page}}
-{{end}}
 {{template "list_panel_end"}}
 
 {{$defs := .DefaultLimits}}

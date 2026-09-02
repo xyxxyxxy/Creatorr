@@ -1,7 +1,7 @@
 {{define "stats"}}
 {{template "head" .}}
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "page" "title" "Stats" "icon" .Icon "help" (printf "Video status and queue depth over time (stored on change, polled every minute). Library size pies are live. Storage development is sampled daily. Retention %s. Charts refresh every minute." .RetentionLabel))}}
+{{template "list_header" (dict "level" "page" "title" "Stats" "icon" .Icon "help" "Video status and queue depth over time (stored on change, polled every minute). Library size pies are live. Storage development is sampled daily. Chart samples are kept for 1 year. Charts refresh every minute.")}}
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}

@@ -69,7 +69,8 @@
   {{else}}
   <select name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
           class="select w-full{{$vClass}} {{.InputClass}}"
-          {{if .Required}}required{{end}}>
+          {{if .Required}}required{{end}}
+          {{if .AutosaveChange}}data-settings-autosave-change=""{{end}}>
     {{range .Options}}
     <option value="{{.Value}}" {{if eq .Value $sel}}selected{{end}}>{{.Label}}</option>
     {{end}}
@@ -147,7 +148,8 @@
            {{if .Minlength}}minlength="{{.Minlength}}"{{end}} {{if .Maxlength}}maxlength="{{.Maxlength}}"{{end}}
            {{if .ListID}}list="{{.ListID}}"{{end}}
            {{if .Autocomplete}}autocomplete="{{.Autocomplete}}"{{else if .ListID}}autocomplete="off"{{end}}
-           {{if .Required}}required{{end}} {{if .Readonly}}readonly{{end}} />
+           {{if .Required}}required{{end}} {{if .Readonly}}readonly{{end}}
+           {{if .AutosaveBlur}}data-settings-autosave-blur=""{{end}} />
     {{if $joinSuffix}}<span class="btn join-item no-animation pointer-events-none font-mono">{{$joinSuffix}}</span>{{end}}
   </div>
   {{if $validator}}<p class="validator-hint hidden">{{$vHint}}</p>{{end}}
@@ -169,7 +171,8 @@
          {{if .Minlength}}minlength="{{.Minlength}}"{{end}} {{if .Maxlength}}maxlength="{{.Maxlength}}"{{end}}
          {{if .ListID}}list="{{.ListID}}"{{end}}
          {{if .Autocomplete}}autocomplete="{{.Autocomplete}}"{{else if .ListID}}autocomplete="off"{{end}}
-         {{if .Required}}required{{end}} {{if .Readonly}}readonly{{end}} />
+         {{if .Required}}required{{end}} {{if .Readonly}}readonly{{end}}
+         {{if .AutosaveBlur}}data-settings-autosave-blur=""{{end}} />
   {{if $validator}}<p class="validator-hint hidden">{{$vHint}}</p>{{end}}
   {{end}}
   {{end}}

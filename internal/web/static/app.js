@@ -1188,6 +1188,33 @@
     refreshMaintenanceLive();
   }
 
+  function onConnectPage() {
+    return location.pathname === "/settings/connect";
+  }
+
+  const ytdlpUpdateTaskKind = "ytdlp_update";
+
+  function refreshYtDlpConnectLive() {
+    if (!onConnectPage() || !document.getElementById("ytdlp-connect-live") || !window.htmx) return;
+    window.htmx.ajax("GET", "/settings/connect", {
+      target: "#ytdlp-connect-live",
+      select: "#ytdlp-connect-live",
+      swap: "outerHTML",
+    });
+  }
+
+  function maybeRefreshYtDlpConnect(ev) {
+    if (!onConnectPage()) return;
+    if (ev.type !== "task.done" && ev.type !== "task.failed" && ev.type !== "task.updated") return;
+    let kind = "";
+    try {
+      const data = JSON.parse(ev.data || "{}");
+      kind = data.kind || "";
+    } catch (_) {}
+    if (kind !== ytdlpUpdateTaskKind) return;
+    refreshYtDlpConnectLive();
+  }
+
   function onSSE(ev) {
     refreshBadge();
     if (ev.type === "notification.created" || ev.type === "notification.read") {
@@ -1218,6 +1245,7 @@
     maybeRefreshSeriesVideos(ev);
     maybeRefreshSeriesList(ev);
     maybeRefreshMaintenance(ev);
+    maybeRefreshYtDlpConnect(ev);
     if (typeof window.refreshImportFullScanNote === "function") {
       window.refreshImportFullScanNote(ev);
     }
@@ -1568,6 +1596,25 @@
     document.body.appendChild(toast);
     scheduleFlashToasts();
   };
+
+  async function copyInputValue(inputId) {
+    const el = document.getElementById(inputId);
+    const text =
+      el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+        ? el.value
+        : el instanceof HTMLElement
+          ? el.textContent || ""
+          : "";
+    try {
+      if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+        throw new Error("clipboard unavailable");
+      }
+      await navigator.clipboard.writeText(String(text));
+      window.showFlashToast("Copied.");
+    } catch (_) {
+      window.showFlashToast("Copying failed.", { error: true });
+    }
+  }
 
   function initFlashToasts() {
     const el = document.querySelector("[data-flash-toast]");
@@ -2765,7 +2812,10 @@
     const el = ev.target;
     if (el instanceof HTMLInputElement && el.hasAttribute("data-cron-regular")) {
       const join = el.closest("[data-cron-join]");
-      if (join) syncScanCronJoin(join);
+      if (join) {
+        syncScanCronJoin(join);
+        queueCronAutosave(join, true);
+      }
       return;
     }
     if (!(el instanceof HTMLSelectElement) || !el.hasAttribute("data-rate-unit")) {
@@ -3280,10 +3330,212 @@
     syncStringListEmptyLabel(editor);
     input.value = "";
     input.focus();
+    maybeAutosaveSettingsEditor(editor);
     return true;
   }
 
+  const cronAutosaveTimers = new WeakMap();
+
+  function applySettingsOOB(html) {
+    if (!html) return false;
+    const holder = document.createElement("div");
+    holder.innerHTML = html;
+    let swapped = false;
+    holder.querySelectorAll("[hx-swap-oob]").forEach((el) => {
+      const spec = el.getAttribute("hx-swap-oob") || "";
+      const colon = spec.indexOf(":");
+      const mode = colon >= 0 ? spec.slice(0, colon).trim() : "beforeend";
+      const sel = (colon >= 0 ? spec.slice(colon + 1) : spec).trim();
+      const target = sel === "body" ? document.body : document.querySelector(sel);
+      if (!target || mode !== "beforeend") return;
+      target.appendChild(el);
+      swapped = true;
+    });
+    if (swapped) scheduleFlashToasts();
+    return swapped;
+  }
+
+  function swapCronFieldError(key, html) {
+    const wrap = document.getElementById("setting-cron-wrap-" + key);
+    if (!wrap || !html) return "";
+    wrap.outerHTML = html;
+    syncAllScanCronJoins(document.getElementById("setting-cron-wrap-" + key)?.parentElement);
+    createLucideIcons(document.body);
+    const input = document.getElementById("setting-" + key);
+    const hint = document.querySelector("#setting-cron-wrap-" + key + " .validator-hint");
+    const msg = hint?.textContent?.trim() || "";
+    if (input instanceof HTMLInputElement && msg) setControlValidity(input, msg);
+    return msg;
+  }
+
+  async function postSettingsAutosave(action, body, contentType) {
+    const headers = { "HX-Request": "true" };
+    if (contentType) headers["Content-Type"] = contentType;
+    return fetch(action, {
+      method: "POST",
+      body,
+      headers,
+      credentials: "same-origin",
+    });
+  }
+
+  function isCronAutosaveError(resp, text, cronHintName) {
+    if (!resp || !text) return false;
+    if (resp.status === 422) return true;
+    if (resp.headers.get("X-Settings-Cron-Error") === "1") return true;
+    if (!cronHintName) return false;
+    return text.includes("setting-cron-wrap-" + cronHintName) && text.includes("validator-hint");
+  }
+
+  async function handleSettingsAutosaveResponse(resp, text, cronHintName) {
+    if (resp.headers.get("HX-Redirect")) {
+      window.location.assign(resp.headers.get("HX-Redirect"));
+      return;
+    }
+    const cronKey = resp.headers.get("X-Settings-Cron-Key") || cronHintName || "";
+    if (isCronAutosaveError(resp, text, cronHintName)) {
+      const msg = swapCronFieldError(cronKey, text) || "Invalid schedule.";
+      window.showFlashToast(msg, { error: true });
+      return;
+    }
+    if (!resp.ok) {
+      window.showFlashToast("Save failed.", { error: true });
+      return;
+    }
+    if (!applySettingsOOB(text)) {
+      window.showFlashToast("Settings saved.");
+    }
+  }
+
+  function settingsAutosaveForm(form) {
+    if (!form) return;
+    const action = form.getAttribute("data-autosave-action") || form.getAttribute("action") || "/actions/save-settings";
+    const body = new URLSearchParams(new FormData(form)).toString();
+    postSettingsAutosave(action, body, "application/x-www-form-urlencoded")
+      .then(async (resp) => {
+        const text = await resp.text();
+        await handleSettingsAutosaveResponse(resp, text, "");
+      })
+      .catch(() => window.showFlashToast("Save failed.", { error: true }));
+  }
+
+  function maybeAutosaveSettingsEditor(editor) {
+    const form = editor && editor.closest("form.js-settings-autosave");
+    if (form) settingsAutosaveForm(form);
+  }
+
+  function queueCronAutosave(join, immediate) {
+    if (!join) return;
+    const run = () => {
+      cronAutosaveTimers.delete(join);
+      settingsAutosaveCron(join);
+    };
+    if (immediate) {
+      const prev = cronAutosaveTimers.get(join);
+      if (prev) window.clearTimeout(prev);
+      cronAutosaveTimers.delete(join);
+      run();
+      return;
+    }
+    const prev = cronAutosaveTimers.get(join);
+    if (prev) window.clearTimeout(prev);
+    cronAutosaveTimers.set(join, window.setTimeout(run, 50));
+  }
+
+  async function settingsAutosaveCron(join) {
+    if (!join) return;
+    syncScanCronJoin(join);
+    const form = join.closest("form.js-settings-autosave");
+    if (!form) return;
+    const action = form.getAttribute("data-autosave-action") || form.getAttribute("action") || "/actions/save-settings";
+    const input = join.querySelector("[data-cron-input]");
+    if (!(input instanceof HTMLInputElement)) return;
+    const name = input.dataset.cronName || "";
+    if (!name) return;
+    const regular = join.querySelector("[data-cron-regular]");
+    const params = new URLSearchParams();
+    const redirect = form.querySelector('input[name="redirect"]');
+    if (redirect instanceof HTMLInputElement) params.set("redirect", redirect.value);
+    if (regular instanceof HTMLInputElement && !regular.checked) {
+      params.set(name, "");
+    } else {
+      const v = input.value.trim();
+      params.set(name, v === "never" ? "" : v);
+    }
+    try {
+      const resp = await postSettingsAutosave(action, params.toString(), "application/x-www-form-urlencoded");
+      const text = await resp.text();
+      await handleSettingsAutosaveResponse(resp, text, name);
+    } catch (_) {
+      window.showFlashToast("Save failed.", { error: true });
+    }
+  }
+
+  document.body.addEventListener(
+    "blur",
+    (ev) => {
+      const el = ev.target;
+      if (el instanceof HTMLInputElement && el.hasAttribute("data-cron-input")) {
+        const join = el.closest("[data-cron-join]");
+        if (join) queueCronAutosave(join, true);
+        return;
+      }
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return;
+      if (el.disabled || el.readOnly) return;
+      const form = el.closest("form.js-settings-autosave");
+      if (!form) return;
+      if (
+        el.hasAttribute("data-settings-autosave-blur") ||
+        el.type === "number" ||
+        el.type === "text" ||
+        el.tagName === "TEXTAREA"
+      ) {
+        settingsAutosaveForm(form);
+      }
+    },
+    true
+  );
+
+  document.body.addEventListener("keydown", (ev) => {
+    const el = ev.target;
+    if (!(el instanceof HTMLInputElement) || !el.hasAttribute("data-cron-input")) return;
+    if (ev.key !== "Enter") return;
+    const join = el.closest("[data-cron-join]");
+    if (!join) return;
+    ev.preventDefault();
+    queueCronAutosave(join, true);
+  });
+
+  document.body.addEventListener("submit", (ev) => {
+    const form = ev.target;
+    if (!(form instanceof HTMLFormElement) || !form.classList.contains("js-settings-autosave")) return;
+    ev.preventDefault();
+    settingsAutosaveForm(form);
+  });
+
+  document.body.addEventListener("change", (ev) => {
+    const el = ev.target;
+    const form = el instanceof Element ? el.closest("form.js-settings-autosave") : null;
+    if (!form) return;
+    if (el instanceof HTMLInputElement && el.hasAttribute("data-cron-input")) {
+      const join = el.closest("[data-cron-join]");
+      if (join) queueCronAutosave(join, true);
+      return;
+    }
+    if (el instanceof HTMLSelectElement || (el instanceof HTMLInputElement && el.type === "checkbox")) {
+      if (el.hasAttribute("data-cron-regular")) return;
+      settingsAutosaveForm(form);
+    }
+  });
+
   document.body.addEventListener("click", (ev) => {
+    const copyBtn = ev.target.closest("[data-copy-input]");
+    if (copyBtn) {
+      ev.preventDefault();
+      const inputId = copyBtn.getAttribute("data-copy-input");
+      if (inputId) copyInputValue(inputId);
+      return;
+    }
     const addBtn = ev.target.closest("[data-actor-add]");
     if (addBtn) {
       ev.preventDefault();
@@ -3337,6 +3589,7 @@
       const editor = listRm.closest("[data-string-list-editor]");
       if (row) row.remove();
       syncStringListEmptyLabel(editor);
+      maybeAutosaveSettingsEditor(editor);
       return;
     }
   });

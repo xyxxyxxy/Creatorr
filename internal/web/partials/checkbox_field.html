@@ -18,7 +18,7 @@
   </span>
   {{else}}
   <label class="label justify-start gap-2 cursor-pointer">
-    <input type="checkbox" name="{{.Name}}" class="checkbox{{with .InputClass}} {{.}}{{end}}" value="1" {{if .Checked}}checked{{end}} />
+    <input type="checkbox" name="{{.Name}}" class="checkbox{{with .InputClass}} {{.}}{{end}}" value="1" {{if .Checked}}checked{{end}}{{if .AutosaveChange}} data-settings-autosave-change=""{{end}} />
     <span class="label-text text-base-content">{{.Label}}</span>
     {{template "field_info" (dict "Info" $info)}}
   </label>

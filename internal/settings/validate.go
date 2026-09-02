@@ -8,9 +8,6 @@ func validateValue(key, value string) error {
 	if CronKeys[key] {
 		return cronexpr.Validate(value)
 	}
-	if key == KeyStatsRetentionDays {
-		return validateStatsRetention(value)
-	}
 	if key == KeyPotFetch {
 		return validatePotFetch(value)
 	}

@@ -18,7 +18,8 @@
 {{$listID := printf "%s-dl" $id}}
 {{$off := not $cur}}
 {{$inputClass := .FieldClass}}
-<div class="w-full">
+{{$fieldError := .FieldError}}
+<div class="w-full" {{if .Autosave}}data-settings-cron-autosave{{end}}>
   <fieldset class="fieldset">
     <legend class="fieldset-legend">
       <span class="inline-flex items-center gap-1">
@@ -26,7 +27,7 @@
         {{if $info}}{{template "field_info" (dict "Info" $info)}}{{end}}
       </span>
     </legend>
-    <div class="join w-full" data-cron-join>
+    <div class="join w-full{{if $fieldError}} validator{{end}}" data-cron-join{{if $fieldError}} aria-invalid="true"{{end}}>
       <span class="btn join-item no-animation pointer-events-none shrink-0">cron</span>
       {{if $off}}<input type="hidden" name="{{$name}}" value="" data-cron-submit />{{end}}
       <input type="text" {{if not $off}}name="{{$name}}"{{end}} id="{{$id}}"
@@ -39,6 +40,7 @@
              data-cron-name="{{$name}}"
              data-cron-placeholder="{{$ph}}"
              {{if .FieldRequired}}{{if not $off}}required{{end}}{{end}}
+             {{if $fieldError}} aria-invalid="true"{{end}}
              {{if $off}}disabled{{end}} />
       <label class="btn join-item gap-2 no-animation shrink-0">
         <input type="checkbox" class="checkbox checkbox-sm" data-cron-regular{{if not $off}} checked{{end}} />
@@ -52,6 +54,9 @@
     </datalist>
     {{if .FieldHint}}
     <p class="label whitespace-pre-line">{{.FieldHint}}</p>
+    {{end}}
+    {{if $fieldError}}
+    <p class="validator-hint">{{$fieldError}}</p>
     {{end}}
   </fieldset>
 </div>

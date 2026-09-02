@@ -8,6 +8,8 @@ Most knobs are Settings keys (UI / SQLite). Process bootstrap env is only `CREAT
 
 **Appearance (browser only):** Settings → General theme picker (Dark / Light / Special curated daisyUI themes). Stored in `localStorage` `creatorr-theme`; not a SQLite setting. OS default is `emerald` (light) / `dark` (dark) until the operator picks one.
 
+**Stats chart samples:** fixed **1 year** retention (not a Settings key). Minute metrics stored on change (polled every minute); library size sampled daily. Prune runs on each sample tick. Mentioned on the Stats page header help only.
+
 **Authentication:** empty `auth_password_hash` = first-boot **Setup** only (UI redirects to `/setup`; API returns `SetupRequired` except `GET /api/health`). After setup, Forms login + `X-Api-Key` are always required (no disable). Keys: `auth_username`, `auth_password_hash` (bcrypt), `api_key` (32 hex chars), `auth_cookie_secret`, `auth_session_epoch`. Settings → General shows a **Login** control (**Change username / password** modal) + API key; Password change / username change bumps epoch (other sessions die); Save re-issues cookie for the current browser. Login always runs bcrypt (dummy hash on wrong username) and rate-limits failed attempts per IP (5 fails → 5 minute lock). Recover: stop Creatorr, clear `auth_password_hash` via `sqlite3` or [DB Browser for SQLite](https://sqlitebrowser.org/), restart, run Setup again. Details: [README Authentication](../README.md#authentication).
 
 Editable settings (examples):
@@ -20,7 +22,6 @@ Editable settings (examples):
 | `download_wanted_order` | Which wanted videos to download first inside each series (`oldest` default / `newest` by upload date; no date uses id). Series take turns so one series does not fill the whole queue. Settings → Queue / Domains |
 | `sync_files_cron` | Library scan will detect changed files in the root folders and cache directories. Settings → Scheduler. Seed `@daily`. Empty = off. Cron does not enqueue when there are no videos |
 | `retention_delete_cron` | Deleting old data according to root folder retention (Settings → Library). Settings → Scheduler. Seed `@daily`. Empty = off. Cron does not enqueue when no root has a TTL |
-| `stats_retention_days` | Stats sample retention dropdown: `90` (3 months), `365` (1 year, default), `-1` (forever). Minute metrics stored on change (polled every minute); library size sampled daily. Prune on each sample tick and immediately when this setting is saved (shorter drops older rows; forever never prunes). |
 | `source_download_error_threshold` | When this many videos of a source enter an error state, other videos from that source are held until the issue is resolved. Set to 1 so the first error stops further downloads from that source. Integer ≥ 1. Default 2. Settings → Queue / Domains |
 | `subtitle_langs` | JSON string array of yt-dlp `--sub-langs` tags (default `[]` = off). Settings → Library → Subtitles. Not retroactive (next download / metadata rescan / Refresh sidecars). |
 | `subtitle_auto` | `1` = also `--write-auto-subs`; default `0`. Auto is used only when no custom track exists for that language (yt-dlp preference). Auto-only sidecars are packed as `.lang.auto.srt` (e.g. `.en.auto.srt`). Settings → Library → Subtitles. |

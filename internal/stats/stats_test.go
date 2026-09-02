@@ -315,19 +315,25 @@ func TestLoadLibrarySize(t *testing.T) {
 	}
 }
 
-func TestApplyRetentionForever(t *testing.T) {
+func TestApplyRetentionFixedYear(t *testing.T) {
 	d := openStatsDB(t)
-	if err := settings.Set(d, settings.KeyStatsRetentionDays, settings.StatsRetentionForever); err != nil {
-		t.Fatal(err)
-	}
-	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	_, _ = d.SQL.Exec(`INSERT INTO stats_samples (sampled_at, metric, value) VALUES (?, ?, 1)`,
-		old.Format(time.RFC3339), stats.MetricVideosWanted)
+	older := time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC)
+	baseline := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	_, _ = d.SQL.Exec(`INSERT INTO stats_samples (sampled_at, metric, value) VALUES (?, ?, 1), (?, ?, 1)`,
+		older.Format(time.RFC3339), stats.MetricVideosWanted,
+		baseline.Format(time.RFC3339), stats.MetricVideosWanted)
 	n, err := stats.ApplyRetention(d, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n != 0 {
-		t.Fatalf("forever prune deleted %d", n)
+	if n == 0 {
+		t.Fatal("expected sample older than baseline pruned with fixed 1-year retention")
+	}
+	var remain int
+	if err := d.SQL.QueryRow(`SELECT COUNT(*) FROM stats_samples WHERE metric = ?`, stats.MetricVideosWanted).Scan(&remain); err != nil {
+		t.Fatal(err)
+	}
+	if remain != 1 {
+		t.Fatalf("remain=%d want 1 baseline row", remain)
 	}
 }

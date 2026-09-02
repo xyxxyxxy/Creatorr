@@ -14,8 +14,10 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
+
+// RetentionDays is the fixed chart sample retention window (not configurable).
+const RetentionDays = 365
 
 // SampleCron is the fixed schedule for minute metrics (UTC).
 const SampleCron = "* * * * *"
@@ -125,13 +127,10 @@ func (s *Sampler) TickOnce(log *slog.Logger) {
 		}
 	}
 
-	days := retentionDays(s.DB)
-	if days >= 0 {
-		if n, err := Prune(s.DB, now, days); err != nil {
-			log.Error("stats prune", "err", err)
-		} else if n > 0 {
-			log.Info("stats prune", "deleted", n, "retention_days", days)
-		}
+	if n, err := Prune(s.DB, now, RetentionDays); err != nil {
+		log.Error("stats prune", "err", err)
+	} else if n > 0 {
+		log.Info("stats prune", "deleted", n, "retention_days", RetentionDays)
 	}
 }
 
@@ -178,11 +177,6 @@ func (s *Sampler) shouldWrite(metric string, value int) bool {
 	}
 	s.lastValue[metric] = value
 	return true
-}
-
-func retentionDays(database *db.DB) int {
-	raw, _ := settings.Get(database, settings.KeyStatsRetentionDays)
-	return settings.ParseStatsRetentionDays(raw)
 }
 
 // Sample records global queue + video status counts (change-only writes).
@@ -329,9 +323,9 @@ func SampleLibrarySizeWithWriter(database *db.DB, at time.Time, writeFn func(met
 	return err
 }
 
-// ApplyRetention deletes samples outside the current stats_retention_days window.
+// ApplyRetention deletes samples outside the fixed RetentionDays window.
 func ApplyRetention(database *db.DB, now time.Time) (int64, error) {
-	return Prune(database, now, retentionDays(database))
+	return Prune(database, now, RetentionDays)
 }
 
 // Prune deletes samples per retention policy, keeping one baseline row per metric
@@ -455,7 +449,7 @@ func LoadChart(database *db.DB) (ChartPayload, error) {
 func LoadChartAt(database *db.DB, now time.Time) (ChartPayload, error) {
 	now = now.UTC()
 	out := ChartPayload{
-		RetentionDays: retentionDays(database),
+		RetentionDays: RetentionDays,
 	}
 
 	rows, err := database.SQL.Query(`

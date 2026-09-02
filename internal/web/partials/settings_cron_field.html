@@ -1,0 +1,20 @@
+{{define "settings_cron_field"}}
+{{/*
+  Scheduler cron field for autosave (success swap or validation error re-render).
+  Expects: Key, Label, Help, Value, CronDescriptors; optional Error.
+*/}}
+<div class="md:col-span-2" id="setting-cron-wrap-{{.Key}}">
+  {{template "preset_fill" (dict
+    "FieldName" .Key
+    "FieldID" (printf "setting-%s" .Key)
+    "FieldLabel" .Label
+    "FieldValue" .Value
+    "FieldPlaceholder" "* * * * *"
+    "FieldClass" "font-mono"
+    "FieldHint" .Help
+    "CronDescriptors" .CronDescriptors
+    "FieldError" .Error
+    "Autosave" true
+  )}}
+</div>
+{{end}}
