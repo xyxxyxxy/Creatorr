@@ -84,6 +84,46 @@ func pickVideosTab(tabs []map[string]any) map[string]any {
 	return nil
 }
 
+func httpEntryURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || !strings.HasPrefix(raw, "http") {
+		return ""
+	}
+	return raw
+}
+
+// pickEntryURL chooses the URL stored as WebpageURL for index/download.
+// When flat-list entries share a container webpage_url, prefer a distinct per-entry url.
+func pickEntryURL(id, webpageURL, directURL string) string {
+	webpageURL = httpEntryURL(webpageURL)
+	directURL = httpEntryURL(directURL)
+	if directURL == "" {
+		return webpageURL
+	}
+	if webpageURL == "" {
+		return directURL
+	}
+	if entryURLMoreSpecific(id, webpageURL, directURL) {
+		return directURL
+	}
+	return webpageURL
+}
+
+func entryURLMoreSpecific(id, webpageURL, directURL string) bool {
+	if strings.EqualFold(directURL, webpageURL) {
+		return false
+	}
+	low := strings.ToLower(directURL)
+	if strings.Contains(low, "/download/") {
+		return true
+	}
+	id = strings.TrimSpace(id)
+	if id != "" && strings.Contains(id, "/") {
+		return strings.Contains(low, strings.ToLower(id))
+	}
+	return false
+}
+
 func entryFromMap(m map[string]any) Entry {
 	id := strField(m, "id", "display_id")
 	title := strField(m, "title")
@@ -93,10 +133,7 @@ func entryFromMap(m map[string]any) Entry {
 	if title == "" {
 		title = "video"
 	}
-	url := strField(m, "webpage_url", "url")
-	if url != "" && !strings.HasPrefix(url, "http") {
-		url = ""
-	}
+	url := pickEntryURL(id, strField(m, "webpage_url"), strField(m, "url"))
 	date := uploadTime(m)
 	desc := strField(m, "description")
 	if len(desc) > 4000 {

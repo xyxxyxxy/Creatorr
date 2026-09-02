@@ -682,10 +682,15 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 	if _, ok, _ := h.Library.VideoThumbPath(vid); ok {
 		thumbURL = fmt.Sprintf("/series/%d/videos/%d/thumb", sid, vid)
 	}
+	resolvedSourceURL := ""
+	if video.SourceURL.Valid {
+		resolvedSourceURL = library.DownloadURL(video.SourceURL.String, video.RemoteID)
+	}
 	render(w, "video_detail", struct {
 		pageBase
 		Series              *library.Series
 		Video               *library.Video
+		ResolvedSourceURL   string
 		ThumbURL            string
 		SizeLabel           string
 		Files               []videoFileView
@@ -705,6 +710,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		pageBase:            newPage(video.Title, "series", flashFromQuery(r)),
 		Series:              ser,
 		Video:               video,
+		ResolvedSourceURL:   resolvedSourceURL,
 		ThumbURL:            thumbURL,
 		SizeLabel:           sizeLabel,
 		Files:               fileRows,

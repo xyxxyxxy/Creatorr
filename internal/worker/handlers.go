@@ -1238,6 +1238,7 @@ func RefreshSidecarsHandler(d Deps) TaskHandler {
 		if url == "" {
 			return apperrors.New(apperrors.CodeResolveFailed, "video has no source_url")
 		}
+		url = library.DownloadURL(url, v.RemoteID)
 		if d.YtDlp == nil {
 			return apperrors.New(apperrors.CodeInternal, "yt-dlp client missing")
 		}
@@ -1298,6 +1299,7 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 	if url == "" {
 		return apperrors.New(apperrors.CodeResolveFailed, "video has no source_url")
 	}
+	url = library.DownloadURL(url, v.RemoteID)
 	if d.YtDlp == nil {
 		return apperrors.New(apperrors.CodeInternal, "yt-dlp client missing")
 	}
@@ -1460,6 +1462,7 @@ func metadataRescanSeries(ctx context.Context, d Deps, t *queue.Task, progress f
 			if url == "" {
 				continue
 			}
+			url = library.DownloadURL(url, e.ID)
 			if err := refreshSidecars(ctx, d, work, jar, url, domain, vid, t.ID, progress); err != nil {
 				lastErr = err
 				continue

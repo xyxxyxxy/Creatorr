@@ -290,6 +290,7 @@ func (s *Store) PrepareDownload(videoID int64) (*DownloadContext, error) {
 	if v.SourceURL.Valid {
 		url = strings.TrimSpace(v.SourceURL.String)
 	}
+	url = DownloadURL(url, v.RemoteID)
 	return &DownloadContext{
 		Video:          *v,
 		SeriesTitle:    title,

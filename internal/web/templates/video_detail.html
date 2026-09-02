@@ -136,7 +136,9 @@
   {{else}}
   <tr><th class="w-40">Size</th><td>{{.SizeLabel}}</td></tr>
   {{end}}
-  {{if .Video.SourceURL.Valid}}
+  {{if .ResolvedSourceURL}}
+  <tr><th class="w-40">Source URL</th><td class="text-xs break-all" colspan="2"><a class="link" href="{{.ResolvedSourceURL}}" target="_blank" rel="noopener">{{.ResolvedSourceURL}}</a></td></tr>
+  {{else if .Video.SourceURL.Valid}}
   <tr><th class="w-40">Source URL</th><td class="text-xs break-all" colspan="2"><a class="link" href="{{.Video.SourceURL.String}}" target="_blank" rel="noopener">{{.Video.SourceURL.String}}</a></td></tr>
   {{else}}
   <tr><th class="w-40">Source URL</th><td class="opacity-60 text-xs break-all" colspan="2">none</td></tr>
