@@ -84,8 +84,8 @@ func TestSeriesListRenders(t *testing.T) {
 	if !strings.Contains(body, `name="source_url"`) || !strings.Contains(body, `name="scan_cron"`) {
 		t.Fatalf("missing add-series URL path fields: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, `supportedsites.md`) {
-		t.Fatalf("missing yt-dlp supported sites link: %s", truncate(body, 400))
+	if !strings.Contains(body, `supportedsites.md`) || !strings.Contains(body, "channel/playlist URL of a") {
+		t.Fatalf("missing yt-dlp supported sites hint: %s", truncate(body, 400))
 	}
 	if !strings.Contains(body, `name="source_label"`) || !strings.Contains(body, `data-add-series-step="series"`) {
 		t.Fatalf("missing add-series series step: %s", truncate(body, 400))

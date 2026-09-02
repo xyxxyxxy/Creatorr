@@ -136,7 +136,6 @@
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Name (optional)</legend>
         <input name="label" class="input w-full" value="{{if .Source.Label.Valid}}{{.Source.Label.String}}{{end}}" />
-        <p class="label whitespace-normal">Empty clears the name.</p>
       </fieldset>
       {{if ne .Source.Kind "single"}}
       {{template "scan_cron_field" (dict
