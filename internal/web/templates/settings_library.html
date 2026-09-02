@@ -201,25 +201,22 @@
     <h3 class="font-bold text-lg mb-2">Add root folder</h3>
         <form method="post" action="/actions/add-root" class="space-y-2">
       <input type="hidden" name="redirect" value="/settings/library" />
-      <fieldset class="fieldset">
-  <legend class="fieldset-legend">
-    <span class="inline-flex items-center gap-1">
-      Path
-      {{template "field_info" (dict "Info" "Absolute path on disk.")}}
-    </span>
-  </legend>
-  <input name="path" id="add-root-path" class="input w-full" required autocomplete="off"
-                   placeholder="/library" />
-</fieldset>
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Name (optional)
-            {{template "field_info" (dict "Info" "Optional display label. Leave empty to show no name in the UI.")}}
-          </span>
-        </legend>
-        <input name="name" id="add-root-name" class="input w-full" placeholder="Root folder name" autocomplete="off" />
-      </fieldset>
+      {{template "field_input" (dict
+        "Name" "path"
+        "ID" "add-root-path"
+        "Label" "Path"
+        "Required" true
+        "Placeholder" "/library"
+        "Autocomplete" "off"
+        "Hint" "Absolute path on disk."
+      )}}
+      {{template "field_input" (dict
+        "Name" "name"
+        "ID" "add-root-name"
+        "Label" "Name (optional)"
+        "Placeholder" "Root folder name"
+        "Autocomplete" "off"
+      )}}
       {{template "field_input" (dict
         "Name" "retention_ttl_days"
         "Label" "Retention days (optional)"
@@ -227,7 +224,7 @@
         "Min" "1"
         "Placeholder" "Forever"
         "JoinSuffix" "days"
-        "Info" "Days after pack before retention delete may remove artifacts."
+        "Hint" "Days after pack before retention delete may remove artifacts."
       )}}
       <div class="modal-action">
         <label for="modal-add-root" class="btn modal-cancel">Cancel</label>
@@ -251,14 +248,13 @@
         "Label" "Path"
         "Value" .Path
         "Required" true
-        "Info" "Absolute path on disk."
+        "Hint" "Absolute path on disk."
       )}}
       {{template "field_input" (dict
         "Name" "name"
         "Label" "Name (optional)"
         "Value" .Name
         "Placeholder" "Root folder name"
-        "Info" "Optional display label. Leave empty to show no name in the UI."
       )}}
       {{template "field_input" (dict
         "Name" "retention_ttl_days"
@@ -268,7 +264,7 @@
         "Placeholder" "Forever"
         "Value" (retentionDaysValue .RetentionTTLSeconds)
         "JoinSuffix" "days"
-        "Info" "Days after pack before retention delete may remove artifacts."
+        "Hint" "Days after pack before retention delete may remove artifacts."
       )}}
       <div class="modal-action">
         <label for="modal-edit-root-{{.ID}}" class="btn modal-cancel">Cancel</label>
@@ -287,13 +283,7 @@
         <form method="post" action="/actions/add-profile" class="space-y-2">
       <input type="hidden" name="redirect" value="/settings/library" />
       {{template "field_input" (dict "Name" "name" "Label" "Name" "Placeholder" "Quality profile name" "Required" true)}}
-      {{template "field_input" (dict
-        "Name" "format_selector"
-        "Label" "Format selector"
-        "Value" "bv*+ba/b"
-        "Required" true
-        "Info" "Passed to yt-dlp as --format (yt-dlp -f style)."
-      )}}
+      {{template "profile_format_selector_field" (dict "Value" "bv*+ba/b")}}
       {{template "checkbox_field" (dict
         "Name" "verify_media"
         "Label" "Verify downloaded videos"
@@ -325,13 +315,7 @@
       <input type="hidden" name="id" value="{{.ID}}" />
       <input type="hidden" name="redirect" value="/settings/library" />
       {{template "field_input" (dict "Name" "name" "Label" "Name" "Value" .Name "Placeholder" "Quality profile name" "Required" true)}}
-      {{template "field_input" (dict
-        "Name" "format_selector"
-        "Label" "Format selector"
-        "Value" .FormatSelector
-        "Required" true
-        "Info" "Passed to yt-dlp as --format (yt-dlp -f style)."
-      )}}
+      {{template "profile_format_selector_field" (dict "Value" .FormatSelector)}}
       {{template "checkbox_field" (dict
         "Name" "verify_media"
         "Label" "Verify downloaded videos"
