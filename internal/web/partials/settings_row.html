@@ -23,18 +23,6 @@
     "InputClass" "h-24"
     "Disabled" .Disabled
   )}}
-  {{else if eq .Key "source_download_error_threshold"}}
-  {{template "field_input" (dict
-    "Name" .Key
-    "ID" $id
-    "Label" $label
-    "Type" "number"
-    "Value" .Value
-    "Hint" .Help
-    "Min" "1"
-    "Step" "1"
-    "AutosaveBlur" true
-  )}}
   {{else}}
   {{template "field_input" (dict
     "Name" .Key

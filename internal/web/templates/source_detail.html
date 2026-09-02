@@ -32,7 +32,7 @@
     </form>
     {{end}}
     {{if .HasRetryable}}
-    <label for="modal-retry-source" class="btn btn-outline tooltip tooltip-top" data-tip="Clear 'wanted_download_error' and 'wanted_source_error' status from videos of this source and put them back to 'wanted'">Retry</label>
+    <label for="modal-retry-source" class="btn btn-outline tooltip tooltip-top" data-tip="Clear download errors on this source and put videos back to wanted">Retry</label>
     {{end}}
     {{$fullOff := or .ScanActive (not .DomainActive)}}
     {{$tipFull := "Start 'Full scan'"}}
@@ -188,8 +188,8 @@
 <input type="checkbox" id="modal-retry-source" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Retry source errors</h3>
-    <p class="text-sm mb-4">Set wanted_download_error and wanted_source_error videos back to wanted for this source. Does not enqueue downloads.</p>
+    <h3 class="font-bold text-lg mb-2">Retry download errors</h3>
+    <p class="text-sm mb-4">Set wanted_download_error videos back to wanted for this source. Does not enqueue downloads.</p>
     <form method="post" action="/actions/retry-source-errors">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />

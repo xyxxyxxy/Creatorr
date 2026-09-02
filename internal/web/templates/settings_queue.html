@@ -4,36 +4,10 @@
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 
 <section class="card bg-base-100 border border-base-300 mb-4">
-  <form method="post" action="/actions/save-settings" class="card-body gap-3 js-settings-autosave">
-    <input type="hidden" name="redirect" value="/settings/queue" />
-    <h2 class="text-lg font-semibold">Queue</h2>
-    <p class="text-sm opacity-60">Download order and source error threshold.</p>
-    <div class="grid gap-3 md:grid-cols-2">
-      {{range .Settings}}
-      {{if .Select}}
-      {{template "field_input" (dict
-        "Name" .Key
-        "ID" (printf "setting-%s" .Key)
-        "Label" .Label
-        "Type" "select"
-        "Value" .Value
-        "Hint" .Help
-        "Options" .Options
-        "AutosaveChange" true
-      )}}
-      {{else}}
-      {{template "settings_row" .}}
-      {{end}}
-      {{end}}
-    </div>
-  </form>
-</section>
-
-<section class="card bg-base-100 border border-base-300 mb-4">
   <form method="post" action="/actions/save-domain-default" class="card-body gap-3 js-settings-autosave" data-autosave-action="/actions/save-domain-default">
     <input type="hidden" name="redirect" value="/settings/queue" />
-    <h2 class="text-lg font-semibold">Domain defaults</h2>
-    <p class="text-sm opacity-60">Per-hostname queue depth and concurrency. Overrides below replace these for individual domains.</p>
+    <h2 class="text-lg font-semibold">Defaults</h2>
+    <p class="text-sm opacity-60">Per-domain queue depth and concurrency. Overrides below replace these for individual domains.</p>
     <div class="grid gap-3">
       <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
         <legend class="fieldset-legend">Domain Queues</legend>
@@ -89,7 +63,7 @@
 </section>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Domain overrides" "help" "Per-host limit and Access overrides. Empty limit fields inherit the default row." "add_modal" "modal-add-domain-override" "add_label" "Add override")}}
+{{template "list_header" (dict "level" "section" "title" "Domain overrides" "help" "Per-domain limit and Access overrides. Empty limit fields inherit the default row." "add_modal" "modal-add-domain-override" "add_label" "Add override")}}
 {{template "list_table"}}
 <thead><tr>
   <th>Domain</th>

@@ -91,7 +91,7 @@ func TestSeriesWarnLevels(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := flags[ser.ID]
-	if !f.HasDownloadError || f.HasSourceError || f.DownloadErrorCount != 1 {
+	if !f.HasDownloadError || f.HasVerifyFailed || f.DownloadErrorCount != 1 {
 		t.Fatalf("flags=%+v", f)
 	}
 	if _, err := d.SQL.Exec(`
@@ -107,17 +107,6 @@ func TestSeriesWarnLevels(t *testing.T) {
 	f = flags[ser.ID]
 	if !f.HasDownloadError || f.DownloadErrorCount != 2 {
 		t.Fatalf("want 2 download errors, flags=%+v", f)
-	}
-	if _, err := d.SQL.Exec(`UPDATE videos SET status = 'wanted_source_error' WHERE remote_id = 'e1'`); err != nil {
-		t.Fatal(err)
-	}
-	flags, err = s.SeriesVideoErrorFlagsMap([]int64{ser.ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	f = flags[ser.ID]
-	if !f.HasSourceError || !f.HasDownloadError || f.SourceErrorCount != 1 || f.DownloadErrorCount != 1 {
-		t.Fatalf("after source error flags=%+v", f)
 	}
 	n, err := s.CountSeriesWithError()
 	if err != nil {

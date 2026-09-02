@@ -14,7 +14,6 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 // SeriesIDsMonitored returns series with series.monitored=1.
@@ -171,7 +170,7 @@ func (s *Store) EnqueueFullScansForMonitored() (int, error) {
 // EnqueueDownloadWanted enqueues downloads for wanted videos lacking a file.
 // Requires series monitored and domain active. Videos with no source are skipped.
 // Order: fair round-robin across series (fewest active downloads first), within
-// each series by download_wanted_order (upload_date; undated by id).
+// each series oldest upload_date first (undated by lowest id).
 // Per-domain max_download_queue caps that hostname only; other domains keep
 // filling until their caps (or all active candidate domains are full).
 func (s *Store) EnqueueDownloadWanted() (int, error) {
@@ -179,11 +178,6 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
 	}
 	orderSQL := videoDownloadOrderOldest
-	if raw, err := settings.Get(s.DB, settings.KeyDownloadWantedOrder); err == nil {
-		if settings.NormalizeDownloadWantedOrder(raw) == settings.DownloadWantedOrderNewest {
-			orderSQL = videoDownloadOrderNewest
-		}
-	}
 	rows, err := s.DB.SQL.Query(`
 		SELECT v.id, v.series_id, COALESCE(v.source_url,''), v.source_id, COALESCE(src.url,'')
 		FROM videos v
@@ -282,6 +276,7 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 	}
 
 	activeOK := map[string]bool{}
+	pausedOK := map[string]bool{}
 	seenActive := map[string]bool{}
 	openDomainCount := 0
 	for _, r := range list {
@@ -294,7 +289,16 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 			}
 			activeOK[r.domain] = ok
 		}
-		if ok && !seenActive[r.domain] {
+		paused, cached := pausedOK[r.domain]
+		if !cached {
+			var err error
+			paused, err = domains.IsPaused(s.DB, r.domain)
+			if err != nil {
+				return 0, err
+			}
+			pausedOK[r.domain] = paused
+		}
+		if ok && !paused && !seenActive[r.domain] {
 			seenActive[r.domain] = true
 			openDomainCount++
 		}
@@ -304,7 +308,7 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 	fullCount := 0
 	n := 0
 	for _, r := range list {
-		if !activeOK[r.domain] || fullDomains[r.domain] {
+		if !activeOK[r.domain] || pausedOK[r.domain] || fullDomains[r.domain] {
 			continue
 		}
 		if _, ok, err := s.HasVideoFile(r.id); err != nil {

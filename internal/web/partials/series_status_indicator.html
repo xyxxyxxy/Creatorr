@@ -1,6 +1,6 @@
 {{define "series_status_indicator"}}
 {{/* Poster top-left health badge (errors/warnings only). Kind:
-     wanted_source_error | wanted_download_error | verify_failed | scan_error | incomplete.
+     wanted_download_error | verify_failed | scan_error | incomplete.
      Monitor state is left of title (series_monitor_indicator). Title = tooltip. */}}
 {{$badge := "badge-error"}}{{if eq .Kind "verify_failed"}}{{$badge = "badge-warning"}}{{end}}
 <span class="series-health-badge absolute top-0 left-0 z-10 badge badge-sm {{$badge}} shadow p-1 tooltip tooltip-top inline-flex items-center justify-center"
@@ -8,8 +8,6 @@
       aria-label="{{.Title}}">
   {{if gt .Count 0}}
   <span class="text-[10px] font-semibold tabular-nums leading-none">{{.Count}}</span>
-  {{else if eq .Kind "wanted_source_error"}}
-  <i data-lucide="circle-alert" class="size-3"></i>
   {{else if eq .Kind "wanted_download_error"}}
   <i data-lucide="circle-x" class="size-3"></i>
   {{else if eq .Kind "verify_failed"}}

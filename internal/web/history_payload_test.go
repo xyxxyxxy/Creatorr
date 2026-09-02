@@ -14,9 +14,6 @@ func TestHistoryEventError(t *testing.T) {
 		want  bool
 	}{
 		{"download_failed", true},
-		{"source_failed", true},
-		{"wanted_download_error", true}, // legacy
-		{"wanted_source_error", true},   // legacy
 		{library.SourceHistScanError, true},
 		{library.SourceHistCancelled, false},
 		{"cancelled", false},

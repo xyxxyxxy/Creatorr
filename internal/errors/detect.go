@@ -59,12 +59,6 @@ func DetectAgeRestricted(message string) bool {
 	return ageRestrictRe.MatchString(message)
 }
 
-// IsSourceCountableDownloadError reports whether a download failure code
-// counts toward source_download_error_threshold.
-func IsSourceCountableDownloadError(code string) bool {
-	return code != CodeAgeRestricted
-}
-
 // DetectPauseCode inspects external-tool stderr / error text.
 // Returns CookieInvalid, RateLimited, or "" if not a pause trigger.
 func DetectPauseCode(message string) string {

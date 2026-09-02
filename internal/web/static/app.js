@@ -656,7 +656,6 @@
   function statusBadgeEl(status) {
     const s = String(status || "");
     const tips = {
-      wanted_source_error: "Source has too many download errors - Retry on the source",
       wanted_download_error: "Last download failed",
       verify_failed: "Post-pack media verify failed - file kept; Want or Queue download",
       missing: "File path recorded but media not on disk - file sync may restore",
@@ -670,7 +669,6 @@
       done: { icon: "circle-check", color: "text-success" },
       success: { icon: "circle-check", color: "text-success" },
       wanted: { icon: "download", color: "text-warning" },
-      wanted_source_error: { icon: "circle-alert", color: "text-error" },
       wanted_download_error: { icon: "circle-x", color: "text-error" },
       verify_failed: { icon: "badge-alert", color: "text-warning" },
       downloaded: { icon: "circle-check", color: "text-success" },
@@ -679,7 +677,6 @@
       ignored: { icon: "eye-off", color: "text-base-content/50" },
     };
     const labels = {
-      wanted_source_error: "wanted (source error)",
       wanted_download_error: "wanted (download error)",
       verify_failed: "Verify failed",
     };

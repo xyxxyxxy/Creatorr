@@ -14,10 +14,8 @@ const (
 	KeyPotFetch                     = "pot_fetch"
 	KeyEpisodeFormat                = "episode_format"
 	KeyDownloadWantedCron           = "download_wanted_cron"
-	KeyDownloadWantedOrder          = "download_wanted_order"
 	KeySyncFilesCron                = "sync_files_cron"
 	KeyRetentionDeleteCron          = "retention_delete_cron"
-	KeySourceDownloadErrorThreshold = "source_download_error_threshold"
 	KeyMetadataDomainTag            = "metadata_domain_tag"
 	KeyMetadataGenresFromCategories = "metadata_genres_from_categories"
 	KeyYtDlpUpdateCron              = "ytdlp_update_cron"
@@ -32,10 +30,8 @@ var Help = map[string]string{
 	KeyPotFetch: "A PO token (proof of origin) is an attestation token yt-dlp can attach so media hosts treat traffic as more legitimate when an IP is flagged for bot checks. It may help, but does not guarantee avoiding blocks. Creatorr fetches tokens from the provider sidecar above.",
 	KeyEpisodeFormat:                "Relative path under the series folder for packed episodes (no extension). Saving does not rename existing files - use Apply episode format.",
 	KeyDownloadWantedCron:           "Schedule to enqueue wanted videos for monitored series.",
-	KeyDownloadWantedOrder:          "Which wanted videos to download first inside each series (by upload date; no date uses id). Series take turns so one series does not fill the whole queue.",
 	KeySyncFilesCron:                "Library scan will detect changed files in the root folders and cache directories.",
 	KeyRetentionDeleteCron:          "Deleting old data according to root folder retention ('Settings → Library').",
-	KeySourceDownloadErrorThreshold: "When this many videos of a source enter an error state, other videos from that source are held until the issue is resolved.\nSet to 1 so the first error stops further downloads from that source.",
 	KeySubtitleLangs:                "Supports all, regex (en.*), and -TAG exclusions. Saving does not re-fetch existing episodes.",
 	KeySubtitleAuto:                 "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",
 	KeyMetadataDomainTag:            "On download and metadata rescan, prepend the source domain to video tags when source_url is known.",
@@ -56,10 +52,8 @@ var Labels = map[string]string{
 	KeyPotFetch:                     "PO token fetch",
 	KeyEpisodeFormat:                "Episode format",
 	KeyDownloadWantedCron:           "Download wanted schedule",
-	KeyDownloadWantedOrder:          "Download wanted order",
 	KeySyncFilesCron:                "File sync schedule",
 	KeyRetentionDeleteCron:          "Retention delete schedule",
-	KeySourceDownloadErrorThreshold: "Source download error threshold",
 	KeySubtitleLangs:                "Subtitle languages",
 	KeySubtitleAuto:                 "Include auto-generated subtitles",
 	KeyMetadataDomainTag:            "Add source domain as video tag",
@@ -90,12 +84,6 @@ var schedulerOrder = []string{
 	KeySyncFilesCron,
 	KeyRetentionDeleteCron,
 	KeyYtDlpUpdateCron,
-}
-
-// queueOrder is Settings → Queue / Domains (order, source error threshold).
-var queueOrder = []string{
-	KeyDownloadWantedOrder,
-	KeySourceDownloadErrorThreshold,
 }
 
 // libraryOrder is Settings → Library (subtitles; episode_format is separate).
@@ -132,10 +120,8 @@ func SeedDefaults(database *db.DB) error {
 		KeyPotFetch:                     PotFetchAuto,
 		KeyEpisodeFormat:                DefaultEpisodeFormat,
 		KeyDownloadWantedCron:           "@hourly",
-		KeyDownloadWantedOrder:          DownloadWantedOrderOldest,
 		KeySyncFilesCron:                "@daily",
 		KeyRetentionDeleteCron:          "@daily",
-		KeySourceDownloadErrorThreshold: strconv.Itoa(DefaultSourceDownloadErrorThreshold),
 		KeySubtitleLangs:                DefaultSubtitleLangs,
 		KeySubtitleAuto:                 DefaultSubtitleAuto,
 		KeyMetadataDomainTag:            DefaultMetadataDomainTag,
@@ -145,7 +131,6 @@ func SeedDefaults(database *db.DB) error {
 	}
 	allKeys := append([]string{}, generalOrder...)
 	allKeys = append(allKeys, schedulerOrder...)
-	allKeys = append(allKeys, queueOrder...)
 	allKeys = append(allKeys, libraryOrder...)
 	allKeys = append(allKeys, KeyEpisodeFormat)
 	allKeys = append(allKeys, KeyMetadataDomainTag, KeyMetadataGenresFromCategories)
@@ -188,7 +173,7 @@ func migrateLegacySettingKeys(database *db.DB) error {
 		}
 	}
 	// Drop removed settings no longer used.
-	for _, key := range []string{"download_new_on_scan", "stats_retention_days"} {
+	for _, key := range []string{"download_new_on_scan", "stats_retention_days", "source_download_error_threshold", "download_wanted_order"} {
 		_, _ = database.SQL.Exec(`DELETE FROM settings WHERE key = ?`, key)
 	}
 	return nil
@@ -217,11 +202,10 @@ func migrateLegacyTaskKinds(database *db.DB) error {
 	return nil
 }
 
-// All returns Connect + General + Scheduler + Queue + Library keys (API listing).
+// All returns Connect + General + Scheduler + Library keys (API listing).
 func All(database *db.DB) ([]Entry, error) {
 	keys := append(append([]string{}, connectOrder...), generalOrder...)
 	keys = append(keys, schedulerOrder...)
-	keys = append(keys, queueOrder...)
 	keys = append(keys, libraryOrder...)
 	keys = append(keys, KeyEpisodeFormat)
 	return entriesFor(database, keys)
@@ -240,16 +224,6 @@ func Connect(database *db.DB) ([]Entry, error) {
 // Scheduler returns Settings → Scheduler rows.
 func Scheduler(database *db.DB) ([]Entry, error) {
 	return entriesFor(database, schedulerOrder)
-}
-
-// Queue returns Settings → Queue / Domains rows.
-func Queue(database *db.DB) ([]Entry, error) {
-	return entriesFor(database, queueOrder)
-}
-
-// DomainsSettings is deprecated: threshold lives under Queue.
-func DomainsSettings(database *db.DB) ([]Entry, error) {
-	return entriesFor(database, []string{KeySourceDownloadErrorThreshold})
 }
 
 // LibrarySettings returns Settings → Library global knobs (not roots/profiles tables).
@@ -302,9 +276,6 @@ func Set(database *db.DB, key, value string) error {
 	if key == KeyMetadataDomainTag || key == KeyMetadataGenresFromCategories {
 		value = NormalizeMetadataFlag(value)
 	}
-	if key == KeySourceDownloadErrorThreshold {
-		value = NormalizeSourceDownloadErrorThreshold(value)
-	}
 	if key == KeyYtDlpUpdateChannel {
 		if err := validateYtDlpUpdateChannel(value); err != nil {
 			return err
@@ -346,10 +317,6 @@ func SetMany(database *db.DB, values map[string]string) error {
 		}
 		if k == KeyMetadataDomainTag || k == KeyMetadataGenresFromCategories {
 			v = NormalizeMetadataFlag(v)
-			values[k] = v
-		}
-		if k == KeySourceDownloadErrorThreshold {
-			v = NormalizeSourceDownloadErrorThreshold(v)
 			values[k] = v
 		}
 		if err := validateValue(k, v); err != nil {

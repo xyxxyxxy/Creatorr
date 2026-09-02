@@ -184,11 +184,11 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 			task.Kind == queue.KindDownload &&
 			task.VideoID.Valid && r.Library != nil {
 			doneMsg := "Skipped (currently live)"
-			_ = r.Queue.Finish(task.ID, queue.StatusDone, doneMsg, code, runErr.Error())
-			_ = r.Queue.SetDetail(task.ID, runErr.Error())
 			if err := r.Library.RecordLiveBroadcastSkipped(task.VideoID.Int64, task.ID); err != nil {
 				log.Warn("record live_skipped", "video", task.VideoID.Int64, "err", err)
 			}
+			_ = r.Queue.Finish(task.ID, queue.StatusDone, doneMsg, code, runErr.Error())
+			_ = r.Queue.SetDetail(task.ID, runErr.Error())
 			seriesTitle, videoTitle := "", ""
 			if v, err := r.Library.GetVideo(task.VideoID.Int64); err == nil && v != nil {
 				videoTitle = v.Title
@@ -220,16 +220,14 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 			log.Info("task done (media type excluded)", "id", task.ID, "kind", task.Kind)
 			return
 		}
-		_ = r.Queue.Finish(task.ID, queue.StatusFailed, msg, code, runErr.Error())
 		_ = r.Queue.SetDetail(task.ID, runErr.Error())
 		r.Events.TaskFailed(task.ID, task.Kind, task.Domain, msg, code, sid, vid)
 		if task.Kind == queue.KindDownload && task.VideoID.Valid && r.Library != nil {
 			if err := r.Library.MarkDownloadFailed(task.VideoID.Int64, task.ID, code, msg); err != nil {
 				log.Warn("mark wanted_download_error", "video", task.VideoID.Int64, "err", err)
 			}
-		} else {
-			r.maybeHoldSourceOnYtDlp(log, task, code)
 		}
+		_ = r.Queue.Finish(task.ID, queue.StatusFailed, msg, code, runErr.Error())
 		r.maybeNotifyFailure(ctx, log, task, code, runErr)
 		if mediaKind(task.Kind) {
 			r.maybeScheduleDigest(ctx, log)
@@ -249,24 +247,6 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 		r.maybeScheduleDigest(ctx, log)
 	}
 	log.Info("task done", "id", task.ID, "kind", task.Kind)
-}
-
-func (r *Runner) maybeHoldSourceOnYtDlp(log *slog.Logger, task *queue.Task, code string) {
-	if r.Library == nil || !apperrors.IsYtDlpPauseCode(code) {
-		return
-	}
-	srcID := queue.SourceIDFromPayload(task.Payload)
-	if srcID <= 0 && task.VideoID.Valid {
-		if v, err := r.Library.GetVideo(task.VideoID.Int64); err == nil && v != nil && v.SourceID.Valid {
-			srcID = v.SourceID.Int64
-		}
-	}
-	if srcID <= 0 {
-		return
-	}
-	if err := r.Library.HoldSourceOnYtDlpError(srcID, task.ID); err != nil {
-		log.Warn("hold source on yt-dlp error", "source", srcID, "err", err)
-	}
 }
 
 func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task *queue.Task, code string, runErr error) {

@@ -396,20 +396,23 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if strings.Contains(body, "download_new_on_scan") {
 				t.Fatalf("%s still has download_new_on_scan", path)
 			}
-			if strings.Contains(body, "download_wanted_order") || strings.Contains(body, "source_download_error_threshold") {
+			if strings.Contains(body, "download_wanted_order") {
 				t.Fatalf("%s still has queue settings", path)
 			}
 			continue
 		}
 		if path == "/settings/queue" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "download_wanted_order") || !strings.Contains(body, "max_download_queue") || !strings.Contains(body, "max_parallel_tasks") || !strings.Contains(body, "source_download_error_threshold") {
+			if strings.Contains(body, "download_wanted_order") {
+				t.Fatalf("%s still has download_wanted_order", path)
+			}
+			if !strings.Contains(body, "max_download_queue") || !strings.Contains(body, "max_parallel_tasks") {
 				t.Fatalf("%s missing queue form fields", path)
 			}
 			if strings.Contains(body, "download_new_on_scan") {
 				t.Fatalf("%s should not have download_new_on_scan", path)
 			}
-			if !strings.Contains(body, "Domain defaults") || !strings.Contains(body, "Domain overrides") || !strings.Contains(body, "modal-add-domain-override") {
+			if !strings.Contains(body, ">Defaults</h2>") || !strings.Contains(body, "Domain overrides") || !strings.Contains(body, "modal-add-domain-override") {
 				t.Fatalf("%s missing domain defaults/overrides", path)
 			}
 			if !strings.Contains(body, `>default</span>`) || strings.Contains(body, `modal-edit-domain-default`) {

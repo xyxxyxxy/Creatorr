@@ -667,7 +667,7 @@ type Video struct {
 	// SourceUrl Video page URL (watch/clip); never the feed channel/playlist URL
 	SourceUrl *string `json:"source_url"`
 
-	// Status wanted, wanted_source_error, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored
+	// Status wanted, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored
 	Status       string  `json:"status"`
 	ThumbnailUrl *string `json:"thumbnail_url"`
 	Title        string  `json:"title"`

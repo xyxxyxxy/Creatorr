@@ -41,8 +41,8 @@ func testSettingsRouter(t *testing.T) http.Handler {
 func TestActionSaveSettingsHTMXSuccess(t *testing.T) {
 	r := testSettingsRouter(t)
 	form := url.Values{}
-	form.Set("redirect", "/settings/queue")
-	form.Set(settings.KeyDownloadWantedOrder, settings.DownloadWantedOrderNewest)
+	form.Set("redirect", "/settings/scheduler")
+	form.Set(settings.KeyDownloadWantedCron, "@hourly")
 	req := httptest.NewRequest(http.MethodPost, "/actions/save-settings", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")

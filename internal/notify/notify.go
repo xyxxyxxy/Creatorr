@@ -169,7 +169,7 @@ func truncateDetailTail(detail string) string {
 func DomainAlert(ctx context.Context, database *db.DB, taskID int64, domain, reason, detail string) error {
 	detail = truncateDetailTail(detail)
 	title := fmt.Sprintf("Domain issue (%s)", domain)
-	body := fmt.Sprintf("Domain %s reported %s. Videos may be in wanted_download_error / wanted_source_error. Fix cookies or wait, then Retry on the source.\n\n%s", domain, reason, detail)
+	body := fmt.Sprintf("Domain %s reported %s. Videos may be in wanted_download_error. Fix cookies or wait, then Retry on the source.\n\n%s", domain, reason, detail)
 	return SendEvent(ctx, database, reason, title, body, taskID)
 }
 

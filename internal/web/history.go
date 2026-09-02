@@ -115,9 +115,8 @@ func isHistoryStatus(status string) bool {
 // (video download holds, source scan failures).
 func historyEventError(event string) bool {
 	switch event {
-	case "download_failed", "source_failed", "verify_failed", "file_externally_changed",
+	case "download_failed", "verify_failed", "file_externally_changed",
 		"sidecar_externally_changed",
-		"wanted_download_error", "wanted_source_error", // legacy history rows
 		library.SourceHistScanError:
 		return true
 	default:

@@ -386,25 +386,6 @@ func (h *Handler) settingsScheduler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
-	entries, err := settings.Queue(h.Queue.DB)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	rows := make([]settingsRowView, 0, len(entries))
-	for _, e := range entries {
-		row := settingsRowView{
-			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
-		}
-		if e.Key == settings.KeyDownloadWantedOrder {
-			row.Select = true
-			row.Value = settings.NormalizeDownloadWantedOrder(e.Value)
-			for _, o := range settings.DownloadWantedOrderOptions() {
-				row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
-			}
-		}
-		rows = append(rows, row)
-	}
 	defLim, _ := settings.DefaultLimits(h.Queue.DB)
 	dqRows, _ := settings.DomainOverrideRows(h.Queue.DB)
 	pageRows, pageInfo := SlicePage(r, "page", dqRows)
@@ -415,7 +396,6 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 	defLim.UseFlareSolverr = false
 	render(w, "settings_queue", struct {
 		pageBase
-		Settings        []settingsRowView
 		DefaultLimits   settings.DomainLimits
 		DefaultUsername string
 		DomainOverrides []settings.DomainQueueRow
@@ -424,7 +404,6 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 		FlareConfigured bool
 	}{
 		pageBase:        newSettingsPage("Settings · Queue / Domains", "queue", flashFromQuery(r)),
-		Settings:        rows,
 		DefaultLimits:   defLim,
 		DefaultUsername: "",
 		DomainOverrides: pageRows,
@@ -569,12 +548,10 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	for _, e := range []string{
 		settings.KeyPotFetch,
 		settings.KeyDownloadWantedCron,
-		settings.KeyDownloadWantedOrder,
 		settings.KeySyncFilesCron,
 		settings.KeyRetentionDeleteCron,
 		settings.KeyYtDlpUpdateCron,
 		settings.KeyYtDlpUpdateChannel,
-		settings.KeySourceDownloadErrorThreshold,
 		settings.KeyEpisodeFormat,
 	} {
 		if _, ok := r.Form[e]; !ok {

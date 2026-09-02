@@ -11,12 +11,6 @@ func validateValue(key, value string) error {
 	if key == KeyPotFetch {
 		return validatePotFetch(value)
 	}
-	if key == KeyDownloadWantedOrder {
-		return validateDownloadWantedOrder(value)
-	}
-	if key == KeySourceDownloadErrorThreshold {
-		return validateSourceDownloadErrorThreshold(value)
-	}
 	if key == KeyEpisodeFormat {
 		return ValidateEpisodeFormat(value)
 	}
