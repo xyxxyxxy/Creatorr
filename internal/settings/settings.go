@@ -17,7 +17,6 @@ const (
 	KeyDownloadWantedOrder          = "download_wanted_order"
 	KeySyncFilesCron                = "sync_files_cron"
 	KeyRetentionDeleteCron          = "retention_delete_cron"
-	KeyStatsRetentionDays           = "stats_retention_days"
 	KeySourceDownloadErrorThreshold = "source_download_error_threshold"
 	KeyMetadataDomainTag            = "metadata_domain_tag"
 	KeyMetadataGenresFromCategories = "metadata_genres_from_categories"
@@ -36,7 +35,6 @@ var Help = map[string]string{
 	KeyDownloadWantedOrder:          "Which wanted videos to download first inside each series (by upload date; no date uses id). Series take turns so one series does not fill the whole queue.",
 	KeySyncFilesCron:                "Library scan will detect changed files in the root folders and cache directories.",
 	KeyRetentionDeleteCron:          "Deleting old data according to root folder retention ('Settings → Library').",
-	KeyStatsRetentionDays:           "Shorter windows delete older samples immediately on Save.",
 	KeySourceDownloadErrorThreshold: "When this many videos of a source enter an error state, other videos from that source are held until the issue is resolved.\nSet to 1 so the first error stops further downloads from that source.",
 	KeySubtitleLangs:                "Supports all, regex (en.*), and -TAG exclusions. Saving does not re-fetch existing episodes.",
 	KeySubtitleAuto:                 "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",
@@ -61,7 +59,6 @@ var Labels = map[string]string{
 	KeyDownloadWantedOrder:          "Download wanted order",
 	KeySyncFilesCron:                "File sync schedule",
 	KeyRetentionDeleteCron:          "Retention delete schedule",
-	KeyStatsRetentionDays:           "Retention",
 	KeySourceDownloadErrorThreshold: "Source download error threshold",
 	KeySubtitleLangs:                "Subtitle languages",
 	KeySubtitleAuto:                 "Include auto-generated subtitles",
@@ -79,9 +76,7 @@ var Labels = map[string]string{
 }
 
 // generalOrder is Settings → General (not schedules / connect).
-var generalOrder = []string{
-	KeyStatsRetentionDays,
-}
+var generalOrder = []string{}
 
 // connectOrder is Settings → Connect (outbound integrations).
 var connectOrder = []string{
@@ -140,7 +135,6 @@ func SeedDefaults(database *db.DB) error {
 		KeyDownloadWantedOrder:          DownloadWantedOrderOldest,
 		KeySyncFilesCron:                "@daily",
 		KeyRetentionDeleteCron:          "@daily",
-		KeyStatsRetentionDays:           "365",
 		KeySourceDownloadErrorThreshold: strconv.Itoa(DefaultSourceDownloadErrorThreshold),
 		KeySubtitleLangs:                DefaultSubtitleLangs,
 		KeySubtitleAuto:                 DefaultSubtitleAuto,
@@ -194,7 +188,7 @@ func migrateLegacySettingKeys(database *db.DB) error {
 		}
 	}
 	// Drop removed settings no longer used.
-	for _, key := range []string{"download_new_on_scan"} {
+	for _, key := range []string{"download_new_on_scan", "stats_retention_days"} {
 		_, _ = database.SQL.Exec(`DELETE FROM settings WHERE key = ?`, key)
 	}
 	return nil

@@ -1,27 +1,3 @@
-{{define "settings_general_field"}}
-{{/*
-  One General/Connect settings control.
-  Expects dict: Row (settingsRowView).
-*/}}
-{{with .Row}}
-{{if .Select}}
-{{template "field_input" (dict
-  "Name" .Key
-  "ID" (printf "setting-%s" .Key)
-  "Label" .Label
-  "Type" "select"
-  "Value" .Value
-  "Hint" .Help
-  "Options" .Options
-  "Disabled" .Disabled
-  "DisabledTitle" .DisabledTitle
-)}}
-{{else}}
-{{template "settings_row" .}}
-{{end}}
-{{end}}
-{{end}}
-
 {{define "settings_general"}}
 {{template "head" .}}
 {{template "settings_nav" .}}
@@ -41,7 +17,7 @@
           <span class="label-text">API key</span>
           <div class="join w-full">
             <input type="text" class="input input-bordered join-item font-mono text-xs grow min-w-0" disabled value="{{.APIKey}}" id="api-key-value" />
-            <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-tip="Copy" aria-label="Copy" onclick="navigator.clipboard.writeText(document.getElementById('api-key-value').value)">
+            <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-tip="Copy" aria-label="Copy" data-copy-input="api-key-value">
               <i data-lucide="copy" class="size-4"></i>
             </button>
             <button type="submit" form="regenerate-api-key-form" class="btn btn-square btn-warning join-item tooltip tooltip-top" data-tip="Regenerate" aria-label="Regenerate" onclick="return confirm('Regenerate API key? Existing API clients will stop working until updated.');">
@@ -68,23 +44,6 @@
       {{template "theme_picker"}}
     </fieldset>
   </div>
-</section>
-
-<section class="card bg-base-100 border border-base-300 mb-4">
-  <form method="post" action="/actions/save-settings" class="card-body gap-6">
-    <input type="hidden" name="redirect" value="/settings/general" />
-    <fieldset class="fieldset gap-3">
-      <legend class="fieldset-legend text-lg font-semibold">Stats</legend>
-      <div class="grid gap-3 md:grid-cols-2 w-full">
-        {{range .Settings}}
-        {{if eq .Key "stats_retention_days"}}
-        {{template "settings_general_field" (dict "Row" .)}}
-        {{end}}
-        {{end}}
-      </div>
-    </fieldset>
-    <div class="card-actions"><button type="submit" class="btn btn-primary">Save</button></div>
-  </form>
 </section>
 
 <input type="checkbox" id="modal-change-credentials" class="modal-toggle" />

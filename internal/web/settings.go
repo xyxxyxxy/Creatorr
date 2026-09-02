@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/auth"
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
@@ -16,7 +17,6 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
-	"github.com/xyxxyxxy/Creatorr/internal/stats"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
@@ -28,7 +28,7 @@ type settingsRowView struct {
 	Cron          bool
 	Checkbox      bool
 	Checked       bool
-	Select        bool // closed-set dropdown (scan schedule, stats retention)
+	Select        bool // closed-set dropdown
 	Options       []PresetOption
 	Textarea      bool
 	Wide          bool
@@ -112,36 +112,14 @@ func redirectSettings(w http.ResponseWriter, r *http.Request, defaultPath, query
 }
 
 func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
-	entries, err := settings.General(h.Queue.DB)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	rows := make([]settingsRowView, 0, len(entries))
-	for _, e := range entries {
-		row := settingsRowView{
-			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
-			Cron: settings.CronKeys[e.Key],
-		}
-		if e.Key == settings.KeyStatsRetentionDays {
-			row.Select = true
-			row.Value = settings.NormalizeStatsRetention(e.Value)
-			for _, o := range settings.StatsRetentionOptions() {
-				row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
-			}
-		}
-		rows = append(rows, row)
-	}
 	authUser, _ := settings.AuthUsername(h.Queue.DB)
 	apiKey, _ := settings.APIKey(h.Queue.DB)
 	render(w, "settings_general", struct {
 		pageBase
-		Settings     []settingsRowView
 		AuthUsername string
 		APIKey       string
 	}{
 		pageBase:     newSettingsPage("Settings · General", "general", flashFromQuery(r)),
-		Settings:     rows,
 		AuthUsername: authUser,
 		APIKey:       apiKey,
 	})
@@ -161,30 +139,69 @@ func (h *Handler) ytdlpConnectPageData() (managedPath, installedVer, lastChecked
 	return managedPath, installedVer, lastCheckedAt, updatesEnabled, updateBusy
 }
 
+type ytdlpConnectLiveView struct {
+	YtDlpInstalledVer  string
+	YtDlpLastCheckedAt string
+	YtDlpUpdatesOn     bool
+	YtDlpUpdateBusy    bool
+	YtDlpUpdateOffTip  string
+	YtDlpUpdateBusyTip string
+	YtDlpChannel       settingsRowView
+}
+
+func (h *Handler) ytdlpUpdateChannelRow(updatesEnabled bool) settingsRowView {
+	val, _ := settings.Get(h.Queue.DB, settings.KeyYtDlpUpdateChannel)
+	row := settingsRowView{
+		Key:   settings.KeyYtDlpUpdateChannel,
+		Label: settings.Labels[settings.KeyYtDlpUpdateChannel],
+		Value: settings.NormalizeYtDlpUpdateChannel(val),
+		Help:  settings.Help[settings.KeyYtDlpUpdateChannel],
+		Select: true,
+	}
+	for _, o := range settings.YtDlpUpdateChannelOptions() {
+		row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
+	}
+	if !updatesEnabled {
+		row.Disabled = true
+		row.DisabledTitle = "Set yt-dlp update schedule under Settings → Scheduler first."
+	}
+	return row
+}
+
+func (h *Handler) ytdlpConnectLiveView() ytdlpConnectLiveView {
+	_, installedVer, lastCheckedAt, updatesEnabled, updateBusy := h.ytdlpConnectPageData()
+	return ytdlpConnectLiveView{
+		YtDlpInstalledVer:  installedVer,
+		YtDlpLastCheckedAt: lastCheckedAt,
+		YtDlpUpdatesOn:     updatesEnabled,
+		YtDlpUpdateBusy:    updateBusy,
+		YtDlpUpdateOffTip:  "Automatic updates disabled. Set yt-dlp update schedule under Settings → Scheduler.",
+		YtDlpUpdateBusyTip: "yt-dlp update already queued or running",
+		YtDlpChannel:       h.ytdlpUpdateChannelRow(updatesEnabled),
+	}
+}
+
 func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("HX-Target") == "ytdlp-connect-live" {
+		render(w, "ytdlp_connect_live", h.ytdlpConnectLiveView())
+		return
+	}
 	entries, err := settings.Connect(h.Queue.DB)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
 	managedPath, installedVer, lastCheckedAt, updatesEnabled, updateBusy := h.ytdlpConnectPageData()
+	ytdlpLive := h.ytdlpConnectLiveView()
 	rows := make([]settingsRowView, 0, len(entries))
 	potURLSet := strings.TrimSpace(h.PotProviderURL) != ""
 	for _, e := range entries {
+		if e.Key == settings.KeyYtDlpUpdateChannel {
+			continue
+		}
 		row := settingsRowView{
 			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
 			Cron: settings.CronKeys[e.Key],
-		}
-		if e.Key == settings.KeyYtDlpUpdateChannel {
-			row.Select = true
-			row.Value = settings.NormalizeYtDlpUpdateChannel(e.Value)
-			for _, o := range settings.YtDlpUpdateChannelOptions() {
-				row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
-			}
-			if !updatesEnabled {
-				row.Disabled = true
-				row.DisabledTitle = "Set yt-dlp update schedule under Settings → Scheduler first."
-			}
 		}
 		if e.Key == settings.KeyPotFetch {
 			row.Select = true
@@ -201,7 +218,8 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, row)
 	}
-	flareJoin, potJoin := externalServiceJoinViews(h)
+	potJoin := externalServiceURLViewPending(h, false)
+	flareJoin := externalServiceURLViewPending(h, true)
 	channels, err := notify.List(h.Queue.DB)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -246,6 +264,7 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 		YtDlpUpdateBusy    bool
 		YtDlpUpdateOffTip  string
 		YtDlpUpdateBusyTip string
+		YtDlpChannel       settingsRowView
 	}{
 		pageBase:           newSettingsPage("Settings · Connect", "connect", flashFromQuery(r)),
 		FlareService:       flareJoin,
@@ -259,8 +278,9 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 		YtDlpLastCheckedAt: lastCheckedAt,
 		YtDlpUpdatesOn:     updatesEnabled,
 		YtDlpUpdateBusy:    updateBusy,
-		YtDlpUpdateOffTip:  "Automatic updates disabled. Set yt-dlp update schedule under Settings → Scheduler.",
-		YtDlpUpdateBusyTip: "yt-dlp update already queued or running",
+		YtDlpUpdateOffTip:  ytdlpLive.YtDlpUpdateOffTip,
+		YtDlpUpdateBusyTip: ytdlpLive.YtDlpUpdateBusyTip,
+		YtDlpChannel:       ytdlpLive.YtDlpChannel,
 	})
 }
 
@@ -273,34 +293,52 @@ type externalServiceURLView struct {
 	StatusTip   string
 }
 
-func externalServiceJoinViews(h *Handler) (flare, pot externalServiceURLView) {
-	flare = externalServiceURLView{
-		Label: "FlareSolverr URL",
-		Value: strings.TrimSpace(h.FlareSolverrURL),
-		Hint:  "Set CREATORR_FLARESOLVERR_URL and restart.\nEnable 'Use FlareSolverr' On a host 'Domain override' ('Settings → Queue / Domains').",
+func externalServiceURLViewBase(h *Handler, flare bool) externalServiceURLView {
+	if flare {
+		return externalServiceURLView{
+			Label: "FlareSolverr URL",
+			Value: strings.TrimSpace(h.FlareSolverrURL),
+			Hint:  "Set CREATORR_FLARESOLVERR_URL and restart.\nEnable 'Use FlareSolverr' On a host 'Domain override' ('Settings → Queue / Domains').",
+		}
 	}
-	pot = externalServiceURLView{
+	return externalServiceURLView{
 		Label: "PO token provider URL",
 		Value: strings.TrimSpace(h.PotProviderURL),
 		Hint:  "Set CREATORR_POT_PROVIDER_URL and restart.\nEnable 'PO token fetch' below when the URL is set (forced to 'Never' while unset).",
 	}
-	if h.Health == nil {
-		flare.Status, flare.StatusLabel, flare.StatusTip = externalServiceStatusFromCheck(health.Check{Status: health.StatusSkipped, Message: "URL unset"})
-		pot.Status, pot.StatusLabel, pot.StatusTip = externalServiceStatusFromCheck(health.Check{Status: health.StatusSkipped, Message: "URL unset"})
-		if flare.Value != "" {
-			flare.Status, flare.StatusLabel, flare.StatusTip = string(health.StatusDegraded), "Unreachable", "Health checker unavailable"
-		}
-		if pot.Value != "" {
-			pot.Status, pot.StatusLabel, pot.StatusTip = string(health.StatusDegraded), "Unreachable", "Health checker unavailable"
-		}
-		return flare, pot
+}
+
+func externalServiceURLViewPending(h *Handler, flare bool) externalServiceURLView {
+	v := externalServiceURLViewBase(h, flare)
+	v.Status = "pending"
+	v.StatusLabel = "Checking"
+	v.StatusTip = "Probing service health"
+	return v
+}
+
+func (h *Handler) settingsConnectExternalServiceHealth(w http.ResponseWriter, r *http.Request) {
+	service := strings.TrimSpace(chi.URLParam(r, "service"))
+	flare := service == "flare"
+	if service != "pot" && service != "flare" {
+		http.NotFound(w, r)
+		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	v := externalServiceURLViewBase(h, flare)
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
-	flareCheck, potCheck := h.Health.ExternalServices(ctx)
-	flare.Status, flare.StatusLabel, flare.StatusTip = externalServiceStatusFromCheck(flareCheck)
-	pot.Status, pot.StatusLabel, pot.StatusTip = externalServiceStatusFromCheck(potCheck)
-	return flare, pot
+	var ch health.Check
+	if h.Health == nil {
+		ch = health.Check{Status: health.StatusSkipped, Message: "URL unset"}
+		if v.Value != "" {
+			ch = health.Check{Status: health.StatusDegraded, Message: "Health checker unavailable"}
+		}
+	} else if flare {
+		ch = h.Health.ProbeFlareSolverr(ctx)
+	} else {
+		ch = h.Health.ProbePotProvider(ctx)
+	}
+	v.Status, v.StatusLabel, v.StatusTip = externalServiceStatusFromCheck(ch)
+	render(w, "external_service_url_join", v)
 }
 
 func externalServiceStatusFromCheck(ch health.Check) (status, label, tip string) {
@@ -534,7 +572,6 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 		settings.KeyDownloadWantedOrder,
 		settings.KeySyncFilesCron,
 		settings.KeyRetentionDeleteCron,
-		settings.KeyStatsRetentionDays,
 		settings.KeyYtDlpUpdateCron,
 		settings.KeyYtDlpUpdateChannel,
 		settings.KeySourceDownloadErrorThreshold,
@@ -587,21 +624,10 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := settings.SetMany(h.Queue.DB, vals); err != nil {
-		redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
+		h.respondSettingsSaveError(w, r, err)
 		return
 	}
-	// Shorter/disabled retention must drop old samples immediately (not wait for next sample tick).
-	if _, ok := vals[settings.KeyStatsRetentionDays]; ok {
-		if _, err := stats.ApplyRetention(h.Queue.DB, time.Now().UTC()); err != nil {
-			redirectSettings(w, r, "/settings/general", "err="+urlQuery(err.Error()))
-			return
-		}
-	}
-	redir := r.FormValue("redirect")
-	if redir == "" {
-		redir = "/settings/general"
-	}
-	redirectSettings(w, r, redir, "ok=saved")
+	h.respondSettingsSaveOK(w, r)
 }
 
 func (h *Handler) actionSaveAuthSettings(w http.ResponseWriter, r *http.Request) {
@@ -763,35 +789,35 @@ func (h *Handler) actionSaveDomainDefault(w http.ResponseWriter, r *http.Request
 	_ = r.ParseForm()
 	delay, err := strconv.Atoi(r.FormValue("task_cooldown_seconds"))
 	if err != nil || delay < 0 {
-		redirectSettings(w, r, "/settings/queue", "err="+urlQuery("invalid task_cooldown_seconds"))
+		h.respondDomainDefaultsSaveError(w, r, fmt.Errorf("invalid task_cooldown_seconds"))
 		return
 	}
 	maxQueue, err := settings.ParsePositiveInt(r.FormValue("max_download_queue"), "max download tasks")
 	if err != nil {
-		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
+		h.respondDomainDefaultsSaveError(w, r, err)
 		return
 	}
 	maxParallel, err := settings.ParsePositiveInt(r.FormValue("max_parallel_tasks"), "max parallel tasks")
 	if err != nil {
-		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
+		h.respondDomainDefaultsSaveError(w, r, err)
 		return
 	}
 	rate, err := settings.CombineDownloadRateLimit(r.FormValue("download_rate_limit_value"), r.FormValue("download_rate_limit_unit"))
 	if err != nil {
-		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
+		h.respondDomainDefaultsSaveError(w, r, err)
 		return
 	}
 	if err := settings.SetDomainDefault(h.Queue.DB, delay, maxQueue, maxParallel, rate, r.FormValue("sleep_requests"), false); err != nil {
-		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
+		h.respondDomainDefaultsSaveError(w, r, err)
 		return
 	}
 	// Access (Flare / cookies / credentials) is override-only; clear any legacy defaults jar/creds.
 	_ = domains.ClearCookies(h.Queue.DB, settings.DomainDefault)
 	if err := settings.SaveDefaultCredentials(h.Queue.DB, "", "", false); err != nil {
-		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
+		h.respondDomainDefaultsSaveError(w, r, err)
 		return
 	}
-	redirectSettings(w, r, "/settings/queue", "ok=domain-defaults")
+	h.respondDomainDefaultsSaveOK(w, r)
 }
 
 func (h *Handler) actionUpsertDomainOverride(w http.ResponseWriter, r *http.Request) {

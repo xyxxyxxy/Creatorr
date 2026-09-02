@@ -4,7 +4,7 @@
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 
 <section class="card bg-base-100 border border-base-300 mb-4">
-  <form method="post" action="/actions/save-settings" class="card-body gap-3">
+  <form method="post" action="/actions/save-settings" class="card-body gap-3 js-settings-autosave">
     <input type="hidden" name="redirect" value="/settings/scheduler" />
     <h2 class="text-lg font-semibold">Scheduler</h2>
     <p class="text-sm opacity-60">The scheduler queues recurring work such as downloading videos and scanning sources for new videos.</p>
@@ -12,43 +12,16 @@
     <div class="grid gap-3 md:grid-cols-2">
       {{range .Settings}}
       {{if .Cron}}
-      <div class="md:col-span-2">
-        {{template "preset_fill" (dict
-          "FieldName" .Key
-          "FieldID" (printf "setting-%s" .Key)
-          "FieldLabel" .Label
-          "FieldValue" .Value
-          "FieldPlaceholder" "* * * * *"
-          "FieldClass" "font-mono"
-          "FieldHint" .Help
-          "CronDescriptors" $.CronDescriptors
-        )}}
-      </div>
-      {{else if .Checkbox}}
-      <div class="md:col-span-2">
-        {{template "checkbox_field" (dict
-          "Name" .Key
-          "Label" .Label
-          "Checked" .Checked
-          "Info" .Help
-        )}}
-      </div>
-      {{else if .Select}}
-      {{template "field_input" (dict
-        "Name" .Key
-        "ID" (printf "setting-%s" .Key)
+      {{template "settings_cron_field" (dict
+        "Key" .Key
         "Label" .Label
-        "Type" "select"
+        "Help" .Help
         "Value" .Value
-        "Info" .Help
-        "Options" .Options
+        "CronDescriptors" $.CronDescriptors
       )}}
-      {{else}}
-      {{template "settings_row" .}}
       {{end}}
       {{end}}
     </div>
-    <div class="card-actions"><button type="submit" class="btn btn-primary">Save</button></div>
   </form>
 </section>
 

@@ -25,7 +25,7 @@
 {{template "list_table_end"}}
 {{template "pagination" .RootsPage}}
 {{end}}
-<form method="post" action="/actions/save-settings" class="space-y-3 border-t border-base-300 pt-3 max-w-3xl">
+<form method="post" action="/actions/save-settings" class="space-y-3 border-t border-base-300 pt-3 max-w-3xl js-settings-autosave">
   <input type="hidden" name="redirect" value="/settings/library" />
   {{if .NamingLocked}}
   <div class="alert alert-info text-sm"><span>'Episode format' is locked while 'Apply episode format' is pending or running. Cancel that task on 'Tasks' or wait until it finishes.</span></div>
@@ -41,6 +41,7 @@
     "JoinSuffix" ".ext"
     "Disabled" .NamingLocked
     "DisabledTitle" "'Episode format' is locked while 'Apply episode format' is pending or running."
+    "AutosaveBlur" true
   )}}
   <details class="collapse collapse-arrow bg-base-100 border border-base-300 max-w-3xl">
     <summary class="collapse-title font-medium text-sm min-h-0 py-3">Available format tokens</summary>
@@ -96,7 +97,6 @@
       <p>The following tokens become available after the release date of a video is known: <code class="text-xs">{date}</code>, <code class="text-xs">{year}</code>, <code class="text-xs">{month}</code>, <code class="text-xs">{day}</code>, and <code class="text-xs">{episode}</code>.</p>
     </div>
   </details>
-  <div class="card-actions"><button type="submit" class="btn btn-primary" {{if .NamingLocked}}disabled{{end}}>Save</button></div>
 </form>
 {{template "list_panel_end"}}
 
@@ -148,7 +148,7 @@
 {{template "list_panel_end"}}
 
 <section class="card bg-base-100 border border-base-300 mb-4">
-  <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl">
+  <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl js-settings-autosave">
     <input type="hidden" name="redirect" value="/settings/library" />
     <input type="hidden" name="subtitle_settings" value="1" />
     <h2 class="text-lg font-semibold">Subtitles</h2>
@@ -164,17 +164,17 @@
         "Label" "Include auto-generated subtitles"
         "Checked" .SubtitleAuto
         "Hint" "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt)."
+        "AutosaveChange" true
       )}}
     </div>
     <div class="card-actions items-center gap-2">
-      <button type="submit" class="btn btn-primary">Save</button>
       {{template "field_info" (dict "Info" "Saving does not re-fetch existing episodes.")}}
     </div>
   </form>
 </section>
 
 <section class="card bg-base-100 border border-base-300 mb-4">
-  <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl">
+  <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl js-settings-autosave">
     <input type="hidden" name="redirect" value="/settings/library" />
     <input type="hidden" name="metadata_settings" value="1" />
     <h2 class="text-lg font-semibold">Metadata</h2>
@@ -185,16 +185,17 @@
         "Label" "Add source domain as video tag"
         "Checked" .MetadataDomainTag
         "Hint" "Prepend the source domain to video tags when source_url is known."
+        "AutosaveChange" true
       )}}
       {{template "checkbox_field" (dict
         "Name" "metadata_genres_from_categories"
         "Label" "Add genres from yt-dlp categories"
         "Checked" .MetadataGenresFromCategories
         "Hint" "Add yt-dlp categories as video genres when categories are known."
+        "AutosaveChange" true
       )}}
     </div>
     <div class="card-actions items-center gap-2">
-      <button type="submit" class="btn btn-primary">Save</button>
       {{template "field_info" (dict "Info" "Saving does not rewrite existing episodes.")}}
     </div>
   </form>

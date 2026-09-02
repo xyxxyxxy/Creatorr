@@ -7,7 +7,10 @@
 {{if and .StatusTip (ne .Status "ok")}}{{$tip = printf "%s: %s" .StatusLabel .StatusTip}}{{else if .StatusTip}}{{$tip = .StatusTip}}{{end}}
 {{$icon := "circle-minus"}}
 {{$iconClass := "size-4 opacity-50"}}
-{{if eq .Status "ok"}}
+{{if eq .Status "pending"}}
+  {{$icon = "loader-circle"}}
+  {{$iconClass = "size-4 opacity-50 animate-spin"}}
+{{else if eq .Status "ok"}}
   {{$icon = "circle-check"}}
   {{$iconClass = "size-4 text-success"}}
 {{else if eq .Status "degraded"}}

@@ -39,7 +39,7 @@ Compose service **`creatorr-flaresolverr`** (`ghcr.io/flaresolverr/flaresolverr`
 | Session | One browser session per hostname (`sessions.create`) while that domain lane has pending/running work; destroyed when the lane drains. `session_ttl_minutes` safety net on each get. |
 | Cookie cache | Successful clearance cookies are cached in-process (2–30 min) so warm lanes often skip Flare HTTP; cache miss still hits the warm session when open. |
 | Tasks UI | Lane header shield icon when Flare is effective: muted = enabled, `text-info` = session warm. |
-| Health | `/api/health` check `flaresolverr` probes the env URL (skipped if unset). Settings → Connect shows the same probe once on page load (Healthy join). |
+| Health | `/api/health` check `flaresolverr` probes the env URL (skipped if unset). Settings → Connect loads the same probe asynchronously after the page shell (Healthy join). |
 
 ## PO Token provider
 
@@ -51,7 +51,7 @@ Compose service **`creatorr-po-token`** (`brainicism/bgutil-ytdlp-pot-provider:*
 | Settings | `pot_fetch`: `auto` (default) / `always` / `never` → `youtube:fetch_pot=…` when URL is set. |
 | Trace | When URL is set and fetch is not `never`, Creatorr also passes `youtube:pot_trace=true` so mint/provider lines appear in task logs. |
 | Detect | yt-dlp output is scanned for provider failures (`Providers: none`, HTTP ping/mint errors) and successful mints (`Retrieved a … PO Token`). The task still succeeds on provider problems; Creatorr emits warning notification `pot_provider` (unread like alerts). Outcome is stored on the task as detail JSON `po-token` (`issued` / `failed` / `skipped` / `off`) and shown on the task Details row **PO token**. |
-| Health | `/api/health` check `pot_provider` probes `GET {URL}/ping` (skipped if URL unset). Settings → Connect shows the same probe once on page load (Healthy join). |
+| Health | `/api/health` check `pot_provider` probes `GET {URL}/ping` (skipped if URL unset). Settings → Connect loads the same probe asynchronously after the page shell (Healthy join). |
 | Local Go | `make pot-plugin` installs the zip under `var/yt-dlp-plugins/bgutil`; run a provider yourself and set `CREATORR_POT_PROVIDER_URL`. |
 
 Creatorr passes `--extractor-args youtubepot-bgutilhttp:base_url=…` when the env URL is set and fetch is not `never`.

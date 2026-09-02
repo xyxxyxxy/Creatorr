@@ -157,7 +157,17 @@ func (c *Checker) checkDisk() Check {
 // statuses (including skipped when the URL is unset). Unlike Run, skipped is not
 // mapped to ok.
 func (c *Checker) ExternalServices(ctx context.Context) (flare, pot Check) {
-	return c.checkFlareSolverr(ctx), c.checkPotProvider(ctx)
+	return c.ProbeFlareSolverr(ctx), c.ProbePotProvider(ctx)
+}
+
+// ProbeFlareSolverr probes FlareSolverr only (Connect async health).
+func (c *Checker) ProbeFlareSolverr(ctx context.Context) Check {
+	return c.checkFlareSolverr(ctx)
+}
+
+// ProbePotProvider probes the PO token provider only (Connect async health).
+func (c *Checker) ProbePotProvider(ctx context.Context) Check {
+	return c.checkPotProvider(ctx)
 }
 
 func (c *Checker) checkFlareSolverr(ctx context.Context) Check {

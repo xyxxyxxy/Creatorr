@@ -1,0 +1,58 @@
+{{define "ytdlp_connect_live"}}
+{{/*
+  yt-dlp status row on Settings → Connect (installed version, last checked, update control).
+  Refreshed via HTMX when ytdlp_update tasks finish (see app.js).
+*/}}
+<div id="ytdlp-connect-live" class="contents">
+  <div class="form-control w-full min-w-0 gap-2">
+    <span class="label-text">Installed version</span>
+    <input type="text" class="input input-bordered font-mono text-sm w-full" disabled value="{{if .YtDlpInstalledVer}}{{.YtDlpInstalledVer}}{{else}}-{{end}}" />
+  </div>
+  <div class="form-control w-full min-w-0 gap-2">
+    <span class="label-text">Last checked</span>
+    <input type="text" class="input input-bordered text-sm w-full" disabled
+      {{if .YtDlpLastCheckedAt}}data-local-date data-datetime="{{.YtDlpLastCheckedAt}}" value="{{.YtDlpLastCheckedAt}}"{{else}}value="-"{{end}} />
+  </div>
+  {{with .YtDlpChannel}}
+  {{$channel := .}}
+  <div class="form-control w-full min-w-0 gap-2">
+    <span class="label-text">{{.Label}}</span>
+    <div class="join w-full">
+      {{if .Disabled}}
+      <input type="hidden" name="{{.Key}}" value="{{.Value}}" />
+      <span class="tooltip tooltip-top join-item grow min-w-0" {{if .DisabledTitle}}data-tip="{{.DisabledTitle}}"{{end}}>
+        <select id="setting-{{.Key}}" class="select select-bordered join-item grow min-w-0 w-full pointer-events-none" disabled>
+          {{range .Options}}
+          <option value="{{.Value}}" {{if eq .Value $channel.Value}}selected{{end}}>{{.Label}}</option>
+          {{end}}
+        </select>
+      </span>
+      {{else}}
+      <select name="{{.Key}}" id="setting-{{.Key}}" class="select select-bordered join-item grow min-w-0" data-settings-autosave-change>
+        {{range .Options}}
+        <option value="{{.Value}}" {{if eq .Value $channel.Value}}selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+      {{end}}
+      {{if $.YtDlpUpdateBusy}}
+      <span class="tooltip tooltip-top join-item shrink-0" data-tip="{{$.YtDlpUpdateBusyTip}}">
+        <button type="button" class="btn btn-warning btn-square join-item pointer-events-none" disabled aria-label="Update queued">
+          <i data-lucide="refresh-cw" class="size-4"></i>
+        </button>
+      </span>
+      {{else if not $.YtDlpUpdatesOn}}
+      <span class="tooltip tooltip-top join-item shrink-0" data-tip="{{$.YtDlpUpdateOffTip}}">
+        <button type="button" class="btn btn-square join-item pointer-events-none" disabled aria-label="Update now">
+          <i data-lucide="refresh-cw" class="size-4"></i>
+        </button>
+      </span>
+      {{else}}
+      <button type="submit" form="ytdlp-update-form" class="btn btn-secondary btn-square join-item shrink-0 tooltip tooltip-top" data-tip="Update now" aria-label="Update now">
+        <i data-lucide="refresh-cw" class="size-4"></i>
+      </button>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+</div>
+{{end}}

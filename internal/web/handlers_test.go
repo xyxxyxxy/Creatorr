@@ -344,8 +344,17 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "PO token fetch (disabled)") || !strings.Contains(body, `value="never"`) {
 				t.Fatalf("%s pot_fetch should be disabled/never when provider URL unset", path)
 			}
-			if !strings.Contains(body, "Not configured") && !strings.Contains(body, "Healthy") && !strings.Contains(body, "Unreachable") {
-				t.Fatalf("%s missing health status label", path)
+			if !strings.Contains(body, "connect-pot-service-health") || !strings.Contains(body, `hx-get="/settings/connect/external-services/pot"`) {
+				t.Fatalf("%s missing async PO token health load", path)
+			}
+			if !strings.Contains(body, "connect-flare-service-health") || !strings.Contains(body, `hx-get="/settings/connect/external-services/flare"`) {
+				t.Fatalf("%s missing async Flare health load", path)
+			}
+			if !strings.Contains(body, `id="ytdlp-connect-live"`) {
+				t.Fatalf("%s missing yt-dlp live panel", path)
+			}
+			if !strings.Contains(body, "Checking") {
+				t.Fatalf("%s missing pending health status", path)
 			}
 			if !strings.Contains(body, "Notifications") {
 				t.Fatalf("%s missing Notifications", path)
@@ -402,6 +411,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			}
 			if !strings.Contains(body, "Domain defaults") || !strings.Contains(body, "Domain overrides") || !strings.Contains(body, "modal-add-domain-override") {
 				t.Fatalf("%s missing domain defaults/overrides", path)
+			}
+			if !strings.Contains(body, `>default</span>`) || strings.Contains(body, `modal-edit-domain-default`) {
+				t.Fatalf("%s missing fixed default row or has edit modal for default", path)
 			}
 			if !strings.Contains(body, "FlareSolverr, cookies, and membership credentials are set on a 'Domain override' per domain") {
 				t.Fatalf("%s missing Access info-only blurb", path)
