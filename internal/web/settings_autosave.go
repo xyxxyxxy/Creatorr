@@ -57,8 +57,17 @@ func (h *Handler) respondSettingsSaveError(w http.ResponseWriter, r *http.Reques
 
 func (h *Handler) respondDomainDefaultsSaveOK(w http.ResponseWriter, r *http.Request) {
 	if h.isHTMX(r) {
+		defLim, err := settings.DefaultLimits(h.Queue.DB)
+		if err != nil {
+			h.respondDomainDefaultsSaveError(w, r, err)
+			return
+		}
+		defLim.UseFlareSolverr = false
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		render(w, "flash_toast_oob", flashOK("Domain defaults saved."))
+		render(w, "domain_defaults_autosave_oob", map[string]any{
+			"Flash":         flashOK("Domain defaults saved."),
+			"DefaultLimits": defLim,
+		})
 		return
 	}
 	redirectSettings(w, r, "/settings/queue", "ok=domain-defaults")

@@ -1,18 +1,10 @@
-{{define "ytdlp_connect_live"}}
+{{define "ytdlp_connect_controls"}}
 {{/*
-  yt-dlp status row on Settings → Connect (installed version, last checked, update control).
-  Refreshed via HTMX when ytdlp_update tasks finish (see app.js).
+  Last checked + update channel on Settings → Connect (loaded with page shell).
+  Expects ytdlpConnectControlsView fields.
 */}}
-<div id="ytdlp-connect-live" class="contents">
-  <div class="form-control w-full min-w-0 gap-2">
-    <span class="label-text">Installed version</span>
-    <input type="text" class="input input-bordered font-mono text-sm w-full" disabled value="{{if .YtDlpInstalledVer}}{{.YtDlpInstalledVer}}{{else}}-{{end}}" />
-  </div>
-  <div class="form-control w-full min-w-0 gap-2">
-    <span class="label-text">Last checked</span>
-    <input type="text" class="input input-bordered text-sm w-full" disabled
-      {{if .YtDlpLastCheckedAt}}data-local-date data-datetime="{{.YtDlpLastCheckedAt}}" value="{{.YtDlpLastCheckedAt}}"{{else}}value="-"{{end}} />
-  </div>
+<div class="contents">
+  {{template "ytdlp_connect_last_checked" .}}
   {{with .YtDlpChannel}}
   {{$channel := .}}
   <div class="form-control w-full min-w-0 gap-2">

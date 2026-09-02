@@ -17,7 +17,8 @@
       <form method="post" action="/actions/save-settings" class="flex flex-col gap-3 js-settings-autosave">
         <input type="hidden" name="redirect" value="/settings/connect" />
         <div class="grid gap-3 sm:grid-cols-3 w-full items-end">
-          {{template "ytdlp_connect_live" .}}
+          {{template "ytdlp_connect_installed_version" .YtDlpInstalledVersion}}
+          {{template "ytdlp_connect_controls" .YtDlpControls}}
         </div>
       </form>
       <form id="ytdlp-update-form" method="post" action="/actions/ytdlp-update" class="hidden" aria-hidden="true">
@@ -81,12 +82,7 @@
         <input type="hidden" name="redirect" value="/settings/connect" />
         <div class="grid gap-3 md:grid-cols-2 w-full items-start">
           <div class="flex flex-col gap-3 w-full min-w-0">
-            <div id="connect-pot-service-health"
-                 hx-get="/settings/connect/external-services/pot"
-                 hx-trigger="load"
-                 hx-swap="outerHTML">
-              {{template "external_service_url_join" .PotService}}
-            </div>
+            {{template "external_service_url_join" .PotService}}
             {{range .Settings}}
             {{if eq .Key "pot_fetch"}}
             {{template "field_input" (dict
@@ -104,13 +100,7 @@
             {{end}}
             {{end}}
           </div>
-          <div id="connect-flare-service-health"
-               class="w-full min-w-0"
-               hx-get="/settings/connect/external-services/flare"
-               hx-trigger="load"
-               hx-swap="outerHTML">
-            {{template "external_service_url_join" .FlareService}}
-          </div>
+          {{template "external_service_url_join" .FlareService}}
         </div>
       </form>
     </fieldset>

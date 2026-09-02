@@ -207,7 +207,7 @@ func (s *Store) MaybeEnqueueMediaVerifyAfterPack(videoID int64, maturityPack boo
 	return id, nil
 }
 
-// MarkVerifyFailed sets status verify_failed and history; does not bump source error threshold.
+// MarkVerifyFailed sets status verify_failed and history.
 func (s *Store) MarkVerifyFailed(videoID, taskID int64, message string) error {
 	if _, err := s.GetVideo(videoID); err != nil {
 		return err

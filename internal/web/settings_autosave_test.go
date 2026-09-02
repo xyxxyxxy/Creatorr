@@ -41,8 +41,8 @@ func testSettingsRouter(t *testing.T) http.Handler {
 func TestActionSaveSettingsHTMXSuccess(t *testing.T) {
 	r := testSettingsRouter(t)
 	form := url.Values{}
-	form.Set("redirect", "/settings/queue")
-	form.Set(settings.KeyDownloadWantedOrder, settings.DownloadWantedOrderNewest)
+	form.Set("redirect", "/settings/scheduler")
+	form.Set(settings.KeyDownloadWantedCron, "@hourly")
 	req := httptest.NewRequest(http.MethodPost, "/actions/save-settings", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
@@ -180,6 +180,9 @@ func TestSettingsConnectExternalServiceHealthSkipped(t *testing.T) {
 			if !strings.Contains(body, "Not configured") {
 				t.Fatalf("body=%q", body)
 			}
+			if strings.Contains(body, "fieldset-legend") {
+				t.Fatalf("health fragment should be icon-only: %q", body)
+			}
 		})
 	}
 }
@@ -194,26 +197,25 @@ func TestSettingsConnectExternalServiceHealthInvalidService(t *testing.T) {
 	}
 }
 
-func TestSettingsConnectYtDlpLiveFragment(t *testing.T) {
+func TestSettingsConnectYtDlpInstalledVersionFragment(t *testing.T) {
 	r := testSettingsRouter(t)
-	req := httptest.NewRequest(http.MethodGet, "/settings/connect", nil)
-	req.Header.Set("HX-Target", "ytdlp-connect-live")
+	req := httptest.NewRequest(http.MethodGet, "/settings/connect/ytdlp-installed-version", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `id="ytdlp-connect-live"`) {
-		t.Fatalf("missing live root: %q", body)
+	if !strings.Contains(body, `id="ytdlp-connect-installed-version"`) {
+		t.Fatalf("missing installed version root: %q", body)
 	}
-	if !strings.Contains(body, "Last checked") || !strings.Contains(body, "Installed version") {
-		t.Fatalf("missing yt-dlp status fields: %q", body)
+	if !strings.Contains(body, "Installed version") {
+		t.Fatalf("missing installed version label: %q", body)
 	}
-	if !strings.Contains(body, "ytdlp_update_channel") {
-		t.Fatalf("missing update channel: %q", body)
+	if !strings.Contains(body, "Binary not found") || !strings.Contains(body, "input-error") {
+		t.Fatalf("missing installed version error when yt-dlp unavailable: %q", body)
 	}
 	if strings.Contains(body, "fieldset-legend") {
-		t.Fatalf("full page leaked into live fragment: %q", body)
+		t.Fatalf("full page leaked into installed version fragment: %q", body)
 	}
 }

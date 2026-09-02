@@ -1752,7 +1752,7 @@ components:
           description: Video page URL (watch/clip); never the feed channel/playlist URL
         status:
           type: string
-          description: wanted, wanted_source_error, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored
+          description: wanted, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored
         season:
           type: integer
           nullable: true

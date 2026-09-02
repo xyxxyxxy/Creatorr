@@ -544,9 +544,56 @@
     return parts.join(" ");
   }
 
+  /** Short span with only the largest unit ("3min", "2h"). Matches Go formatDurationLargest. */
+  function formatDurationLargest(totalSec) {
+    let sec = Math.max(0, Math.floor(Number(totalSec) || 0));
+    if (sec < 1) return "1sec";
+    const days = Math.floor(sec / 86400);
+    if (days > 0) return days + "d";
+    const hours = Math.floor(sec / 3600);
+    if (hours > 0) return hours + "h";
+    const minutes = Math.floor(sec / 60);
+    if (minutes > 0) return minutes + "min";
+    return Math.max(1, sec) + "sec";
+  }
+
   function cooldownWaitTip(remSec) {
     const n = Math.max(1, Math.ceil(Number(remSec) || 0));
     return "Waiting " + formatDurationCompact(n);
+  }
+
+  function scheduledTaskWaitTip(remSec) {
+    const n = Math.max(1, Math.ceil(Number(remSec) || 0));
+    return "in " + formatDurationLargest(n);
+  }
+
+  function tickScheduledTasks() {
+    let anyActive = false;
+    document.querySelectorAll("[data-scheduled-task]").forEach((row) => {
+      const endsAttr = row.getAttribute("data-ends-at");
+      if (!endsAttr) return;
+      const ends = Date.parse(endsAttr);
+      if (!Number.isFinite(ends)) return;
+      const remMs = ends - Date.now();
+      if (remMs <= 0) {
+        refreshTasksPanel(true);
+        return;
+      }
+      anyActive = true;
+      const remSec = Math.ceil(remMs / 1000);
+      const waitTip = scheduledTaskWaitTip(remSec);
+      const schedule = row.getAttribute("data-schedule") || "";
+      const labelText = schedule ? schedule + " next " + waitTip : waitTip;
+      const absTip = row.getAttribute("data-abs-tip") || "";
+      const tipText = absTip ? labelText + " · " + absTip : labelText;
+      const label = row.querySelector("[data-scheduled-label]");
+      if (label) {
+        if (label.textContent !== labelText) label.textContent = labelText;
+        label.setAttribute("data-tip", tipText);
+      }
+      row.setAttribute("aria-label", labelText);
+    });
+    return anyActive;
   }
 
   function tickDomainCooldowns() {
@@ -624,7 +671,7 @@
 
   (function runDomainCooldownLoop() {
     function frame() {
-      if (tickDomainCooldowns()) {
+      if (tickDomainCooldowns() || tickScheduledTasks()) {
         requestAnimationFrame(frame);
       } else {
         // Idle: poll slowly so HTMX lane swaps still pick up a new cooldown.
@@ -656,7 +703,6 @@
   function statusBadgeEl(status) {
     const s = String(status || "");
     const tips = {
-      wanted_source_error: "Source has too many download errors - Retry on the source",
       wanted_download_error: "Last download failed",
       verify_failed: "Post-pack media verify failed - file kept; Want or Queue download",
       missing: "File path recorded but media not on disk - file sync may restore",
@@ -670,7 +716,6 @@
       done: { icon: "circle-check", color: "text-success" },
       success: { icon: "circle-check", color: "text-success" },
       wanted: { icon: "download", color: "text-warning" },
-      wanted_source_error: { icon: "circle-alert", color: "text-error" },
       wanted_download_error: { icon: "circle-x", color: "text-error" },
       verify_failed: { icon: "badge-alert", color: "text-warning" },
       downloaded: { icon: "circle-check", color: "text-success" },
@@ -679,7 +724,6 @@
       ignored: { icon: "eye-off", color: "text-base-content/50" },
     };
     const labels = {
-      wanted_source_error: "wanted (source error)",
       wanted_download_error: "wanted (download error)",
       verify_failed: "Verify failed",
     };
@@ -1195,12 +1239,21 @@
   const ytdlpUpdateTaskKind = "ytdlp_update";
 
   function refreshYtDlpConnectLive() {
-    if (!onConnectPage() || !document.getElementById("ytdlp-connect-live") || !window.htmx) return;
-    window.htmx.ajax("GET", "/settings/connect", {
-      target: "#ytdlp-connect-live",
-      select: "#ytdlp-connect-live",
-      swap: "outerHTML",
-    });
+    if (!onConnectPage() || !window.htmx) return;
+    const version = document.getElementById("ytdlp-connect-installed-version");
+    if (version) {
+      window.htmx.ajax("GET", "/settings/connect/ytdlp-installed-version", {
+        target: "#ytdlp-connect-installed-version",
+        swap: "outerHTML",
+      });
+    }
+    const lastChecked = document.getElementById("ytdlp-connect-last-checked");
+    if (lastChecked) {
+      window.htmx.ajax("GET", "/settings/connect/ytdlp-last-checked", {
+        target: "#ytdlp-connect-last-checked",
+        swap: "outerHTML",
+      });
+    }
   }
 
   function maybeRefreshYtDlpConnect(ev) {
@@ -2608,7 +2661,7 @@
       input.classList.remove("opacity-60");
       if (hidden) hidden.remove();
       if (!input.value.trim() || input.value.trim() === "never") {
-        input.value = input.dataset.prevCron || "";
+        input.value = (input.dataset.prevCron || input.dataset.cronDefault || "").trim();
       }
     }
   }
@@ -2630,6 +2683,7 @@
     const unit = join.querySelector("[data-rate-unit]");
     const num = join.querySelector("[data-rate-value]");
     if (!unit || !num) return;
+    const wasDisabled = num.disabled;
     const off = unit.value === "off";
     const inherit = unit.value === "";
     num.disabled = off;
@@ -2637,10 +2691,15 @@
     if (off) {
       num.value = "";
       num.removeAttribute("required");
-    } else if (join.hasAttribute("data-rate-required") && !inherit) {
-      num.required = true;
     } else {
-      num.removeAttribute("required");
+      if (wasDisabled && String(num.value || "").trim() === "") {
+        num.value = "1";
+      }
+      if (join.hasAttribute("data-rate-required") && !inherit) {
+        num.required = true;
+      } else {
+        num.removeAttribute("required");
+      }
     }
   }
 
@@ -3338,20 +3397,35 @@
 
   function applySettingsOOB(html) {
     if (!html) return false;
-    const holder = document.createElement("div");
-    holder.innerHTML = html;
+    const doc = new DOMParser().parseFromString(html, "text/html");
     let swapped = false;
-    holder.querySelectorAll("[hx-swap-oob]").forEach((el) => {
+    doc.body.querySelectorAll("[hx-swap-oob]").forEach((el) => {
       const spec = el.getAttribute("hx-swap-oob") || "";
+      if (spec === "true" || spec.startsWith("outerHTML")) {
+        let target = null;
+        if (spec.startsWith("outerHTML:")) {
+          const sel = spec.slice("outerHTML:".length).trim();
+          target = sel.startsWith("#") ? document.getElementById(sel.slice(1)) : document.querySelector(sel);
+        } else if (el.id) {
+          target = document.getElementById(el.id);
+        }
+        if (!target) return;
+        target.replaceWith(document.adoptNode(el));
+        swapped = true;
+        return;
+      }
       const colon = spec.indexOf(":");
       const mode = colon >= 0 ? spec.slice(0, colon).trim() : "beforeend";
       const sel = (colon >= 0 ? spec.slice(colon + 1) : spec).trim();
       const target = sel === "body" ? document.body : document.querySelector(sel);
       if (!target || mode !== "beforeend") return;
-      target.appendChild(el);
+      target.appendChild(document.adoptNode(el));
       swapped = true;
     });
-    if (swapped) scheduleFlashToasts();
+    if (swapped) {
+      scheduleFlashToasts();
+      createLucideIcons(document.body);
+    }
     return swapped;
   }
 

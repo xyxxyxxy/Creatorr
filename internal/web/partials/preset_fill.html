@@ -6,7 +6,7 @@
 
   Required: FieldName, FieldID, FieldLabel
   Optional: FieldValue, FieldPlaceholder, FieldInfo, FieldHint, FieldHelp (alias→Info),
-            FieldClass, FieldRequired, CronDescriptors ([]string),
+            FieldClass, FieldRequired, CronDescriptors ([]string), CronDefault (enable fill),
             RegularLabel (default "enabled")
 */}}
 {{$name := .FieldName}}
@@ -39,6 +39,7 @@
              data-cron-input
              data-cron-name="{{$name}}"
              data-cron-placeholder="{{$ph}}"
+             {{with .CronDefault}}data-cron-default="{{.}}"{{end}}
              {{if .FieldRequired}}{{if not $off}}required{{end}}{{end}}
              {{if $fieldError}} aria-invalid="true"{{end}}
              {{if $off}}disabled{{end}} />

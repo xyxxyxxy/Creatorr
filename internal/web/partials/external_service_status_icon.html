@@ -1,0 +1,29 @@
+{{define "external_service_status_icon"}}
+{{/*
+  Health status glyph for Settings → Connect external service URL rows.
+  Expects: Status (pending|ok|degraded|skipped), StatusLabel.
+*/}}
+{{if eq .Status "pending"}}
+<span class="loading loading-spinner loading-sm opacity-70" aria-label="{{.StatusLabel}}" aria-busy="true"></span>
+{{else if eq .Status "ok"}}
+<i data-lucide="circle-check" class="size-4 text-success" aria-label="{{.StatusLabel}}"></i>
+{{else if eq .Status "degraded"}}
+<i data-lucide="circle-x" class="size-4 text-warning" aria-label="{{.StatusLabel}}"></i>
+{{else}}
+<i data-lucide="circle-minus" class="size-4 opacity-50" aria-label="{{.StatusLabel}}"></i>
+{{end}}
+{{end}}
+
+{{define "external_service_status_slot"}}
+{{/*
+  Tooltip + status icon slot. HTMX outerHTML swap replaces the whole span after probe.
+  Expects: Status, StatusLabel, StatusTip, HealthTargetID, HealthURL (optional on initial pending).
+*/}}
+{{$tip := .StatusLabel}}
+{{if and .StatusTip (ne .Status "ok")}}{{$tip = printf "%s: %s" .StatusLabel .StatusTip}}{{else if .StatusTip}}{{$tip = .StatusTip}}{{end}}
+<span class="tooltip tooltip-top shrink-0 inline-flex" data-tip="{{$tip}}"
+  {{if .HealthTargetID}}id="{{.HealthTargetID}}"{{end}}
+  {{if .HealthURL}}hx-get="{{.HealthURL}}" hx-trigger="load" hx-swap="outerHTML"{{end}}>
+  {{template "external_service_status_icon" .}}
+</span>
+{{end}}

@@ -13,10 +13,7 @@ import (
 // videoListOrderBy: dated rows first (newest upload), then undated by id.
 const videoListOrderBy = `(upload_date IS NULL OR upload_date = ''), upload_date DESC, id DESC`
 
-// videoDownloadOrderNewest matches UI list order (newest release first). Prefixed for JOIN queries.
-const videoDownloadOrderNewest = `(v.upload_date IS NULL OR v.upload_date = ''), v.upload_date DESC, v.id DESC`
-
-// videoDownloadOrderOldest is the inverse (oldest release first).
+// videoDownloadOrderOldest: oldest upload_date first; undated by lowest id.
 const videoDownloadOrderOldest = `(v.upload_date IS NULL OR v.upload_date = '') DESC, v.upload_date ASC, v.id ASC`
 
 // videoSelectCols is the shared SELECT list for scanVideo (order must match Scan).
@@ -556,7 +553,7 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 		}
 	}
 	switch cur.Status {
-	case "ignored", "deleted", "missing", "wanted_download_error", "wanted_source_error", "verify_failed":
+	case "ignored", "deleted", "missing", "wanted_download_error", "verify_failed":
 		_, _ = s.DB.SQL.Exec(`UPDATE videos SET status = 'wanted' WHERE id = ?`, videoID)
 	}
 	params := enqueueDownloadParams(videoID, cur.SeriesID, domain)

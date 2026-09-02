@@ -511,7 +511,6 @@ func ScanHandler(d Deps) TaskHandler {
 				"mode": mode,
 				"code": apperrors.CodeCookieInvalid,
 			}, t.ID)
-			_ = d.Library.HoldSourceOnYtDlpError(src.ID, t.ID)
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 		}
 
@@ -532,7 +531,6 @@ func ScanHandler(d Deps) TaskHandler {
 				"mode": mode,
 				"code": code,
 			}, t.ID)
-			_ = d.Library.HoldSourceOnYtDlpError(src.ID, t.ID)
 			return err
 		}
 
@@ -1422,7 +1420,6 @@ func metadataRescanSeries(ctx context.Context, d Deps, t *queue.Task, progress f
 				"mode": library.SourceHistModeRescanMetadata,
 				"code": apperrors.CodeCookieInvalid,
 			}, t.ID)
-			_ = d.Library.HoldSourceOnYtDlpError(src.ID, t.ID)
 			lastErr = apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 			continue
 		}
@@ -1435,7 +1432,6 @@ func metadataRescanSeries(ctx context.Context, d Deps, t *queue.Task, progress f
 				"mode": library.SourceHistModeRescanMetadata,
 				"code": code,
 			}, t.ID)
-			_ = d.Library.HoldSourceOnYtDlpError(src.ID, t.ID)
 			lastErr = err
 			continue
 		}

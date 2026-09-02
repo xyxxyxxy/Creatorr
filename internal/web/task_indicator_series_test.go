@@ -21,10 +21,10 @@ func TestBuildSeriesHealthStatusCounts(t *testing.T) {
 		t.Fatalf("multi download error: ok=%v v=%+v", ok, v)
 	}
 	v, ok = buildSeriesHealthStatus(library.SeriesVideoErrorFlags{
-		HasSourceError: true, SourceErrorCount: 2,
+		HasVerifyFailed: true, VerifyFailedCount: 2,
 		HasDownloadError: true, DownloadErrorCount: 5,
 	}, library.SeriesWarnNone)
-	if !ok || v.Kind != "wanted_source_error" || v.Count != 2 {
-		t.Fatalf("source wins over download: ok=%v v=%+v", ok, v)
+	if !ok || v.Kind != "wanted_download_error" || v.Count != 5 {
+		t.Fatalf("download wins over verify: ok=%v v=%+v", ok, v)
 	}
 }

@@ -17,6 +17,18 @@ const DomainDefault = "default"
 // DefaultMaxParallelTasks is the seed / fallback for max_parallel_tasks.
 const DefaultMaxParallelTasks = 1
 
+// DefaultMaxDownloadQueue is the seed / fallback for max_download_queue.
+const DefaultMaxDownloadQueue = 8
+
+// ParsePositiveInt parses an integer ≥ 1 from a form field.
+func ParsePositiveInt(raw, label string) (int, error) {
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n < 1 {
+		return 0, fmt.Errorf("%s must be an integer ≥ 1", label)
+	}
+	return n, nil
+}
+
 // NormalizeDomain lowercases, trims, and strips a leading www. prefix.
 // Used for cookies, domains table keys, handler hosts, and queue lanes.
 func NormalizeDomain(domain string) string {

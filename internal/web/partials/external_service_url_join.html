@@ -1,29 +1,14 @@
 {{define "external_service_url_join"}}
 {{/*
   Env-only external service URL with health status icon to the right (not a daisyUI join).
-  Expects: Label, Value, Hint, Status (ok|degraded|skipped), StatusLabel, StatusTip (optional).
+  Expects: Label, Value, Hint, Status (pending|ok|degraded|skipped), StatusLabel, StatusTip (optional).
+  When HealthURL is set, probes asynchronously via HTMX after the page shell loads.
 */}}
-{{$tip := .StatusLabel}}
-{{if and .StatusTip (ne .Status "ok")}}{{$tip = printf "%s: %s" .StatusLabel .StatusTip}}{{else if .StatusTip}}{{$tip = .StatusTip}}{{end}}
-{{$icon := "circle-minus"}}
-{{$iconClass := "size-4 opacity-50"}}
-{{if eq .Status "pending"}}
-  {{$icon = "loader-circle"}}
-  {{$iconClass = "size-4 opacity-50 animate-spin"}}
-{{else if eq .Status "ok"}}
-  {{$icon = "circle-check"}}
-  {{$iconClass = "size-4 text-success"}}
-{{else if eq .Status "degraded"}}
-  {{$icon = "circle-x"}}
-  {{$iconClass = "size-4 text-warning"}}
-{{end}}
 <fieldset class="fieldset w-full">
   <legend class="fieldset-legend">{{.Label}}</legend>
   <div class="flex items-center gap-2 w-full">
     <input type="text" class="input grow min-w-0 font-mono" value="{{.Value}}" placeholder="-" disabled />
-    <span class="tooltip tooltip-top shrink-0 inline-flex" data-tip="{{$tip}}">
-      <i data-lucide="{{$icon}}" class="{{$iconClass}}" aria-label="{{.StatusLabel}}"></i>
-    </span>
+    {{template "external_service_status_slot" .}}
   </div>
   {{if .Hint}}
   <p class="label whitespace-pre-line">{{.Hint}}</p>

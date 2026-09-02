@@ -1,0 +1,11 @@
+{{define "domain_defaults_autosave_oob"}}
+{{/*
+  HTMX autosave success for Domain defaults: toast + refreshed default table row.
+  Expects Flash (*flash), DefaultLimits (settings.DomainLimits).
+  Row is wrapped in table/tbody so applySettingsOOB can parse a valid <tr> fragment.
+*/}}
+{{template "flash_toast_oob" .Flash}}
+<table hidden aria-hidden="true"><tbody>
+{{template "domain_defaults_table_row" (dict "DefaultLimits" .DefaultLimits "OOB" true)}}
+</tbody></table>
+{{end}}

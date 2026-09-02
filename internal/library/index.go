@@ -109,15 +109,7 @@ func (s *Store) UpsertListed(seriesID int64, li ListedVideo, taskID int64) (Upse
 				} else if src.IndexAsIgnored {
 					status = "ignored"
 					ignoreReason = IgnoreReasonIndexAsIgnored
-				} else if hold, herr := s.SourceShouldHoldWanted(li.SourceID); herr != nil {
-					return out, herr
-				} else if hold {
-					status = "wanted_source_error"
 				}
-			} else if hold, herr := s.SourceShouldHoldWanted(li.SourceID); herr != nil {
-				return out, herr
-			} else if hold {
-				status = "wanted_source_error"
 			}
 		}
 		var src any

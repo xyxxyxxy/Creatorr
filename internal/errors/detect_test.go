@@ -69,15 +69,6 @@ func TestDetectAgeRestricted(t *testing.T) {
 	}
 }
 
-func TestIsSourceCountableDownloadError(t *testing.T) {
-	if apperrors.IsSourceCountableDownloadError(apperrors.CodeAgeRestricted) {
-		t.Fatal("AgeRestricted must not count toward threshold")
-	}
-	if !apperrors.IsSourceCountableDownloadError(apperrors.CodeDownloadFailed) {
-		t.Fatal("DownloadFailed must count")
-	}
-}
-
 func TestIsYtDlpPauseCode(t *testing.T) {
 	if !apperrors.IsYtDlpPauseCode(apperrors.CodeDownloadFailed) ||
 		!apperrors.IsYtDlpPauseCode(apperrors.CodeResolveFailed) ||

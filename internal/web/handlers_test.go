@@ -84,6 +84,9 @@ func TestSeriesListRenders(t *testing.T) {
 	if !strings.Contains(body, `name="source_url"`) || !strings.Contains(body, `name="scan_cron"`) {
 		t.Fatalf("missing add-series URL path fields: %s", truncate(body, 400))
 	}
+	if !strings.Contains(body, `supportedsites.md`) {
+		t.Fatalf("missing yt-dlp supported sites link: %s", truncate(body, 400))
+	}
 	if !strings.Contains(body, `name="source_label"`) || !strings.Contains(body, `data-add-series-step="series"`) {
 		t.Fatalf("missing add-series series step: %s", truncate(body, 400))
 	}
@@ -239,6 +242,59 @@ func TestOverviewRenders(t *testing.T) {
 	}
 }
 
+func TestActionRunScheduledQueuesSyncFiles(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "run-sched.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	root, err := lib.CreateRoot("r", t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, err := lib.CreateProfile("p", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "S", RootID: root.ID, QualityProfileID: prof.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, status)
+		VALUES (?, 'v1', 'One', 'wanted')
+	`, ser.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	form := strings.NewReader("key=" + settings.KeySyncFilesCron + "&redirect=/tasks")
+	req := httptest.NewRequest(http.MethodPost, "/actions/run-scheduled", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
+	}
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "ok=sync-files-queued") {
+		t.Fatalf("location=%q", loc)
+	}
+	busy, err := q.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain)
+	if err != nil || !busy {
+		t.Fatalf("expected sync_files queued, busy=%v err=%v", busy, err)
+	}
+}
+
 func TestTasksShowsSoftPausedHostWithoutDomainsRow(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
@@ -350,11 +406,20 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "connect-flare-service-health") || !strings.Contains(body, `hx-get="/settings/connect/external-services/flare"`) {
 				t.Fatalf("%s missing async Flare health load", path)
 			}
-			if !strings.Contains(body, `id="ytdlp-connect-live"`) {
-				t.Fatalf("%s missing yt-dlp live panel", path)
+			if !strings.Contains(body, `id="ytdlp-connect-installed-version"`) || !strings.Contains(body, `hx-get="/settings/connect/ytdlp-installed-version"`) {
+				t.Fatalf("%s missing async yt-dlp installed version load", path)
 			}
-			if !strings.Contains(body, "Checking") {
-				t.Fatalf("%s missing pending health status", path)
+			if !strings.Contains(body, `placeholder="loading"`) {
+				t.Fatalf("%s missing yt-dlp installed version loading placeholder", path)
+			}
+			if !strings.Contains(body, `id="ytdlp-connect-last-checked"`) || !strings.Contains(body, "Last checked") {
+				t.Fatalf("%s missing yt-dlp last checked field", path)
+			}
+			if !strings.Contains(body, "ytdlp_update_channel") {
+				t.Fatalf("%s missing yt-dlp update channel on page shell", path)
+			}
+			if !strings.Contains(body, "Checking") || !strings.Contains(body, "loading-spinner") {
+				t.Fatalf("%s missing pending health spinner", path)
 			}
 			if !strings.Contains(body, "Notifications") {
 				t.Fatalf("%s missing Notifications", path)
@@ -378,6 +443,15 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "interactive") || !strings.Contains(body, "Pausing a domain") {
 				t.Fatalf("/tasks missing interactive/pause note")
 			}
+			if !strings.Contains(body, `data-scheduled-task`) || !strings.Contains(body, "download_wanted") || !strings.Contains(body, queue.KindSyncFiles) {
+				t.Fatalf("/tasks missing scheduled task rows on system lane")
+			}
+			if !strings.Contains(body, `action="/actions/run-scheduled"`) || !strings.Contains(body, `data-tip="Queue now"`) {
+				t.Fatalf("/tasks missing queue-now on scheduled rows")
+			}
+			if strings.Contains(body, "data-download-schedule") {
+				t.Fatalf("/tasks still has header download schedule chip")
+			}
 		}
 		if path == "/settings/library" || path == "/settings/queue" || path == "/settings/maintenance" {
 			body := rec.Body.String()
@@ -396,23 +470,26 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if strings.Contains(body, "download_new_on_scan") {
 				t.Fatalf("%s still has download_new_on_scan", path)
 			}
-			if strings.Contains(body, "download_wanted_order") || strings.Contains(body, "source_download_error_threshold") {
+			if strings.Contains(body, "download_wanted_order") {
 				t.Fatalf("%s still has queue settings", path)
 			}
 			continue
 		}
 		if path == "/settings/queue" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "download_wanted_order") || !strings.Contains(body, "max_download_queue") || !strings.Contains(body, "max_parallel_tasks") || !strings.Contains(body, "source_download_error_threshold") {
+			if strings.Contains(body, "download_wanted_order") {
+				t.Fatalf("%s still has download_wanted_order", path)
+			}
+			if !strings.Contains(body, "max_download_queue") || !strings.Contains(body, "max_parallel_tasks") {
 				t.Fatalf("%s missing queue form fields", path)
 			}
 			if strings.Contains(body, "download_new_on_scan") {
 				t.Fatalf("%s should not have download_new_on_scan", path)
 			}
-			if !strings.Contains(body, "Domain defaults") || !strings.Contains(body, "Domain overrides") || !strings.Contains(body, "modal-add-domain-override") {
+			if !strings.Contains(body, ">Defaults</h2>") || !strings.Contains(body, "Domain overrides") || !strings.Contains(body, "modal-add-domain-override") {
 				t.Fatalf("%s missing domain defaults/overrides", path)
 			}
-			if !strings.Contains(body, `>default</span>`) || strings.Contains(body, `modal-edit-domain-default`) {
+			if !strings.Contains(body, `id="domain-defaults-table-row"`) || !strings.Contains(body, `>default</span>`) || strings.Contains(body, `modal-edit-domain-default`) {
 				t.Fatalf("%s missing fixed default row or has edit modal for default", path)
 			}
 			if !strings.Contains(body, "FlareSolverr, cookies, and membership credentials are set on a 'Domain override' per domain") {
@@ -710,6 +787,39 @@ func TestMonitorToggleHTMX(t *testing.T) {
 	out := rec.Body.String()
 	if !strings.Contains(out, "monitor-toggle-root") || !strings.Contains(out, "hx-post") {
 		t.Fatalf("expected toggle partial: %s", truncate(out, 300))
+	}
+}
+
+func TestSaveDomainDefaultHTMX(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	body := strings.NewReader("max_download_queue=9&max_parallel_tasks=2&task_cooldown_seconds=15&download_rate_limit_value=5&download_rate_limit_unit=M&sleep_requests=3&redirect=/settings/queue")
+	req := httptest.NewRequest(http.MethodPost, "/actions/save-domain-default", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	out := rec.Body.String()
+	if !strings.Contains(out, `id="domain-defaults-table-row"`) || !strings.Contains(out, `hx-swap-oob="outerHTML:#domain-defaults-table-row"`) {
+		t.Fatalf("expected OOB default row: %s", truncate(out, 400))
+	}
+	if !strings.Contains(out, "<td>9</td>") || !strings.Contains(out, "<td>15</td>") {
+		t.Fatalf("expected saved limits in row: %s", truncate(out, 400))
 	}
 }
 

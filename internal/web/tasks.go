@@ -71,7 +71,8 @@ type laneView struct {
 	DefaultRate         string
 	DefaultSleep        float64
 	DefaultFlare        bool
-	Tasks               []taskView // pending + running (ListActive order)
+	Tasks               []taskView           // pending + running (ListActive order)
+	ScheduledTasks      []scheduledTaskView  // system lane: upcoming scheduler jobs
 }
 
 func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
@@ -306,15 +307,125 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 	}
 	flareOK := strings.TrimSpace(h.FlareSolverrURL) != ""
 
+	now := time.Now().UTC()
+	scheduled, err := buildScheduledTasks(h.Library, now)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	markScheduledBusy(h.Queue, scheduled)
+	for i := range lanes {
+		if lanes[i].Domain == queue.SystemDomain {
+			lanes[i].ScheduledTasks = scheduled
+			break
+		}
+	}
+
 	render(w, "tasks", struct {
 		pageBase
 		Lanes           []laneView
 		FlareConfigured bool
 	}{
-		pageBase:        newPage("Tasks", "tasks", nil),
+		pageBase:        newPage("Tasks", "tasks", flashFromQuery(r)),
 		Lanes:           lanes,
 		FlareConfigured: flareOK,
 	})
+}
+
+func (h *Handler) actionRunScheduled(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	key := strings.TrimSpace(r.FormValue("key"))
+	redir := strings.TrimSpace(r.FormValue("redirect"))
+	if redir != "/tasks" {
+		redir = "/tasks"
+	}
+	if h.Library == nil {
+		http.Redirect(w, r, redir+"?err="+urlQuery("library unavailable"), http.StatusSeeOther)
+		return
+	}
+
+	switch key {
+	case settings.KeyDownloadWantedCron:
+		n, err := h.Library.EnqueueDownloadWanted()
+		if err != nil {
+			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
+			return
+		}
+		if _, _, err := h.Library.EnqueueMaturityDue(); err != nil {
+			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
+			return
+		}
+		if n == 0 {
+			http.Redirect(w, r, redir+"?ok=download-wanted-empty", http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, redir+"?ok=download-wanted-queued", http.StatusSeeOther)
+		return
+
+	case settings.KeySyncFilesCron:
+		if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain); busy {
+			http.Redirect(w, r, redir+"?err="+urlQuery("File sync already queued"), http.StatusSeeOther)
+			return
+		}
+		id, err := h.Library.EnqueueSyncFiles(queue.PrioritySyncFilesDue)
+		if err != nil {
+			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
+			return
+		}
+		if id == 0 {
+			http.Redirect(w, r, redir+"?ok=sync-files-empty", http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, redir+"?ok=sync-files-queued", http.StatusSeeOther)
+		return
+
+	case settings.KeyRetentionDeleteCron:
+		if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRetentionDelete, queue.SystemDomain); busy {
+			http.Redirect(w, r, redir+"?err="+urlQuery("Retention delete already queued"), http.StatusSeeOther)
+			return
+		}
+		id, err := h.Library.EnqueueRetentionDelete(queue.PriorityRetentionDeleteDue)
+		if err != nil {
+			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
+			return
+		}
+		if id == 0 {
+			http.Redirect(w, r, redir+"?ok=retention-delete-empty", http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, redir+"?ok=retention-delete-queued", http.StatusSeeOther)
+		return
+
+	case settings.KeyYtDlpUpdateCron:
+		enabled, err := settings.YtDlpUpdatesEnabled(h.Queue.DB)
+		if err != nil {
+			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
+			return
+		}
+		if !enabled {
+			http.Redirect(w, r, redir+"?err="+urlQuery("Automatic yt-dlp updates disabled"), http.StatusSeeOther)
+			return
+		}
+		if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindYtDlpUpdate, queue.SystemDomain); busy {
+			http.Redirect(w, r, redir+"?err="+urlQuery("yt-dlp update already queued or running"), http.StatusSeeOther)
+			return
+		}
+		id, err := h.Library.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, "manual")
+		if err != nil {
+			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
+			return
+		}
+		if id == 0 {
+			http.Redirect(w, r, redir+"?err="+urlQuery("yt-dlp update not enqueued"), http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, redir+"?ok=ytdlp-update-queued", http.StatusSeeOther)
+		return
+
+	default:
+		http.Redirect(w, r, redir+"?err="+urlQuery("unknown schedule"), http.StatusSeeOther)
+		return
+	}
 }
 
 func (h *Handler) actionCancelTask(w http.ResponseWriter, r *http.Request) {

@@ -16,7 +16,7 @@ import (
 var schemaFS embed.FS
 
 // schemaVersion is the latest schema. Fresh installs record this; existing DBs migrate up.
-const schemaVersion = 2
+const schemaVersion = 3
 
 // busyTimeoutMS is how long pooled connections wait on SQLITE_BUSY before failing.
 // Must be set via DSN _pragma so every pool conn gets it (Exec PRAGMA only hits one conn).

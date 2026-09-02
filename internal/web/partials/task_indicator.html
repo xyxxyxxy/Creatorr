@@ -27,8 +27,6 @@
   {{else if .VideoStatus}}
     {{if eq .VideoStatus "wanted"}}
     <i data-lucide="download" class="size-5 text-warning"></i>
-    {{else if eq .VideoStatus "wanted_source_error"}}
-    <i data-lucide="circle-alert" class="size-5 text-error"></i>
     {{else if eq .VideoStatus "wanted_download_error"}}
     <i data-lucide="circle-x" class="size-5 text-error"></i>
     {{else if eq .VideoStatus "verify_failed"}}

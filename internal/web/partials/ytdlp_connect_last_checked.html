@@ -1,0 +1,7 @@
+{{define "ytdlp_connect_last_checked"}}
+<div id="ytdlp-connect-last-checked" class="form-control w-full min-w-0 gap-2">
+  <span class="label-text">Last checked</span>
+  <input type="text" class="input input-bordered text-sm w-full" disabled
+    {{if .YtDlpLastCheckedAt}}data-local-date data-datetime="{{.YtDlpLastCheckedAt}}" value="{{.YtDlpLastCheckedAt}}"{{else}}value="-"{{end}} />
+</div>
+{{end}}

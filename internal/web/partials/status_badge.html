@@ -32,10 +32,6 @@
 <span class="inline-flex tooltip tooltip-top text-warning" data-tip="wanted" aria-label="wanted">
   <i data-lucide="download" class="size-4"></i>
 </span>
-{{else if eq . "wanted_source_error"}}
-<span class="inline-flex tooltip tooltip-top text-error" data-tip="Source has too many download errors - Retry on the source" aria-label="wanted (source error)">
-  <i data-lucide="circle-alert" class="size-4"></i>
-</span>
 {{else if eq . "wanted_download_error"}}
 <span class="inline-flex tooltip tooltip-top text-error" data-tip="Last download failed" aria-label="wanted (download error)">
   <i data-lucide="circle-x" class="size-4"></i>

@@ -22,6 +22,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo2(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 3:
+			if err := d.migrateTo3(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -73,6 +77,20 @@ func (d *DB) migrateTo2() error {
 		if _, err := d.SQL.Exec(`ALTER TABLE sources DROP COLUMN scan_cutoff`); err != nil {
 			return fmt.Errorf("drop scan_cutoff: %w", err)
 		}
+	}
+	return nil
+}
+
+// migrateTo3 drops source-download hold: reset held videos and remove hold history rows.
+func (d *DB) migrateTo3() error {
+	if _, err := d.SQL.Exec(`UPDATE videos SET status = 'wanted' WHERE status = 'wanted_source_error'`); err != nil {
+		return fmt.Errorf("clear wanted_source_error: %w", err)
+	}
+	if _, err := d.SQL.Exec(`DELETE FROM video_history WHERE event IN ('source_failed', 'wanted_source_error')`); err != nil {
+		return fmt.Errorf("delete source hold history: %w", err)
+	}
+	if _, err := d.SQL.Exec(`UPDATE video_history SET event = 'download_failed' WHERE event = 'wanted_download_error'`); err != nil {
+		return fmt.Errorf("rewrite legacy wanted_download_error history: %w", err)
 	}
 	return nil
 }

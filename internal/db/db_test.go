@@ -24,8 +24,8 @@ func TestOpenFreshSchema(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 2 {
-		t.Fatalf("schema_version=%d want 2", ver)
+	if ver != 3 {
+		t.Fatalf("schema_version=%d want 3", ver)
 	}
 	assertColumn(t, d.SQL, "sources", "full_scan_limit", true)
 	assertColumn(t, d.SQL, "sources", "scan_cutoff", false)
@@ -94,8 +94,8 @@ func TestMigrateV2AddsFullScanLimitDropsCutoff(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 2 {
-		t.Fatalf("schema_version=%d want 2", ver)
+	if ver != 3 {
+		t.Fatalf("schema_version=%d want 3", ver)
 	}
 	assertColumn(t, d.SQL, "sources", "full_scan_limit", true)
 	assertColumn(t, d.SQL, "sources", "scan_cutoff", false)
@@ -106,6 +106,100 @@ func TestMigrateV2AddsFullScanLimitDropsCutoff(t *testing.T) {
 	}
 	if limit != 0 {
 		t.Fatalf("full_scan_limit=%d want 0 default", limit)
+	}
+}
+
+func TestMigrateV3ClearsSourceHold(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hold.db")
+	sqlDB, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = sqlDB.Exec(`
+		CREATE TABLE schema_version (version INTEGER NOT NULL);
+		INSERT INTO schema_version (version) VALUES (2);
+		CREATE TABLE series (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			title TEXT NOT NULL,
+			root_id INTEGER NOT NULL,
+			quality_profile_id INTEGER NOT NULL,
+			monitored INTEGER NOT NULL DEFAULT 1,
+			added_at TEXT NOT NULL
+		);
+		CREATE TABLE sources (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			series_id INTEGER NOT NULL,
+			url TEXT NOT NULL,
+			kind TEXT NOT NULL DEFAULT 'feed',
+			scan_cron TEXT NOT NULL DEFAULT '',
+			index_as_ignored INTEGER NOT NULL DEFAULT 0,
+			full_scan_limit INTEGER NOT NULL DEFAULT 0,
+			full_scan_done INTEGER NOT NULL DEFAULT 0
+		);
+		CREATE TABLE videos (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			series_id INTEGER NOT NULL,
+			source_id INTEGER,
+			remote_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'wanted'
+		);
+		CREATE TABLE video_history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			video_id INTEGER NOT NULL,
+			created_at TEXT NOT NULL,
+			event TEXT NOT NULL,
+			message TEXT NOT NULL DEFAULT '',
+			detail TEXT NOT NULL DEFAULT '',
+			task_id INTEGER NOT NULL DEFAULT 0
+		);
+		INSERT INTO series (id, title, root_id, quality_profile_id, added_at) VALUES (1, 'S', 1, 1, '2026-01-01T00:00:00Z');
+		INSERT INTO sources (id, series_id, url) VALUES (1, 1, 'https://www.example.com/@x');
+		INSERT INTO videos (id, series_id, source_id, remote_id, title, status) VALUES (1, 1, 1, 'h1', 'H1', 'wanted_source_error');
+		INSERT INTO videos (id, series_id, source_id, remote_id, title, status) VALUES (2, 1, 1, 'h2', 'H2', 'wanted_download_error');
+		INSERT INTO video_history (video_id, created_at, event, message, task_id) VALUES (1, '2026-01-01T00:00:00Z', 'source_failed', 'Held', 1);
+		INSERT INTO video_history (video_id, created_at, event, message, task_id) VALUES (2, '2026-01-01T00:00:00Z', 'wanted_download_error', 'legacy', 2);
+		INSERT INTO video_history (video_id, created_at, event, message, task_id) VALUES (2, '2026-01-01T00:00:00Z', 'download_failed', 'keep', 3);
+	`)
+	if err != nil {
+		_ = sqlDB.Close()
+		t.Fatal(err)
+	}
+	_ = sqlDB.Close()
+
+	d, err := db.Open(path)
+	if err != nil {
+		t.Fatalf("open migrate: %v", err)
+	}
+	defer func() { _ = d.Close() }()
+
+	var ver int
+	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
+		t.Fatal(err)
+	}
+	if ver != 3 {
+		t.Fatalf("schema_version=%d want 3", ver)
+	}
+	var st string
+	if err := d.SQL.QueryRow(`SELECT status FROM videos WHERE id = 1`).Scan(&st); err != nil {
+		t.Fatal(err)
+	}
+	if st != "wanted" {
+		t.Fatalf("video 1 status=%q want wanted", st)
+	}
+	var histN int
+	if err := d.SQL.QueryRow(`SELECT COUNT(*) FROM video_history WHERE event IN ('source_failed', 'wanted_source_error')`).Scan(&histN); err != nil {
+		t.Fatal(err)
+	}
+	if histN != 0 {
+		t.Fatalf("hold history rows=%d want 0", histN)
+	}
+	var ev string
+	if err := d.SQL.QueryRow(`SELECT event FROM video_history WHERE message = 'legacy'`).Scan(&ev); err != nil {
+		t.Fatal(err)
+	}
+	if ev != "download_failed" {
+		t.Fatalf("legacy event=%q want download_failed", ev)
 	}
 }
 

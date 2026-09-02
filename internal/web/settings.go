@@ -125,28 +125,78 @@ func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) ytdlpConnectPageData() (managedPath, installedVer, lastCheckedAt string, updatesEnabled, updateBusy bool) {
-	updatesEnabled, _ = settings.YtDlpUpdatesEnabled(h.Queue.DB)
-	updateBusy, _ = h.Queue.HasPendingOrRunningKind(queue.KindYtDlpUpdate, queue.SystemDomain)
-	installedVer, _ = settings.Get(h.Queue.DB, settings.KeyYtDlpInstalledVersion)
-	lastCheckedAt, _ = h.Queue.LastFinishedAt(queue.KindYtDlpUpdate, queue.SystemDomain, queue.StatusDone)
-	if h.YtDlp != nil {
-		managedPath = h.YtDlp.BinPath()
-		if installedVer == "" {
-			installedVer, _ = ytdlp.VerifyBinary(managedPath)
-		}
+func (h *Handler) ytdlpConnectControlsView() ytdlpConnectControlsView {
+	updatesEnabled, _ := settings.YtDlpUpdatesEnabled(h.Queue.DB)
+	updateBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindYtDlpUpdate, queue.SystemDomain)
+	lastCheckedAt, _ := h.Queue.LastFinishedAt(queue.KindYtDlpUpdate, queue.SystemDomain, queue.StatusDone)
+	return ytdlpConnectControlsView{
+		YtDlpLastCheckedAt: lastCheckedAt,
+		YtDlpUpdatesOn:     updatesEnabled,
+		YtDlpUpdateBusy:    updateBusy,
+		YtDlpUpdateOffTip:  "Automatic updates disabled. Set yt-dlp update schedule under Settings → Scheduler.",
+		YtDlpUpdateBusyTip: "yt-dlp update already queued or running",
+		YtDlpChannel:       h.ytdlpUpdateChannelRow(updatesEnabled),
 	}
-	return managedPath, installedVer, lastCheckedAt, updatesEnabled, updateBusy
 }
 
-type ytdlpConnectLiveView struct {
-	YtDlpInstalledVer  string
+type ytdlpConnectControlsView struct {
 	YtDlpLastCheckedAt string
 	YtDlpUpdatesOn     bool
 	YtDlpUpdateBusy    bool
 	YtDlpUpdateOffTip  string
 	YtDlpUpdateBusyTip string
 	YtDlpChannel       settingsRowView
+}
+
+type ytdlpInstalledVersionView struct {
+	Pending     bool
+	Value       string
+	Error       bool
+	ErrorDetail string
+}
+
+func ytdlpInstalledVersionErrorLabel(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "missing") {
+		return "Binary not found"
+	}
+	if strings.Contains(msg, "--version failed") {
+		return "Binary check failed"
+	}
+	return "Binary unavailable"
+}
+
+func (h *Handler) ytdlpInstalledVersionView() ytdlpInstalledVersionView {
+	if installedVer, _ := settings.Get(h.Queue.DB, settings.KeyYtDlpInstalledVersion); strings.TrimSpace(installedVer) != "" {
+		return ytdlpInstalledVersionView{Value: installedVer}
+	}
+	if h.YtDlp == nil {
+		return ytdlpInstalledVersionView{
+			Error:       true,
+			Value:       "Binary not found",
+			ErrorDetail: "yt-dlp client unavailable",
+		}
+	}
+	ver, err := ytdlp.VerifyBinary(h.YtDlp.BinPath())
+	if err != nil {
+		return ytdlpInstalledVersionView{
+			Error:       true,
+			Value:       ytdlpInstalledVersionErrorLabel(err),
+			ErrorDetail: err.Error(),
+		}
+	}
+	return ytdlpInstalledVersionView{Value: ver}
+}
+
+func (h *Handler) settingsConnectYtDlpInstalledVersion(w http.ResponseWriter, r *http.Request) {
+	render(w, "ytdlp_connect_installed_version", h.ytdlpInstalledVersionView())
+}
+
+func (h *Handler) settingsConnectYtDlpLastChecked(w http.ResponseWriter, r *http.Request) {
+	render(w, "ytdlp_connect_last_checked", h.ytdlpConnectControlsView())
 }
 
 func (h *Handler) ytdlpUpdateChannelRow(updatesEnabled bool) settingsRowView {
@@ -168,31 +218,14 @@ func (h *Handler) ytdlpUpdateChannelRow(updatesEnabled bool) settingsRowView {
 	return row
 }
 
-func (h *Handler) ytdlpConnectLiveView() ytdlpConnectLiveView {
-	_, installedVer, lastCheckedAt, updatesEnabled, updateBusy := h.ytdlpConnectPageData()
-	return ytdlpConnectLiveView{
-		YtDlpInstalledVer:  installedVer,
-		YtDlpLastCheckedAt: lastCheckedAt,
-		YtDlpUpdatesOn:     updatesEnabled,
-		YtDlpUpdateBusy:    updateBusy,
-		YtDlpUpdateOffTip:  "Automatic updates disabled. Set yt-dlp update schedule under Settings → Scheduler.",
-		YtDlpUpdateBusyTip: "yt-dlp update already queued or running",
-		YtDlpChannel:       h.ytdlpUpdateChannelRow(updatesEnabled),
-	}
-}
-
 func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("HX-Target") == "ytdlp-connect-live" {
-		render(w, "ytdlp_connect_live", h.ytdlpConnectLiveView())
-		return
-	}
 	entries, err := settings.Connect(h.Queue.DB)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	managedPath, installedVer, lastCheckedAt, updatesEnabled, updateBusy := h.ytdlpConnectPageData()
-	ytdlpLive := h.ytdlpConnectLiveView()
+	updatesEnabled, _ := settings.YtDlpUpdatesEnabled(h.Queue.DB)
+	ytdlpControls := h.ytdlpConnectControlsView()
 	rows := make([]settingsRowView, 0, len(entries))
 	potURLSet := strings.TrimSpace(h.PotProviderURL) != ""
 	for _, e := range entries {
@@ -251,46 +284,38 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	render(w, "settings_connect", struct {
 		pageBase
-		FlareService       externalServiceURLView
-		PotService         externalServiceURLView
-		Settings           []settingsRowView
-		NotifyChannels     []notifyChannelView
-		EventOptions       []notifyEventOption
-		DefaultEvents      []string
-		YtDlpManagedPath   string
-		YtDlpInstalledVer  string
-		YtDlpLastCheckedAt string
-		YtDlpUpdatesOn     bool
-		YtDlpUpdateBusy    bool
-		YtDlpUpdateOffTip  string
-		YtDlpUpdateBusyTip string
-		YtDlpChannel       settingsRowView
+		FlareService          externalServiceURLView
+		PotService            externalServiceURLView
+		Settings              []settingsRowView
+		NotifyChannels        []notifyChannelView
+		EventOptions          []notifyEventOption
+		DefaultEvents         []string
+		YtDlpUpdatesOn        bool
+		YtDlpInstalledVersion ytdlpInstalledVersionView
+		YtDlpControls         ytdlpConnectControlsView
 	}{
-		pageBase:           newSettingsPage("Settings · Connect", "connect", flashFromQuery(r)),
-		FlareService:       flareJoin,
-		PotService:         potJoin,
-		Settings:           rows,
-		NotifyChannels:     chViews,
-		EventOptions:       evOpts,
-		DefaultEvents:      append([]string(nil), notify.AllEvents...),
-		YtDlpManagedPath:   managedPath,
-		YtDlpInstalledVer:  installedVer,
-		YtDlpLastCheckedAt: lastCheckedAt,
-		YtDlpUpdatesOn:     updatesEnabled,
-		YtDlpUpdateBusy:    updateBusy,
-		YtDlpUpdateOffTip:  ytdlpLive.YtDlpUpdateOffTip,
-		YtDlpUpdateBusyTip: ytdlpLive.YtDlpUpdateBusyTip,
-		YtDlpChannel:       ytdlpLive.YtDlpChannel,
+		pageBase:              newSettingsPage("Settings · Connect", "connect", flashFromQuery(r)),
+		FlareService:          flareJoin,
+		PotService:            potJoin,
+		Settings:              rows,
+		NotifyChannels:        chViews,
+		EventOptions:          evOpts,
+		DefaultEvents:         append([]string(nil), notify.AllEvents...),
+		YtDlpUpdatesOn:        updatesEnabled,
+		YtDlpInstalledVersion: ytdlpInstalledVersionView{Pending: true},
+		YtDlpControls:         ytdlpControls,
 	})
 }
 
 type externalServiceURLView struct {
-	Label       string
-	Value       string
-	Hint        string
-	Status      string
-	StatusLabel string
-	StatusTip   string
+	Label          string
+	Value          string
+	Hint           string
+	Status         string
+	StatusLabel    string
+	StatusTip      string
+	HealthTargetID string
+	HealthURL      string
 }
 
 func externalServiceURLViewBase(h *Handler, flare bool) externalServiceURLView {
@@ -313,6 +338,13 @@ func externalServiceURLViewPending(h *Handler, flare bool) externalServiceURLVie
 	v.Status = "pending"
 	v.StatusLabel = "Checking"
 	v.StatusTip = "Probing service health"
+	if flare {
+		v.HealthTargetID = "connect-flare-service-health"
+		v.HealthURL = "/settings/connect/external-services/flare"
+	} else {
+		v.HealthTargetID = "connect-pot-service-health"
+		v.HealthURL = "/settings/connect/external-services/pot"
+	}
 	return v
 }
 
@@ -324,6 +356,11 @@ func (h *Handler) settingsConnectExternalServiceHealth(w http.ResponseWriter, r 
 		return
 	}
 	v := externalServiceURLViewBase(h, flare)
+	if flare {
+		v.HealthTargetID = "connect-flare-service-health"
+	} else {
+		v.HealthTargetID = "connect-pot-service-health"
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 	var ch health.Check
@@ -338,7 +375,7 @@ func (h *Handler) settingsConnectExternalServiceHealth(w http.ResponseWriter, r 
 		ch = h.Health.ProbePotProvider(ctx)
 	}
 	v.Status, v.StatusLabel, v.StatusTip = externalServiceStatusFromCheck(ch)
-	render(w, "external_service_url_join", v)
+	render(w, "external_service_status_slot", v)
 }
 
 func externalServiceStatusFromCheck(ch health.Check) (status, label, tip string) {
@@ -386,25 +423,6 @@ func (h *Handler) settingsScheduler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
-	entries, err := settings.Queue(h.Queue.DB)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	rows := make([]settingsRowView, 0, len(entries))
-	for _, e := range entries {
-		row := settingsRowView{
-			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
-		}
-		if e.Key == settings.KeyDownloadWantedOrder {
-			row.Select = true
-			row.Value = settings.NormalizeDownloadWantedOrder(e.Value)
-			for _, o := range settings.DownloadWantedOrderOptions() {
-				row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
-			}
-		}
-		rows = append(rows, row)
-	}
 	defLim, _ := settings.DefaultLimits(h.Queue.DB)
 	dqRows, _ := settings.DomainOverrideRows(h.Queue.DB)
 	pageRows, pageInfo := SlicePage(r, "page", dqRows)
@@ -415,7 +433,6 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 	defLim.UseFlareSolverr = false
 	render(w, "settings_queue", struct {
 		pageBase
-		Settings        []settingsRowView
 		DefaultLimits   settings.DomainLimits
 		DefaultUsername string
 		DomainOverrides []settings.DomainQueueRow
@@ -424,7 +441,6 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 		FlareConfigured bool
 	}{
 		pageBase:        newSettingsPage("Settings · Queue / Domains", "queue", flashFromQuery(r)),
-		Settings:        rows,
 		DefaultLimits:   defLim,
 		DefaultUsername: "",
 		DomainOverrides: pageRows,
@@ -569,12 +585,10 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	for _, e := range []string{
 		settings.KeyPotFetch,
 		settings.KeyDownloadWantedCron,
-		settings.KeyDownloadWantedOrder,
 		settings.KeySyncFilesCron,
 		settings.KeyRetentionDeleteCron,
 		settings.KeyYtDlpUpdateCron,
 		settings.KeyYtDlpUpdateChannel,
-		settings.KeySourceDownloadErrorThreshold,
 		settings.KeyEpisodeFormat,
 	} {
 		if _, ok := r.Form[e]; !ok {

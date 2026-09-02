@@ -1,0 +1,18 @@
+{{define "ytdlp_connect_installed_version"}}
+{{/*
+  Installed yt-dlp version on Settings → Connect. Probed asynchronously when Pending.
+  Expects: Pending, Value, Error, ErrorDetail (optional full message for tooltip).
+*/}}
+<div id="ytdlp-connect-installed-version" class="form-control w-full min-w-0 gap-2"
+  {{if .Pending}}hx-get="/settings/connect/ytdlp-installed-version" hx-trigger="load" hx-swap="outerHTML"{{end}}>
+  <span class="label-text">Installed version</span>
+  {{if .Pending}}
+  <input type="text" class="input input-bordered font-mono text-sm w-full" disabled placeholder="loading" value="" aria-busy="true" />
+  {{else if .Error}}
+  <input type="text" class="input input-bordered input-error font-mono text-sm w-full" disabled value="{{.Value}}" aria-invalid="true"
+    {{if .ErrorDetail}}title="{{.ErrorDetail}}"{{end}} />
+  {{else}}
+  <input type="text" class="input input-bordered font-mono text-sm w-full" disabled value="{{if .Value}}{{.Value}}{{else}}-{{end}}" />
+  {{end}}
+</div>
+{{end}}

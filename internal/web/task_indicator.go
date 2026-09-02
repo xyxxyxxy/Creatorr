@@ -70,8 +70,6 @@ func videoStatusLabel(status string) string {
 	switch status {
 	case "wanted":
 		return "wanted"
-	case "wanted_source_error":
-		return "wanted (source error)"
 	case "wanted_download_error":
 		return "wanted (download error)"
 	case "verify_failed":
@@ -277,7 +275,7 @@ func videoIndicatorID(videoID int64) string {
 
 // seriesStatusView drives partials/series_status_indicator.html and series_monitor_indicator.html.
 type seriesStatusView struct {
-	Kind  string // wanted_source_error | wanted_download_error | verify_failed | scan_error | incomplete | monitored | unmonitored
+	Kind  string // wanted_download_error | verify_failed | scan_error | incomplete | monitored | unmonitored
 	Title string
 	Count int // video error count for health badge; 0 = icon only
 }
@@ -299,13 +297,6 @@ func seriesHealthTitle(label string, count int) string {
 
 // buildSeriesHealthStatus is poster health badge only (errors/warnings; no task busy). ok false = idle healthy.
 func buildSeriesHealthStatus(errs library.SeriesVideoErrorFlags, warn library.SeriesWarnLevel) (seriesStatusView, bool) {
-	if errs.HasSourceError {
-		return seriesStatusView{
-			Kind:  "wanted_source_error",
-			Title: seriesHealthTitle("Source error", errs.SourceErrorCount),
-			Count: errs.SourceErrorCount,
-		}, true
-	}
 	if errs.HasDownloadError {
 		return seriesStatusView{
 			Kind:  "wanted_download_error",
