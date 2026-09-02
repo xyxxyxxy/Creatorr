@@ -1192,12 +1192,21 @@
   const ytdlpUpdateTaskKind = "ytdlp_update";
 
   function refreshYtDlpConnectLive() {
-    if (!onConnectPage() || !document.getElementById("ytdlp-connect-live") || !window.htmx) return;
-    window.htmx.ajax("GET", "/settings/connect", {
-      target: "#ytdlp-connect-live",
-      select: "#ytdlp-connect-live",
-      swap: "outerHTML",
-    });
+    if (!onConnectPage() || !window.htmx) return;
+    const version = document.getElementById("ytdlp-connect-installed-version");
+    if (version) {
+      window.htmx.ajax("GET", "/settings/connect/ytdlp-installed-version", {
+        target: "#ytdlp-connect-installed-version",
+        swap: "outerHTML",
+      });
+    }
+    const lastChecked = document.getElementById("ytdlp-connect-last-checked");
+    if (lastChecked) {
+      window.htmx.ajax("GET", "/settings/connect/ytdlp-last-checked", {
+        target: "#ytdlp-connect-last-checked",
+        swap: "outerHTML",
+      });
+    }
   }
 
   function maybeRefreshYtDlpConnect(ev) {

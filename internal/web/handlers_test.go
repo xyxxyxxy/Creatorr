@@ -350,11 +350,20 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "connect-flare-service-health") || !strings.Contains(body, `hx-get="/settings/connect/external-services/flare"`) {
 				t.Fatalf("%s missing async Flare health load", path)
 			}
-			if !strings.Contains(body, `id="ytdlp-connect-live"`) {
-				t.Fatalf("%s missing yt-dlp live panel", path)
+			if !strings.Contains(body, `id="ytdlp-connect-installed-version"`) || !strings.Contains(body, `hx-get="/settings/connect/ytdlp-installed-version"`) {
+				t.Fatalf("%s missing async yt-dlp installed version load", path)
 			}
-			if !strings.Contains(body, "Checking") {
-				t.Fatalf("%s missing pending health status", path)
+			if !strings.Contains(body, `placeholder="loading"`) {
+				t.Fatalf("%s missing yt-dlp installed version loading placeholder", path)
+			}
+			if !strings.Contains(body, `id="ytdlp-connect-last-checked"`) || !strings.Contains(body, "Last checked") {
+				t.Fatalf("%s missing yt-dlp last checked field", path)
+			}
+			if !strings.Contains(body, "ytdlp_update_channel") {
+				t.Fatalf("%s missing yt-dlp update channel on page shell", path)
+			}
+			if !strings.Contains(body, "Checking") || !strings.Contains(body, "loading-spinner") {
+				t.Fatalf("%s missing pending health spinner", path)
 			}
 			if !strings.Contains(body, "Notifications") {
 				t.Fatalf("%s missing Notifications", path)

@@ -71,6 +71,8 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/settings/general", h.settingsGeneral)
 	r.Get("/settings/library", h.settingsLibrary)
 	r.Get("/settings/connect", h.settingsConnect)
+	r.Get("/settings/connect/ytdlp-installed-version", h.settingsConnectYtDlpInstalledVersion)
+	r.Get("/settings/connect/ytdlp-last-checked", h.settingsConnectYtDlpLastChecked)
 	r.Get("/settings/connect/external-services/{service}", h.settingsConnectExternalServiceHealth)
 	r.Get("/settings/queue", h.settingsQueue)
 	r.Get("/settings/scheduler", h.settingsScheduler)
