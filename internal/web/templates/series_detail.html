@@ -12,10 +12,19 @@
     </h1>
     <p class="text-xs opacity-60">{{if .Series.RootName}}{{.Series.RootName}} · {{end}}{{.Series.QualityProfileName}}</p>
   </div>
-  <div class="flex-none flex flex-wrap gap-2">
+  <div class="flex-none flex flex-wrap gap-2 items-center">
     <label for="modal-edit-series" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Edit series</label>
     <label for="modal-edit-series-metadata" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Edit metadata</label>
     <label for="modal-delete-series" class="btn btn-soft btn-error{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Delete</label>
+    {{template "monitor_toggle" (dict
+      "Action" "/actions/set-series-monitored"
+      "SeriesID" .Series.ID
+      "Monitored" .Series.Monitored
+      "Redirect" (printf "/series/%d" .Series.ID)
+      "AsButton" true
+      "Disabled" .Deleting
+      "DisabledTitle" "Series is being deleted"
+    )}}
   </div>
 </div>
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}

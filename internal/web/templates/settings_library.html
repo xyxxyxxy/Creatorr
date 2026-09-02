@@ -3,6 +3,10 @@
 {{template "settings_nav" .}}
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 
+<div role="alert" class="alert alert-info text-sm mb-4">
+  <span>Changing library settings does not update already downloaded videos. Use maintenance tasks under 'Settings → Maintenance' to apply episode format, file sync, or NFO changes to the existing library.</span>
+</div>
+
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Root folders" "help" "Named disk paths where series store files." "add_modal" "modal-add-root" "add_label" "Add root")}}
 {{if not .Roots}}
@@ -34,7 +38,6 @@
     "Name" "episode_format"
     "Label" "Episode format"
     "Value" .EpisodeFormat
-    "Hint" "Saving does not rename existing files. Run maintenance task to apply new format to existing files."
     "Mono" true
     "Required" true
     "JoinPrefix" "Series/"
@@ -142,9 +145,6 @@
 {{template "list_table_end"}}
 {{template "pagination" .ProfilesPage}}
 {{end}}
-<fieldset class="fieldset">
-  <p class="label whitespace-normal">Changing quality profile format does not affect already downloaded or queued videos.</p>
-</fieldset>
 {{template "list_panel_end"}}
 
 <section class="card bg-base-100 border border-base-300 mb-4">
@@ -166,9 +166,6 @@
         "Hint" "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt)."
         "AutosaveChange" true
       )}}
-    </div>
-    <div class="card-actions items-center gap-2">
-      {{template "field_info" (dict "Info" "Saving does not re-fetch existing episodes.")}}
     </div>
   </form>
 </section>
@@ -194,9 +191,6 @@
         "Hint" "Add yt-dlp categories as video genres when categories are known."
         "AutosaveChange" true
       )}}
-    </div>
-    <div class="card-actions items-center gap-2">
-      {{template "field_info" (dict "Info" "Saving does not rewrite existing episodes.")}}
     </div>
   </form>
 </section>
