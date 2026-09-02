@@ -152,7 +152,7 @@
     <input type="hidden" name="redirect" value="/settings/library" />
     <input type="hidden" name="subtitle_settings" value="1" />
     <h2 class="text-lg font-semibold">Subtitles</h2>
-    <p class="text-sm opacity-60">Sidecars are always SRT (yt-dlp --convert-subs). Added on download and Replace sidecars.</p>
+    <p class="text-sm opacity-60">Sidecars are always SRT (yt-dlp <a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp#post-processing-options" target="_blank" rel="noopener noreferrer">--convert-subs</a>). Added on download and Replace sidecars.</p>
     <div class="space-y-3 w-full min-w-0">
       {{template "subtitle_langs_field" (dict
         "Items" .SubtitleLangs
