@@ -133,6 +133,30 @@ func TestEntryFromMapDropsNonHTTPURL(t *testing.T) {
 	}
 }
 
+func TestEntryFromMapPrefersPerFileURL(t *testing.T) {
+	const container = "https://archive.org/details/example-item"
+	const file = "https://archive.org/download/example-item/episode.mp4"
+	e := entryFromMap(map[string]any{
+		"id":          "example-item/episode.mp4",
+		"title":       "Example episode",
+		"webpage_url": container,
+		"url":         file,
+	})
+	if e.WebpageURL != file {
+		t.Fatalf("WebpageURL = %q, want per-file %q", e.WebpageURL, file)
+	}
+}
+
+func TestEntryFromMapYouTubeKeepsWebpageURL(t *testing.T) {
+	const watch = "https://www.youtube.com/watch?v=abc123"
+	e := entryFromMap(map[string]any{
+		"id": "abc123", "title": "Clip", "webpage_url": watch,
+	})
+	if e.WebpageURL != watch {
+		t.Fatalf("WebpageURL = %q, want %q", e.WebpageURL, watch)
+	}
+}
+
 func TestEntriesFromInfoNil(t *testing.T) {
 	if entriesFromInfo(nil) != nil {
 		t.Fatal("expected nil entries for nil info")

@@ -57,7 +57,7 @@ func (h *Handler) buildVideoMetadataView(ser *library.Series, video *library.Vid
 		h.applyVideoMetadataManagedLists(&v, nil)
 	}
 	if video.SourceURL.Valid {
-		v.FetchURL = video.SourceURL.String
+		v.FetchURL = library.DownloadURL(video.SourceURL.String, video.RemoteID)
 	}
 	if video.Season.Valid && video.Episode.Valid {
 		v.SeasonEpisodeHint = fmt.Sprintf("S%dE%d", video.Season.Int64, video.Episode.Int64)
