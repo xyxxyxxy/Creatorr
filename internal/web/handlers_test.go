@@ -725,6 +725,39 @@ func TestMonitorToggleHTMX(t *testing.T) {
 	}
 }
 
+func TestSaveDomainDefaultHTMX(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	body := strings.NewReader("max_download_queue=9&max_parallel_tasks=2&task_cooldown_seconds=15&download_rate_limit_value=5&download_rate_limit_unit=M&sleep_requests=3&redirect=/settings/queue")
+	req := httptest.NewRequest(http.MethodPost, "/actions/save-domain-default", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	out := rec.Body.String()
+	if !strings.Contains(out, `id="domain-defaults-table-row"`) || !strings.Contains(out, `hx-swap-oob="outerHTML:#domain-defaults-table-row"`) {
+		t.Fatalf("expected OOB default row: %s", truncate(out, 400))
+	}
+	if !strings.Contains(out, "<td>9</td>") || !strings.Contains(out, "<td>15</td>") {
+		t.Fatalf("expected saved limits in row: %s", truncate(out, 400))
+	}
+}
+
 func itoa(n int64) string {
 	return strconv.FormatInt(n, 10)
 }

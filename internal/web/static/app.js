@@ -3344,17 +3344,20 @@
 
   function applySettingsOOB(html) {
     if (!html) return false;
-    const holder = document.createElement("div");
-    holder.innerHTML = html;
+    const doc = new DOMParser().parseFromString(html, "text/html");
     let swapped = false;
-    holder.querySelectorAll("[hx-swap-oob]").forEach((el) => {
+    doc.body.querySelectorAll("[hx-swap-oob]").forEach((el) => {
       const spec = el.getAttribute("hx-swap-oob") || "";
-      if (spec === "true" || spec === "outerHTML") {
-        const id = el.id;
-        if (!id) return;
-        const target = document.getElementById(id);
+      if (spec === "true" || spec.startsWith("outerHTML")) {
+        let target = null;
+        if (spec.startsWith("outerHTML:")) {
+          const sel = spec.slice("outerHTML:".length).trim();
+          target = sel.startsWith("#") ? document.getElementById(sel.slice(1)) : document.querySelector(sel);
+        } else if (el.id) {
+          target = document.getElementById(el.id);
+        }
         if (!target) return;
-        target.replaceWith(el);
+        target.replaceWith(document.adoptNode(el));
         swapped = true;
         return;
       }
@@ -3363,7 +3366,7 @@
       const sel = (colon >= 0 ? spec.slice(colon + 1) : spec).trim();
       const target = sel === "body" ? document.body : document.querySelector(sel);
       if (!target || mode !== "beforeend") return;
-      target.appendChild(el);
+      target.appendChild(document.adoptNode(el));
       swapped = true;
     });
     if (swapped) {
