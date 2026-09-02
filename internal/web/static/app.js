@@ -2636,6 +2636,7 @@
     const unit = join.querySelector("[data-rate-unit]");
     const num = join.querySelector("[data-rate-value]");
     if (!unit || !num) return;
+    const wasDisabled = num.disabled;
     const off = unit.value === "off";
     const inherit = unit.value === "";
     num.disabled = off;
@@ -2643,10 +2644,15 @@
     if (off) {
       num.value = "";
       num.removeAttribute("required");
-    } else if (join.hasAttribute("data-rate-required") && !inherit) {
-      num.required = true;
     } else {
-      num.removeAttribute("required");
+      if (wasDisabled && String(num.value || "").trim() === "") {
+        num.value = "1";
+      }
+      if (join.hasAttribute("data-rate-required") && !inherit) {
+        num.required = true;
+      } else {
+        num.removeAttribute("required");
+      }
     }
   }
 
