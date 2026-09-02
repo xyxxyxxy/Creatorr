@@ -1,0 +1,18 @@
+{{define "domain_defaults_table_row"}}
+{{/*
+  Settings → Queue / Domains: fixed "default" limits row in the overrides table.
+  Expects DefaultLimits (settings.DomainLimits). Optional OOB for HTMX autosave refresh.
+*/}}
+<tr id="domain-defaults-table-row" class="text-base-content/70"{{if .OOB}} hx-swap-oob="true"{{end}}>
+  <td class="font-mono"><span class="tooltip tooltip-top" data-tip="Edit in the form above" aria-label="Edit in the form above">default</span></td>
+  <td>{{.DefaultLimits.MaxDownloadQueue}}</td>
+  <td>{{.DefaultLimits.MaxParallelTasks}}</td>
+  <td>{{.DefaultLimits.TaskCooldownSeconds}}</td>
+  <td><span class="font-mono text-xs">{{formatRateLimit .DefaultLimits.DownloadRateLimit}}</span></td>
+  <td>{{.DefaultLimits.SleepRequests}}</td>
+  <td>{{template "empty_value"}}</td>
+  <td>{{template "empty_value"}}</td>
+  <td>{{template "empty_value"}}</td>
+  <td></td>
+</tr>
+{{end}}

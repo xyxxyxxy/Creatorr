@@ -3349,6 +3349,15 @@
     let swapped = false;
     holder.querySelectorAll("[hx-swap-oob]").forEach((el) => {
       const spec = el.getAttribute("hx-swap-oob") || "";
+      if (spec === "true" || spec === "outerHTML") {
+        const id = el.id;
+        if (!id) return;
+        const target = document.getElementById(id);
+        if (!target) return;
+        target.replaceWith(el);
+        swapped = true;
+        return;
+      }
       const colon = spec.indexOf(":");
       const mode = colon >= 0 ? spec.slice(0, colon).trim() : "beforeend";
       const sel = (colon >= 0 ? spec.slice(colon + 1) : spec).trim();
@@ -3357,7 +3366,10 @@
       target.appendChild(el);
       swapped = true;
     });
-    if (swapped) scheduleFlashToasts();
+    if (swapped) {
+      scheduleFlashToasts();
+      createLucideIcons(document.body);
+    }
     return swapped;
   }
 

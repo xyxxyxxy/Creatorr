@@ -113,19 +113,38 @@ type CreateSeriesParams struct {
 	SourceLabel      string
 }
 
-// SeriesListFilter scopes the series admin list (title, root, quality, delivery, monitored).
+const (
+	SeriesListStatusMonitored   = "monitored"
+	SeriesListStatusUnmonitored = "unmonitored"
+	SeriesListStatusComplete    = "complete"
+	SeriesListStatusIncomplete  = "incomplete"
+	SeriesListStatusHasErrors   = "has_errors"
+)
+
+// SeriesListFilter scopes the series admin list (title, root, quality, delivery, status).
 type SeriesListFilter struct {
 	Title            string // case-insensitive substring; empty = any
 	RootID           int64  // 0 = any
 	QualityProfileID int64  // 0 = any
 	DeliveryMode     string // video|audio; empty = any
-	Monitored        *bool  // nil = any
+	Status           string // SeriesListStatus*; empty = any
 }
 
 // Active reports whether any series list filter constraint is set.
 func (f SeriesListFilter) Active() bool {
 	return strings.TrimSpace(f.Title) != "" || f.RootID > 0 || f.QualityProfileID > 0 ||
-		f.DeliveryMode == DeliveryVideo || f.DeliveryMode == DeliveryAudio || f.Monitored != nil
+		f.DeliveryMode == DeliveryVideo || f.DeliveryMode == DeliveryAudio ||
+		seriesListStatusActive(f.Status)
+}
+
+func seriesListStatusActive(status string) bool {
+	switch status {
+	case SeriesListStatusMonitored, SeriesListStatusUnmonitored,
+		SeriesListStatusComplete, SeriesListStatusIncomplete, SeriesListStatusHasErrors:
+		return true
+	default:
+		return false
+	}
 }
 
 const seriesListSelectCols = `s.id, s.title, s.root_id, s.quality_profile_id, s.monitored, s.delivery_mode, s.added_at,
@@ -153,13 +172,40 @@ func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilt
 		b.WriteString(` AND s.delivery_mode = ?`)
 		*args = append(*args, f.DeliveryMode)
 	}
-	if f.Monitored != nil {
-		b.WriteString(` AND s.monitored = ?`)
-		if *f.Monitored {
-			*args = append(*args, 1)
-		} else {
-			*args = append(*args, 0)
-		}
+	switch f.Status {
+	case SeriesListStatusMonitored:
+		b.WriteString(` AND s.monitored = 1`)
+	case SeriesListStatusUnmonitored:
+		b.WriteString(` AND s.monitored = 0`)
+	case SeriesListStatusComplete:
+		// Match list progress (downloaded+verify_failed / downloaded+verify_failed+wanted): no wanted left.
+		b.WriteString(` AND (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('downloaded', 'verify_failed', 'wanted')) > 0
+			AND NOT EXISTS (
+				SELECT 1 FROM videos v
+				WHERE v.series_id = s.id AND v.status = 'wanted'
+			)`)
+	case SeriesListStatusIncomplete:
+		b.WriteString(` AND EXISTS (
+			SELECT 1 FROM videos v
+			WHERE v.series_id = s.id AND v.status = 'wanted'
+		)`)
+	case SeriesListStatusHasErrors:
+		b.WriteString(` AND (
+			EXISTS (
+				SELECT 1 FROM videos v
+				WHERE v.series_id = s.id AND v.status IN ('wanted_download_error', 'verify_failed')
+			)
+			OR EXISTS (
+				SELECT 1 FROM sources src
+				WHERE src.series_id = s.id
+				  AND (
+				    SELECT sh.event FROM source_history sh
+				    WHERE sh.source_id = src.id AND sh.event IN (?, ?)
+				    ORDER BY sh.id DESC LIMIT 1
+				  ) = ?
+			)
+		)`)
+		*args = append(*args, SourceHistScanned, SourceHistScanError, SourceHistScanError)
 	}
 }
 

@@ -63,13 +63,13 @@ func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
 	case library.DeliveryAudio:
 		f.DeliveryMode = library.DeliveryAudio
 	}
-	switch strings.TrimSpace(q.Get("monitored")) {
-	case "1":
-		on := true
-		f.Monitored = &on
-	case "0":
-		off := false
-		f.Monitored = &off
+	switch strings.TrimSpace(q.Get("status")) {
+	case library.SeriesListStatusMonitored,
+		library.SeriesListStatusUnmonitored,
+		library.SeriesListStatusComplete,
+		library.SeriesListStatusIncomplete,
+		library.SeriesListStatusHasErrors:
+		f.Status = strings.TrimSpace(q.Get("status"))
 	}
 	return f
 }
@@ -219,19 +219,14 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 			{Value: library.DeliveryAudio, Label: "Audio", Selected: filter.DeliveryMode == library.DeliveryAudio},
 		},
 	})
-	monSel := ""
-	if filter.Monitored != nil {
-		if *filter.Monitored {
-			monSel = "1"
-		} else {
-			monSel = "0"
-		}
-	}
 	seriesFilter.Selects = append(seriesFilter.Selects, listFilterSelect{
-		Name: "monitored", AriaLabel: "Monitored", EmptyLabel: "Any monitored",
+		Name: "status", AriaLabel: "Status", EmptyLabel: "Any status",
 		Options: []listFilterOpt{
-			{Value: "1", Label: "Monitored", Selected: monSel == "1"},
-			{Value: "0", Label: "Unmonitored", Selected: monSel == "0"},
+			{Value: library.SeriesListStatusMonitored, Label: "Monitored", Selected: filter.Status == library.SeriesListStatusMonitored},
+			{Value: library.SeriesListStatusUnmonitored, Label: "Unmonitored", Selected: filter.Status == library.SeriesListStatusUnmonitored},
+			{Value: library.SeriesListStatusComplete, Label: "Complete", Selected: filter.Status == library.SeriesListStatusComplete},
+			{Value: library.SeriesListStatusIncomplete, Label: "Incomplete", Selected: filter.Status == library.SeriesListStatusIncomplete},
+			{Value: library.SeriesListStatusHasErrors, Label: "Has errors", Selected: filter.Status == library.SeriesListStatusHasErrors},
 		},
 	})
 

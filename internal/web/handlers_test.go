@@ -424,7 +424,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, ">Defaults</h2>") || !strings.Contains(body, "Domain overrides") || !strings.Contains(body, "modal-add-domain-override") {
 				t.Fatalf("%s missing domain defaults/overrides", path)
 			}
-			if !strings.Contains(body, `>default</span>`) || strings.Contains(body, `modal-edit-domain-default`) {
+			if !strings.Contains(body, `id="domain-defaults-table-row"`) || !strings.Contains(body, `>default</span>`) || strings.Contains(body, `modal-edit-domain-default`) {
 				t.Fatalf("%s missing fixed default row or has edit modal for default", path)
 			}
 			if !strings.Contains(body, "FlareSolverr, cookies, and membership credentials are set on a 'Domain override' per domain") {

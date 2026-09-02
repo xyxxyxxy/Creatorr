@@ -371,8 +371,7 @@ func TestListSeriesFiltered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	on := true
-	got, err := s.ListSeriesFiltered(library.SeriesListFilter{Title: "alpha", Monitored: &on}, 20, 0)
+	got, err := s.ListSeriesFiltered(library.SeriesListFilter{Title: "alpha", Status: library.SeriesListStatusMonitored}, 20, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,6 +412,114 @@ func TestListSeriesFiltered(t *testing.T) {
 	}
 	if n != 2 {
 		t.Fatalf("delivery video count=%d", n)
+	}
+}
+
+func TestListSeriesFilteredStatus(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	if _, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Clean Show", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	errShow, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Error Show", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	completeShow, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Complete Show", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	incompleteShow, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Incomplete Show", RootID: rootID, QualityProfileID: profileID, Monitored: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	errSrc, err := s.AddSource(errShow.ID, library.AddSourceParams{
+		URL: "https://www.example.com/c/err",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	completeSrc, err := s.AddSource(completeShow.ID, library.AddSourceParams{
+		URL: "https://www.example.com/c/done",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	incompleteSrc, err := s.AddSource(incompleteShow.ID, library.AddSourceParams{
+		URL: "https://www.example.com/c/want",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`
+		INSERT INTO videos (series_id, source_id, remote_id, title, status)
+		VALUES (?, ?, 'e1', 'E', 'wanted_download_error')
+	`, errShow.ID, errSrc.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`
+		INSERT INTO videos (series_id, source_id, remote_id, title, status)
+		VALUES (?, ?, 'd1', 'Done', 'downloaded'), (?, ?, 'd2', 'Done2', 'downloaded'), (?, ?, 'ig1', 'Skip', 'ignored')
+	`, completeShow.ID, completeSrc.ID, completeShow.ID, completeSrc.ID, completeShow.ID, completeSrc.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`
+		INSERT INTO videos (series_id, source_id, remote_id, title, status)
+		VALUES (?, ?, 'w1', 'Want', 'wanted')
+	`, incompleteShow.ID, incompleteSrc.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	assertOne := func(t *testing.T, filter library.SeriesListFilter, wantID int64, label string) {
+		t.Helper()
+		got, err := s.ListSeriesFiltered(filter, 20, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].ID != wantID {
+			t.Fatalf("%s filter got %#v want id=%d", label, got, wantID)
+		}
+		n, err := s.CountSeriesFiltered(filter)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 {
+			t.Fatalf("%s count=%d", label, n)
+		}
+	}
+	assertNotIn := func(t *testing.T, filter library.SeriesListFilter, excludeID int64, label string) {
+		t.Helper()
+		got, err := s.ListSeriesFiltered(filter, 20, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, ser := range got {
+			if ser.ID == excludeID {
+				t.Fatalf("%s filter included id=%d", label, excludeID)
+			}
+		}
+	}
+
+	assertOne(t, library.SeriesListFilter{Status: library.SeriesListStatusHasErrors}, errShow.ID, "has_errors")
+	assertOne(t, library.SeriesListFilter{Status: library.SeriesListStatusComplete}, completeShow.ID, "complete")
+	assertNotIn(t, library.SeriesListFilter{Status: library.SeriesListStatusIncomplete}, completeShow.ID, "incomplete excludes complete+ignored")
+	assertOne(t, library.SeriesListFilter{Status: library.SeriesListStatusIncomplete}, incompleteShow.ID, "incomplete")
+	assertOne(t, library.SeriesListFilter{Status: library.SeriesListStatusUnmonitored}, incompleteShow.ID, "unmonitored")
+
+	monitored, err := s.ListSeriesFiltered(library.SeriesListFilter{Status: library.SeriesListStatusMonitored}, 20, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(monitored) != 3 {
+		t.Fatalf("monitored count=%d want 3", len(monitored))
 	}
 }
 

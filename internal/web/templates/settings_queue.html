@@ -78,18 +78,7 @@
   <th></th>
 </tr></thead>
 <tbody>
-  <tr class="text-base-content/70">
-    <td class="font-mono"><span class="tooltip tooltip-top" data-tip="Edit in the form above" aria-label="Edit in the form above">default</span></td>
-    <td>{{.DefaultLimits.MaxDownloadQueue}}</td>
-    <td>{{.DefaultLimits.MaxParallelTasks}}</td>
-    <td>{{.DefaultLimits.TaskCooldownSeconds}}</td>
-    <td><span class="font-mono text-xs">{{formatRateLimit .DefaultLimits.DownloadRateLimit}}</span></td>
-    <td>{{.DefaultLimits.SleepRequests}}</td>
-    <td>{{template "empty_value"}}</td>
-    <td>{{template "empty_value"}}</td>
-    <td>{{template "empty_value"}}</td>
-    <td></td>
-  </tr>
+  {{template "domain_defaults_table_row" (dict "DefaultLimits" .DefaultLimits)}}
   {{range .DomainOverrides}}
   <tr>
     <td class="font-mono">{{.Domain}}</td>
