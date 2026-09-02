@@ -245,6 +245,41 @@ func cooldownWaitTip(remSec int) string {
 	return "Waiting " + formatDurationCompact(time.Duration(remSec)*time.Second)
 }
 
+// scheduledTaskWaitTip is the countdown label for upcoming scheduler rows on Tasks.
+func scheduledTaskWaitTip(remSec int) string {
+	if remSec < 1 {
+		remSec = 1
+	}
+	return "in " + formatDurationLargest(time.Duration(remSec)*time.Second)
+}
+
+// formatDurationLargest is a short span using only the largest unit ("3min", "2h").
+func formatDurationLargest(d time.Duration) string {
+	if d < 0 {
+		d = -d
+	}
+	if d < time.Second {
+		return "1sec"
+	}
+	days := int(d / (24 * time.Hour))
+	if days > 0 {
+		return fmt.Sprintf("%dd", days)
+	}
+	hours := int(d / time.Hour)
+	if hours > 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+	minutes := int(d / time.Minute)
+	if minutes > 0 {
+		return fmt.Sprintf("%dmin", minutes)
+	}
+	sec := int(d / time.Second)
+	if sec < 1 {
+		sec = 1
+	}
+	return fmt.Sprintf("%dsec", sec)
+}
+
 // formatDurationCompact is a short span like "3min 2sec" (at most two units).
 func formatDurationCompact(d time.Duration) string {
 	if d < 0 {

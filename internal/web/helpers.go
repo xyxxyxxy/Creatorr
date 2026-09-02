@@ -197,6 +197,14 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("File sync queued.")
 	case "sync-files-empty":
 		return flashWarn("No videos to sync.")
+	case "download-wanted-queued":
+		return flashOK("Wanted downloads queued.")
+	case "download-wanted-empty":
+		return flashWarn("No wanted downloads to queue.")
+	case "retention-delete-queued":
+		return flashOK("Retention delete queued.")
+	case "retention-delete-empty":
+		return flashWarn("No root folders use retention.")
 	case "ytdlp-update-queued":
 		return flashOK("yt-dlp update queued.")
 	case "nfo-regen":

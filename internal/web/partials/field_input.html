@@ -12,7 +12,8 @@
             JoinSuffix (non-editable daisyUI join label after the text control, e.g. ".ext"),
             Minlength, Maxlength (HTML minlength/maxlength on text-like inputs),
             Validator (bool: daisyUI validator + hint; https://daisyui.com/components/validator/),
-            ValidatorHint (default hint text; server/JS may replace via setControlValidity).
+            ValidatorHint (default hint text; server/JS may replace via setControlValidity),
+            SupportedSitesLink (bool: link to yt-dlp supported sites under the control).
   NoPlaceholder: omit placeholder (legend already names the field).
   Disabled: tip wrap (DisabledTitle, else Hint); mute legend label / hint / range readout only
             (never fieldset or tip host - docs/ui.md Tooltips). Control mute = daisyUI :disabled.
@@ -186,5 +187,6 @@
   {{if .Hint}}
   <p class="label whitespace-pre-line{{if $mute}} opacity-60{{end}}">{{.Hint}}</p>
   {{end}}
+  {{if .SupportedSitesLink}}{{template "ytdlp_supported_sites_hint"}}{{end}}
 </fieldset>
 {{end}}

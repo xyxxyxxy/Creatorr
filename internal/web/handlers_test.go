@@ -84,6 +84,9 @@ func TestSeriesListRenders(t *testing.T) {
 	if !strings.Contains(body, `name="source_url"`) || !strings.Contains(body, `name="scan_cron"`) {
 		t.Fatalf("missing add-series URL path fields: %s", truncate(body, 400))
 	}
+	if !strings.Contains(body, `supportedsites.md`) {
+		t.Fatalf("missing yt-dlp supported sites link: %s", truncate(body, 400))
+	}
 	if !strings.Contains(body, `name="source_label"`) || !strings.Contains(body, `data-add-series-step="series"`) {
 		t.Fatalf("missing add-series series step: %s", truncate(body, 400))
 	}
@@ -239,6 +242,59 @@ func TestOverviewRenders(t *testing.T) {
 	}
 }
 
+func TestActionRunScheduledQueuesSyncFiles(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "run-sched.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	root, err := lib.CreateRoot("r", t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, err := lib.CreateProfile("p", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "S", RootID: root.ID, QualityProfileID: prof.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, status)
+		VALUES (?, 'v1', 'One', 'wanted')
+	`, ser.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	form := strings.NewReader("key=" + settings.KeySyncFilesCron + "&redirect=/tasks")
+	req := httptest.NewRequest(http.MethodPost, "/actions/run-scheduled", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
+	}
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "ok=sync-files-queued") {
+		t.Fatalf("location=%q", loc)
+	}
+	busy, err := q.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain)
+	if err != nil || !busy {
+		t.Fatalf("expected sync_files queued, busy=%v err=%v", busy, err)
+	}
+}
+
 func TestTasksShowsSoftPausedHostWithoutDomainsRow(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
@@ -386,6 +442,15 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			body := rec.Body.String()
 			if !strings.Contains(body, "interactive") || !strings.Contains(body, "Pausing a domain") {
 				t.Fatalf("/tasks missing interactive/pause note")
+			}
+			if !strings.Contains(body, `data-scheduled-task`) || !strings.Contains(body, "download_wanted") || !strings.Contains(body, queue.KindSyncFiles) {
+				t.Fatalf("/tasks missing scheduled task rows on system lane")
+			}
+			if !strings.Contains(body, `action="/actions/run-scheduled"`) || !strings.Contains(body, `data-tip="Queue now"`) {
+				t.Fatalf("/tasks missing queue-now on scheduled rows")
+			}
+			if strings.Contains(body, "data-download-schedule") {
+				t.Fatalf("/tasks still has header download schedule chip")
 			}
 		}
 		if path == "/settings/library" || path == "/settings/queue" || path == "/settings/maintenance" {

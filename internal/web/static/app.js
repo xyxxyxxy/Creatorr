@@ -544,9 +544,56 @@
     return parts.join(" ");
   }
 
+  /** Short span with only the largest unit ("3min", "2h"). Matches Go formatDurationLargest. */
+  function formatDurationLargest(totalSec) {
+    let sec = Math.max(0, Math.floor(Number(totalSec) || 0));
+    if (sec < 1) return "1sec";
+    const days = Math.floor(sec / 86400);
+    if (days > 0) return days + "d";
+    const hours = Math.floor(sec / 3600);
+    if (hours > 0) return hours + "h";
+    const minutes = Math.floor(sec / 60);
+    if (minutes > 0) return minutes + "min";
+    return Math.max(1, sec) + "sec";
+  }
+
   function cooldownWaitTip(remSec) {
     const n = Math.max(1, Math.ceil(Number(remSec) || 0));
     return "Waiting " + formatDurationCompact(n);
+  }
+
+  function scheduledTaskWaitTip(remSec) {
+    const n = Math.max(1, Math.ceil(Number(remSec) || 0));
+    return "in " + formatDurationLargest(n);
+  }
+
+  function tickScheduledTasks() {
+    let anyActive = false;
+    document.querySelectorAll("[data-scheduled-task]").forEach((row) => {
+      const endsAttr = row.getAttribute("data-ends-at");
+      if (!endsAttr) return;
+      const ends = Date.parse(endsAttr);
+      if (!Number.isFinite(ends)) return;
+      const remMs = ends - Date.now();
+      if (remMs <= 0) {
+        refreshTasksPanel(true);
+        return;
+      }
+      anyActive = true;
+      const remSec = Math.ceil(remMs / 1000);
+      const waitTip = scheduledTaskWaitTip(remSec);
+      const schedule = row.getAttribute("data-schedule") || "";
+      const labelText = schedule ? schedule + " next " + waitTip : waitTip;
+      const absTip = row.getAttribute("data-abs-tip") || "";
+      const tipText = absTip ? labelText + " · " + absTip : labelText;
+      const label = row.querySelector("[data-scheduled-label]");
+      if (label) {
+        if (label.textContent !== labelText) label.textContent = labelText;
+        label.setAttribute("data-tip", tipText);
+      }
+      row.setAttribute("aria-label", labelText);
+    });
+    return anyActive;
   }
 
   function tickDomainCooldowns() {
@@ -624,7 +671,7 @@
 
   (function runDomainCooldownLoop() {
     function frame() {
-      if (tickDomainCooldowns()) {
+      if (tickDomainCooldowns() || tickScheduledTasks()) {
         requestAnimationFrame(frame);
       } else {
         // Idle: poll slowly so HTMX lane swaps still pick up a new cooldown.
@@ -2614,7 +2661,7 @@
       input.classList.remove("opacity-60");
       if (hidden) hidden.remove();
       if (!input.value.trim() || input.value.trim() === "never") {
-        input.value = input.dataset.prevCron || "";
+        input.value = (input.dataset.prevCron || input.dataset.cronDefault || "").trim();
       }
     }
   }

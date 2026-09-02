@@ -1,0 +1,24 @@
+{{define "scheduled_task_row"}}
+<li id="scheduled-task-{{.Key}}" class="list-row" data-scheduled-task data-ends-at="{{.EndsAt}}" data-abs-tip="{{.AbsTip}}" data-schedule="{{.Schedule}}" aria-label="{{.Schedule}} next {{.WaitTip}}">
+  <span class="shrink-0 self-center opacity-60" aria-hidden="true">
+    <i data-lucide="calendar-clock" class="size-4"></i>
+  </span>
+  <div class="list-col-grow min-w-0">
+    <div class="flex items-center gap-2 min-w-0">
+      <span class="font-medium truncate opacity-80">{{.Kind}}</span>
+    </div>
+  </div>
+  <div class="justify-self-end self-center flex items-center gap-2 min-w-0 max-w-full">
+    <span class="tooltip tooltip-top text-xs opacity-60 truncate min-w-0 max-w-[20rem] sm:max-w-md text-right" data-tip="{{.Schedule}} next {{.WaitTip}} · {{.AbsTip}}" data-scheduled-label>{{.Schedule}} next {{.WaitTip}}</span>
+    {{$tip := "Queue now"}}
+    {{if .Busy}}{{$tip = "Already queued"}}{{end}}
+    <form method="post" action="/actions/run-scheduled" class="inline shrink-0">
+      <input type="hidden" name="key" value="{{.Key}}" />
+      <input type="hidden" name="redirect" value="/tasks" />
+      <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square tooltip tooltip-top" data-tip="{{$tip}}" aria-label="Queue now"{{if .Busy}} disabled{{end}}>
+        <i data-lucide="list-plus" class="size-3.5"></i>
+      </button>
+    </form>
+  </div>
+</li>
+{{end}}

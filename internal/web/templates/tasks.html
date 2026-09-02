@@ -1,5 +1,6 @@
 {{define "tasks"}}
 {{template "head" .}}
+{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 {{template "list_panel"}}
 {{template "list_header" (dict
   "level" "page"
@@ -157,8 +158,9 @@
       </h2>
     </div>
   </div>
-  {{if .Tasks}}
+  {{if or .Tasks .ScheduledTasks}}
   <ul class="list bg-base-100 rounded-box border border-base-300 mt-1">
+    {{range .ScheduledTasks}}{{template "scheduled_task_row" .}}{{end}}
     {{range .Tasks}}{{template "task_row" .}}{{end}}
   </ul>
   {{else}}

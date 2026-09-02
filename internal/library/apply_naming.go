@@ -56,7 +56,7 @@ func (s *Store) EnqueueRetentionDelete(priority int) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue unavailable", ErrInvalid)
 	}
-	ok, err := s.anyRootRetentionTTL()
+	ok, err := s.AnyRootRetentionTTL()
 	if err != nil {
 		return 0, err
 	}

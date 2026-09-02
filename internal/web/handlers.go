@@ -113,6 +113,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/delete-video-sidecar", h.actionDeleteVideoSidecar)
 	r.Post("/actions/cancel-task", h.actionCancelTask)
 	r.Post("/actions/cancel-domain-tasks", h.actionCancelDomainTasks)
+	r.Post("/actions/run-scheduled", h.actionRunScheduled)
 	r.Post("/actions/save-settings", h.actionSaveSettings)
 	r.Post("/actions/regenerate-api-key", h.actionRegenerateAPIKey)
 	r.Post("/actions/upsert-notify-channel", h.actionUpsertNotifyChannel)

@@ -53,8 +53,8 @@ func (s *Store) ListRoots() ([]RootFolder, error) {
 	return out, rows.Err()
 }
 
-// anyRootRetentionTTL reports whether any root has a positive retention TTL.
-func (s *Store) anyRootRetentionTTL() (bool, error) {
+// AnyRootRetentionTTL reports whether any root has a positive retention TTL.
+func (s *Store) AnyRootRetentionTTL() (bool, error) {
 	var n int
 	err := s.DB.SQL.QueryRow(`
 		SELECT COUNT(*) FROM root_folders
