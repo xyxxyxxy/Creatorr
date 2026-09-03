@@ -107,7 +107,7 @@
             {{end}}
           </span>
         </span>
-        {{if ne .Domain "system"}}
+        {{if and (ne .Domain "system") (or .Tasks .ScheduledTasks)}}
         <span class="flex flex-wrap items-center gap-x-4 gap-y-2 w-full font-normal text-sm">
           <span class="inline-flex flex-wrap items-center gap-4 min-w-0">
           {{if gt .MaxDownloadQueue 0}}
