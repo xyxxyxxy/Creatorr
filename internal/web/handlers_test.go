@@ -404,6 +404,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		if rec.Code != 200 {
 			t.Fatalf("%s status %d: %s", path, rec.Code, rec.Body.String())
 		}
+		if strings.HasPrefix(path, "/settings/") && strings.Contains(rec.Body.String(), "<details open") {
+			t.Fatalf("%s settings nav submenu should close after navigation", path)
+		}
 		if path == "/settings/general" {
 			body := rec.Body.String()
 			if !strings.Contains(body, "Authentication") || !strings.Contains(body, "Appearance") || !strings.Contains(body, `name="theme-picker"`) || !strings.Contains(body, `value="cyberpunk"`) {
