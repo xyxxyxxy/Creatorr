@@ -213,8 +213,8 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 	}
 	videoFilter.Selects = append(videoFilter.Selects,
 		listFilterSelect{Name: "source", AriaLabel: "Source", EmptyLabel: "All sources", Options: srcOpts},
-		listFilterSelect{Name: "status", AriaLabel: "Status", EmptyLabel: "All statuses", Options: statusOpts},
 		listFilterSelect{Name: "year", AriaLabel: "Year", EmptyLabel: "All years", Options: yearOpts},
+		listFilterSelect{Name: "status", AriaLabel: "Status", EmptyLabel: "Any status", Options: statusOpts},
 	)
 
 	return seriesVideosLiveData{
