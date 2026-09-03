@@ -430,6 +430,32 @@ type ImportPickerVideo struct {
 	HasThumb    bool   `json:"has_thumb"` // true when a kind=thumb files row exists
 }
 
+// ImportPickerSeries is a series row for the Import Match UI (no sources loaded).
+type ImportPickerSeries struct {
+	ID    int64  `json:"id"`
+	Title string `json:"title"`
+}
+
+// ListImportPickerSeries returns id/title for every series (no sources, no disk I/O).
+func (s *Store) ListImportPickerSeries() ([]ImportPickerSeries, error) {
+	rows, err := s.DB.SQL.Query(`
+		SELECT id, title FROM series ORDER BY title COLLATE NOCASE, id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []ImportPickerSeries
+	for rows.Next() {
+		var ser ImportPickerSeries
+		if err := rows.Scan(&ser.ID, &ser.Title); err != nil {
+			return nil, err
+		}
+		out = append(out, ser)
+	}
+	return out, rows.Err()
+}
+
 // ListImportPickerVideos returns all indexed videos for Import dropdowns.
 func (s *Store) ListImportPickerVideos() ([]ImportPickerVideo, error) {
 	rows, err := s.DB.SQL.Query(`

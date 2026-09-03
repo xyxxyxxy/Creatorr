@@ -755,6 +755,20 @@ func TestEnqueueImportReplaceExistingMedia(t *testing.T) {
 	if !found {
 		t.Fatal("picker missing video")
 	}
+	seriesPicker, err := s.ListImportPickerSeries()
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundSeries := false
+	for _, serRow := range seriesPicker {
+		if serRow.ID == ser.ID && serRow.Title == "Replace Show" {
+			foundSeries = true
+			break
+		}
+	}
+	if !foundSeries {
+		t.Fatal("picker series missing")
+	}
 
 	media := filepath.Join(inbox, "Has Media [rep1].mkv")
 	if err := os.WriteFile(media, []byte("new"), 0o644); err != nil {

@@ -125,8 +125,12 @@
 </div>
 
 <script>
-const SERIES = {{toJSON .Series}};
-const VIDEOS = {{toJSON .Videos}};
+let SERIES = [];
+let VIDEOS = [];
+/** False until GET /api/import/picker fills SERIES/VIDEOS. */
+let importPickerReady = false;
+/** @type {Promise<void>|null} */
+let importPickerPromise = null;
 const CREATE = '__create__';
 const PAGE_SIZE = 50;
 const SIDECAR_ROLES = { nfo:1, json:1, thumb:1, sub:1 };
@@ -147,6 +151,44 @@ let pendingImportJobs = [];
 let autoMatchStale = false;
 /** @type {AbortController|null} */
 let importScanAbort = null;
+
+async function loadImportPicker() {
+  if (importPickerReady) return;
+  if (importPickerPromise) return importPickerPromise;
+  importPickerPromise = (async () => {
+    try {
+      const res = await fetch('/api/import/picker', {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      if (!res.ok) {
+        showImportMsg('Library index', 'Failed to load Match catalog: ' + await res.text(), { error: true });
+        return;
+      }
+      const data = await res.json();
+      SERIES = Array.isArray(data.series) ? data.series : [];
+      VIDEOS = Array.isArray(data.videos) ? data.videos : [];
+      importPickerReady = true;
+      // Scrub picks that need has_media now that the catalog is known.
+      importBundles.forEach((b) => {
+        if (b.kind !== 'media') return;
+        const key = bundleStateKey(b);
+        scrubMediaVideoPick(getUIState(key), key);
+      });
+      if (matchCtx && matchCtx.kind === 'media') {
+        scrubMediaVideoPick(matchCtx.draft, matchCtx.key);
+        renderMatchModalLists();
+      }
+      if (importCandidates.length) renderImportPage();
+      else updateBulkSeriesBtn();
+    } catch (err) {
+      showImportMsg('Library index', 'Failed to load Match catalog: ' + (err && err.message ? err.message : String(err)), { error: true });
+    } finally {
+      importPickerPromise = null;
+    }
+  })();
+  return importPickerPromise;
+}
 
 function showImportMsg(title, body, opts) {
   // Close Add series / Add video so the toast is not trapped under them.
@@ -457,6 +499,17 @@ function matchActionsHTML(st, kind) {
       </button>
     </div>`;
   }
+  if (!importPickerReady) {
+    return `
+    <div class="flex items-center gap-3 shrink-0 self-center">
+      ${status}
+      <span class="tooltip tooltip-top inline-flex" data-tip="Loading library index">
+        <button type="button" class="btn btn-soft btn-primary btn-square" disabled aria-label="Loading library index">
+          <span class="loading loading-spinner loading-sm" aria-hidden="true"></span>
+        </button>
+      </span>
+    </div>`;
+  }
   return `
     <div class="flex items-center gap-3 shrink-0 self-center">
       ${status}
@@ -500,24 +553,24 @@ function createSeriesListRowHTML() {
   </li>`;
 }
 
+function seriesPosterHTML(s) {
+  const fallback = `<div class="bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true"><i data-lucide="tv" class="size-5 opacity-40"></i></div>`;
+  if (!s || !s.poster_url) return fallback;
+  return `<img class="size-10 rounded-full object-cover" src="${escapeHtml(s.poster_url)}" alt="" width="40" height="40" loading="lazy" onerror="this.onerror=null;this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden')" /><div class="hidden bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true"><i data-lucide="tv" class="size-5 opacity-40"></i></div>`;
+}
+
 function seriesListRowHTML(s, selectedId) {
   const sel = selectedId && Number(selectedId) === Number(s.id);
-  const img = s.poster_url
-    ? `<img class="size-10 rounded-full object-cover" src="${escapeHtml(s.poster_url)}" alt="" width="40" height="40" loading="lazy" />`
-    : `<div class="bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true"><i data-lucide="tv" class="size-5 opacity-40"></i></div>`;
   return `<li class="list-row cursor-pointer ${sel ? 'bg-base-200' : ''}" data-series-id="${s.id}" role="option" aria-selected="${sel ? 'true' : 'false'}">
-    <div class="relative shrink-0">${img}</div>
+    <div class="relative shrink-0">${seriesPosterHTML(s)}</div>
     <div class="list-col-grow min-w-0 font-medium truncate">${escapeHtml(s.title)}</div>
   </li>`;
 }
 
 function lockedSeriesRowHTML(s) {
   const title = s ? s.title : 'Series';
-  const img = s && s.poster_url
-    ? `<img class="size-10 rounded-full object-cover" src="${escapeHtml(s.poster_url)}" alt="" width="40" height="40" loading="lazy" />`
-    : `<div class="bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true"><i data-lucide="tv" class="size-5 opacity-40"></i></div>`;
   return `<li class="list-row bg-base-200" aria-selected="true">
-    <div class="relative shrink-0">${img}</div>
+    <div class="relative shrink-0">${seriesPosterHTML(s)}</div>
     <div class="list-col-grow min-w-0 font-medium truncate">${escapeHtml(title)}</div>
     <button type="button" class="btn btn-ghost btn-sm btn-square shrink-0 tooltip tooltip-left" data-unlock-series aria-label="Change series" data-tip="Change series">
       <i data-lucide="x" class="size-4"></i>
@@ -963,6 +1016,10 @@ function uploadDateToRFC(dateStr) {
 }
 
 function openMatchModal(key, kind, hints) {
+  if (!importPickerReady) {
+    showImportMsg('Match', 'Library index still loading', { warning: true });
+    return;
+  }
   const st = getUIState(key);
   if (kind === 'media') scrubMediaVideoPick(st, key);
   matchCtx = {
@@ -996,6 +1053,10 @@ function openMatchModal(key, kind, hints) {
 }
 
 function openBulkSeriesMatchModal() {
+  if (!importPickerReady) {
+    showImportMsg('Match', 'Library index still loading', { warning: true });
+    return;
+  }
   matchCtx = {
     key: '',
     kind: 'bulk-series',
@@ -1410,7 +1471,7 @@ function updateBulkSeriesBtn() {
   const btn = document.getElementById('btn-import-bulk-series');
   if (!btn) return;
   const n = countBundlesMissingSeries();
-  btn.disabled = n === 0;
+  btn.disabled = !importPickerReady || n === 0;
 }
 
 function importTotalPages(list) {
@@ -2080,6 +2141,7 @@ async function refreshImportFullScanNote(ev) {
 }
 window.refreshImportFullScanNote = refreshImportFullScanNote;
 
+loadImportPicker();
 runImportScan({ notifyAutoMatch: false });
 </script>
 {{template "add_series_modal" .}}
