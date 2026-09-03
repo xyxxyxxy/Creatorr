@@ -7,7 +7,7 @@
 */}}
 {{$name := .Name}}{{if not $name}}{{$name = "scan_cron"}}{{end}}
 {{$id := .ID}}{{if not $id}}{{$id = "scan-cron"}}{{end}}
-{{$hint := .Hint}}{{if not $hint}}{{$hint = "Higher schedule results in less requests to the external site, making rate limiting less likely, but new videos will be available later."}}{{end}}
+{{$hint := .Hint}}{{if not $hint}}{{$hint = "Higher schedule results in less requests to the external site, making rate limiting less likely, but new videos will be indexed later."}}{{end}}
 {{template "preset_fill" (dict
   "FieldName" $name
   "FieldID" $id

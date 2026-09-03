@@ -84,8 +84,8 @@ func TestSeriesListRenders(t *testing.T) {
 	if !strings.Contains(body, `name="source_url"`) || !strings.Contains(body, `name="scan_cron"`) {
 		t.Fatalf("missing add-series URL path fields: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, `supportedsites.md`) {
-		t.Fatalf("missing yt-dlp supported sites link: %s", truncate(body, 400))
+	if !strings.Contains(body, `supportedsites.md`) || !strings.Contains(body, "channel/playlist URL of a") {
+		t.Fatalf("missing yt-dlp supported sites hint: %s", truncate(body, 400))
 	}
 	if !strings.Contains(body, `name="source_label"`) || !strings.Contains(body, `data-add-series-step="series"`) {
 		t.Fatalf("missing add-series series step: %s", truncate(body, 400))
@@ -528,6 +528,12 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "list-panel") {
 				t.Fatalf("%s missing list-panel", path)
 			}
+			if !strings.Contains(body, "Changing library settings does not update already downloaded videos") {
+				t.Fatalf("%s missing library settings scope alert", path)
+			}
+			if strings.Contains(body, "Saving does not") {
+				t.Fatalf("%s still has per-field Saving does not hints", path)
+			}
 			continue
 		}
 		if path == "/settings/maintenance" {
@@ -787,6 +793,43 @@ func TestMonitorToggleHTMX(t *testing.T) {
 	out := rec.Body.String()
 	if !strings.Contains(out, "monitor-toggle-root") || !strings.Contains(out, "hx-post") {
 		t.Fatalf("expected toggle partial: %s", truncate(out, 300))
+	}
+}
+
+func TestSeriesDetailHasMonitorToggle(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "monitor-toggle-root") || !strings.Contains(body, `action="/actions/set-series-monitored"`) {
+		t.Fatalf("series detail missing monitor toggle: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, `data-tip="Unmonitor"`) {
+		t.Fatalf("series detail missing Unmonitor tip: %s", truncate(body, 400))
 	}
 }
 

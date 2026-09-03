@@ -11,7 +11,7 @@ Mandatory reading for AI agents. Creatorr is a Sonarr-shaped Go daemon for creat
 - **No em dash:** never write Unicode em dash (U+2014) in docs, UI copy, comments, OpenAPI, flash strings, or commits. Prefer ` - `, `: `, or a period. Empty UI placeholders use ASCII `-`. See `.cursor/rules/no-em-dash.mdc`.
 - **API:** edit `api/openapi.yaml` → `make generate` → implement handlers. Never hand-edit `internal/api/gen/`.
 - **Never invoke yt-dlp from HTTP handlers** - enqueue a task; worker runs yt-dlp.
-- **Flags never auto-cascade** - series `monitored` and domain `active` are operator-only; cookie/rate/yt-dlp failures soft-pause the domain lane and notify, do not deactivate.
+- **Flags never auto-cascade** - series `monitored` and domain `active` are operator-only; cookie/rate failures soft-pause the domain lane and notify, do not deactivate.
 - **Ask when ambiguous** - behavior not in [`docs/`](docs/README.md), API/UI forks, missing env, large/unclear CSS overrides, adding a non-daisyUI library. Short question + recommended default → wait → record in the matching docs file (AGENTS only for agent-contract rules).
 - **daisyUI first** - stock daisyUI + Tailwind in markup; minimal `input.css` only for small glue (document why). Do not add another UI kit. UI work: read [`docs/ui.md`](docs/ui.md).
 - Keep files small; no god modules. New endpoint → small handler file or package method.
@@ -56,7 +56,7 @@ New domain term → matching docs file (domain-model by default).
 ## API & errors
 
 - Contract: [`api/openapi.yaml`](api/openapi.yaml). Generate: `make generate`. Serve: `GET /api/openapi.json`. CI: `make openapi-check`.
-- **ErrorResponse:** `{code, message, detail?}` - stable `code` (`CookieInvalid`, `DownloadFailed`, `RemuxFailed`, `PackFailed`, …). Worker stores `code` + `message` on tasks/sources. yt-dlp-facing failures (`CookieInvalid` / `RateLimited` / `DownloadFailed` / `ResolveFailed`) **auto soft-pause** the domain lane and notify as alerts (no auto-deactivate); download → `wanted_download_error`. Never bare HTTP status with empty body.
+- **ErrorResponse:** `{code, message, detail?}` - stable `code` (`CookieInvalid`, `DownloadFailed`, `RemuxFailed`, `PackFailed`, …). Worker stores `code` + `message` on tasks/sources. Cookie/rate failures (`CookieInvalid` / `RateLimited`) **auto soft-pause** the domain lane and notify as alerts (no auto-deactivate). Generic `DownloadFailed` / `ResolveFailed` fail the task (download → `wanted_download_error`) and notify `ytdlp_failed` but do **not** soft-pause. Never bare HTTP status with empty body.
 - **Out of OpenAPI:** HTMX routes + SSE `GET /api/events` (`EventSource`). Events: `task.updated` | `task.done` | `task.failed` | `notification.created` | `notification.read` (JSON in `data:`; keepalive ~15s; outside 60s HTTP timeout). Product behavior: [`docs/`](docs/README.md).
 
 ## Workflow

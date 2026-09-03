@@ -13,7 +13,7 @@
             Minlength, Maxlength (HTML minlength/maxlength on text-like inputs),
             Validator (bool: daisyUI validator + hint; https://daisyui.com/components/validator/),
             ValidatorHint (default hint text; server/JS may replace via setControlValidity),
-            SupportedSitesLink (bool: link to yt-dlp supported sites under the control).
+            SupportedSitesLink (string: "video" or "feed"; shows yt-dlp supported-sites hint under the control).
   NoPlaceholder: omit placeholder (legend already names the field).
   Disabled: tip wrap (DisabledTitle, else Hint); mute legend label / hint / range readout only
             (never fieldset or tip host - docs/ui.md Tooltips). Control mute = daisyUI :disabled.
@@ -187,6 +187,6 @@
   {{if .Hint}}
   <p class="label whitespace-pre-line{{if $mute}} opacity-60{{end}}">{{.Hint}}</p>
   {{end}}
-  {{if .SupportedSitesLink}}{{template "ytdlp_supported_sites_hint"}}{{end}}
+  {{if .SupportedSitesLink}}{{template "ytdlp_supported_sites_hint" .SupportedSitesLink}}{{end}}
 </fieldset>
 {{end}}
