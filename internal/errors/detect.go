@@ -109,10 +109,12 @@ func PauseMessage(code string) string {
 }
 
 // IsYtDlpPauseCode reports whether a classified failure should soft-pause the domain lane.
-// Remux/pack/verify are not yt-dlp-facing and return false.
+// Only cookie/session and rate-limit/IP-block failures pause the hostname queue.
+// Generic DownloadFailed / ResolveFailed stay per-task (and per-video for downloads);
+// remux/pack/verify/age-gate are never pause codes.
 func IsYtDlpPauseCode(code string) bool {
 	switch code {
-	case CodeCookieInvalid, CodeRateLimited, CodeDownloadFailed, CodeResolveFailed:
+	case CodeCookieInvalid, CodeRateLimited:
 		return true
 	default:
 		return false

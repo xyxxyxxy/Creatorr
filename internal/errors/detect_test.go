@@ -70,19 +70,19 @@ func TestDetectAgeRestricted(t *testing.T) {
 }
 
 func TestIsYtDlpPauseCode(t *testing.T) {
-	if !apperrors.IsYtDlpPauseCode(apperrors.CodeDownloadFailed) ||
-		!apperrors.IsYtDlpPauseCode(apperrors.CodeResolveFailed) ||
-		!apperrors.IsYtDlpPauseCode(apperrors.CodeCookieInvalid) ||
+	if !apperrors.IsYtDlpPauseCode(apperrors.CodeCookieInvalid) ||
 		!apperrors.IsYtDlpPauseCode(apperrors.CodeRateLimited) {
-		t.Fatal("expected yt-dlp pause codes")
+		t.Fatal("expected cookie/rate pause codes")
 	}
-	if apperrors.IsYtDlpPauseCode(apperrors.CodeRemuxFailed) ||
+	if apperrors.IsYtDlpPauseCode(apperrors.CodeDownloadFailed) ||
+		apperrors.IsYtDlpPauseCode(apperrors.CodeResolveFailed) ||
+		apperrors.IsYtDlpPauseCode(apperrors.CodeRemuxFailed) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodePackFailed) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodeMediaVerifyFailed) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodeLiveBroadcastSkipped) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodeMediaTypeExcluded) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodeAgeRestricted) {
-		t.Fatal("remux/pack/verify/live-skip/media-type/age-restrict must not pause")
+		t.Fatal("download/resolve/remux/pack/verify/live-skip/media-type/age-restrict must not pause")
 	}
 }
 

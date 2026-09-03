@@ -243,7 +243,8 @@ func testRunnerDomainIssueNotify(t *testing.T, returnCode, returnMsg string, wan
 }
 
 func TestRunnerDownloadFailedNotifies(t *testing.T) {
-	testRunnerDomainIssueNotify(t, apperrors.CodeDownloadFailed, "extractor exploded", true)
+	// Generic download failure: alert only, no domain soft-pause (cookie/rate still pause).
+	testRunnerDomainIssueNotify(t, apperrors.CodeDownloadFailed, "extractor exploded", false)
 }
 
 func TestRunnerRemuxFailedDoesNotPause(t *testing.T) {

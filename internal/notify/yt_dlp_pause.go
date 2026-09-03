@@ -10,8 +10,9 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
-// SoftPauseAndAlert soft-pauses the hostname when code is a yt-dlp pause code,
-// then records the matching alert (cookie_invalid / rate_limited / ytdlp_failed).
+// SoftPauseAndAlert soft-pauses the hostname when code is CookieInvalid or
+// RateLimited, then records the matching alert (cookie_invalid / rate_limited /
+// ytdlp_failed). Generic DownloadFailed / ResolveFailed alert without pause.
 // Used by the worker and stream proxy so behavior stays aligned.
 func SoftPauseAndAlert(ctx context.Context, database *db.DB, log *slog.Logger, taskID int64, domain, code, detail string) {
 	if database == nil || domain == "" || domain == "unknown" || domain == "system" {

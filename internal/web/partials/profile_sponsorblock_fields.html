@@ -11,18 +11,15 @@
   <legend class="fieldset-legend text-base">
     <span class="inline-flex items-baseline gap-2 flex-wrap">
       <h2 class="text-base font-semibold m-0">SponsorBlock</h2>
-      <span class="text-xs font-normal opacity-60">Uses SponsorBlock data from <a class="link" href="https://sponsor.ajay.app/" target="_blank" rel="noopener noreferrer">sponsor.ajay.app</a></span>
+      <span class="text-xs font-normal opacity-60">Uses SponsorBlock data from <a class="link link-primary" href="https://sponsor.ajay.app/" target="_blank" rel="noopener noreferrer">sponsor.ajay.app</a></span>
     </span>
   </legend>
-  <p class="label whitespace-normal"><span>Mark adds chapter markers; remove cuts those spans from archive downloads. The same category cannot be in both lists (<a class="link" href="https://wiki.sponsor.ajay.app/w/Community#Media" target="_blank" rel="noopener noreferrer">category guide</a>).</span></p>
+  <p class="label whitespace-normal"><span>Mark adds chapter markers; remove cuts those spans from archive downloads. The same category cannot be in both lists (<a class="link link-primary" href="https://wiki.sponsor.ajay.app/w/Community#Media" target="_blank" rel="noopener noreferrer">category guide</a>).</span></p>
   <p class="label whitespace-normal">yt-dlp chapters are added by default. SponsorBlock mark chapters are added on top of those.</p>
 
   <div class="flex w-full gap-4 items-start">
     <div class="flex-1 min-w-0">
-      <div class="mb-1 inline-flex items-center gap-1">
-        <h3 class="font-semibold m-0 text-inherit">Mark (chapters)</h3>
-        {{template "field_info" (dict "Info" "Embed these categories as extra MKV chapters on top of the creator timeline.")}}
-      </div>
+      <h3 class="font-semibold m-0 text-inherit mb-1">Mark (chapters)</h3>
       <div class="flex flex-col gap-1">
         {{template "sb_cat_cb" (dict "Name" "sponsorblock_mark" "Side" "mark" "Cat" "sponsor" "Selected" $mark)}}
         {{template "sb_cat_cb" (dict "Name" "sponsorblock_mark" "Side" "mark" "Cat" "selfpromo" "Selected" $mark)}}
@@ -36,12 +33,10 @@
         {{template "sb_cat_cb" (dict "Name" "sponsorblock_mark" "Side" "mark" "Cat" "poi_highlight" "Selected" $mark)}}
         {{template "sb_cat_cb" (dict "Name" "sponsorblock_mark" "Side" "mark" "Cat" "chapter" "Selected" $mark)}}
       </div>
+      <p class="label whitespace-normal mt-2">Embed these categories as extra MKV chapters on top of the creator timeline.</p>
     </div>
     <div class="flex-1 min-w-0">
-      <div class="mb-1 inline-flex items-center gap-1">
-        <h3 class="font-semibold m-0 text-inherit">Remove (cut)</h3>
-        {{template "field_info" (dict "Info" "Cut these categories from downloads.")}}
-      </div>
+      <h3 class="font-semibold m-0 text-inherit mb-1">Remove (cut)</h3>
       <div class="flex flex-col gap-1">
         {{template "sb_cat_cb" (dict "Name" "sponsorblock_remove" "Side" "remove" "Cat" "sponsor" "Selected" $remove)}}
         {{template "sb_cat_cb" (dict "Name" "sponsorblock_remove" "Side" "remove" "Cat" "selfpromo" "Selected" $remove)}}
@@ -53,28 +48,31 @@
         {{template "sb_cat_cb" (dict "Name" "sponsorblock_remove" "Side" "remove" "Cat" "filler" "Selected" $remove)}}
         {{template "sb_cat_cb" (dict "Name" "sponsorblock_remove" "Side" "remove" "Cat" "music_offtopic" "Selected" $remove)}}
       </div>
+      <p class="label whitespace-normal mt-2">Cut these categories from downloads.</p>
     </div>
   </div>
 
   <fieldset class="fieldset gap-2">
     <legend class="fieldset-legend"><h3 class="font-semibold m-0 text-inherit">Encoding</h3></legend>
     <p>By default, cuts are only spliced at keyframes, so cut points are often early or late. Re-encode will cut at exact timestamps without needing keyframes. Because re-encode is heavy on the host, it is scheduled as a separate low priority system task.</p>
-    <label class="label cursor-pointer gap-2 justify-start">
-      <input type="hidden" name="sponsorblock_reencode_cut" value="0" />
-      <input type="checkbox" class="checkbox checkbox-sm" name="sponsorblock_reencode_cut" value="1"
-        {{if $reenc}}checked{{end}} data-sb-reencode />
-      <span class="label-text">Re-encode on cut for higher accuracy</span>
-    </label>
-    <span class="inline-flex w-fit max-w-full{{if not $reenc}} tooltip tooltip-top{{end}}"
-          {{if not $reenc}}data-tip="Requires re-encode to be enabled"{{end}}
-          data-sb-cards-wrap>
-      <label class="label gap-2 justify-start cursor-pointer has-[input:disabled]:!cursor-not-allowed">
-        <input type="hidden" name="sponsorblock_info_cards" value="0" />
-        <input type="checkbox" class="checkbox checkbox-sm" name="sponsorblock_info_cards" value="1"
-          {{if $cards}}checked{{end}} {{if not $reenc}}disabled{{end}} data-sb-cards />
-        <span class="label-text">Insert info cards on cut</span>
+    <div class="flex w-full gap-4 items-start flex-wrap">
+      <label class="label cursor-pointer gap-2 justify-start flex-1 min-w-0">
+        <input type="hidden" name="sponsorblock_reencode_cut" value="0" />
+        <input type="checkbox" class="checkbox checkbox-sm" name="sponsorblock_reencode_cut" value="1"
+          {{if $reenc}}checked{{end}} data-sb-reencode />
+        <span class="label-text">Re-encode on cut for higher accuracy</span>
       </label>
-    </span>
+      <span class="inline-flex flex-1 min-w-0 w-fit max-w-full{{if not $reenc}} tooltip tooltip-top{{end}}"
+            {{if not $reenc}}data-tip="Requires re-encode to be enabled"{{end}}
+            data-sb-cards-wrap>
+        <label class="label gap-2 justify-start cursor-pointer has-[input:disabled]:!cursor-not-allowed">
+          <input type="hidden" name="sponsorblock_info_cards" value="0" />
+          <input type="checkbox" class="checkbox checkbox-sm" name="sponsorblock_info_cards" value="1"
+            {{if $cards}}checked{{end}} {{if not $reenc}}disabled{{end}} data-sb-cards />
+          <span class="label-text">Insert info cards on cut</span>
+        </label>
+      </span>
+    </div>
     <p>When a section is cut, Creatorr can insert a short info card (~2s) naming the removed category and the duration skipped.</p>
     <div>
       <p class="text-xs opacity-60 mb-1">Example</p>

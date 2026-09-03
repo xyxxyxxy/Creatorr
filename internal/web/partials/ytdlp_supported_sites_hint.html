@@ -1,3 +1,5 @@
 {{define "ytdlp_supported_sites_hint"}}
-<p class="label whitespace-normal">See <a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md" target="_blank" rel="noopener">yt-dlp supported sites</a>.</p>
+{{/* Expects pipeline string: "video" (single) or "feed" (channel/playlist). */}}
+{{$what := "channel/playlist"}}{{if eq . "video"}}{{$what = "video"}}{{end}}
+<p class="label whitespace-normal">Enter a {{$what}} URL of a <a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md" target="_blank" rel="noopener">supported site</a> as a source to index.</p>
 {{end}}

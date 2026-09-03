@@ -11,11 +11,6 @@
             </a>
           </li>
           <li>
-            <a href="/import" {{if eq .Nav "import"}}class="active"{{end}}>
-              <i data-lucide="folder-input" class="size-4"></i>Import
-            </a>
-          </li>
-          <li>
             <a href="/tasks" {{if eq .Nav "tasks"}}class="active"{{end}}>
               <i data-lucide="list-todo" class="size-4"></i>Tasks
               <span id="tasks-badge" class="badge badge-primary badge-sm hidden">0</span>
@@ -30,6 +25,11 @@
           <li>
             <a href="/stats" {{if eq .Nav "stats"}}class="active"{{end}}>
               <i data-lucide="chart-column" class="size-4"></i>Stats
+            </a>
+          </li>
+          <li>
+            <a href="/import" {{if eq .Nav "import"}}class="active"{{end}}>
+              <i data-lucide="folder-input" class="size-4"></i>Import
             </a>
           </li>
           <li>

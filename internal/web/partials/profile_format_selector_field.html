@@ -1,0 +1,19 @@
+{{define "profile_format_selector_field"}}
+{{/*
+  Quality profile format selector with yt-dlp --format docs link under the control.
+  Expects: Value. Optional: ID.
+*/}}
+<fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      <span>Format selector</span>
+    </span>
+  </legend>
+  <input type="text" name="format_selector" {{if .ID}}id="{{.ID}}"{{end}}
+         class="input w-full"
+         placeholder="Format selector"
+         value="{{.Value}}"
+         required />
+  <p class="label whitespace-normal">The <a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp#format-selection" target="_blank" rel="noopener noreferrer">format</a> passed to yt-dlp via --format.</p>
+</fieldset>
+{{end}}
