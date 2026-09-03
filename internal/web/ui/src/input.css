@@ -15,32 +15,6 @@
 @source "../../static/app.js";
 
 /*
-  daisyUI lg:drawer-open sets pointer-events:auto on .drawer-side (full sticky column
-  with a stretched .drawer-overlay). That beats utility classes and steals clicks from
-  the sticky top navbar. Force overlay off and clicks through on desktop.
-
-  drawer-side also uses z-40 (mobile overlay). On desktop it paints after drawer-content
-  and covers field tooltips that extend left. Keep side under content so tips win;
-  mobile still uses z-40 when the drawer overlays.
-*/
-@media (width >= 64rem) {
-  .drawer.lg\:drawer-open > .drawer-side {
-    pointer-events: none !important;
-    z-index: 0 !important;
-  }
-  .drawer.lg\:drawer-open > .drawer-content {
-    position: relative;
-    z-index: 1;
-  }
-  .drawer.lg\:drawer-open > .drawer-side > :not(.drawer-overlay) {
-    pointer-events: auto !important;
-  }
-  .drawer.lg\:drawer-open > .drawer-side > .drawer-overlay {
-    display: none !important;
-  }
-}
-
-/*
   Exception (approved): daisyUI .modal-box uses overflow-y:auto, which clips tooltip
   speech-bubble tails. Scroll the .modal overlay instead so stock tooltips paint outside the box.
   https://daisyui.com/components/tooltip/
@@ -150,7 +124,7 @@
 
 /*
   Video detail Details: thumb column follows page breakpoints (Tailwind md/lg:
-  48rem / 64rem - same as main md:p-6, lg:drawer-open).
+  48rem / 64rem - same as main md:p-6, lg navbar breakpoint).
   Below md: collapse cell so colspan value rows keep full width; no fixed w-80 overflow.
 */
 .list-table td.video-detail-thumb {

@@ -32,7 +32,7 @@ func TestMarkVerifyFailedKeepsFilesNoThreshold(t *testing.T) {
 	if err := os.WriteFile(media, []byte("MEDIA"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CompleteImport(res.VideoID, media, "", "", library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(res.VideoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 	tid := seedTaskID(t, s)
@@ -95,7 +95,7 @@ func TestEnqueueMediaVerifyDuplicate(t *testing.T) {
 	_ = os.MkdirAll(dir, 0o755)
 	media := filepath.Join(dir, "ep.mkv")
 	_ = os.WriteFile(media, []byte("MEDIA"), 0o644)
-	if err := s.CompleteImport(res.VideoID, media, "", "", library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(res.VideoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 	id, err := s.EnqueueMediaVerify(res.VideoID)

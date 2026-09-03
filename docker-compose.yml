@@ -16,9 +16,9 @@ services:
     volumes:
       - ./var/data:/data
       - ./var/import:/import
-      # Library root: host CREATORR_LIBRARY_ROOT.
-      # Override the host path in .env before first boot. Add more roots in Settings → Library.
-      - ${CREATORR_LIBRARY_ROOT:-./var/library}:/library
+      # Library: ./var/library → /library (first-boot seed). Add more roots in Settings → Library
+      # (mount extra host paths as needed).
+      - ./var/library:/library
       # Optional yt-dlp plugins:
       # - ./var/yt-dlp-plugins:/yt-dlp-plugins:ro
     environment:

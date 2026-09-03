@@ -35,6 +35,10 @@ func SidecarPathsBeside(mediaPath string) (nfoPath, infoPath string) {
 // FindDownloadSidecars locates info.json, thumbnail, and subtitle files written beside media
 // (handler download should emit these in the same outdir / same stem).
 // Missing files are soft-ok (empty strings / nil slice).
+//
+// Thumbnail preference: `{stem}-thumb.ext` / `{stem}.thumb.ext`, then `{stem}.ext`, then any
+// same-directory image whose ClassifyImportFile stem matches the media stem after bracket
+// strip (so `Show [id].mkv` pairs with `Show-thumb.jpg`).
 func FindDownloadSidecars(mediaPath string) (infoPath, thumbPath string, subPaths []string) {
 	if mediaPath == "" {
 		return "", "", nil
@@ -47,34 +51,48 @@ func FindDownloadSidecars(mediaPath string) (infoPath, thumbPath string, subPath
 		}
 	}
 	for _, ext := range []string{".jpg", ".jpeg", ".png", ".webp"} {
-		cand := stem + ext
-		if fileExists(cand) {
-			thumbPath = cand
+		for _, cand := range []string{stem + "-thumb" + ext, stem + ".thumb" + ext} {
+			if fileExists(cand) {
+				thumbPath = cand
+				break
+			}
+		}
+		if thumbPath != "" {
 			break
 		}
 	}
+	if thumbPath == "" {
+		for _, ext := range []string{".jpg", ".jpeg", ".png", ".webp"} {
+			cand := stem + ext
+			if fileExists(cand) {
+				thumbPath = cand
+				break
+			}
+		}
+	}
 	dir := filepath.Dir(mediaPath)
-	base := filepath.Base(stem)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return infoPath, thumbPath, nil
 	}
+	mediaBase := filepath.Base(mediaPath)
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
 		name := e.Name()
-		lower := strings.ToLower(name)
-		if !strings.HasPrefix(name, base) {
+		if name == mediaBase {
 			continue
 		}
 		path := filepath.Join(dir, name)
-		if thumbPath == "" && (strings.HasSuffix(lower, ".jpg") || strings.HasSuffix(lower, ".jpeg") ||
-			strings.HasSuffix(lower, ".png") || strings.HasSuffix(lower, ".webp")) {
-			thumbPath = path
-			continue
+		if thumbPath == "" {
+			role, _ := ClassifyImportFile(name)
+			if role == ImportRoleThumb && ImportSidecarStemMatchesMedia(path, mediaPath) {
+				thumbPath = path
+				continue
+			}
 		}
-		if IsSubtitleFilename(name) && name != filepath.Base(mediaPath) {
+		if IsSubtitleFilename(name) {
 			subPaths = append(subPaths, path)
 		}
 	}

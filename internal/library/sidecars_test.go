@@ -86,6 +86,76 @@ SourceID: ser.Sources[0].ID,
 	}
 }
 
+func TestRefreshDiskSidecarsGapFillKeepsThumb(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	root, err := s.GetRoot(rootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title:            "GapSide",
+		SourceURL:        "https://www.example.com/@gapside",
+		RootID:           rootID,
+		QualityProfileID: profileID,
+		Monitored:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "g1", Title: "Ep", Description: "",
+		WebpageURL: "https://www.example.com/watch?v=g1", UploadDate: "2024-01-15",
+		SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seriesDir := filepath.Join(root.Path, "GapSide")
+	if err := os.MkdirAll(seriesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	media := filepath.Join(seriesDir, "ep.mkv")
+	oldThumb := filepath.Join(seriesDir, "ep-thumb.jpg")
+	if err := os.WriteFile(media, []byte("VIDEO"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldThumb, []byte("KEEP"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.DB.SQL.Exec(`
+		INSERT INTO files (video_id, path, kind, acquired_at) VALUES
+		  (?, ?, 'video', datetime('now')),
+		  (?, ?, 'thumb', datetime('now'))
+	`, res.VideoID, media, res.VideoID, oldThumb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET description = 'filled plot' WHERE id = ?`, res.VideoID); err != nil {
+		t.Fatal(err)
+	}
+	tmp := t.TempDir()
+	newThumb := filepath.Join(tmp, "fresh.jpg")
+	_ = os.WriteFile(newThumb, []byte("NEW"), 0o644)
+	if err := s.RefreshDiskSidecars(res.VideoID, library.SidecarBundle{
+		ThumbSrc: newThumb, GapFill: true,
+	}, seedTaskID(t, s)); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(oldThumb)
+	if string(got) != "KEEP" {
+		t.Fatalf("imported thumb overwritten: %q", got)
+	}
+	nfo := filepath.Join(seriesDir, "ep.nfo")
+	body, err := os.ReadFile(nfo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "filled plot") {
+		t.Fatalf("nfo missing filled plot: %s", body)
+	}
+}
+
 func TestRegenerateAllNFOs(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)

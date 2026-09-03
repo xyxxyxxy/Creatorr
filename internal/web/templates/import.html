@@ -7,24 +7,26 @@
   "icon" .Icon
   "help" "Scan lists every untracked file under the chosen folder. Media and sidecars show as one list item. Match media to an indexed video or create a new one before import."
 )}}
-<fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4 w-full">
-  <legend class="fieldset-legend">File matching</legend>
-  <ol class="list-decimal pl-5 space-y-1 text-sm">
-    <li>
-      Media auto-match.
-      <ol class="list-[lower-alpha] pl-5 space-y-0.5 mt-1">
-        <li>Remote ID: <code class="text-xs">[id]</code> in filename, then <code class="text-xs">info.json</code> <code class="text-xs">id</code>, then sibling <code class="text-xs">.nfo</code> <code class="text-xs">&lt;uniqueid&gt;</code>.</li>
-        <li>Title similarity on cleaned filename basename.</li>
-        <li>Series suggestion from parent folder / basename (series only; pick a video in 'Match').</li>
-      </ol>
-    </li>
-    <li>Sidecars: <code class="text-xs">.nfo</code> / thumb need a same-basename video beside them. Subs match by directory + basename to packed media. <code class="text-xs">info.json</code> helps ID lookup only.</li>
-  </ol>
-  <div role="alert" class="alert alert-info text-sm">
-    <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
-    <span>It is recommended to create the series first and add relevant sources with 'Mark new videos as ignored' before importing, so a video index is available to match the files automatically.</span>
+<details class="collapse collapse-arrow bg-base-200 border border-base-300 rounded-box w-full">
+  <summary class="collapse-title font-medium text-sm min-h-0 py-3">File matching</summary>
+  <div class="collapse-content gap-3 flex flex-col">
+    <ol class="list-decimal pl-5 space-y-1 text-sm">
+      <li>
+        Media auto-match.
+        <ol class="list-[lower-alpha] pl-5 space-y-0.5 mt-1">
+          <li>Remote ID: <code class="text-xs">[id]</code> in filename, then <code class="text-xs">info.json</code> <code class="text-xs">id</code>, then sibling <code class="text-xs">.nfo</code> <code class="text-xs">&lt;uniqueid&gt;</code>.</li>
+          <li>Title similarity on cleaned filename basename.</li>
+          <li>Series suggestion from parent folder / basename (series only; pick a video in 'Match').</li>
+        </ol>
+      </li>
+      <li>Sidecars: <code class="text-xs">.nfo</code> / thumb need a same-basename video beside them. Subs match by directory + basename to packed media. <code class="text-xs">info.json</code> helps ID lookup only.</li>
+    </ol>
+    <div role="alert" class="alert alert-info text-sm">
+      <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
+      <span>It is recommended to create the series first and add relevant sources with 'Mark new videos as ignored' before importing, so a video index is available to match the files automatically.</span>
+    </div>
   </div>
-</fieldset>
+</details>
 <label class="form-control w-full min-w-0">
   <div class="label py-1"><span class="label-text text-sm opacity-70">Scan folder</span></div>
   <div class="join w-full">
@@ -54,7 +56,7 @@
   </div>
 </div>
 <div id="status" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm opacity-60 mt-2">
-  <span id="status-scan">Scanning…</span>
+  <span id="status-scan"></span>
   <span id="status-match" class="text-right"></span>
 </div>
 <div id="import-empty" class="alert mt-2 hidden" role="status"><span></span></div>
@@ -1149,12 +1151,8 @@ function actionLabel(c) {
   return c.source === 'library' ? 'Bind' : 'Import';
 }
 
-function fileNameTip(c) {
-  return escapeHtml(c.filename || '');
-}
-
 function fileCell(c) {
-  return `<span class="tooltip tooltip-top text-left" data-tip="${fileNameTip(c)}"><code class="text-xs">${escapeHtml(c.filename)}</code></span>`;
+  return `<code class="text-xs break-all">${escapeHtml(c.path || c.filename || '')}</code>`;
 }
 
 /** Mirror web.sidecarKindIcon / sidecarKindLabel for import roles. */
@@ -1182,12 +1180,11 @@ function roleLabel(role) {
   }
 }
 
-/** Icon role mark; tooltip = filename. */
+/** Icon role mark (no tooltip; label via aria). */
 function roleIconMark(c) {
   const role = c.role || 'video';
-  const name = fileNameTip(c);
-  const label = escapeHtml(roleLabel(role)) + (name ? ': ' + name : '');
-  return `<span class="tooltip tooltip-top inline-flex shrink-0" data-tip="${name}" aria-label="${label}">
+  const label = escapeHtml(roleLabel(role));
+  return `<span class="inline-flex shrink-0" aria-label="${label}">
     <i data-lucide="${roleIcon(role)}" class="size-4 opacity-70" aria-hidden="true"></i>
   </span>`;
 }
@@ -1582,12 +1579,14 @@ function setImportScanBusy(busy) {
   const scope = document.getElementById('import-scan-scope');
   const rescan = document.getElementById('btn-import-rescan');
   const spinner = document.getElementById('import-scan-busy');
+  const status = document.getElementById('status');
   const list = importListEl();
   const pager = document.getElementById('import-pager');
   const empty = document.getElementById('import-empty');
   if (scope) scope.disabled = !!busy;
   if (rescan) rescan.disabled = !!busy;
   if (spinner) spinner.classList.toggle('hidden', !busy);
+  if (status) status.classList.toggle('hidden', !!busy);
   if (busy) {
     if (list) list.classList.add('hidden');
     if (pager) pager.classList.add('hidden');
@@ -1689,19 +1688,19 @@ function jobFiles(job) {
   return [job.primary, ...(job.sidecars || [])].filter(Boolean);
 }
 
-/** Icon + basename; tooltip = full path. NFO: source XML discarded, library NFO regenerated. */
+/** Icon + full path. NFO: source XML discarded, library NFO regenerated. */
 function summaryFileRow(c) {
   const role = c.role || 'video';
-  const tip = escapeHtml(c.path || c.filename || '');
-  const label = escapeHtml(roleLabel(role)) + (tip ? ': ' + tip : '');
+  const path = escapeHtml(c.path || c.filename || '');
+  const label = escapeHtml(roleLabel(role));
   const nfoNote = role === 'nfo'
     ? `<span class="opacity-60 shrink-0">used for metadata; re-generated on import</span>`
     : '';
   return `<li class="flex items-center gap-1.5 text-xs min-w-0 py-0.5">
-    <span class="tooltip tooltip-top inline-flex shrink-0" data-tip="${tip}" aria-label="${label}">
+    <span class="inline-flex shrink-0" aria-label="${label}">
       <i data-lucide="${roleIcon(role)}" class="size-4 opacity-70" aria-hidden="true"></i>
     </span>
-    <code class="truncate min-w-0">${escapeHtml(c.filename || '')}</code>
+    <code class="break-all min-w-0">${path}</code>
     ${nfoNote}
   </li>`;
 }
@@ -1860,7 +1859,6 @@ async function runImportScan(opts) {
   const ac = new AbortController();
   importScanAbort = ac;
   closeMatchModal();
-  setStatusScan('Scanning…');
   setImportScanBusy(true);
   if (!preserveMatches) {
     const matchEl = document.getElementById('status-match');

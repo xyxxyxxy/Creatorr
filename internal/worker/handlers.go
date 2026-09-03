@@ -299,14 +299,15 @@ func ImportHandler(d Deps) TaskHandler {
 
 		if inPlace {
 			progress("Binding library file…", ptrFloat(0.5))
-			nfoBeside, infoPath := library.SidecarPathsBeside(abs)
+			nfoBeside, _ := library.SidecarPathsBeside(abs)
+			infoBeside, thumbBeside, subBeside := library.FindDownloadSidecars(abs)
 			meta := library.MediaCompleteMeta{
 				Tool:      "import",
 				ImportSrc: abs,
 				InPlace:   true,
 			}
 			// Do not register a foreign .nfo as library provenance - apply metadata then regenerate.
-			if err := d.Library.CompleteImport(t.VideoID.Int64, abs, "", infoPath, meta, t.ID); err != nil {
+			if err := d.Library.CompleteImport(t.VideoID.Int64, abs, "", infoBeside, thumbBeside, subBeside, meta, t.ID); err != nil {
 				return err
 			}
 			if nfoBeside != "" {
@@ -325,6 +326,7 @@ func ImportHandler(d Deps) TaskHandler {
 					progress("Verify enqueue failed: "+err.Error(), nil)
 				}
 			}
+			softEnqueueImportSidecarGapFill(d, t.VideoID.Int64, progress)
 			progress("Done", ptrFloat(1))
 			return nil
 		}
@@ -356,16 +358,7 @@ func ImportHandler(d Deps) TaskHandler {
 				episode = e
 			}
 		}
-		infoSrc := ""
-		for _, cand := range []string{
-			strings.TrimSuffix(abs, filepath.Ext(abs)) + ".info.json",
-			abs + ".info.json",
-		} {
-			if _, err := os.Stat(cand); err == nil {
-				infoSrc = cand
-				break
-			}
-		}
+		infoSrc, thumbCompanion, subSrcs := library.FindDownloadSidecars(abs)
 		srcNFO := strings.TrimSuffix(abs, filepath.Ext(abs)) + ".nfo"
 		if _, err := os.Stat(srcNFO); err != nil {
 			srcNFO = ""
@@ -397,7 +390,13 @@ func ImportHandler(d Deps) TaskHandler {
 		if uidType == "" {
 			uidType = "yt-dlp"
 		}
-		mediaPath, nfoPath, infoPath, _, _, err := library.PackMedia(
+		thumbURL := ""
+		if dlctx.Video.ThumbnailURL.Valid {
+			thumbURL = dlctx.Video.ThumbnailURL.String
+		}
+		thumbSrc, cleanupThumb := library.MaterializeThumbSrc(thumbCompanion, thumbURL)
+		defer cleanupThumb()
+		mediaPath, nfoPath, infoPath, thumbPath, subPaths, err := library.PackMedia(
 			abs, dlctx.RootPath,
 			library.EpisodeNFO{
 				SeriesTitle:   dlctx.SeriesTitle,
@@ -420,24 +419,30 @@ func ImportHandler(d Deps) TaskHandler {
 				SourceSite:    uidType,
 				Domain:        library.NamingDomain(dlctx.URL),
 			},
-			library.LoadNamingConfig(d.Library.DB), infoSrc, "", nil,
+			library.LoadNamingConfig(d.Library.DB), infoSrc, thumbSrc, subSrcs,
 		)
 		if err != nil {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "install failed"), err.Error())
 		}
-		// Drop leftover sidecars from the inbox after a successful move.
-		for _, leftover := range []string{
-			strings.TrimSuffix(abs, filepath.Ext(abs)) + ".nfo",
-			strings.TrimSuffix(abs, filepath.Ext(abs)) + ".info.json",
-			abs + ".info.json",
-		} {
+		// Drop leftover inbox sidecars after a successful pack (media was moved).
+		leftovers := []string{srcNFO, infoSrc}
+		if thumbPath != "" {
+			leftovers = append(leftovers, thumbCompanion)
+		}
+		if len(subPaths) > 0 {
+			leftovers = append(leftovers, subSrcs...)
+		}
+		for _, leftover := range leftovers {
+			if leftover == "" {
+				continue
+			}
 			_ = os.Remove(leftover)
 		}
 		meta := library.MediaCompleteMeta{
 			Tool:      "import",
 			ImportSrc: abs,
 		}
-		if err := d.Library.CompleteImport(t.VideoID.Int64, mediaPath, nfoPath, infoPath, meta, t.ID); err != nil {
+		if err := d.Library.CompleteImport(t.VideoID.Int64, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, t.ID); err != nil {
 			return err
 		}
 		// NFO soft-fill already ran above when present; ffprobe when duration still empty.
@@ -451,8 +456,25 @@ func ImportHandler(d Deps) TaskHandler {
 				progress("Verify enqueue failed: "+err.Error(), nil)
 			}
 		}
+		softEnqueueImportSidecarGapFill(d, t.VideoID.Int64, progress)
 		progress("Done", ptrFloat(1))
 		return nil
+	}
+}
+
+func softEnqueueImportSidecarGapFill(d Deps, videoID int64, progress func(msg string, pct *float64)) {
+	if d.Library == nil {
+		return
+	}
+	id, enqueued, err := d.Library.MaybeEnqueueImportSidecarGapFill(videoID)
+	if err != nil {
+		if progress != nil {
+			progress("Sidecar gap-fill enqueue skipped: "+err.Error(), nil)
+		}
+		return
+	}
+	if enqueued && progress != nil {
+		progress(fmt.Sprintf("Queued metadata gap-fill from source (task %d)", id), nil)
 	}
 }
 
@@ -1255,7 +1277,7 @@ func RefreshSidecarsHandler(d Deps) TaskHandler {
 		if err != nil {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 		}
-		if err := refreshSidecars(ctx, d, work, jar, url, t.Domain, t.VideoID.Int64, t.ID, progress); err != nil {
+		if err := refreshSidecars(ctx, d, work, jar, url, t.Domain, t.VideoID.Int64, t.ID, progress, false); err != nil {
 			return err
 		}
 		if library.TaskPayloadMaturity(t.Payload) {
@@ -1342,15 +1364,18 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 	if !ok {
 		return apperrors.New(apperrors.CodeNotFound, "video not in index")
 	}
+	if library.TaskPayloadGapFill(t.Payload) {
+		_ = d.Library.SoftFillVideoFromEntry(vid, e, t.ID)
+	}
 	progress("Refreshing sidecars…", ptrFloat(0.7))
-	if err := refreshSidecars(ctx, d, work, jar, url, t.Domain, vid, t.ID, progress); err != nil {
+	if err := refreshSidecars(ctx, d, work, jar, url, t.Domain, vid, t.ID, progress, library.TaskPayloadGapFill(t.Payload)); err != nil {
 		return err
 	}
 	progress("Done", ptrFloat(1))
 	return nil
 }
 
-func refreshSidecars(ctx context.Context, d Deps, work, jar, url, domain string, videoID, taskID int64, progress func(msg string, pct *float64)) error {
+func refreshSidecars(ctx context.Context, d Deps, work, jar, url, domain string, videoID, taskID int64, progress func(msg string, pct *float64), gapFill bool) error {
 	_, hasFile, err := d.Library.HasPackAnchor(videoID)
 	if err != nil {
 		return err
@@ -1380,7 +1405,7 @@ func refreshSidecars(ctx context.Context, d Deps, work, jar, url, domain string,
 	if progress != nil {
 		progress("Writing sidecars…", ptrFloat(0.85))
 	}
-	bundle := library.SidecarBundle{SubSrcs: subPaths, ThumbSrc: thumbPath}
+	bundle := library.SidecarBundle{SubSrcs: subPaths, ThumbSrc: thumbPath, GapFill: gapFill}
 	return d.Library.RefreshDiskSidecars(videoID, bundle, taskID)
 }
 
@@ -1459,7 +1484,7 @@ func metadataRescanSeries(ctx context.Context, d Deps, t *queue.Task, progress f
 				continue
 			}
 			url = library.DownloadURL(url, e.ID)
-			if err := refreshSidecars(ctx, d, work, jar, url, domain, vid, t.ID, progress); err != nil {
+			if err := refreshSidecars(ctx, d, work, jar, url, domain, vid, t.ID, progress, false); err != nil {
 				lastErr = err
 				continue
 			}

@@ -171,12 +171,15 @@ type SidecarBundle struct {
 	InfoJSON []byte // ignored on refresh; kept for call-site compatibility
 	ThumbSrc string // optional path to thumbnail image to copy
 	SubSrcs  []string
+	// GapFill keeps existing thumb/sub files; only adds missing ones and rewrites NFO from DB.
+	GapFill bool
 }
 
 // RefreshDiskSidecars rewrites NFO/thumb/subs beside an existing packed file.
 // Leaves the media file and info.json untouched (info.json updates only when media changes).
 // No-op (nil) when no video pack anchor on disk.
-// Removes prior nfo/thumb/sub files from disk before rewrite (orphan cleanup).
+// Full refresh removes prior nfo/thumb/sub files from disk before rewrite (orphan cleanup).
+// GapFill keeps present thumb/subs and only installs missing kinds.
 func (s *Store) RefreshDiskSidecars(videoID int64, bundle SidecarBundle, taskID int64) error {
 	_ = bundle.InfoJSON // never write info.json on independent sidecar refresh
 	mediaPath, ok, err := s.HasPackAnchor(videoID)
@@ -191,19 +194,33 @@ func (s *Store) RefreshDiskSidecars(videoID int64, bundle SidecarBundle, taskID 
 		return err
 	}
 
-	// Drop previous nfo/thumb/sub only (preserve kind=json / on-disk info.json).
-	oldRows, _ := s.DB.SQL.Query(`SELECT path FROM files WHERE video_id = ? AND kind IN ('nfo','thumb','sub')`, videoID)
-	if oldRows != nil {
-		var oldPaths []string
-		for oldRows.Next() {
-			var p string
-			if oldRows.Scan(&p) == nil && p != "" {
-				oldPaths = append(oldPaths, p)
-			}
+	keepThumb := ""
+	var keepSubs []string
+	if bundle.GapFill {
+		if p, ok, err := s.VideoThumbPath(videoID); err != nil {
+			return err
+		} else if ok {
+			keepThumb = p
 		}
-		_ = oldRows.Close()
-		for _, p := range oldPaths {
-			_ = os.Remove(p)
+		keepSubs, err = s.presentSubPaths(videoID)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Drop previous nfo/thumb/sub only (preserve kind=json / on-disk info.json).
+		oldRows, _ := s.DB.SQL.Query(`SELECT path FROM files WHERE video_id = ? AND kind IN ('nfo','thumb','sub')`, videoID)
+		if oldRows != nil {
+			var oldPaths []string
+			for oldRows.Next() {
+				var p string
+				if oldRows.Scan(&p) == nil && p != "" {
+					oldPaths = append(oldPaths, p)
+				}
+			}
+			_ = oldRows.Close()
+			for _, p := range oldPaths {
+				_ = os.Remove(p)
+			}
 		}
 	}
 
@@ -215,25 +232,31 @@ func (s *Store) RefreshDiskSidecars(videoID int64, bundle SidecarBundle, taskID 
 	dir := filepath.Dir(mediaPath)
 	stem := strings.TrimSuffix(mediaPath, filepath.Ext(mediaPath))
 	stemBase := filepath.Base(stem)
-	thumbPath := ""
-	thumbURL := ""
-	if v.ThumbnailURL.Valid {
-		thumbURL = v.ThumbnailURL.String
-	}
-	thumbSrc, cleanupThumb := MaterializeThumbSrc(bundle.ThumbSrc, thumbURL)
-	defer cleanupThumb()
-	if thumbSrc != "" {
-		ext := strings.ToLower(filepath.Ext(thumbSrc))
-		if ext == "" {
-			ext = ".jpg"
+	thumbPath := keepThumb
+	if thumbPath == "" {
+		thumbURL := ""
+		if v.ThumbnailURL.Valid {
+			thumbURL = v.ThumbnailURL.String
 		}
-		thumbPath = filepath.Join(dir, stemBase+"-thumb"+ext)
-		if err := copyFile(thumbSrc, thumbPath); err != nil {
-			return fmt.Errorf("copy thumb: %w", err)
+		thumbSrc, cleanupThumb := MaterializeThumbSrc(bundle.ThumbSrc, thumbURL)
+		defer cleanupThumb()
+		if thumbSrc != "" {
+			ext := strings.ToLower(filepath.Ext(thumbSrc))
+			if ext == "" {
+				ext = ".jpg"
+			}
+			thumbPath = filepath.Join(dir, stemBase+"-thumb"+ext)
+			if err := copyFile(thumbSrc, thumbPath); err != nil {
+				return fmt.Errorf("copy thumb: %w", err)
+			}
 		}
 	}
 
-	var subPaths []string
+	subPaths := append([]string{}, keepSubs...)
+	haveSub := map[string]struct{}{}
+	for _, p := range keepSubs {
+		haveSub[p] = struct{}{}
+	}
 	for _, src := range bundle.SubSrcs {
 		if !fileExists(src) {
 			continue
@@ -243,10 +266,19 @@ func (s *Store) RefreshDiskSidecars(videoID int64, bundle SidecarBundle, taskID 
 			continue
 		}
 		dest := stem + suffix
+		if _, ok := haveSub[dest]; ok {
+			continue
+		}
+		if bundle.GapFill && fileExists(dest) {
+			subPaths = append(subPaths, dest)
+			haveSub[dest] = struct{}{}
+			continue
+		}
 		if err := copyFile(src, dest); err != nil {
 			continue
 		}
 		subPaths = append(subPaths, dest)
+		haveSub[dest] = struct{}{}
 	}
 
 	// Sidecar refresh must remap via frozen applied-cut plan (not live profile).
@@ -261,7 +293,11 @@ func (s *Store) RefreshDiskSidecars(videoID int64, bundle SidecarBundle, taskID 
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.Exec(`DELETE FROM files WHERE video_id = ? AND kind IN ('nfo','thumb','sub')`, videoID); err != nil {
+	if bundle.GapFill {
+		if _, err := tx.Exec(`DELETE FROM files WHERE video_id = ? AND kind = 'nfo'`, videoID); err != nil {
+			return err
+		}
+	} else if _, err := tx.Exec(`DELETE FROM files WHERE video_id = ? AND kind IN ('nfo','thumb','sub')`, videoID); err != nil {
 		return err
 	}
 	insert := func(kind, path string) error {
@@ -276,22 +312,42 @@ func (s *Store) RefreshDiskSidecars(videoID int64, bundle SidecarBundle, taskID 
 	if err := insert("nfo", nfoPath); err != nil {
 		return err
 	}
-	if err := insert("thumb", thumbPath); err != nil {
-		return err
+	if !bundle.GapFill || keepThumb == "" {
+		if bundle.GapFill {
+			if _, err := tx.Exec(`DELETE FROM files WHERE video_id = ? AND kind = 'thumb'`, videoID); err != nil {
+				return err
+			}
+		}
+		if err := insert("thumb", thumbPath); err != nil {
+			return err
+		}
+	}
+	keepSubSet := map[string]struct{}{}
+	for _, p := range keepSubs {
+		keepSubSet[p] = struct{}{}
 	}
 	for _, p := range subPaths {
+		if bundle.GapFill {
+			if _, ok := keepSubSet[p]; ok {
+				continue
+			}
+		}
 		if err := insert("sub", p); err != nil {
 			return err
 		}
 	}
+	histMsg := "Rewrote NFO/thumb/sub sidecars"
+	if bundle.GapFill {
+		histMsg = "Filled missing NFO/thumb/sub sidecars"
+	}
 	detail, _ := json.Marshal(map[string]any{
-		"nfo": nfoPath, "thumb": thumbPath, "subs": len(subPaths),
+		"nfo": nfoPath, "thumb": thumbPath, "subs": len(subPaths), "gap_fill": bundle.GapFill,
 	})
 	if taskID > 0 {
 		if _, err := tx.Exec(`
 			INSERT INTO video_history (video_id, created_at, event, message, detail, task_id)
-			VALUES (?, ?, 'refresh_sidecars', 'Rewrote NFO/thumb/sub sidecars', ?, ?)
-		`, videoID, acquired, string(detail), taskID); err != nil {
+			VALUES (?, ?, 'refresh_sidecars', ?, ?, ?)
+		`, videoID, acquired, histMsg, string(detail), taskID); err != nil {
 			return err
 		}
 	}
@@ -336,6 +392,25 @@ func looksLikeLangTag(tag string) bool {
 		return false
 	}
 	return true
+}
+
+func (s *Store) presentSubPaths(videoID int64) ([]string, error) {
+	rows, err := s.DB.SQL.Query(`SELECT path FROM files WHERE video_id = ? AND kind = 'sub'`, videoID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var p string
+		if rows.Scan(&p) != nil || strings.TrimSpace(p) == "" {
+			continue
+		}
+		if fileExists(p) {
+			out = append(out, p)
+		}
+	}
+	return out, rows.Err()
 }
 
 // RewriteVideoNFO rewrites the episode NFO beside an on-disk video from current DB metadata.

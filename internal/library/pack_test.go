@@ -29,6 +29,38 @@ func TestFindDownloadSidecars(t *testing.T) {
 	}
 }
 
+func TestFindDownloadSidecarsDashThumb(t *testing.T) {
+	dir := t.TempDir()
+	media := filepath.Join(dir, "Show S01E01.mkv")
+	thumb := filepath.Join(dir, "Show S01E01-thumb.jpg")
+	if err := os.WriteFile(media, []byte("m"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(thumb, []byte("t"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, gotThumb, _ := library.FindDownloadSidecars(media)
+	if gotThumb != thumb {
+		t.Fatalf("thumb=%q want %q", gotThumb, thumb)
+	}
+}
+
+func TestFindDownloadSidecarsBracketMediaPlainThumb(t *testing.T) {
+	dir := t.TempDir()
+	media := filepath.Join(dir, "Show [abc123].mkv")
+	thumb := filepath.Join(dir, "Show-thumb.jpg")
+	if err := os.WriteFile(media, []byte("m"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(thumb, []byte("t"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, gotThumb, _ := library.FindDownloadSidecars(media)
+	if gotThumb != thumb {
+		t.Fatalf("thumb=%q want %q", gotThumb, thumb)
+	}
+}
+
 func TestFindDownloadSidecarsSubs(t *testing.T) {
 	dir := t.TempDir()
 	media := filepath.Join(dir, "clip.mkv")
@@ -85,6 +117,34 @@ func TestPackMediaCopiesSidecars(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("nfo missing %q in %s", want, body)
 		}
+	}
+}
+
+func TestPackMediaCopiesDashThumb(t *testing.T) {
+	srcDir := t.TempDir()
+	root := t.TempDir()
+	media := filepath.Join(srcDir, "a.mkv")
+	thumb := filepath.Join(srcDir, "a-thumb.jpg")
+	if err := os.WriteFile(media, []byte("m"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(thumb, []byte("t"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, thumbPath, _, err := library.PackMedia(
+		media, root,
+		library.EpisodeNFO{
+			SeriesTitle: "Show", Title: "Ep", Season: 1, Episode: 2,
+			Aired: "2024-01-15T00:00:00Z", UniqueID: "rid",
+		},
+		library.NamingConfig{EpisodeFormat: library.DefaultEpisodeFormat},
+		"", thumb, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if thumbPath == "" || !fileExists(thumbPath) || !strings.Contains(filepath.Base(thumbPath), "-thumb.jpg") {
+		t.Fatalf("thumbPath=%q", thumbPath)
 	}
 }
 

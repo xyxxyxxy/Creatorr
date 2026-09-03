@@ -135,7 +135,11 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 		if s.SourceCount == 1 {
 			srcLabel = "1 source"
 		}
-		line2Parts := []string{s.QualityProfileName}
+		qualityLabel := s.QualityProfileName
+		if s.IsAudio() {
+			qualityLabel = library.DefaultProfileName
+		}
+		line2Parts := []string{qualityLabel}
 		if len(roots) > 1 {
 			rootLabel := strings.TrimSpace(s.RootName)
 			if rootLabel == "" {
