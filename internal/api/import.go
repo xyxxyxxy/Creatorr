@@ -9,9 +9,17 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/api/gen"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 func (s *Server) ScanImport(w http.ResponseWriter, r *http.Request, params gen.ScanImportParams) {
+	if busy, err := s.Queue.HasPendingOrRunningKind(queue.KindImport, queue.SystemDomain); err != nil {
+		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "import scan failed", err.Error())
+		return
+	} else if busy {
+		writeLibraryErr(w, fmt.Errorf("%w: import already queued or running", library.ErrConflict), "import scan failed")
+		return
+	}
 	var rootID int64
 	if params.RootId != nil {
 		rootID = *params.RootId
