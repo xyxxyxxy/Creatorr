@@ -66,7 +66,10 @@
 </div>
 <div id="import-tasks-busy" class="{{if not .ImportBusy}}hidden {{end}}flex flex-col items-center justify-center gap-3 py-12 mt-2" role="status" aria-live="polite" aria-busy="true" data-import-busy="{{if .ImportBusy}}1{{else}}0{{end}}">
   <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
-  <p class="text-sm opacity-70 text-center max-w-md">Imports are being processed. <a href="/tasks" class="link link-hover">View progress on Tasks</a>.</p>
+  <div class="text-sm opacity-70 text-center max-w-md space-y-1">
+    <p>Imports are being processed.</p>
+    <p><a href="/tasks" class="link link-primary">View progress on Tasks</a>.</p>
+  </div>
 </div>
 <div id="import-full-scan-note" role="alert" class="alert alert-warning text-sm mt-2{{if or (not .IncompleteFullScan) .ImportBusy}} hidden{{end}}">
   <i data-lucide="triangle-alert" class="size-5 shrink-0" aria-hidden="true"></i>
