@@ -169,8 +169,9 @@ func (s *Store) EnqueueFullScansForMonitored() (int, error) {
 
 // EnqueueDownloadWanted enqueues downloads for wanted videos lacking a file.
 // Requires series monitored and domain active. Videos with no source are skipped.
-// Order: fair round-robin across series (fewest active downloads first), within
-// each series oldest upload_date first (undated by lowest id).
+// Order: fair round-robin across series (fewest active downloads first, then
+// oldest/never last download enqueue, then series_id), within each series oldest
+// upload_date first (undated by lowest id).
 // Per-domain max_download_queue caps that hostname only; other domains keep
 // filling until their caps (or all active candidate domains are full).
 func (s *Store) EnqueueDownloadWanted() (int, error) {
@@ -247,10 +248,41 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 	}
 	_ = arows.Close()
 
+	// Last download enqueue per series (any status). Missing = never served;
+	// used as tie-break so finished low-id series do not reclaim slots forever.
+	lastEnqueueBySeries := map[int64]string{}
+	lrows, err := s.DB.SQL.Query(`
+		SELECT series_id, MAX(created_at) FROM tasks
+		WHERE kind = ? AND series_id IS NOT NULL
+		GROUP BY series_id
+	`, queue.KindDownload)
+	if err != nil {
+		return 0, err
+	}
+	for lrows.Next() {
+		var sid int64
+		var created string
+		if err := lrows.Scan(&sid, &created); err != nil {
+			_ = lrows.Close()
+			return 0, err
+		}
+		lastEnqueueBySeries[sid] = created
+	}
+	if err := lrows.Err(); err != nil {
+		_ = lrows.Close()
+		return 0, err
+	}
+	_ = lrows.Close()
+
 	sort.SliceStable(seriesIDs, func(i, j int) bool {
 		ai, aj := activeBySeries[seriesIDs[i]], activeBySeries[seriesIDs[j]]
 		if ai != aj {
 			return ai < aj
+		}
+		li, lj := lastEnqueueBySeries[seriesIDs[i]], lastEnqueueBySeries[seriesIDs[j]]
+		if li != lj {
+			// Empty (never) sorts before any timestamp.
+			return li < lj
 		}
 		return seriesIDs[i] < seriesIDs[j]
 	})
