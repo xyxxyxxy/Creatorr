@@ -1,77 +1,91 @@
+{{define "nav_links"}}
+{{/* Desktop: includeBadgeIDs true. Mobile: omit badge IDs (unique IDs only on desktop). */}}
+<li>
+  <a href="/series"{{if eq .Nav "series"}} class="active"{{end}}>
+    <i data-lucide="tv" class="size-4"></i>Series
+    {{if .IncludeBadgeIDs}}<span id="series-error-badge" class="badge badge-error badge-sm hidden">0</span>{{end}}
+  </a>
+</li>
+<li>
+  <a href="/tasks"{{if eq .Nav "tasks"}} class="active"{{end}}>
+    <i data-lucide="list-todo" class="size-4"></i>Tasks
+    {{if .IncludeBadgeIDs}}
+    <span id="tasks-badge" class="badge badge-primary badge-sm hidden">0</span>
+    <span id="tasks-paused-badge" class="badge badge-warning badge-sm hidden">0</span>
+    {{end}}
+  </a>
+</li>
+<li>
+  <a href="/import"{{if eq .Nav "import"}} class="active"{{end}}>
+    <i data-lucide="folder-input" class="size-4"></i>Import
+  </a>
+</li>
+<li>
+  <a href="/history"{{if eq .Nav "history"}} class="active"{{end}}>
+    <i data-lucide="history" class="size-4"></i>History
+  </a>
+</li>
+<li>
+  <a href="/stats"{{if eq .Nav "stats"}} class="active"{{end}}>
+    <i data-lucide="chart-column" class="size-4"></i>Stats
+  </a>
+</li>
+<li>
+  <details {{if eq .Nav "settings"}}open{{end}}>
+    <summary{{if eq .Nav "settings"}} class="active"{{end}}>
+      <i data-lucide="settings" class="size-4"></i>Settings
+    </summary>
+    <ul class="p-2 bg-base-100 w-52 z-50 border border-base-300 rounded-box">
+      <li>
+        <a href="/settings/general"{{if eq .SettingsTab "general"}} class="active"{{end}}>
+          <i data-lucide="sliders-horizontal" class="size-4"></i>General
+        </a>
+      </li>
+      <li>
+        <a href="/settings/library"{{if eq .SettingsTab "library"}} class="active"{{end}}>
+          <i data-lucide="folder" class="size-4"></i>Library
+        </a>
+      </li>
+      <li>
+        <a href="/settings/connect"{{if eq .SettingsTab "connect"}} class="active"{{end}}>
+          <i data-lucide="plug" class="size-4"></i>Connect
+        </a>
+      </li>
+      <li>
+        <a href="/settings/queue"{{if eq .SettingsTab "queue"}} class="active"{{end}}>
+          <i data-lucide="list-ordered" class="size-4"></i>Queue / Domains
+        </a>
+      </li>
+      <li>
+        <a href="/settings/scheduler"{{if eq .SettingsTab "scheduler"}} class="active"{{end}}>
+          <i data-lucide="calendar-clock" class="size-4"></i>Scheduler
+        </a>
+      </li>
+      <li>
+        <a href="/settings/maintenance"{{if eq .SettingsTab "maintenance"}} class="active"{{end}}>
+          <i data-lucide="wrench" class="size-4"></i>Maintenance
+        </a>
+      </li>
+    </ul>
+  </details>
+</li>
+{{end}}
+
 {{define "nav"}}
-    <div class="drawer-side z-40">
-      <label for="app-drawer" class="drawer-overlay" aria-label="Close menu"></label>
-      <aside class="bg-base-100 min-h-full w-64 border-r border-base-300 flex flex-col">
-        <a href="/" class="min-h-14 px-4 flex items-center font-bold text-xl tracking-wide border-b border-base-300 shrink-0">Creatorr</a>
-        <ul class="menu w-full px-2 pt-2 grow">
-          <li>
-            <a href="/series" {{if eq .Nav "series"}}class="active"{{end}}>
-              <i data-lucide="tv" class="size-4"></i>Series
-              <span id="series-error-badge" class="badge badge-error badge-sm hidden">0</span>
-            </a>
-          </li>
-          <li>
-            <a href="/import" {{if eq .Nav "import"}}class="active"{{end}}>
-              <i data-lucide="folder-input" class="size-4"></i>Import
-            </a>
-          </li>
-          <li>
-            <a href="/tasks" {{if eq .Nav "tasks"}}class="active"{{end}}>
-              <i data-lucide="list-todo" class="size-4"></i>Tasks
-              <span id="tasks-badge" class="badge badge-primary badge-sm hidden">0</span>
-              <span id="tasks-paused-badge" class="badge badge-warning badge-sm hidden">0</span>
-            </a>
-          </li>
-          <li>
-            <a href="/history" {{if eq .Nav "history"}}class="active"{{end}}>
-              <i data-lucide="history" class="size-4"></i>History
-            </a>
-          </li>
-          <li>
-            <a href="/stats" {{if eq .Nav "stats"}}class="active"{{end}}>
-              <i data-lucide="chart-column" class="size-4"></i>Stats
-            </a>
-          </li>
-          <li>
-            <details {{if eq .Nav "settings"}}open{{end}}>
-              <summary {{if eq .Nav "settings"}}class="active"{{end}}>
-                <i data-lucide="settings" class="size-4"></i>Settings
-              </summary>
-              <ul>
-                <li>
-                  <a href="/settings/general" {{if eq .SettingsTab "general"}}class="active"{{end}}>
-                    <i data-lucide="sliders-horizontal" class="size-4"></i>General
-                  </a>
-                </li>
-                <li>
-                  <a href="/settings/library" {{if eq .SettingsTab "library"}}class="active"{{end}}>
-                    <i data-lucide="folder" class="size-4"></i>Library
-                  </a>
-                </li>
-                <li>
-                  <a href="/settings/connect" {{if eq .SettingsTab "connect"}}class="active"{{end}}>
-                    <i data-lucide="plug" class="size-4"></i>Connect
-                  </a>
-                </li>
-                <li>
-                  <a href="/settings/queue" {{if eq .SettingsTab "queue"}}class="active"{{end}}>
-                    <i data-lucide="list-ordered" class="size-4"></i>Queue / Domains
-                  </a>
-                </li>
-                <li>
-                  <a href="/settings/scheduler" {{if eq .SettingsTab "scheduler"}}class="active"{{end}}>
-                    <i data-lucide="calendar-clock" class="size-4"></i>Scheduler
-                  </a>
-                </li>
-                <li>
-                  <a href="/settings/maintenance" {{if eq .SettingsTab "maintenance"}}class="active"{{end}}>
-                    <i data-lucide="wrench" class="size-4"></i>Maintenance
-                  </a>
-                </li>
-              </ul>
-            </details>
-          </li>
-        </ul>
-      </aside>
+  <div class="navbar-start">
+    <div class="dropdown">
+      <div tabindex="0" role="button" class="btn btn-ghost lg:hidden" aria-label="Open menu">
+        <i data-lucide="menu" class="size-5"></i>
+      </div>
+      <ul tabindex="-1" class="menu menu-sm dropdown-content bg-base-100 rounded-box z-50 mt-3 w-56 p-2 shadow border border-base-300">
+        {{template "nav_links" (dict "Nav" .Nav "SettingsTab" .SettingsTab "IncludeBadgeIDs" false)}}
+      </ul>
     </div>
+    <a href="/" class="btn btn-ghost text-xl font-bold tracking-wide">Creatorr</a>
+  </div>
+  <div class="navbar-center hidden lg:flex">
+    <ul class="menu menu-horizontal px-1">
+      {{template "nav_links" (dict "Nav" .Nav "SettingsTab" .SettingsTab "IncludeBadgeIDs" true)}}
+    </ul>
+  </div>
 {{end}}

@@ -33,63 +33,54 @@
   <script src="/static/app.js" defer></script>
 </head>
 <body class="min-h-screen bg-base-200">
-  <div class="drawer lg:drawer-open">
-    <input id="app-drawer" type="checkbox" class="drawer-toggle" />
-    <div class="drawer-content flex flex-col min-h-screen">
-      <header class="navbar bg-base-100 border-b border-base-300 sticky top-0 z-50 min-h-14 px-6 gap-1">
-        <div class="flex-none lg:hidden">
-          <label for="app-drawer" class="btn btn-ghost btn-square drawer-button" aria-label="Open menu">
-            <i data-lucide="menu" class="size-5"></i>
-          </label>
-        </div>
-        <div class="flex-1"></div>
-        <div class="flex-none flex items-center gap-1">
-          <div class="dropdown dropdown-end">
-            <div tabindex="0" role="button" class="btn btn-ghost btn-square relative" aria-label="Notifications" id="notify-bell-btn">
-              <i data-lucide="bell" class="size-5"></i>
-              <span id="notify-badge" class="badge badge-error badge-xs absolute top-1 right-1 hidden">0</span>
-            </div>
-            <ul tabindex="0" id="notify-menu"
-                class="dropdown-content menu menu-sm bg-base-200 rounded-box z-50 w-80 max-w-[calc(100vw-2rem)] p-2 shadow-lg border border-base-300 max-h-[min(24rem,70vh)] overflow-y-auto">
-              <li id="notify-menu-mark-all">
-                <button type="button" id="notify-mark-all-read" class="justify-center">
-                  Mark all as read
-                </button>
-              </li>
-              <li id="notify-dropdown-empty" class="disabled"><a class="justify-center">No notifications</a></li>
-              <li id="notify-menu-view-all">
-                <a href="/history#notifications" class="justify-center">
-                  View all
-                </a>
-              </li>
-            </ul>
+  <div class="flex flex-col min-h-screen w-full max-w-5xl mx-auto">
+    <header class="navbar bg-base-100 border-b border-base-300 sticky top-0 z-50 min-h-14 px-2 lg:px-4 shrink-0">
+      {{template "nav" .}}
+      <div class="navbar-end flex items-center gap-1">
+        <div class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="btn btn-ghost btn-square relative" aria-label="Notifications" id="notify-bell-btn">
+            <i data-lucide="bell" class="size-5"></i>
+            <span id="notify-badge" class="badge badge-error badge-xs absolute top-1 right-1 hidden">0</span>
           </div>
-          <div class="dropdown dropdown-end">
-            <div tabindex="0" role="button" class="btn btn-ghost btn-square" aria-label="Account" aria-haspopup="menu">
-              <i data-lucide="user" class="size-5"></i>
-            </div>
-            <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-200 rounded-box z-50 w-52 p-2 shadow-lg border border-base-300">
-              {{if .AuthUsername}}
-              <li class="menu-title"><span>{{.AuthUsername}}</span></li>
-              {{end}}
-              <li>
-                <button type="submit" form="account-logout-form">
-                  <i data-lucide="log-out" class="size-4"></i>
-                  Log out
-                </button>
-              </li>
-            </ul>
-          </div>
-          <form id="account-logout-form" method="post" action="/logout" class="hidden"></form>
+          <ul tabindex="0" id="notify-menu"
+              class="dropdown-content menu menu-sm bg-base-100 rounded-box z-50 w-80 max-w-[calc(100vw-2rem)] p-2 border border-base-300 max-h-[min(24rem,70vh)] overflow-y-auto">
+            <li id="notify-menu-mark-all">
+              <button type="button" id="notify-mark-all-read" class="justify-center">
+                Mark all as read
+              </button>
+            </li>
+            <li id="notify-dropdown-empty" class="disabled"><a class="justify-center">No notifications</a></li>
+            <li id="notify-menu-view-all">
+              <a href="/history#notifications" class="justify-center">
+                View all
+              </a>
+            </li>
+          </ul>
         </div>
-      </header>
-      <main class="p-4 md:p-6 flex-1 w-full max-w-5xl mx-auto">
+        <div class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="btn btn-ghost btn-square" aria-label="Account" aria-haspopup="menu">
+            <i data-lucide="user" class="size-5"></i>
+          </div>
+          <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-100 rounded-box z-50 w-52 p-2 border border-base-300">
+            {{if .AuthUsername}}
+            <li class="menu-title"><span>{{.AuthUsername}}</span></li>
+            {{end}}
+            <li>
+              <button type="submit" form="account-logout-form">
+                <i data-lucide="log-out" class="size-4"></i>
+                Log out
+              </button>
+            </li>
+          </ul>
+        </div>
+        <form id="account-logout-form" method="post" action="/logout" class="hidden"></form>
+      </div>
+    </header>
+    <main class="p-4 md:p-6 flex-1 w-full">
 {{end}}
 
 {{define "foot"}}
-      </main>
-    </div>
-    {{template "nav" .}}
+    </main>
   </div>
 </body>
 </html>

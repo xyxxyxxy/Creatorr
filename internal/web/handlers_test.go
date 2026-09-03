@@ -456,7 +456,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		if path == "/settings/library" || path == "/settings/queue" || path == "/settings/maintenance" {
 			body := rec.Body.String()
 			if !strings.Contains(body, "/settings/general") || !strings.Contains(body, "/settings/connect") || !strings.Contains(body, "/settings/queue") || !strings.Contains(body, "/settings/scheduler") || !strings.Contains(body, "/settings/maintenance") {
-				t.Fatalf("%s missing settings sub-nav in drawer", path)
+				t.Fatalf("%s missing settings sub-nav in navbar", path)
 			}
 			if strings.Contains(body, `href="/settings/domains"`) {
 				t.Fatalf("%s still has Domains nav link", path)

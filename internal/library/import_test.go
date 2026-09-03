@@ -438,6 +438,70 @@ func TestScanImportLibraryOrphanBindInPlace(t *testing.T) {
 	}
 }
 
+func TestScanImportSkipsSeriesFolderMeta(t *testing.T) {
+	s := openLib(t)
+	inbox := filepath.Join(t.TempDir(), "import")
+	if err := os.MkdirAll(inbox, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s.ImportRoot = inbox
+	libRoot := t.TempDir()
+	root, err := s.CreateRoot("archive", libRoot, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := s.CreateProfile("default", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Meta Show", SourceURL: "https://example.com/meta", RootID: root.ID, QualityProfileID: profile.ID, Monitored: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seriesDir := library.SeriesDir(libRoot, ser.Title)
+	if err := os.MkdirAll(seriesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tvshow := filepath.Join(seriesDir, "tvshow.nfo")
+	poster := filepath.Join(seriesDir, "poster.jpg")
+	banner := filepath.Join(seriesDir, "banner.jpg")
+	for _, p := range []string{tvshow, poster, banner} {
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	notes := filepath.Join(seriesDir, "notes.txt")
+	if err := os.WriteFile(notes, []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loosePoster := filepath.Join(libRoot, "poster.jpg")
+	if err := os.WriteFile(loosePoster, []byte("loose"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := s.ScanImport(root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]bool{}
+	for _, c := range res.Candidates {
+		paths[c.Path] = true
+	}
+	for _, skip := range []string{tvshow, poster, banner} {
+		if paths[skip] {
+			t.Fatalf("series folder meta should be skipped: %s", skip)
+		}
+	}
+	if !paths[notes] {
+		t.Fatal("unmanaged notes.txt under series folder should still list")
+	}
+	if !paths[loosePoster] {
+		t.Fatal("poster.jpg outside a series folder should still list")
+	}
+}
+
 func TestClassifyImportFile(t *testing.T) {
 	cases := []struct {
 		name, role, stem string

@@ -92,7 +92,8 @@ func (s *Store) ScanImportInbox() (*ImportScanResult, error) {
 }
 
 // ScanImport lists untracked files under the import inbox (rootID 0) or one
-// online library root (rootID > 0). Never binds.
+// online library root (rootID > 0). Never binds. Library scans skip Creatorr
+// series-folder metadata (tvshow.nfo + poster/banner/fanart/clearlogo).
 func (s *Store) ScanImport(rootID int64) (*ImportScanResult, error) {
 	known, err := s.knownTrackedPaths()
 	if err != nil {
@@ -102,14 +103,18 @@ func (s *Store) ScanImport(rootID int64) (*ImportScanResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	catalog, err := s.loadImportSuggestCatalog()
+	if err != nil {
+		return nil, err
+	}
 
 	if rootID > 0 {
-		return s.scanImportLibraryRoot(rootID, known, videoByStem)
+		return s.scanImportLibraryRoot(rootID, known, videoByStem, catalog)
 	}
-	return s.scanImportInboxOnly(known, videoByStem)
+	return s.scanImportInboxOnly(known, videoByStem, catalog)
 }
 
-func (s *Store) scanImportInboxOnly(known map[string]struct{}, videoByStem map[string]videoStemRef) (*ImportScanResult, error) {
+func (s *Store) scanImportInboxOnly(known map[string]struct{}, videoByStem map[string]videoStemRef, catalog *importSuggestCatalog) (*ImportScanResult, error) {
 	root := strings.TrimSpace(s.ImportRoot)
 	if root == "" {
 		return nil, fmt.Errorf("%w: import root not configured", ErrInvalid)
@@ -128,7 +133,7 @@ func (s *Store) scanImportInboxOnly(known map[string]struct{}, videoByStem map[s
 		return nil, err
 	}
 	for _, path := range inbox {
-		c, err := s.buildImportCandidate(path, ImportSourceInbox, known, videoByStem)
+		c, err := s.buildImportCandidate(path, ImportSourceInbox, known, videoByStem, catalog)
 		if err != nil {
 			return nil, err
 		}
@@ -139,7 +144,7 @@ func (s *Store) scanImportInboxOnly(known map[string]struct{}, videoByStem map[s
 	return out, nil
 }
 
-func (s *Store) scanImportLibraryRoot(rootID int64, known map[string]struct{}, videoByStem map[string]videoStemRef) (*ImportScanResult, error) {
+func (s *Store) scanImportLibraryRoot(rootID int64, known map[string]struct{}, videoByStem map[string]videoStemRef, catalog *importSuggestCatalog) (*ImportScanResult, error) {
 	root, err := s.GetRoot(rootID)
 	if err != nil {
 		return nil, err
@@ -160,6 +165,10 @@ func (s *Store) scanImportLibraryRoot(rootID int64, known map[string]struct{}, v
 	}
 
 	out := &ImportScanResult{ImportPath: absRoot, Candidates: []ImportCandidate{}}
+	seriesDirs, err := s.seriesDirsForRoot(rootID, absRoot)
+	if err != nil {
+		return nil, err
+	}
 	found, err := listAllFilesUnder(absRoot)
 	if err != nil {
 		return nil, err
@@ -172,7 +181,10 @@ func (s *Store) scanImportLibraryRoot(rootID int64, known map[string]struct{}, v
 		if _, ok := known[abs]; ok {
 			continue
 		}
-		c, err := s.buildImportCandidate(abs, ImportSourceLibrary, known, videoByStem)
+		if isSeriesFolderMetaPath(abs, seriesDirs) {
+			continue
+		}
+		c, err := s.buildImportCandidate(abs, ImportSourceLibrary, known, videoByStem, catalog)
 		if err != nil {
 			return nil, err
 		}
@@ -204,6 +216,50 @@ func listAllFilesUnder(absRoot string) ([]string, error) {
 	}
 	sort.Strings(files)
 	return files, nil
+}
+
+// seriesDirsForRoot returns cleaned SeriesDir paths for every series on rootID.
+func (s *Store) seriesDirsForRoot(rootID int64, absRoot string) (map[string]struct{}, error) {
+	rows, err := s.DB.SQL.Query(`SELECT title FROM series WHERE root_id = ?`, rootID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]struct{}{}
+	for rows.Next() {
+		var title string
+		if err := rows.Scan(&title); err != nil {
+			return nil, err
+		}
+		out[filepath.Clean(SeriesDir(absRoot, title))] = struct{}{}
+	}
+	return out, rows.Err()
+}
+
+// isSeriesFolderMetaBasename reports Creatorr-managed show metadata basenames
+// (tvshow.nfo + poster/banner/fanart/clearlogo) that live under SeriesDir only
+// and are not tracked in the files table.
+func isSeriesFolderMetaBasename(name string) bool {
+	base := strings.ToLower(filepath.Base(name))
+	if base == "tvshow.nfo" {
+		return true
+	}
+	for _, role := range seriesArtRoles {
+		for _, ext := range []string{".jpg", ".jpeg", ".png", ".webp"} {
+			if base == role+ext {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isSeriesFolderMetaPath(abs string, seriesDirs map[string]struct{}) bool {
+	if len(seriesDirs) == 0 || !isSeriesFolderMetaBasename(abs) {
+		return false
+	}
+	_, ok := seriesDirs[filepath.Clean(filepath.Dir(abs))]
+	return ok
 }
 
 func (s *Store) knownTrackedPaths() (map[string]struct{}, error) {
@@ -270,7 +326,7 @@ func (s *Store) videoStemIndex() (map[string]videoStemRef, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) buildImportCandidate(path, source string, known map[string]struct{}, videoByStem map[string]videoStemRef) (*ImportCandidate, error) {
+func (s *Store) buildImportCandidate(path, source string, known map[string]struct{}, videoByStem map[string]videoStemRef, catalog *importSuggestCatalog) (*ImportCandidate, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		abs = path
@@ -327,28 +383,27 @@ func (s *Store) buildImportCandidate(path, source string, known map[string]struc
 	}
 	c.SuggestedHandler = meta.HandlerID
 	c.SuggestedWebpageURL = meta.WebpageURL
+	if catalog == nil {
+		catalog = &importSuggestCatalog{byRemote: map[string]importRemoteHit{}}
+	}
 	for _, hint := range c.IDs {
-		vid, seriesID, title, seriesTitle, ok, err := s.findVideoByRemote(hint.RemoteID)
-		if err != nil {
-			return nil, err
+		hit, ok := catalog.byRemote[hint.RemoteID]
+		if !ok {
+			continue
 		}
-		if ok {
-			c.SuggestedVideoID = &vid
-			c.SuggestedSeriesID = &seriesID
-			c.MatchType = "id"
-			c.MatchLabel = fmt.Sprintf("Matched by remote ID to %s / %s", seriesTitle, title)
-			break
-		}
+		vid, seriesID := hit.VideoID, hit.SeriesID
+		c.SuggestedVideoID = &vid
+		c.SuggestedSeriesID = &seriesID
+		c.MatchType = "id"
+		c.MatchLabel = fmt.Sprintf("Matched by remote ID to %s / %s", hit.SeriesTitle, hit.Title)
+		break
 	}
-	stem := stemBase
-	c.VideoSuggestions, err = s.titleSuggestions(stem, 8)
-	if err != nil {
-		return nil, err
+	// ID match is enough for auto-match; skip O(videos) title scans.
+	if c.SuggestedVideoID != nil {
+		return &c, nil
 	}
-	c.SeriesSuggestions, err = s.seriesSuggestions(abs, 6)
-	if err != nil {
-		return nil, err
-	}
+	c.VideoSuggestions = titleSuggestionsFrom(catalog.videos, stemBase, 8)
+	c.SeriesSuggestions = seriesSuggestionsFrom(catalog.series, abs, 6)
 	if c.SuggestedVideoID == nil && len(c.VideoSuggestions) > 0 {
 		top := c.VideoSuggestions[0]
 		c.SuggestedVideoID = &top.VideoID
@@ -1086,30 +1141,27 @@ func (s *Store) hasPendingImport(videoID int64, path string) (bool, error) {
 	return n > 0, err
 }
 
-func (s *Store) findVideoByRemote(remoteID string) (videoID, seriesID int64, title, seriesTitle string, ok bool, err error) {
-	// Prefer videos that do not already have a registered video file (deleted / wanted / missing).
-	err = s.DB.SQL.QueryRow(`
-		SELECT v.id, v.series_id, v.title, s.title
-		FROM videos v
-		JOIN series s ON s.id = v.series_id
-		WHERE v.remote_id = ?
-		ORDER BY CASE WHEN EXISTS (
-		  SELECT 1 FROM files f WHERE f.video_id = v.id AND f.kind = 'video'
-		) THEN 1 ELSE 0 END, v.id
-		LIMIT 1
-	`, remoteID).Scan(&videoID, &seriesID, &title, &seriesTitle)
-	if err == sql.ErrNoRows {
-		return 0, 0, "", "", false, nil
-	}
-	if err != nil {
-		return 0, 0, "", "", false, err
-	}
-	return videoID, seriesID, title, seriesTitle, true, nil
+type importRemoteHit struct {
+	VideoID     int64
+	SeriesID    int64
+	Title       string
+	SeriesTitle string
+	HasMedia    bool
 }
 
-func (s *Store) titleSuggestions(stem string, limit int) ([]VideoSuggestion, error) {
+// importSuggestCatalog is loaded once per ScanImport so title/id matching is O(files×catalog)
+// in memory instead of re-querying SQLite for every media file.
+type importSuggestCatalog struct {
+	videos   []VideoSuggestion
+	series   []SeriesSuggestion
+	byRemote map[string]importRemoteHit
+}
+
+func (s *Store) loadImportSuggestCatalog() (*importSuggestCatalog, error) {
+	cat := &importSuggestCatalog{byRemote: map[string]importRemoteHit{}}
 	rows, err := s.DB.SQL.Query(`
-		SELECT v.id, v.series_id, v.title, v.remote_id, s.title
+		SELECT v.id, v.series_id, v.title, v.remote_id, s.title,
+		  EXISTS(SELECT 1 FROM files f WHERE f.video_id = v.id AND f.kind = 'video') AS has_media
 		FROM videos v
 		JOIN series s ON s.id = v.series_id
 	`)
@@ -1117,25 +1169,57 @@ func (s *Store) titleSuggestions(stem string, limit int) ([]VideoSuggestion, err
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var sug VideoSuggestion
+		var hasMedia bool
+		if err := rows.Scan(&sug.VideoID, &sug.SeriesID, &sug.Title, &sug.RemoteID, &sug.SeriesTitle, &hasMedia); err != nil {
+			return nil, err
+		}
+		cat.videos = append(cat.videos, sug)
+		rid := strings.TrimSpace(sug.RemoteID)
+		if rid == "" {
+			continue
+		}
+		hit := importRemoteHit{
+			VideoID: sug.VideoID, SeriesID: sug.SeriesID,
+			Title: sug.Title, SeriesTitle: sug.SeriesTitle, HasMedia: hasMedia,
+		}
+		prev, ok := cat.byRemote[rid]
+		if !ok || (!hit.HasMedia && prev.HasMedia) || (hit.HasMedia == prev.HasMedia && hit.VideoID < prev.VideoID) {
+			cat.byRemote[rid] = hit
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	srows, err := s.DB.SQL.Query(`SELECT id, title FROM series ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = srows.Close() }()
+	for srows.Next() {
+		var sug SeriesSuggestion
+		if err := srows.Scan(&sug.SeriesID, &sug.Title); err != nil {
+			return nil, err
+		}
+		cat.series = append(cat.series, sug)
+	}
+	return cat, srows.Err()
+}
+
+func titleSuggestionsFrom(videos []VideoSuggestion, stem string, limit int) []VideoSuggestion {
 	clean := cleanStem(stem)
 	type scored struct {
 		score float64
 		v     VideoSuggestion
 	}
 	var hits []scored
-	for rows.Next() {
-		var sug VideoSuggestion
-		if err := rows.Scan(&sug.VideoID, &sug.SeriesID, &sug.Title, &sug.RemoteID, &sug.SeriesTitle); err != nil {
-			return nil, err
-		}
+	for _, sug := range videos {
 		ratio := seqRatio(clean, sug.Title)
 		if ratio >= 0.45 {
 			sug.Score = round3(ratio)
 			hits = append(hits, scored{ratio, sug})
 		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
 	}
 	sort.Slice(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
 	if limit > 0 && len(hits) > limit {
@@ -1145,15 +1229,10 @@ func (s *Store) titleSuggestions(stem string, limit int) ([]VideoSuggestion, err
 	for i, h := range hits {
 		out[i] = h.v
 	}
-	return out, nil
+	return out
 }
 
-func (s *Store) seriesSuggestions(mediaPath string, limit int) ([]SeriesSuggestion, error) {
-	rows, err := s.DB.SQL.Query(`SELECT id, title FROM series ORDER BY id`)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
+func seriesSuggestionsFrom(series []SeriesSuggestion, mediaPath string, limit int) []SeriesSuggestion {
 	needles := []string{
 		filepath.Base(filepath.Dir(mediaPath)),
 		cleanStem(strings.TrimSuffix(filepath.Base(mediaPath), filepath.Ext(mediaPath))),
@@ -1163,11 +1242,7 @@ func (s *Store) seriesSuggestions(mediaPath string, limit int) ([]SeriesSuggesti
 		s     SeriesSuggestion
 	}
 	var hits []scored
-	for rows.Next() {
-		var sug SeriesSuggestion
-		if err := rows.Scan(&sug.SeriesID, &sug.Title); err != nil {
-			return nil, err
-		}
+	for _, sug := range series {
 		best := 0.0
 		for _, needle := range needles {
 			if needle == "" || needle == "." || needle == ".." {
@@ -1178,12 +1253,10 @@ func (s *Store) seriesSuggestions(mediaPath string, limit int) ([]SeriesSuggesti
 			}
 		}
 		if best >= 0.5 {
-			sug.Score = round3(best)
-			hits = append(hits, scored{best, sug})
+			copySug := sug
+			copySug.Score = round3(best)
+			hits = append(hits, scored{best, copySug})
 		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
 	}
 	sort.Slice(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
 	if limit > 0 && len(hits) > limit {
@@ -1193,7 +1266,7 @@ func (s *Store) seriesSuggestions(mediaPath string, limit int) ([]SeriesSuggesti
 	for i, h := range hits {
 		out[i] = h.s
 	}
-	return out, nil
+	return out
 }
 
 func extractImportIDs(path string) []ImportIDHint {
