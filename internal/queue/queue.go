@@ -568,6 +568,37 @@ func (s *Store) startDomainCooldown(domain string) {
 	s.cooldown[domain] = time.Now().Add(time.Duration(lim.TaskCooldownSeconds) * time.Second)
 }
 
+// StartCooldownForDomains arms task_cooldown_seconds for each hostname (skips empty,
+// system, and DomainDefault). Dedupes. Used at process boot so ClaimNext waits before
+// the first non-interactive claim after restart. Caller need not hold s.mu.
+// Returns how many unique domains are cooling afterward.
+func (s *Store) StartCooldownForDomains(domains []string) int {
+	if s == nil || len(domains) == 0 {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	seen := map[string]struct{}{}
+	for _, raw := range domains {
+		d := settings.NormalizeDomain(raw)
+		if d == "" || d == SystemDomain || d == settings.DomainDefault || d == "unknown" {
+			continue
+		}
+		if _, ok := seen[d]; ok {
+			continue
+		}
+		seen[d] = struct{}{}
+		s.startDomainCooldown(d)
+	}
+	n := 0
+	for d := range seen {
+		if until, ok := s.cooldown[d]; ok && time.Now().Before(until) {
+			n++
+		}
+	}
+	return n
+}
+
 // HasPendingOrRunningDomain reports whether any task is pending or running for domain.
 func (s *Store) HasPendingOrRunningDomain(domain string) (bool, error) {
 	domain = strings.TrimSpace(domain)
