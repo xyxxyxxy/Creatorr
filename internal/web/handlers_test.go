@@ -111,6 +111,52 @@ func TestSeriesListRenders(t *testing.T) {
 	}
 }
 
+func TestSeriesListAudioQualityShowsBest(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	var rootID, profileID int64
+	if err := d.SQL.QueryRow(`SELECT id FROM root_folders LIMIT 1`).Scan(&rootID); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SQL.QueryRow(`SELECT id FROM quality_profiles WHERE name = ?`, library.Profile480Name).Scan(&profileID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title:            "Audio Show",
+		RootID:           rootID,
+		QualityProfileID: profileID,
+		Monitored:        false,
+		DeliveryMode:     library.DeliveryAudio,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/series", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "best · 0 sources") {
+		t.Fatalf("audio series should show best quality, got: %s", truncate(body, 800))
+	}
+	if strings.Contains(body, library.Profile480Name+" ·") {
+		t.Fatalf("audio series must not show assigned profile name: %s", truncate(body, 800))
+	}
+}
+
 func TestImportPageWithoutSeries(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
