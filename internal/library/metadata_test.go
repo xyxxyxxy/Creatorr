@@ -3,6 +3,7 @@ package library_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
@@ -161,6 +162,81 @@ func TestEnqueueRefreshSidecarsVideo(t *testing.T) {
 	}
 	if _, err := s.EnqueueRefreshSidecarsVideo(res.VideoID); err == nil {
 		t.Fatal("want conflict on second enqueue")
+	}
+}
+
+func TestMaybeEnqueueImportSidecarGapFill(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	root, err := s.GetRoot(rootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title:            "GapFill",
+		SourceURL:        "https://www.example.com/@gap",
+		RootID:           rootID,
+		QualityProfileID: profileID,
+		Monitored:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "g1", Title: "T", WebpageURL: "https://www.example.com/watch?v=g1",
+		SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root.Path, "GapFill")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	media := filepath.Join(dir, "ep.mkv")
+	if err := os.WriteFile(media, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CompleteImport(res.VideoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+		t.Fatal(err)
+	}
+
+	id, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID)
+	if err != nil || !enqueued || id == 0 {
+		t.Fatalf("want enqueue with source_url: id=%d enqueued=%v err=%v", id, enqueued, err)
+	}
+	var kind, payload string
+	if err := s.DB.SQL.QueryRow(`SELECT kind, payload FROM tasks WHERE id = ?`, id).Scan(&kind, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if kind != "rescan_metadata" || !strings.Contains(payload, `"gap_fill":true`) {
+		t.Fatalf("kind=%s payload=%s", kind, payload)
+	}
+
+	thumb := filepath.Join(dir, "ep-thumb.jpg")
+	if err := os.WriteFile(thumb, []byte("t"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`INSERT INTO files (video_id, path, kind, acquired_at) VALUES (?, ?, 'thumb', datetime('now'))`, res.VideoID, thumb); err != nil {
+		t.Fatal(err)
+	}
+	if _, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID); err == nil && enqueued {
+		t.Fatal("want skip/conflict while first gap-fill still queued")
+	}
+
+	if _, err := s.DB.SQL.Exec(`UPDATE tasks SET status = 'done' WHERE id = ?`, id); err != nil {
+		t.Fatal(err)
+	}
+	id2, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID)
+	if err != nil || !enqueued || id2 == 0 {
+		t.Fatalf("want enqueue even with thumb present: id=%d enqueued=%v err=%v", id2, enqueued, err)
+	}
+
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET source_url = NULL WHERE id = ?`, res.VideoID); err != nil {
+		t.Fatal(err)
+	}
+	if _, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID); err != nil || enqueued {
+		t.Fatalf("want skip without source_url: enqueued=%v err=%v", enqueued, err)
 	}
 }
 

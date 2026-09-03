@@ -118,7 +118,7 @@ func TestFileDeletePassMarksDeletedWithTaskID(t *testing.T) {
 	if err := os.WriteFile(media, []byte("data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CompleteImport(res.VideoID, media, "", "", library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(res.VideoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.DeleteVideo(res.VideoID); err != nil {

@@ -239,3 +239,12 @@ func TaskPayloadMaturity(payload string) bool {
 	}
 	return strings.Contains(payload, `"maturity":true`) || strings.Contains(payload, `"maturity": true`)
 }
+
+// TaskPayloadGapFill reports whether a task should only fill missing sidecars/metadata.
+func TaskPayloadGapFill(payload string) bool {
+	payload = strings.TrimSpace(payload)
+	if payload == "" || payload == "{}" {
+		return false
+	}
+	return strings.Contains(payload, `"gap_fill":true`) || strings.Contains(payload, `"gap_fill": true`)
+}

@@ -407,7 +407,7 @@ func TestScanImportLibraryOrphanBindInPlace(t *testing.T) {
 	if nfoPath == "" {
 		t.Fatal("expected nfo sidecar")
 	}
-	if err := s.CompleteImport(videoID, orphan.Path, nfoPath, infoPath, library.MediaCompleteMeta{
+	if err := s.CompleteImport(videoID, orphan.Path, nfoPath, infoPath, "", nil, library.MediaCompleteMeta{
 		Tool: "import", InPlace: true, ImportSrc: orphan.Path,
 	}, taskID); err != nil {
 		t.Fatal(err)
@@ -555,7 +555,7 @@ func TestScanImportSidecarStemAndOther(t *testing.T) {
 	_ = os.MkdirAll(dir, 0o755)
 	media := filepath.Join(dir, "Ep One [side1].mkv")
 	_ = os.WriteFile(media, []byte("media"), 0o644)
-	if err := s.CompleteImport(videoID, media, "", "", library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(videoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -676,7 +676,7 @@ func TestAttachInboxSubtitleMovesBesideMedia(t *testing.T) {
 	_ = os.MkdirAll(dir, 0o755)
 	media := filepath.Join(dir, "Ep Sub [sub1].mkv")
 	_ = os.WriteFile(media, []byte("media"), 0o644)
-	if err := s.CompleteImport(videoID, media, "", "", library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(videoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -776,6 +776,55 @@ func TestEnqueueImportReplaceExistingMedia(t *testing.T) {
 	}
 	if !strings.Contains(payload, `"replace":true`) {
 		t.Fatalf("payload=%s", payload)
+	}
+}
+
+func TestCompleteImportRegistersDashThumb(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	root, err := s.GetRoot(rootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title:            "ThumbImp",
+		SourceURL:        "https://www.example.com/@thumbimp",
+		RootID:           rootID,
+		QualityProfileID: profileID,
+		Monitored:        false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "th1", Title: "T", WebpageURL: "https://www.example.com/watch?v=th1",
+		SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root.Path, "ThumbImp")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	media := filepath.Join(dir, "Show [th1].mkv")
+	thumb := filepath.Join(dir, "Show-thumb.jpg")
+	if err := os.WriteFile(media, []byte("m"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(thumb, []byte("t"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, foundThumb, _ := library.FindDownloadSidecars(media)
+	if foundThumb != thumb {
+		t.Fatalf("FindDownloadSidecars thumb=%q", foundThumb)
+	}
+	if err := s.CompleteImport(res.VideoID, media, "", "", foundThumb, nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := s.VideoThumbPath(res.VideoID)
+	if err != nil || !ok || got != thumb {
+		t.Fatalf("thumb path=%q ok=%v err=%v", got, ok, err)
 	}
 }
 

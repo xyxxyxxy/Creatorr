@@ -120,7 +120,7 @@ func TestApplyImportNFOUpdatesDBAndRegenerates(t *testing.T) {
 	_ = os.MkdirAll(dir, 0o755)
 	media := filepath.Join(dir, "Ep.mkv")
 	_ = os.WriteFile(media, []byte("media"), 0o644)
-	if err := s.CompleteImport(videoID, media, "", "", library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(videoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -201,7 +201,7 @@ func TestSoftFillDurationFromMedia(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Skipf("ffmpeg unavailable: %v (%s)", err, out)
 	}
-	if err := s.CompleteImport(videoID, media, "", "", library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(videoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SoftFillDurationFromMedia(context.Background(), videoID, media); err != nil {

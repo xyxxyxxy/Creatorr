@@ -324,12 +324,12 @@ func (s *Store) CompleteDownload(videoID int64, mediaPath, nfoPath, infoPath, th
 }
 
 // CompleteImport records files installed from the import folder or bound in place from the library.
-func (s *Store) CompleteImport(videoID int64, mediaPath, nfoPath, infoPath string, meta MediaCompleteMeta, taskID int64) error {
+func (s *Store) CompleteImport(videoID int64, mediaPath, nfoPath, infoPath, thumbPath string, subPaths []string, meta MediaCompleteMeta, taskID int64) error {
 	msg := "Imported from import folder"
 	if meta.InPlace || (meta.ImportSrc != "" && s.ImportInPlace(meta.ImportSrc)) {
 		msg = "Bound library file in place"
 	}
-	return s.completeMedia(videoID, mediaPath, nfoPath, infoPath, "", nil, meta, taskID, "imported", msg)
+	return s.completeMedia(videoID, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, taskID, "imported", msg)
 }
 
 func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumbPath string, subPaths []string, meta MediaCompleteMeta, taskID int64, event, message string) error {

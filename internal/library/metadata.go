@@ -174,6 +174,10 @@ func (s *Store) EnqueueMetadataRescanSeries(seriesID int64) (int64, error) {
 
 // EnqueueMetadataRescanVideo queues a single-video metadata refresh.
 func (s *Store) EnqueueMetadataRescanVideo(videoID int64) (int64, error) {
+	return s.enqueueMetadataRescanVideo(videoID, false)
+}
+
+func (s *Store) enqueueMetadataRescanVideo(videoID int64, gapFill bool) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
 	}
@@ -194,13 +198,19 @@ func (s *Store) EnqueueMetadataRescanVideo(videoID int64) (int64, error) {
 		_ = s.DB.SQL.QueryRow(`SELECT url FROM sources WHERE id = ?`, v.SourceID.Int64).Scan(&url)
 		domain = queueDomain(url)
 	}
+	payload := map[string]any{"video_id": videoID, "series_id": v.SeriesID}
+	msg := "Metadata rescan"
+	if gapFill {
+		payload["gap_fill"] = true
+		msg = "Import metadata gap-fill"
+	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
 		Kind:     queue.KindRescanMetadata,
 		Domain:   domain,
 		SeriesID: v.SeriesID,
 		VideoID:  videoID,
-		Message:  "Metadata rescan",
-		Payload:  map[string]any{"video_id": videoID, "series_id": v.SeriesID},
+		Message:  msg,
+		Payload:  payload,
 	})
 }
 
@@ -264,4 +274,32 @@ func (s *Store) EnqueueRefreshSidecarsVideo(videoID int64) (int64, error) {
 		return 0, fmt.Errorf("%w: sidecar refresh already queued", ErrConflict)
 	}
 	return id, err
+}
+
+// MaybeEnqueueImportSidecarGapFill soft-enqueues a gap-fill metadata rescan when the video
+// has a source_url after import. Fills empty episode metadata (plot/NFO fields) and missing
+// thumb/subs; never clobbers present files except rewriting episode NFO from the filled DB row.
+// Import still succeeds if enqueue fails: returns (0, false, nil) when skipped.
+func (s *Store) MaybeEnqueueImportSidecarGapFill(videoID int64) (taskID int64, enqueued bool, err error) {
+	v, err := s.GetVideo(videoID)
+	if err != nil {
+		return 0, false, err
+	}
+	url := ""
+	if v.SourceURL.Valid {
+		url = strings.TrimSpace(v.SourceURL.String)
+	}
+	if url == "" {
+		return 0, false, nil
+	}
+	if _, ok, err := s.HasPackAnchor(videoID); err != nil {
+		return 0, false, err
+	} else if !ok {
+		return 0, false, nil
+	}
+	id, err := s.enqueueMetadataRescanVideo(videoID, true)
+	if err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
 }
