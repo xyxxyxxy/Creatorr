@@ -31,6 +31,7 @@ type InfoJSONMediaMeta struct {
 	Height          int
 	FPS             float64
 	MediaType       string
+	Description     string
 }
 
 // MediaMetaFromInfoJSON reads duration/resolution/fps/media_type from a packed info.json.
@@ -53,6 +54,12 @@ func MediaMetaFromInfoJSON(path string) InfoJSONMediaMeta {
 	out.FPS = positiveFloatFromAny(data["fps"])
 	if s, ok := data["media_type"].(string); ok {
 		out.MediaType = NormalizeMediaType(s)
+	}
+	if s, ok := data["description"].(string); ok {
+		if len(s) > 4000 {
+			s = s[:4000]
+		}
+		out.Description = s
 	}
 	return out
 }

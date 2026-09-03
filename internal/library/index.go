@@ -459,6 +459,11 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 	}
 	mediaType := NormalizeMediaType(infoMeta.MediaType)
 
+	var descVal any
+	if infoMeta.Description != "" {
+		descVal = infoMeta.Description
+	}
+
 	setCols := `
 		UPDATE videos SET status = 'downloaded',
 		  acquired_at = ?,
@@ -471,8 +476,9 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		  width = COALESCE(?, width),
 		  height = COALESCE(?, height),
 		  fps = COALESCE(?, fps),
-		  media_type = CASE WHEN (media_type IS NULL OR media_type = '') AND ? != '' THEN ? ELSE media_type END`
-	args := []any{acquired, acquired, toolVal, formatVal, remuxVal, importSrcVal, durVal, widthVal, heightVal, fpsVal, mediaType, mediaType}
+		  media_type = CASE WHEN (media_type IS NULL OR media_type = '') AND ? != '' THEN ? ELSE media_type END,
+		  description = COALESCE(NULLIF(description, ''), ?)`
+	args := []any{acquired, acquired, toolVal, formatVal, remuxVal, importSrcVal, durVal, widthVal, heightVal, fpsVal, mediaType, mediaType, descVal}
 
 	if uploadFromInfo != "" && needDate {
 		var seriesID int64
