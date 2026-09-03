@@ -78,8 +78,9 @@ type Series struct {
 	RootName           string
 	QualityProfileName string
 	VideoCount         int64
-	DownloadedCount    int64 // ready: status downloaded or verify_failed
-	WantedCount        int64
+	DownloadedCount    int64 // successful: status downloaded only
+	WantedCount        int64 // status wanted (API); subset of PendingCount
+	PendingCount       int64 // open work: wanted | wanted_download_error | verify_failed
 	SourceCount        int64
 	Sources            []Source
 	Videos             []Video
@@ -91,9 +92,18 @@ func (ser Series) IsAudio() bool {
 	return ser.DeliveryMode == DeliveryAudio
 }
 
-// ProgressTotal is downloaded + wanted (list progress denominator).
+// ProgressTotal is downloaded + pending open work (list progress denominator).
 func (ser Series) ProgressTotal() int64 {
-	return ser.DownloadedCount + ser.WantedCount
+	return ser.DownloadedCount + ser.PendingCount
+}
+
+// ErrorCount is open error statuses in list progress (PendingCount minus wanted).
+func (ser Series) ErrorCount() int64 {
+	n := ser.PendingCount - ser.WantedCount
+	if n < 0 {
+		return 0
+	}
+	return n
 }
 
 // CreateSeriesParams creates a series and optional first source.
@@ -147,12 +157,16 @@ func seriesListStatusActive(status string) bool {
 	}
 }
 
+// seriesProgressOpenStatuses: still-open for list progress + Incomplete (wanted, download error, verify fail).
+const seriesProgressOpenStatuses = `'wanted', 'wanted_download_error', 'verify_failed'`
+
 const seriesListSelectCols = `s.id, s.title, s.root_id, s.quality_profile_id, s.monitored, s.delivery_mode, s.added_at,
 		       COALESCE(s.auto_ignore_media_types,'[]'),
 		       r.name, q.name,
 		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id),
-		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('downloaded', 'verify_failed')),
+		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status = 'downloaded'),
 		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status = 'wanted'),
+		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN (` + seriesProgressOpenStatuses + `)),
 		       (SELECT COUNT(*) FROM sources f WHERE f.series_id = s.id)`
 
 func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilter) {
@@ -178,16 +192,16 @@ func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilt
 	case SeriesListStatusUnmonitored:
 		b.WriteString(` AND s.monitored = 0`)
 	case SeriesListStatusComplete:
-		// Match list progress (downloaded+verify_failed / downloaded+verify_failed+wanted): no wanted left.
-		b.WriteString(` AND (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('downloaded', 'verify_failed', 'wanted')) > 0
+		// Match list progress: has downloaded or open work, and no open work left.
+		b.WriteString(` AND (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('downloaded', ` + seriesProgressOpenStatuses + `)) > 0
 			AND NOT EXISTS (
 				SELECT 1 FROM videos v
-				WHERE v.series_id = s.id AND v.status = 'wanted'
+				WHERE v.series_id = s.id AND v.status IN (` + seriesProgressOpenStatuses + `)
 			)`)
 	case SeriesListStatusIncomplete:
 		b.WriteString(` AND EXISTS (
 			SELECT 1 FROM videos v
-			WHERE v.series_id = s.id AND v.status = 'wanted'
+			WHERE v.series_id = s.id AND v.status IN (` + seriesProgressOpenStatuses + `)
 		)`)
 	case SeriesListStatusHasErrors:
 		b.WriteString(` AND (
@@ -217,7 +231,7 @@ func scanSeriesListRow(rows *sql.Rows) (Series, error) {
 		&ser.ID, &ser.Title, &ser.RootID, &ser.QualityProfileID, &mon, &ser.DeliveryMode, &ser.AddedAt,
 		&mediaTypeExclude,
 		&ser.RootName, &ser.QualityProfileName,
-		&ser.VideoCount, &ser.DownloadedCount, &ser.WantedCount,
+		&ser.VideoCount, &ser.DownloadedCount, &ser.WantedCount, &ser.PendingCount,
 		&ser.SourceCount,
 	); err != nil {
 		return Series{}, err
@@ -303,8 +317,9 @@ func (s *Store) GetSeries(id int64, withVideos bool) (*Series, error) {
 		       COALESCE(s.auto_ignore_media_types,'[]'),
 		       r.name, q.name,
 		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id),
-		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('downloaded', 'verify_failed')),
+		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status = 'downloaded'),
 		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status = 'wanted'),
+		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN (`+seriesProgressOpenStatuses+`)),
 		       (SELECT COUNT(*) FROM sources f WHERE f.series_id = s.id)
 		FROM series s
 		JOIN root_folders r ON r.id = s.root_id
@@ -316,7 +331,7 @@ func (s *Store) GetSeries(id int64, withVideos bool) (*Series, error) {
 		&ser.Meta.UniqueIDType, &ser.Meta.UniqueIDValue, &actorsJSON, &ser.Meta.Tagline, &ser.Meta.Country, &ser.Meta.MPAA, &ser.Meta.Premiered,
 		&mediaTypeExclude,
 		&ser.RootName, &ser.QualityProfileName,
-		&ser.VideoCount, &ser.DownloadedCount, &ser.WantedCount,
+		&ser.VideoCount, &ser.DownloadedCount, &ser.WantedCount, &ser.PendingCount,
 		&ser.SourceCount,
 	)
 	if err == sql.ErrNoRows {

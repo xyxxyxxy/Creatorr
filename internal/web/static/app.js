@@ -323,12 +323,15 @@
     let running = 0;
     let pending = 0;
     let max = 1;
+    let empty = true;
     if (panel) {
       panel.querySelectorAll("[data-task-row-status]").forEach((row) => {
+        empty = false;
         const st = row.getAttribute("data-task-row-status");
         if (st === "running") running++;
         else if (st === "pending") pending++;
       });
+      if (panel.querySelector("[data-scheduled-task]")) empty = false;
       const parallel = panel.querySelector('[aria-label^="Parallel "]');
       const m = parallel && parallel.getAttribute("aria-label").match(/Parallel\s+(\d+)/);
       if (m) {
@@ -336,7 +339,7 @@
         if (Number.isFinite(n) && n > 0) max = n;
       }
     }
-    return { running, pending, max };
+    return { running, pending, max, empty };
   }
 
   /**
@@ -399,16 +402,20 @@
     wrap.removeAttribute("data-slots-full");
     wrap.removeAttribute("data-lane-active");
     clearCooldownBusyTip(wrap);
-    const { running } = inferLaneActivity(wrap);
+    const { running, empty } = inferLaneActivity(wrap);
     const busy = running > 0;
+    const quietLabel = empty ? "Paused, no tasks" : "Paused";
     const tipText = "Some active tasks remain";
     wrap.setAttribute(
       "aria-label",
-      busy ? "Paused; tasks still running" : "Paused"
+      busy ? "Paused; tasks still running" : quietLabel
     );
     const label = wrap.querySelector("[data-cd-label]");
     const bar = wrap.querySelector("[data-cd-bar]");
-    if (label && bar && label.textContent === "Paused") {
+    const labelText = label ? label.textContent : "";
+    const isPausedLabel =
+      labelText === "Paused" || labelText === "Paused, no tasks";
+    if (label && bar && isPausedLabel) {
       const warning = bar.classList.contains("progress-warning");
       const indeterminate = !bar.hasAttribute("value");
       const full =
@@ -421,7 +428,7 @@
         }
         return;
       }
-      if (!busy && warning && full) return;
+      if (!busy && warning && full && labelText === quietLabel) return;
     }
     if (busy) {
       wrap.innerHTML =
@@ -433,7 +440,9 @@
       return;
     }
     wrap.innerHTML =
-      '<span data-cd-label class="shrink-0 leading-none text-warning">Paused</span>' +
+      '<span data-cd-label class="shrink-0 leading-none text-warning">' +
+      quietLabel +
+      "</span>" +
       '<progress data-cd-bar class="progress progress-warning w-24 sm:w-32 h-2 shrink-0" value="100" max="100" aria-hidden="true"></progress>';
   }
 
@@ -504,20 +513,24 @@
     wrap.removeAttribute("data-slots-full");
     wrap.removeAttribute("data-lane-active");
     clearCooldownBusyTip(wrap);
-    wrap.setAttribute("aria-label", "Idle");
+    const { empty } = inferLaneActivity(wrap);
+    const idleLabel = empty ? "Idle, no tasks" : "Idle";
+    wrap.setAttribute("aria-label", idleLabel);
     const label = wrap.querySelector("[data-cd-label]");
     const bar = wrap.querySelector("[data-cd-bar]");
     if (
       label &&
       bar &&
-      label.textContent === "Idle" &&
+      label.textContent === idleLabel &&
       bar.hasAttribute("value") &&
       Number(bar.value) === 0
     ) {
       return;
     }
     wrap.innerHTML =
-      '<span data-cd-label class="shrink-0 leading-none text-base-content/50">Idle</span>' +
+      '<span data-cd-label class="shrink-0 leading-none text-base-content/50">' +
+      idleLabel +
+      "</span>" +
       '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="0" max="100" aria-hidden="true"></progress>';
   }
 

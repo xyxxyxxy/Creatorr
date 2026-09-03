@@ -513,7 +513,29 @@ func TestListSeriesFilteredStatus(t *testing.T) {
 	assertOne(t, library.SeriesListFilter{Status: library.SeriesListStatusHasErrors}, errShow.ID, "has_errors")
 	assertOne(t, library.SeriesListFilter{Status: library.SeriesListStatusComplete}, completeShow.ID, "complete")
 	assertNotIn(t, library.SeriesListFilter{Status: library.SeriesListStatusIncomplete}, completeShow.ID, "incomplete excludes complete+ignored")
-	assertOne(t, library.SeriesListFilter{Status: library.SeriesListStatusIncomplete}, incompleteShow.ID, "incomplete")
+
+	incomplete, err := s.ListSeriesFiltered(library.SeriesListFilter{Status: library.SeriesListStatusIncomplete}, 20, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(incomplete) != 2 {
+		t.Fatalf("incomplete count=%d want 2 (wanted + download error)", len(incomplete))
+	}
+	gotIDs := map[int64]bool{}
+	for _, ser := range incomplete {
+		gotIDs[ser.ID] = true
+	}
+	if !gotIDs[incompleteShow.ID] || !gotIDs[errShow.ID] {
+		t.Fatalf("incomplete got %#v want ids %d and %d", incomplete, incompleteShow.ID, errShow.ID)
+	}
+	nInc, err := s.CountSeriesFiltered(library.SeriesListFilter{Status: library.SeriesListStatusIncomplete})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nInc != 2 {
+		t.Fatalf("incomplete count=%d want 2", nInc)
+	}
+
 	assertOne(t, library.SeriesListFilter{Status: library.SeriesListStatusUnmonitored}, incompleteShow.ID, "unmonitored")
 
 	monitored, err := s.ListSeriesFiltered(library.SeriesListFilter{Status: library.SeriesListStatusMonitored}, 20, 0)
@@ -522,6 +544,79 @@ func TestListSeriesFilteredStatus(t *testing.T) {
 	}
 	if len(monitored) != 3 {
 		t.Fatalf("monitored count=%d want 3", len(monitored))
+	}
+}
+
+func TestSeriesProgressCountsErrorsAsPending(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Progress Mix", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := s.AddSource(ser.ID, library.AddSourceParams{
+		URL: "https://www.example.com/c/progress",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`
+		INSERT INTO videos (series_id, source_id, remote_id, title, status)
+		VALUES
+			(?, ?, 'd1', 'Done', 'downloaded'),
+			(?, ?, 'd2', 'Done2', 'downloaded'),
+			(?, ?, 'd3', 'Done3', 'downloaded'),
+			(?, ?, 'd4', 'Done4', 'downloaded'),
+			(?, ?, 'd5', 'Done5', 'downloaded'),
+			(?, ?, 'd6', 'Done6', 'downloaded'),
+			(?, ?, 'e1', 'Err', 'wanted_download_error'),
+			(?, ?, 'v1', 'Verify', 'verify_failed'),
+			(?, ?, 'ig1', 'Skip', 'ignored')
+	`, ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID,
+		ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.GetSeries(ser.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DownloadedCount != 6 {
+		t.Fatalf("DownloadedCount=%d want 6", got.DownloadedCount)
+	}
+	if got.WantedCount != 0 {
+		t.Fatalf("WantedCount=%d want 0", got.WantedCount)
+	}
+	if got.PendingCount != 2 {
+		t.Fatalf("PendingCount=%d want 2 (error+verify)", got.PendingCount)
+	}
+	if got.ErrorCount() != 2 {
+		t.Fatalf("ErrorCount=%d want 2", got.ErrorCount())
+	}
+	if got.ProgressTotal() != 8 {
+		t.Fatalf("ProgressTotal=%d want 8", got.ProgressTotal())
+	}
+
+	list, err := s.ListSeriesFiltered(library.SeriesListFilter{Status: library.SeriesListStatusIncomplete}, 20, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].ID != ser.ID {
+		t.Fatalf("incomplete %#v want id=%d", list, ser.ID)
+	}
+	if list[0].ProgressTotal() != 8 || list[0].DownloadedCount != 6 {
+		t.Fatalf("list progress %d/%d want 6/8", list[0].DownloadedCount, list[0].ProgressTotal())
+	}
+	complete, err := s.ListSeriesFiltered(library.SeriesListFilter{Status: library.SeriesListStatusComplete}, 20, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range complete {
+		if row.ID == ser.ID {
+			t.Fatal("verify/download errors must not match complete")
+		}
 	}
 }
 

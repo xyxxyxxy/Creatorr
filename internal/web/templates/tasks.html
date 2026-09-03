@@ -23,7 +23,8 @@
           <span class="list-actions flex flex-wrap gap-2 shrink-0 items-center ml-auto">
             {{if ne .Domain "system"}}
             <span class="inline-flex items-center gap-2 shrink-0 font-normal text-sm">
-            <span class="inline-flex items-center gap-2 h-5" data-domain-cooldown{{if .Paused}} data-paused{{end}}{{if .ShowBusy}} data-slots-full{{else if .ShowActive}} data-lane-active{{end}}{{if and (not .Paused) .ShowCooldown}} data-ends-at="{{.CooldownEndsAt}}" data-total-sec="{{.CooldownTotalSec}}"{{end}} aria-label="{{if .Paused}}{{if gt .RunningCount 0}}Paused; tasks still running{{else}}Paused{{end}}{{else if .ShowCooldown}}{{.CooldownTip}}{{else if .ShowBusy}}Maximum of parallel tasks reached{{else if .ShowActive}}Running with free parallel slots{{else}}Idle{{end}}">
+            {{$laneEmpty := and (not .Tasks) (not .ScheduledTasks)}}
+            <span class="inline-flex items-center gap-2 h-5" data-domain-cooldown{{if .Paused}} data-paused{{end}}{{if .ShowBusy}} data-slots-full{{else if .ShowActive}} data-lane-active{{end}}{{if and (not .Paused) .ShowCooldown}} data-ends-at="{{.CooldownEndsAt}}" data-total-sec="{{.CooldownTotalSec}}"{{end}} aria-label="{{if .Paused}}{{if gt .RunningCount 0}}Paused; tasks still running{{else if $laneEmpty}}Paused, no tasks{{else}}Paused{{end}}{{else if .ShowCooldown}}{{.CooldownTip}}{{else if .ShowBusy}}Maximum of parallel tasks reached{{else if .ShowActive}}Running with free parallel slots{{else if $laneEmpty}}Idle, no tasks{{else}}Idle{{end}}">
               {{if .Paused}}
               {{if gt .RunningCount 0}}
               <span class="tooltip tooltip-top" data-tip="Some active tasks remain">
@@ -31,7 +32,7 @@
               </span>
               <progress data-cd-bar class="progress progress-warning w-24 sm:w-32 h-2 shrink-0" max="100" aria-hidden="true"></progress>
               {{else}}
-              <span data-cd-label class="shrink-0 leading-none text-warning">Paused</span>
+              <span data-cd-label class="shrink-0 leading-none text-warning">Paused{{if $laneEmpty}}, no tasks{{end}}</span>
               <progress data-cd-bar class="progress progress-warning w-24 sm:w-32 h-2 shrink-0" value="100" max="100" aria-hidden="true"></progress>
               {{end}}
               {{else if .ShowCooldown}}
@@ -50,7 +51,7 @@
               </span>
               <progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" max="100" aria-hidden="true"></progress>
               {{else}}
-              <span data-cd-label class="shrink-0 leading-none text-base-content/50">Idle</span>
+              <span data-cd-label class="shrink-0 leading-none text-base-content/50">Idle{{if $laneEmpty}}, no tasks{{end}}</span>
               <progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="0" max="100" aria-hidden="true"></progress>
               {{end}}
             </span>
@@ -106,7 +107,7 @@
             {{end}}
           </span>
         </span>
-        {{if ne .Domain "system"}}
+        {{if and (ne .Domain "system") (or .Tasks .ScheduledTasks)}}
         <span class="flex flex-wrap items-center gap-x-4 gap-y-2 w-full font-normal text-sm">
           <span class="inline-flex flex-wrap items-center gap-4 min-w-0">
           {{if gt .MaxDownloadQueue 0}}
@@ -163,8 +164,6 @@
     {{range .ScheduledTasks}}{{template "scheduled_task_row" .}}{{end}}
     {{range .Tasks}}{{template "task_row" .}}{{end}}
   </ul>
-  {{else}}
-  {{template "list_empty" "No tasks."}}
   {{end}}
   {{template "pagination" .Page}}
   {{template "list_panel_end"}}

@@ -1916,9 +1916,11 @@ components:
         downloaded_count:
           type: integer
           format: int64
+          description: Videos with status downloaded (successful only; excludes verify_failed).
         wanted_count:
           type: integer
           format: int64
+          description: Videos with status wanted (excludes wanted_download_error and verify_failed).
         source_count:
           type: integer
           format: int64
