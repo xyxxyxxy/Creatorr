@@ -1302,6 +1302,9 @@
     if (typeof window.refreshImportFullScanNote === "function") {
       window.refreshImportFullScanNote(ev);
     }
+    if (typeof window.refreshImportTasksBusy === "function") {
+      window.refreshImportTasksBusy(ev);
+    }
   }
 
   // Full-page nav that should not jump to top:

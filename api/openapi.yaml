@@ -906,6 +906,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/import/picker:
+    get:
+      tags: [library]
+      operationId: getImportPicker
+      summary: Series and video catalog for Import Match UI
+      description: >
+        Returns every series (id, title, poster_url) and every indexed video row used by
+        the Import Match modal. Loaded asynchronously after the Import page shell paints;
+        poster_url is always set to the series art path (no disk check).
+      responses:
+        "200":
+          description: Picker catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportPickerResponse"
+        "500":
+          description: Catalog load failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/import/scan:
     post:
       tags: [library]
@@ -1335,6 +1358,55 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ImportCandidate"
+
+    ImportPickerSeries:
+      type: object
+      required: [id, title]
+      properties:
+        id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        poster_url:
+          type: string
+          description: Series poster path (`/series/{id}/art/poster`); always set, no disk probe
+
+    ImportPickerVideo:
+      type: object
+      required: [id, series_id, title, series_title, status, has_media, has_thumb]
+      properties:
+        id:
+          type: integer
+          format: int64
+        series_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        series_title:
+          type: string
+        status:
+          type: string
+        has_media:
+          type: boolean
+          description: True when a kind=video files row exists
+        has_thumb:
+          type: boolean
+          description: True when a kind=thumb files row exists
+
+    ImportPickerResponse:
+      type: object
+      required: [series, videos]
+      properties:
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportPickerSeries"
+        videos:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportPickerVideo"
 
     HistoryItem:
       type: object

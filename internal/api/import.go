@@ -2,15 +2,24 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/api/gen"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 func (s *Server) ScanImport(w http.ResponseWriter, r *http.Request, params gen.ScanImportParams) {
+	if busy, err := s.Queue.HasPendingOrRunningKind(queue.KindImport, queue.SystemDomain); err != nil {
+		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "import scan failed", err.Error())
+		return
+	} else if busy {
+		writeLibraryErr(w, fmt.Errorf("%w: import already queued or running", library.ErrConflict), "import scan failed")
+		return
+	}
 	var rootID int64
 	if params.RootId != nil {
 		rootID = *params.RootId
@@ -21,6 +30,43 @@ func (s *Server) ScanImport(w http.ResponseWriter, r *http.Request, params gen.S
 		return
 	}
 	writeJSON(w, http.StatusOK, mapImportScan(res))
+}
+
+func (s *Server) GetImportPicker(w http.ResponseWriter, r *http.Request) {
+	series, err := s.Library.ListImportPickerSeries()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "import picker series failed", err.Error())
+		return
+	}
+	videos, err := s.Library.ListImportPickerVideos()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "import picker videos failed", err.Error())
+		return
+	}
+	out := gen.ImportPickerResponse{
+		Series: make([]gen.ImportPickerSeries, 0, len(series)),
+		Videos: make([]gen.ImportPickerVideo, 0, len(videos)),
+	}
+	for _, ser := range series {
+		poster := fmt.Sprintf("/series/%d/art/poster", ser.ID)
+		out.Series = append(out.Series, gen.ImportPickerSeries{
+			Id:        ser.ID,
+			Title:     ser.Title,
+			PosterUrl: &poster,
+		})
+	}
+	for _, v := range videos {
+		out.Videos = append(out.Videos, gen.ImportPickerVideo{
+			Id:          v.ID,
+			SeriesId:    v.SeriesID,
+			Title:       v.Title,
+			SeriesTitle: v.SeriesTitle,
+			Status:      v.Status,
+			HasMedia:    v.HasMedia,
+			HasThumb:    v.HasThumb,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) ImportManual(w http.ResponseWriter, r *http.Request) {

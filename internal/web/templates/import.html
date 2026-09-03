@@ -30,16 +30,16 @@
 <label class="form-control w-full min-w-0">
   <div class="label py-1"><span class="label-text text-sm opacity-70">Scan folder</span></div>
   <div class="join w-full">
-    <select id="import-scan-scope" class="select select-bordered join-item font-mono text-sm grow min-w-0" aria-label="Scan folder">
+    <select id="import-scan-scope" class="select select-bordered join-item font-mono text-sm grow min-w-0" aria-label="Scan folder"{{if .ImportBusy}} disabled{{end}}>
       <option value="0" selected>Inbox: {{.ImportPath}}</option>
       {{range .Roots}}
       <option value="{{.ID}}">{{if .Name}}{{.Name}}: {{.Path}}{{else}}{{.Path}}{{end}}</option>
       {{end}}
     </select>
-    <button type="button" class="btn join-item shrink-0" id="btn-import-rescan" title="Scan again for new files without changing current matches">Rescan</button>
+    <button type="button" class="btn join-item shrink-0" id="btn-import-rescan" title="Scan again for new files without changing current matches"{{if .ImportBusy}} disabled{{end}}>Rescan</button>
   </div>
 </label>
-<div class="list-actions flex flex-col gap-3" id="import-bulk">
+<div class="list-actions flex flex-col gap-3{{if .ImportBusy}} hidden{{end}}" id="import-bulk">
   <div id="btn-import-wrap" class="w-full block p-0.5 rounded-[calc(0.125rem+var(--radius-field))]">
     <button type="button" class="btn btn-primary w-full tooltip tooltip-top" id="btn-import" disabled data-tip="Review ready items, then schedule import">Import</button>
   </div>
@@ -55,7 +55,7 @@
     </label>
   </div>
 </div>
-<div id="status" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm opacity-60 mt-2">
+<div id="status" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm opacity-60 mt-2{{if .ImportBusy}} hidden{{end}}">
   <span id="status-scan"></span>
   <span id="status-match" class="text-right"></span>
 </div>
@@ -64,11 +64,18 @@
   <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
   <span class="text-sm opacity-70">Scanning folder…</span>
 </div>
-<div id="import-full-scan-note" role="alert" class="alert alert-warning text-sm mt-2{{if not .IncompleteFullScan}} hidden{{end}}">
+<div id="import-tasks-busy" class="{{if not .ImportBusy}}hidden {{end}}flex flex-col items-center justify-center gap-3 py-12 mt-2" role="status" aria-live="polite" aria-busy="true" data-import-busy="{{if .ImportBusy}}1{{else}}0{{end}}">
+  <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
+  <div class="text-sm opacity-70 text-center max-w-md space-y-1">
+    <p>Imports are being processed.</p>
+    <p><a href="/tasks" class="link link-primary">View progress on Tasks</a>.</p>
+  </div>
+</div>
+<div id="import-full-scan-note" role="alert" class="alert alert-warning text-sm mt-2{{if or (not .IncompleteFullScan) .ImportBusy}} hidden{{end}}">
   <i data-lucide="triangle-alert" class="size-5 shrink-0" aria-hidden="true"></i>
   <span>'Full scan' is incomplete on one or more sources. Not all videos may be indexed yet for auto-match.</span>
 </div>
-<ul id="import-list" class="flex flex-col gap-3 w-full list-none p-0 m-0 mt-2" aria-label="Import candidates"></ul>
+<ul id="import-list" class="flex flex-col gap-3 w-full list-none p-0 m-0 mt-2{{if .ImportBusy}} hidden{{end}}" aria-label="Import candidates"></ul>
 <div id="import-pager" class="hidden flex flex-wrap items-center justify-between gap-2 mt-3">
   <p class="text-sm opacity-60" id="import-pager-label"></p>
   <div class="join">
@@ -125,8 +132,12 @@
 </div>
 
 <script>
-const SERIES = {{toJSON .Series}};
-const VIDEOS = {{toJSON .Videos}};
+let SERIES = [];
+let VIDEOS = [];
+/** False until GET /api/import/picker fills SERIES/VIDEOS. */
+let importPickerReady = false;
+/** @type {Promise<void>|null} */
+let importPickerPromise = null;
 const CREATE = '__create__';
 const PAGE_SIZE = 50;
 const SIDECAR_ROLES = { nfo:1, json:1, thumb:1, sub:1 };
@@ -147,6 +158,45 @@ let pendingImportJobs = [];
 let autoMatchStale = false;
 /** @type {AbortController|null} */
 let importScanAbort = null;
+let importTasksBusy = false;
+
+async function loadImportPicker() {
+  if (importPickerReady) return;
+  if (importPickerPromise) return importPickerPromise;
+  importPickerPromise = (async () => {
+    try {
+      const res = await fetch('/api/import/picker', {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      if (!res.ok) {
+        showImportMsg('Library index', 'Failed to load Match catalog: ' + await res.text(), { error: true });
+        return;
+      }
+      const data = await res.json();
+      SERIES = Array.isArray(data.series) ? data.series : [];
+      VIDEOS = Array.isArray(data.videos) ? data.videos : [];
+      importPickerReady = true;
+      // Scrub picks that need has_media now that the catalog is known.
+      importBundles.forEach((b) => {
+        if (b.kind !== 'media') return;
+        const key = bundleStateKey(b);
+        scrubMediaVideoPick(getUIState(key), key);
+      });
+      if (matchCtx && matchCtx.kind === 'media') {
+        scrubMediaVideoPick(matchCtx.draft, matchCtx.key);
+        renderMatchModalLists();
+      }
+      if (importCandidates.length) renderImportPage();
+      else updateBulkSeriesBtn();
+    } catch (err) {
+      showImportMsg('Library index', 'Failed to load Match catalog: ' + (err && err.message ? err.message : String(err)), { error: true });
+    } finally {
+      importPickerPromise = null;
+    }
+  })();
+  return importPickerPromise;
+}
 
 function showImportMsg(title, body, opts) {
   // Close Add series / Add video so the toast is not trapped under them.
@@ -457,6 +507,17 @@ function matchActionsHTML(st, kind) {
       </button>
     </div>`;
   }
+  if (!importPickerReady) {
+    return `
+    <div class="flex items-center gap-3 shrink-0 self-center">
+      ${status}
+      <span class="tooltip tooltip-top inline-flex" data-tip="Loading library index">
+        <button type="button" class="btn btn-soft btn-primary btn-square" disabled aria-label="Loading library index">
+          <span class="loading loading-spinner loading-sm" aria-hidden="true"></span>
+        </button>
+      </span>
+    </div>`;
+  }
   return `
     <div class="flex items-center gap-3 shrink-0 self-center">
       ${status}
@@ -500,24 +561,24 @@ function createSeriesListRowHTML() {
   </li>`;
 }
 
+function seriesPosterHTML(s) {
+  const fallback = `<div class="bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true"><i data-lucide="tv" class="size-5 opacity-40"></i></div>`;
+  if (!s || !s.poster_url) return fallback;
+  return `<img class="size-10 rounded-full object-cover" src="${escapeHtml(s.poster_url)}" alt="" width="40" height="40" loading="lazy" onerror="this.onerror=null;this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden')" /><div class="hidden bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true"><i data-lucide="tv" class="size-5 opacity-40"></i></div>`;
+}
+
 function seriesListRowHTML(s, selectedId) {
   const sel = selectedId && Number(selectedId) === Number(s.id);
-  const img = s.poster_url
-    ? `<img class="size-10 rounded-full object-cover" src="${escapeHtml(s.poster_url)}" alt="" width="40" height="40" loading="lazy" />`
-    : `<div class="bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true"><i data-lucide="tv" class="size-5 opacity-40"></i></div>`;
   return `<li class="list-row cursor-pointer ${sel ? 'bg-base-200' : ''}" data-series-id="${s.id}" role="option" aria-selected="${sel ? 'true' : 'false'}">
-    <div class="relative shrink-0">${img}</div>
+    <div class="relative shrink-0">${seriesPosterHTML(s)}</div>
     <div class="list-col-grow min-w-0 font-medium truncate">${escapeHtml(s.title)}</div>
   </li>`;
 }
 
 function lockedSeriesRowHTML(s) {
   const title = s ? s.title : 'Series';
-  const img = s && s.poster_url
-    ? `<img class="size-10 rounded-full object-cover" src="${escapeHtml(s.poster_url)}" alt="" width="40" height="40" loading="lazy" />`
-    : `<div class="bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true"><i data-lucide="tv" class="size-5 opacity-40"></i></div>`;
   return `<li class="list-row bg-base-200" aria-selected="true">
-    <div class="relative shrink-0">${img}</div>
+    <div class="relative shrink-0">${seriesPosterHTML(s)}</div>
     <div class="list-col-grow min-w-0 font-medium truncate">${escapeHtml(title)}</div>
     <button type="button" class="btn btn-ghost btn-sm btn-square shrink-0 tooltip tooltip-left" data-unlock-series aria-label="Change series" data-tip="Change series">
       <i data-lucide="x" class="size-4"></i>
@@ -963,6 +1024,10 @@ function uploadDateToRFC(dateStr) {
 }
 
 function openMatchModal(key, kind, hints) {
+  if (!importPickerReady) {
+    showImportMsg('Match', 'Library index still loading', { warning: true });
+    return;
+  }
   const st = getUIState(key);
   if (kind === 'media') scrubMediaVideoPick(st, key);
   matchCtx = {
@@ -996,6 +1061,10 @@ function openMatchModal(key, kind, hints) {
 }
 
 function openBulkSeriesMatchModal() {
+  if (!importPickerReady) {
+    showImportMsg('Match', 'Library index still loading', { warning: true });
+    return;
+  }
   matchCtx = {
     key: '',
     kind: 'bulk-series',
@@ -1410,7 +1479,7 @@ function updateBulkSeriesBtn() {
   const btn = document.getElementById('btn-import-bulk-series');
   if (!btn) return;
   const n = countBundlesMissingSeries();
-  btn.disabled = n === 0;
+  btn.disabled = !importPickerReady || n === 0;
 }
 
 function importTotalPages(list) {
@@ -1576,6 +1645,7 @@ function pruneImportUIState(candidates) {
 }
 
 function setImportScanBusy(busy) {
+  const blocked = !!busy || importTasksBusy;
   const scope = document.getElementById('import-scan-scope');
   const rescan = document.getElementById('btn-import-rescan');
   const spinner = document.getElementById('import-scan-busy');
@@ -1583,14 +1653,47 @@ function setImportScanBusy(busy) {
   const list = importListEl();
   const pager = document.getElementById('import-pager');
   const empty = document.getElementById('import-empty');
-  if (scope) scope.disabled = !!busy;
-  if (rescan) rescan.disabled = !!busy;
-  if (spinner) spinner.classList.toggle('hidden', !busy);
-  if (status) status.classList.toggle('hidden', !!busy);
-  if (busy) {
+  if (scope) scope.disabled = blocked;
+  if (rescan) rescan.disabled = blocked;
+  // Folder-scan spinner yields to import-tasks busy panel.
+  if (spinner) spinner.classList.toggle('hidden', !busy || importTasksBusy);
+  if (status) status.classList.toggle('hidden', blocked);
+  if (blocked) {
     if (list) list.classList.add('hidden');
     if (pager) pager.classList.add('hidden');
     if (empty) empty.classList.add('hidden');
+  } else if (list) {
+    list.classList.remove('hidden');
+  }
+}
+
+function setImportTasksBusy(busy) {
+  importTasksBusy = !!busy;
+  const panel = document.getElementById('import-tasks-busy');
+  const bulk = document.getElementById('import-bulk');
+  const note = document.getElementById('import-full-scan-note');
+  const scope = document.getElementById('import-scan-scope');
+  const rescan = document.getElementById('btn-import-rescan');
+  const status = document.getElementById('status');
+  const list = importListEl();
+  const pager = document.getElementById('import-pager');
+  const empty = document.getElementById('import-empty');
+  const scanSpinner = document.getElementById('import-scan-busy');
+  if (panel) {
+    panel.classList.toggle('hidden', !importTasksBusy);
+    panel.dataset.importBusy = importTasksBusy ? '1' : '0';
+  }
+  if (bulk) bulk.classList.toggle('hidden', importTasksBusy);
+  if (scope) scope.disabled = importTasksBusy;
+  if (rescan) rescan.disabled = importTasksBusy;
+  if (scanSpinner && importTasksBusy) scanSpinner.classList.add('hidden');
+  if (status) status.classList.toggle('hidden', importTasksBusy);
+  if (importTasksBusy) {
+    if (importScanAbort) importScanAbort.abort();
+    if (list) list.classList.add('hidden');
+    if (pager) pager.classList.add('hidden');
+    if (empty) empty.classList.add('hidden');
+    if (note) note.classList.add('hidden');
   } else if (list) {
     list.classList.remove('hidden');
   }
@@ -1837,20 +1940,25 @@ async function runImportQueue(verifyMedia) {
   document.getElementById('modal-import-summary').checked = false;
   pendingImportJobs = [];
   removePaths(removed);
-  if (!importCandidates.length) {
-    setImportEmpty('All pending imports queued.');
-  }
-  renderImportPage();
   const queuedMsg = 'Queued ' + ok + ' item(s)' + (fail ? '; ' + fail + ' failed' : '') +
     (verifyMedia && ok ? ' (verify after import)' : '') + '.';
   const toastOpts = fail && !ok ? { error: true } : (fail ? { warning: true } : {});
   showImportMsg('Import queued', queuedMsg, toastOpts);
+  if (ok > 0) {
+    setImportTasksBusy(true);
+    return;
+  }
+  if (!importCandidates.length) {
+    setImportEmpty('All pending imports queued.');
+  }
+  renderImportPage();
 }
 
 document.getElementById('btn-import-now').addEventListener('click', () => runImportQueue(false));
 document.getElementById('btn-import-now-verify').addEventListener('click', () => runImportQueue(true));
 
 async function runImportScan(opts) {
+  if (importTasksBusy) return;
   const preserveMatches = !!(opts && opts.preserveMatches);
   const notifyAutoMatch = !(opts && opts.notifyAutoMatch === false);
   const scope = document.getElementById('import-scan-scope');
@@ -2061,6 +2169,10 @@ document.getElementById('btn-import-match-cancel').addEventListener('click', () 
 async function refreshImportFullScanNote(ev) {
   const el = document.getElementById('import-full-scan-note');
   if (!el) return;
+  if (importTasksBusy) {
+    el.classList.add('hidden');
+    return;
+  }
   let kind = '';
   if (ev && ev.data) {
     try { kind = JSON.parse(ev.data || '{}').kind || ''; } catch (_) {}
@@ -2080,7 +2192,40 @@ async function refreshImportFullScanNote(ev) {
 }
 window.refreshImportFullScanNote = refreshImportFullScanNote;
 
-runImportScan({ notifyAutoMatch: false });
+async function refreshImportTasksBusy(ev) {
+  if (!document.getElementById('import-tasks-busy')) return;
+  let kind = '';
+  if (ev && ev.data) {
+    try { kind = JSON.parse(ev.data || '{}').kind || ''; } catch (_) {}
+  }
+  if (ev && kind && kind !== 'import') return;
+  try {
+    const res = await fetch('/actions/import-busy-status', {
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+    });
+    if (!res.ok) return;
+    const data = await res.json().catch(() => ({}));
+    const next = !!data.busy;
+    const was = importTasksBusy;
+    setImportTasksBusy(next);
+    if (was && !next) {
+      runImportScan({ notifyAutoMatch: false });
+      refreshImportFullScanNote(null);
+    }
+  } catch (_) {}
+}
+window.refreshImportTasksBusy = refreshImportTasksBusy;
+
+loadImportPicker();
+(function bootImportPage() {
+  const panel = document.getElementById('import-tasks-busy');
+  if (panel && panel.dataset.importBusy === '1') {
+    importTasksBusy = true;
+    return;
+  }
+  runImportScan({ notifyAutoMatch: false });
+})();
 </script>
 {{template "add_series_modal" .}}
 {{template "add_video_modal" .}}
