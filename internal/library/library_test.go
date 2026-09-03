@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1611,6 +1613,152 @@ func TestEnqueueDownloadWantedRoundRobinFair(t *testing.T) {
 	`, pre).Scan(&firstSeries)
 	if firstSeries != s2 {
 		t.Fatalf("fair RR: want series %d (zero active) before series %d, got %d", s2, s1, firstSeries)
+	}
+}
+
+func TestEnqueueDownloadWantedSameHostQueueCapFair(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	_ = settings.SetDomainDefault(s.DB, 0, 2, 2, "10M", "0", false)
+
+	for i := 1; i <= 5; i++ {
+		ser, err := s.CreateSeries(library.CreateSeriesParams{
+			Title: fmt.Sprintf("S%d", i), SourceURL: "https://same.example.com/@x" + strconv.Itoa(i),
+			RootID: rootID, QualityProfileID: profileID, Monitored: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		srcID := ser.Sources[0].ID
+		for j := 1; j <= 3; j++ {
+			rid := fmt.Sprintf("s%d-v%d", i, j)
+			if _, err := s.UpsertListed(ser.ID, library.ListedVideo{
+				RemoteID: rid, Title: rid, WebpageURL: "https://same.example.com/" + rid,
+				SourceID: srcID, UploadDate: time.Date(2024, 1, j, 12, 0, 0, 0, time.UTC).Format(time.RFC3339),
+			}, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	n, err := s.EnqueueDownloadWanted()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("want 2 enqueues (queue cap), got %d", n)
+	}
+	rows, err := s.DB.SQL.Query(`
+		SELECT DISTINCT series_id FROM tasks
+		WHERE kind = 'download' AND status = 'pending'
+		ORDER BY series_id
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var got []int64
+	for rows.Next() {
+		var sid int64
+		if err := rows.Scan(&sid); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, sid)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 distinct series, got %v", got)
+	}
+	if got[0] == got[1] {
+		t.Fatalf("want two different series, got %v", got)
+	}
+}
+
+func TestEnqueueDownloadWantedCrossTickServesNeverQueued(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	_ = settings.SetDomainDefault(s.DB, 0, 2, 2, "10M", "0", false)
+
+	var seriesIDs []int64
+	for i := 1; i <= 4; i++ {
+		ser, err := s.CreateSeries(library.CreateSeriesParams{
+			Title: fmt.Sprintf("C%d", i), SourceURL: "https://cross.example.com/@c" + strconv.Itoa(i),
+			RootID: rootID, QualityProfileID: profileID, Monitored: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		srcID := ser.Sources[0].ID
+		seriesIDs = append(seriesIDs, ser.ID)
+		for j := 1; j <= 2; j++ {
+			rid := fmt.Sprintf("c%d-v%d", i, j)
+			if _, err := s.UpsertListed(ser.ID, library.ListedVideo{
+				RemoteID: rid, Title: rid, WebpageURL: "https://cross.example.com/" + rid,
+				SourceID: srcID, UploadDate: time.Date(2024, 1, j, 12, 0, 0, 0, time.UTC).Format(time.RFC3339),
+			}, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	n, err := s.EnqueueDownloadWanted()
+	if err != nil || n != 2 {
+		t.Fatalf("first tick: n=%d err=%v", n, err)
+	}
+	var firstCohort []int64
+	rows, err := s.DB.SQL.Query(`
+		SELECT series_id FROM tasks WHERE kind = 'download' AND status = 'pending' ORDER BY series_id
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var sid int64
+		if err := rows.Scan(&sid); err != nil {
+			_ = rows.Close()
+			t.Fatal(err)
+		}
+		firstCohort = append(firstCohort, sid)
+	}
+	_ = rows.Close()
+	if len(firstCohort) != 2 {
+		t.Fatalf("first tick want 2 series, got %v", firstCohort)
+	}
+	// Lowest ids win when all never-served.
+	if firstCohort[0] != seriesIDs[0] || firstCohort[1] != seriesIDs[1] {
+		t.Fatalf("first tick want series %d,%d got %v", seriesIDs[0], seriesIDs[1], firstCohort)
+	}
+
+	// Finish first cohort so active=0 but last-enqueue history remains.
+	if _, err := s.DB.SQL.Exec(`UPDATE tasks SET status = 'done' WHERE kind = 'download' AND status = 'pending'`); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err = s.EnqueueDownloadWanted()
+	if err != nil || n != 2 {
+		t.Fatalf("second tick: n=%d err=%v", n, err)
+	}
+	var second []int64
+	rows, err = s.DB.SQL.Query(`
+		SELECT series_id FROM tasks WHERE kind = 'download' AND status = 'pending' ORDER BY series_id
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var sid int64
+		if err := rows.Scan(&sid); err != nil {
+			_ = rows.Close()
+			t.Fatal(err)
+		}
+		second = append(second, sid)
+	}
+	_ = rows.Close()
+	if len(second) != 2 {
+		t.Fatalf("second tick want 2 series, got %v", second)
+	}
+	if second[0] != seriesIDs[2] || second[1] != seriesIDs[3] {
+		t.Fatalf("second tick want never-queued %d,%d got %v (first cohort was %v)",
+			seriesIDs[2], seriesIDs[3], second, firstCohort)
 	}
 }
 
