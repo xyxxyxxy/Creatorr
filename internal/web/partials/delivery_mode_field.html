@@ -2,15 +2,13 @@
 {{/*
   Delivery method: large joined Video | Audio buttons (series-list icons film / headphones).
   Expects: Value (video|audio).
-  Optional: Info, Help (alias→Info), Hint.
+  Optional: Hint (default explains video vs audio).
 */}}
 {{$val := .Value}}{{if not $val}}{{$val = "video"}}{{end}}
-{{$info := .Info}}{{if not $info}}{{$info = .Help}}{{end}}
-{{if not $info}}{{$info = "Audio downloads podcast-like VOD audio extracted from the source videos, not music or albums. Video downloads the full video file."}}{{end}}
+{{$hint := .Hint}}{{if not $hint}}{{$hint = "Audio downloads podcast-like VOD audio extracted from the source videos, not music or albums. Video downloads the full video file."}}{{end}}
 <div class="w-full">
-  <div class="flex items-center gap-1 mb-2">
+  <div class="mb-2">
     <span class="text-sm font-medium">Delivery method</span>
-    {{template "field_info" (dict "Info" $info)}}
   </div>
   <div class="join delivery-mode-join w-full" role="group" aria-label="Delivery method">
     <label class="btn btn-lg join-item flex-1 h-auto min-h-14 py-3 gap-2">
@@ -24,8 +22,6 @@
       <span>Audio</span>
     </label>
   </div>
-  {{if .Hint}}
-  <p class="label whitespace-normal mt-1">{{.Hint}}</p>
-  {{end}}
+  <p class="label whitespace-normal mt-1">{{$hint}}</p>
 </div>
 {{end}}

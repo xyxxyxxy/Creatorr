@@ -21,19 +21,14 @@
   "Required" true
   "Validator" true
   "ValidatorHint" "Title is required"
-  "Info" .TitleInfo
+  "Hint" .TitleInfo
   "Disabled" .TitleDisabled
   "DisabledTitle" .TitleDisabledTitle
 )}}
 {{if .RootDisabled}}
 <input type="hidden" name="root_id" value="{{.RootID}}" />
 <fieldset class="fieldset">
-  <legend class="fieldset-legend">
-    <span class="inline-flex items-center gap-1">
-      <span class="opacity-60">Root folder</span>
-      {{if .RootInfo}}{{template "field_info" (dict "Info" .RootInfo)}}{{end}}
-    </span>
-  </legend>
+  <legend class="fieldset-legend"><span class="opacity-60">Root folder</span></legend>
   <span class="tooltip tooltip-top block w-full" {{if .RootDisabledTitle}}data-tip="{{.RootDisabledTitle}}"{{end}}>
     <select class="select w-full pointer-events-none" disabled>
       {{range .Roots}}
@@ -44,27 +39,18 @@
 </fieldset>
 {{else}}
 <fieldset class="fieldset">
-  <legend class="fieldset-legend">
-    <span class="inline-flex items-center gap-1">
-      Root folder
-      {{if .RootInfo}}{{template "field_info" (dict "Info" .RootInfo)}}{{end}}
-    </span>
-  </legend>
+  <legend class="fieldset-legend">Root folder</legend>
   <select name="root_id" class="select w-full validator" required {{if not .Roots}}disabled{{end}}>
     {{range .Roots}}
     <option value="{{.ID}}"{{if eq .ID $.RootID}} selected{{end}}>{{if .Name}}{{.Name}} ({{.Path}}){{else}}{{.Path}}{{end}}</option>
     {{end}}
   </select>
   <p class="validator-hint hidden">Root folder is required</p>
+  {{if .RootInfo}}<p class="label whitespace-normal">{{.RootInfo}}</p>{{end}}
 </fieldset>
 {{end}}
 <fieldset class="fieldset" data-quality-profile-fieldset>
-  <legend class="fieldset-legend">
-    <span class="inline-flex items-center gap-1">
-      Quality profile
-      {{if .ProfileInfo}}{{template "field_info" (dict "Info" .ProfileInfo)}}{{end}}
-    </span>
-  </legend>
+  <legend class="fieldset-legend">Quality profile</legend>
   <input type="hidden" value="{{.ProfileID}}" data-quality-profile-hidden {{if $isAudio}}name="quality_profile_id"{{else}}disabled{{end}} />
   <span class="{{if $isAudio}}tooltip tooltip-top {{end}}block w-full" data-quality-profile-tip {{if $isAudio}}data-tip="Audio always uses the best available quality."{{end}}>
     <select class="select w-full{{if not $isAudio}} validator{{end}}" data-quality-profile-select {{if not .Profiles}}disabled{{end}}{{if $isAudio}} disabled{{else}} name="quality_profile_id" required{{end}}>
@@ -74,5 +60,6 @@
     </select>
   </span>
   <p class="validator-hint hidden">Quality profile is required</p>
+  <p class="label whitespace-normal">Quality format used for video downloads. Does not change already downloaded videos.</p>
 </fieldset>
 {{end}}
