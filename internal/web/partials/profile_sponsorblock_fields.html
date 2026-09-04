@@ -54,7 +54,7 @@
 
   <fieldset class="fieldset gap-2">
     <legend class="fieldset-legend"><h3 class="font-semibold m-0 text-inherit">Encoding</h3></legend>
-    <p>By default, cuts are only spliced at keyframes, so cut points are often early or late. Re-encode will cut at exact timestamps without needing keyframes. Because re-encode is heavy on the host, it is scheduled as a separate low priority system task.</p>
+    <p>By default, cuts are only spliced at keyframes, so cut points are often early or late. Re-encode will cut at exact timestamps without needing keyframes (always H.264 for host cost). Because re-encode is heavy on the host, it is scheduled as a separate low priority system task.</p>
     <div class="flex w-full gap-4 items-start flex-wrap">
       <label class="label cursor-pointer gap-2 justify-start flex-1 min-w-0">
         <input type="hidden" name="sponsorblock_reencode_cut" value="0" />

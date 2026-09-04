@@ -2,13 +2,12 @@ package sponsorblock
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
 )
 
-// EncodePlan holds bitrate/codec-matched ffmpeg args for accurate re-encode cuts.
+// EncodePlan holds bitrate-matched H.264 ffmpeg args for accurate re-encode cuts.
 type EncodePlan struct {
-	VideoEncoder string // libx264, libvpx-vp9, libsvtav1, …
+	VideoEncoder string // always libx264 for video re-encode
 	AudioEncoder string // aac, libopus, or "" if no audio
 	VideoBitrate int64  // bits per second
 	AudioBitrate int64
@@ -25,17 +24,23 @@ const (
 	minVideoBitrate = int64(300_000)
 	maxVideoBitrate = int64(40_000_000)
 	defaultAudioBR  = int64(160_000)
+	// efficientCodecBitrateFactor pads H.264 bitrate when the source used a
+	// more efficient codec (AV1 / VP9 / VP8).
+	efficientCodecBitrateFactor = 1.5
 )
 
-// BuildEncodePlan picks encoders and bitrates from a probe (prefer matching source codecs).
+// BuildEncodePlan picks bitrates from a probe and always targets libx264 for video.
+// Audio still matches the source family (aac / libopus). AV1 and VP9/VP8 sources
+// get a 1.5× video bitrate bump to offset H.264 efficiency loss.
 func BuildEncodePlan(probe MediaProbe) EncodePlan {
 	p := EncodePlan{
-		Width:      evenDim(probe.Width, 1280),
-		Height:     evenDim(probe.Height, 720),
-		FPS:        probe.FPS,
-		SampleRate: audioRate(probe),
-		Channels:   audioChannels(probe),
-		HasAudio:   probe.HasAudio,
+		Width:        evenDim(probe.Width, 1280),
+		Height:       evenDim(probe.Height, 720),
+		FPS:          probe.FPS,
+		SampleRate:   audioRate(probe),
+		Channels:     audioChannels(probe),
+		HasAudio:     probe.HasAudio,
+		VideoEncoder: "libx264",
 	}
 	if p.FPS <= 0 {
 		p.FPS = 30
@@ -50,21 +55,12 @@ func BuildEncodePlan(probe MediaProbe) EncodePlan {
 	}
 
 	vc := strings.ToLower(probe.VideoCodec)
-	switch {
-	case vc == "h264" || vc == "avc" || strings.Contains(vc, "h264"):
-		p.VideoEncoder = "libx264"
-	case vc == "vp9" || vc == "vp8":
-		p.VideoEncoder = "libvpx-vp9"
-	case vc == "av1":
-		if encoderAvailable("libsvtav1") {
-			p.VideoEncoder = "libsvtav1"
-		} else {
-			p.VideoEncoder = "libx264"
-			p.VideoBitrate = clampBitrate(int64(float64(p.VideoBitrate)*1.3), minVideoBitrate, maxVideoBitrate)
-			p.Warning = "SponsorBlock: AV1 re-encode fell back to H.264 at ~1.3× bitrate"
-		}
-	default:
-		p.VideoEncoder = "libx264"
+	if vc == "av1" || vc == "vp9" || vc == "vp8" {
+		p.VideoBitrate = clampBitrate(
+			int64(float64(p.VideoBitrate)*efficientCodecBitrateFactor),
+			minVideoBitrate,
+			maxVideoBitrate,
+		)
 	}
 
 	if !probe.HasAudio {
@@ -116,15 +112,6 @@ func bitrateK(bps int64) string {
 	return fmt.Sprintf("%dk", k)
 }
 
-func encoderAvailable(name string) bool {
-	cmd := exec.Command("ffmpeg", "-hide_banner", "-encoders")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return false
-	}
-	return strings.Contains(string(out), name)
-}
-
 // VideoFilter returns the normalize vf for re-encode keeps/stitch.
 func (p EncodePlan) VideoFilter() string {
 	return fmt.Sprintf(
@@ -133,28 +120,15 @@ func (p EncodePlan) VideoFilter() string {
 	)
 }
 
-// AppendVideoEncode appends video codec args (after -vf if any).
+// AppendVideoEncode appends libx264 video codec args (after -vf if any).
 func (p EncodePlan) AppendVideoEncode(args []string) []string {
 	vb := bitrateK(p.VideoBitrate)
 	maxr := bitrateK(int64(float64(p.VideoBitrate) * 1.1))
 	buf := bitrateK(p.VideoBitrate * 2)
-	switch p.VideoEncoder {
-	case "libvpx-vp9":
-		return append(args,
-			"-c:v", "libvpx-vp9", "-b:v", vb, "-maxrate", maxr, "-bufsize", buf,
-			"-row-mt", "1", "-deadline", "good", "-cpu-used", "4",
-		)
-	case "libsvtav1":
-		return append(args,
-			"-c:v", "libsvtav1", "-b:v", vb, "-maxrate", maxr, "-bufsize", buf,
-			"-preset", "8",
-		)
-	default: // libx264
-		return append(args,
-			"-c:v", "libx264", "-preset", "fast", "-b:v", vb, "-maxrate", maxr, "-bufsize", buf,
-			"-pix_fmt", "yuv420p",
-		)
-	}
+	return append(args,
+		"-c:v", "libx264", "-preset", "fast", "-b:v", vb, "-maxrate", maxr, "-bufsize", buf,
+		"-pix_fmt", "yuv420p",
+	)
 }
 
 // AppendAudioEncode appends audio codec args, or -an.

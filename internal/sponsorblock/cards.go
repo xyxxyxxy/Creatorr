@@ -151,7 +151,7 @@ type CutResult struct {
 }
 
 // CutArchive removes cut spans. When reencode is false, stream-copies (keyframe snap) and ignores cards.
-// When reencode is true, accurate-seek re-encodes with bitrate/codec-matched EncodePlan; cards only if wantCards.
+// When reencode is true, accurate-seek re-encodes with bitrate-matched H.264 EncodePlan; cards only if wantCards.
 // onProg reports fractions only during keep-segment re-encode ffmpeg (nil-safe); cards/stitch clear to spinner.
 // Copy-cut never reports fractions.
 func CutArchive(ctx context.Context, inPath, outPath string, cuts []Segment, cardDur float64, fontDir string, reencode, wantCards bool, onProg EncodeProgress) (CutResult, error) {
