@@ -140,6 +140,34 @@ func TestCooldownUntil(t *testing.T) {
 	}
 }
 
+func TestStartCooldownForDomainsBlocksClaim(t *testing.T) {
+	s := openStore(t)
+	_ = settings.SeedDefaults(s.DB)
+	_ = settings.SetDomainDefault(s.DB, 30, 8, 1, "10M", "1", false)
+	_ = domains.EnsureHost(s.DB, "example.com")
+	vid := seedVideo(t, s, "boot-cd")
+	if _, err := s.Enqueue(queue.EnqueueParams{
+		Kind: queue.KindDownload, Domain: "example.com", VideoID: vid,
+		Payload: map[string]any{"url": "https://example.com/watch?v=boot-cd"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	n := s.StartCooldownForDomains([]string{"example.com", "example.com", "system", "default"})
+	if n != 1 {
+		t.Fatalf("armed %d domains, want 1", n)
+	}
+	if s.CooldownUntil("example.com").IsZero() {
+		t.Fatal("expected boot cooldown")
+	}
+	t2, err := s.ClaimNext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if t2 != nil {
+		t.Fatalf("ClaimNext during boot cooldown got %+v", t2)
+	}
+}
+
 func TestSystemLaneNoCooldown(t *testing.T) {
 	s := openStore(t)
 	_ = settings.SeedDefaults(s.DB)

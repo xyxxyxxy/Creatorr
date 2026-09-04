@@ -19,6 +19,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/auth"
 	"github.com/xyxxyxxy/Creatorr/internal/config"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
+	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/events"
 	"github.com/xyxxyxxy/Creatorr/internal/health"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
@@ -114,6 +115,25 @@ func main() {
 		log.Error("requeue stale tasks", "err", err)
 	} else if n > 0 {
 		log.Info("requeued interrupted tasks", "count", n)
+	}
+
+	// Arm per-host cooldown before the worker claims anything so a restart does not
+	// slam downloads immediately (in-memory cooldown map is empty after boot).
+	var bootHosts []string
+	if hosts, err := domains.ListHosts(database); err != nil {
+		log.Warn("list domain hosts for boot cooldown", "err", err)
+	} else {
+		for _, h := range hosts {
+			bootHosts = append(bootHosts, h.Domain)
+		}
+	}
+	if src, err := lib.ListSourceDomains(); err != nil {
+		log.Warn("list source domains for boot cooldown", "err", err)
+	} else {
+		bootHosts = append(bootHosts, src...)
+	}
+	if n := q.StartCooldownForDomains(bootHosts); n > 0 {
+		log.Info("armed domain cooldowns after boot", "domains", n)
 	}
 
 	if enabled, err := settings.YtDlpUpdatesEnabled(database); err != nil {
