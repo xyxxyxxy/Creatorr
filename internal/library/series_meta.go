@@ -905,7 +905,7 @@ type MetaSuggestions struct {
 // DefaultMPAASuggestions are US TV Parental Guidelines seeded into the Content
 // rating datalist (free-text; operators may still type any value).
 var DefaultMPAASuggestions = []string{
-	"TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "TV-PG", "TV-14", "TV-MA",
+	"TV-Y", "TV-Y7", "TV-G", "TV-PG", "TV-14", "TV-MA",
 }
 
 // ListMetaSuggestions returns sorted unique values for studio, genres, tags, country,
