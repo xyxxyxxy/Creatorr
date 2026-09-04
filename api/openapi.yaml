@@ -1615,7 +1615,7 @@ components:
           description: SponsorBlock categories to cut/skip (explicit list; empty = off). Must be disjoint from sponsorblock_mark.
         sponsorblock_reencode_cut:
           type: boolean
-          description: When remove is non-empty, re-encode keep segments for accurate cut timestamps (bitrate/codec-matched). Off = stream-copy keyframe snap.
+          description: When remove is non-empty, re-encode keep segments for accurate cut timestamps (bitrate-matched H.264; AV1/VP9/VP8 sources get 1.5× video bitrate). Off = stream-copy keyframe snap.
         sponsorblock_info_cards:
           type: boolean
           description: When reencode_cut is on and remove is non-empty, insert hard-cut info cards at each skip. Rejected if set without reencode_cut.
