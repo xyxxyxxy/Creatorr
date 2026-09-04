@@ -284,9 +284,9 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nPage := ParsePage(r, "npage")
-	nPageInfo := NewPageInfo(r, "npage", nPage, nTotal)
+	nPageInfo := NewPageInfoSize(r, "npage", nPage, nTotal, HistoryPageSize)
 	nPageInfo.LiveTarget = "notification-history-live"
-	nItems, err := notify.ListNotifications(h.Queue.DB, nFilter, PageSize, Offset(nPageInfo.Page))
+	nItems, err := notify.ListNotifications(h.Queue.DB, nFilter, HistoryPageSize, OffsetSize(nPageInfo.Page, HistoryPageSize))
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -302,9 +302,9 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := ParsePage(r, "page")
-	pageInfo := NewPageInfo(r, "page", page, total)
+	pageInfo := NewPageInfoSize(r, "page", page, total, HistoryPageSize)
 	pageInfo.LiveTarget = "history-live"
-	items, err := h.Queue.ListHistory(filter, PageSize, Offset(pageInfo.Page))
+	items, err := h.Queue.ListHistory(filter, HistoryPageSize, OffsetSize(pageInfo.Page, HistoryPageSize))
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return

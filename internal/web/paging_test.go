@@ -26,14 +26,14 @@ func TestNewPageInfo(t *testing.T) {
 	}
 }
 
-func TestNewPageInfoSizeVideo(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/series/1?page=2", nil)
-	info := NewPageInfoSize(r, "page", 2, 45, VideoPageSize)
+func TestNewPageInfoSizeHistory(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/history?page=2", nil)
+	info := NewPageInfoSize(r, "page", 2, 45, HistoryPageSize)
 	if info.PageSize != 20 || info.TotalPages != 3 || info.From != 21 || info.To != 40 {
 		t.Fatalf("info=%+v", info)
 	}
-	if OffsetSize(2, VideoPageSize) != 20 {
-		t.Fatalf("offset=%d", OffsetSize(2, VideoPageSize))
+	if OffsetSize(2, HistoryPageSize) != 20 {
+		t.Fatalf("offset=%d", OffsetSize(2, HistoryPageSize))
 	}
 }
 
