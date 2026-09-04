@@ -2,7 +2,7 @@
 {{/*
   Ephemeral fetch bar as one daisyUI join: URL input + Fetch.
   Expects: SeriesID, Action (POST path), HxTarget (HTMX swap target id), Disabled (optional), FetchURL (optional).
-  Video optional: VideoID.
+  Video optional: VideoID. Optional Info (hint under the join; default series wording).
 */}}
 {{$action := .Action}}{{if not $action}}{{$action = "/actions/series-metadata-prefetch"}}{{end}}
 {{$hx := .HxTarget}}{{if not $hx}}{{$hx = "#series-metadata-body"}}{{end}}
@@ -17,12 +17,7 @@
   <input type="hidden" name="series_id" value="{{.SeriesID}}" />
   {{if .VideoID}}<input type="hidden" name="video_id" value="{{.VideoID}}" />{{end}}
   <fieldset class="fieldset" {{if .Disabled}}inert{{end}}>
-    <legend class="fieldset-legend">
-      <span class="inline-flex items-center gap-1">
-        Fetch from URL
-        {{template "field_info" (dict "Info" $info)}}
-      </span>
-    </legend>
+    <legend class="fieldset-legend">Fetch from URL</legend>
     <div class="join w-full">
       <input type="text" name="fetch_url" class="input join-item grow min-w-0"
              placeholder="{{$ph}}"
@@ -35,6 +30,7 @@
         Fetch
       </button>
     </div>
+    <p class="label whitespace-normal">{{$info}}</p>
   </fieldset>
 </form>
 {{end}}

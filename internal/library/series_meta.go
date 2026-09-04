@@ -902,9 +902,16 @@ type MetaSuggestions struct {
 	ActorRoles []string
 }
 
+// DefaultMPAASuggestions are US TV Parental Guidelines seeded into the Content
+// rating datalist (free-text; operators may still type any value).
+var DefaultMPAASuggestions = []string{
+	"TV-Y", "TV-Y7", "TV-G", "TV-PG", "TV-14", "TV-MA",
+}
+
 // ListMetaSuggestions returns sorted unique values for studio, genres, tags, country,
 // mpaa, actor name, and actor role - pooled from both series and videos rows.
 // Same field name ⇒ same pool whether the form is series or video Metadata.
+// mpaa also includes US TV Parental Guidelines defaults (union with library values).
 func (s *Store) ListMetaSuggestions() (MetaSuggestions, error) {
 	var out MetaSuggestions
 	studios := map[string]struct{}{}
@@ -914,6 +921,10 @@ func (s *Store) ListMetaSuggestions() (MetaSuggestions, error) {
 	mpaas := map[string]struct{}{}
 	names := map[string]struct{}{}
 	roles := map[string]struct{}{}
+
+	for _, v := range DefaultMPAASuggestions {
+		mpaas[v] = struct{}{}
+	}
 
 	absorb := func(studio, genresJSON, tagsJSON, country, mpaa, actorsJSON string) {
 		if v := strings.TrimSpace(studio); v != "" {

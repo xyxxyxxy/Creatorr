@@ -15,6 +15,9 @@ const VideoPageSize = 20
 // SeriesPageSize is the page length for the /series media list.
 const SeriesPageSize = 20
 
+// HistoryPageSize is the page length for /history Notifications and Tasks tables.
+const HistoryPageSize = 20
+
 // PageInfo drives the pagination partial under a list table.
 type PageInfo struct {
 	Page       int

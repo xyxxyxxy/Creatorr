@@ -74,7 +74,7 @@ Editable show fields (plot, sorttitle, originaltitle, studio, genres, tags, acto
 | genres | `series.genres` ∪ `videos.genres` (JSON string lists) |
 | tags | `series.tags` ∪ `videos.tags` |
 | country | `series.country` ∪ `videos.country` |
-| mpaa | `series.mpaa` ∪ `videos.mpaa` |
+| mpaa | `series.mpaa` ∪ `videos.mpaa` ∪ US TV Parental Guidelines defaults (`TV-Y` … `TV-MA`; free-text still allowed) |
 | actor name | names in `series.actors` ∪ `videos.actors` |
 | actor role | roles in `series.actors` ∪ `videos.actors` |
 
