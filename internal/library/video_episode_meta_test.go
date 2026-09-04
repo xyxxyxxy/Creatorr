@@ -383,6 +383,68 @@ func TestListMetaSuggestionsPoolsSeriesAndVideos(t *testing.T) {
 			t.Fatalf("missing %s %q in %v", check.label, check.want, check.list)
 		}
 	}
+	for _, def := range library.DefaultMPAASuggestions {
+		if !has(sug.MPAAs, def) {
+			t.Fatalf("missing default mpaa %q in %v", def, sug.MPAAs)
+		}
+	}
+	// Stored TV-14 must appear once (defaults ∪ library, no dup entries).
+	n := 0
+	for _, v := range sug.MPAAs {
+		if v == "TV-14" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("TV-14 count=%d want 1 in %v", n, sug.MPAAs)
+	}
+}
+
+func TestListMetaSuggestionsMPAADefaultsAndCustom(t *testing.T) {
+	s := openLib(t)
+	sug, err := s.ListMetaSuggestions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	has := func(list []string, want string) bool {
+		for _, v := range list {
+			if v == want {
+				return true
+			}
+		}
+		return false
+	}
+	for _, def := range library.DefaultMPAASuggestions {
+		if !has(sug.MPAAs, def) {
+			t.Fatalf("empty library missing default mpaa %q in %v", def, sug.MPAAs)
+		}
+	}
+
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "CustomMPAA", SourceURL: "https://www.example.com/@custommpaa",
+		RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveSeriesMetadata(ser.ID, library.SaveSeriesMetadataParams{
+		MPAA: "PG-13",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sug2, err := s.ListMetaSuggestions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !has(sug2.MPAAs, "PG-13") {
+		t.Fatalf("missing custom mpaa PG-13 in %v", sug2.MPAAs)
+	}
+	for _, def := range library.DefaultMPAASuggestions {
+		if !has(sug2.MPAAs, def) {
+			t.Fatalf("after custom missing default mpaa %q in %v", def, sug2.MPAAs)
+		}
+	}
 }
 
 func TestSaveVideoMetadataUploadDateReindexesAndRenames(t *testing.T) {
