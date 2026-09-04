@@ -158,22 +158,43 @@ let pendingImportJobs = [];
 let autoMatchStale = false;
 /** @type {AbortController|null} */
 let importScanAbort = null;
+/** @type {AbortController|null} */
+let importPickerAbort = null;
 let importTasksBusy = false;
+
+/** True while Import page DOM is still mounted (false after navigate-away). */
+function importPageAlive() {
+  return !!document.getElementById('import-tasks-busy');
+}
+
+/** AbortError / NetworkError / unload TypeError when leaving the page. */
+function isImportFetchCanceled(err) {
+  if (!err) return false;
+  if (err.name === 'AbortError' || err.name === 'NetworkError') return true;
+  if (!importPageAlive()) return true;
+  return false;
+}
 
 async function loadImportPicker() {
   if (importPickerReady) return;
   if (importPickerPromise) return importPickerPromise;
   importPickerPromise = (async () => {
+    if (importPickerAbort) importPickerAbort.abort();
+    const ac = new AbortController();
+    importPickerAbort = ac;
     try {
       const res = await fetch('/api/import/picker', {
         headers: { Accept: 'application/json' },
         credentials: 'same-origin',
+        signal: ac.signal,
       });
+      if (!importPageAlive()) return;
       if (!res.ok) {
         showImportMsg('Library index', 'Failed to load Match catalog: ' + await res.text(), { error: true });
         return;
       }
       const data = await res.json();
+      if (!importPageAlive()) return;
       SERIES = Array.isArray(data.series) ? data.series : [];
       VIDEOS = Array.isArray(data.videos) ? data.videos : [];
       importPickerReady = true;
@@ -190,13 +211,20 @@ async function loadImportPicker() {
       if (importCandidates.length) renderImportPage();
       else updateBulkSeriesBtn();
     } catch (err) {
+      if (isImportFetchCanceled(err)) return;
       showImportMsg('Library index', 'Failed to load Match catalog: ' + (err && err.message ? err.message : String(err)), { error: true });
     } finally {
+      if (importPickerAbort === ac) importPickerAbort = null;
       importPickerPromise = null;
     }
   })();
   return importPickerPromise;
 }
+
+window.addEventListener('pagehide', () => {
+  if (importPickerAbort) importPickerAbort.abort();
+  if (importScanAbort) importScanAbort.abort();
+});
 
 function showImportMsg(title, body, opts) {
   // Close Add series / Add video so the toast is not trapped under them.
@@ -2013,7 +2041,7 @@ async function runImportScan(opts) {
     renderImportPage();
     if (notifyAutoMatch) notifyAutoMatchCount(countSuggestedAutoMatches());
   } catch (err) {
-    if (err && err.name === 'AbortError') return;
+    if (isImportFetchCanceled(err)) return;
     setStatusScan('Scan failed: ' + (err && err.message ? err.message : String(err)));
   } finally {
     if (importScanAbort === ac) {
