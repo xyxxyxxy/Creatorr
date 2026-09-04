@@ -30,16 +30,12 @@
     <div class="grid gap-3 sm:grid-cols-2 items-end">
       {{template "form_row" (dict "Name" "title" "Label" "Title" "Value" .Video.Title "Required" true)}}
       <fieldset class="fieldset">
-        <legend class="fieldset-legend">
-          <span class="inline-flex items-center gap-1">
-            Upload date
-            {{template "field_info" (dict "Info" "UTC. Date is essential for episode numbering. Time helps order episodes released on the same day.")}}
-          </span>
-        </legend>
+        <legend class="fieldset-legend">Upload date</legend>
         <div class="join w-full">
           <input type="date" name="upload_date" class="input join-item grow min-w-[10rem]" value="{{.UploadDateDay}}" aria-label="Upload date" />
           <input type="time" name="upload_time" class="input join-item w-28 shrink-0" value="{{.UploadDateTime}}" aria-label="Upload time (UTC, optional)" />
         </div>
+        <p class="label whitespace-normal">UTC. Date is essential for episode numbering. Time helps order episodes released on the same day.</p>
       </fieldset>
     </div>
     {{template "form_row" (dict "Type" "textarea" "Name" "plot" "Label" "Plot" "Value" .Video.Description)}}
