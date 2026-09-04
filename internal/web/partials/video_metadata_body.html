@@ -27,7 +27,7 @@
     {{if .PrefetchTaskID}}<input type="hidden" name="prefetch_task_id" value="{{.PrefetchTaskID}}" />{{end}}
     <fieldset class="space-y-3 border-0 p-0 m-0 min-w-0" {{if .PrefetchPending}}disabled{{end}}>
 
-    <div class="grid gap-3 sm:grid-cols-2 items-end">
+    <div class="grid gap-3 sm:grid-cols-2 items-start">
       {{template "form_row" (dict "Name" "title" "Label" "Title" "Value" .Video.Title "Required" true)}}
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Upload date</legend>
@@ -92,7 +92,7 @@
           "ArtVersion" .ThumbMtime
           "PrefetchPath" (index .PrefetchArt "thumb")
           "PrefetchTaskID" .PrefetchTaskID
-          "Info" "Episode thumbnail beside packed media (stem-thumb.jpg). Save installs or clears it; Refresh sidecars re-fetches from the source."
+          "Hint" "Episode thumbnail beside packed media (stem-thumb.jpg). 'Save' installs or clears it."
         )}}
       </div>
       {{else}}

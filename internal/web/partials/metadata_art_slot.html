@@ -2,8 +2,9 @@
 {{/*
   Art upload slot with optional preview (saved series art / video thumb, prefetch, or local file pick).
   Clear saved art: X sets clear_{Role}=1 and hides the preview wrap (do not hide the X alone).
-  Expects: Role, Label, Info|Help, HasFile, SeriesID, ArtVersion (optional), PrefetchPath (optional), PrefetchTaskID (optional)
+  Expects: Role, Label, Hint|Info|Help, HasFile, SeriesID, ArtVersion (optional), PrefetchPath (optional), PrefetchTaskID (optional)
   Optional VideoID: preview URLs use video thumb / video-meta prefetch routes instead of series art.
+  Hint (or Info/Help) is a fieldset label under the file input, not a legend info tip.
 */}}
 {{$preview := ""}}
 {{if .PrefetchPath}}
@@ -19,15 +20,10 @@
     {{$preview = printf "/series/%d/art/%s?v=%d" .SeriesID .Role .ArtVersion}}
   {{end}}
 {{end}}
-{{$info := .Info}}{{if not $info}}{{$info = .Help}}{{end}}
+{{$hint := .Hint}}{{if not $hint}}{{$hint = .Info}}{{end}}{{if not $hint}}{{$hint = .Help}}{{end}}
 {{$canClear := and .HasFile (not .PrefetchPath)}}
 <fieldset class="fieldset">
-  <legend class="fieldset-legend">
-    <span class="inline-flex items-center gap-1">
-      {{.Label}}
-      {{if and $info (not .PrefetchPath)}}{{template "field_info" (dict "Info" $info)}}{{end}}
-    </span>
-  </legend>
+  <legend class="fieldset-legend">{{.Label}}</legend>
   <div class="flex flex-wrap gap-3 items-end" data-art-slot{{if $canClear}} data-art-can-clear{{end}}>
     {{if .PrefetchPath}}
     <input type="hidden" name="prefetch_{{.Role}}" value="{{.PrefetchPath}}" data-art-prefetch />
@@ -46,10 +42,13 @@
     </div>
     <div class="grow min-w-[12rem]">
       <input type="file" name="{{.Role}}" class="file-input w-full" accept="image/*" data-art-file />
+      {{if and $hint (not .PrefetchPath)}}
+      <p class="label whitespace-normal">{{$hint}}</p>
+      {{end}}
     </div>
   </div>
   {{if .PrefetchPath}}
-  <p class="label whitespace-normal">Prefetched preview - kept on Save (or replace with a new file).</p>
+  <p class="label whitespace-normal">Prefetched preview - kept on 'Save' (or replace with a new file).</p>
   {{end}}
 </fieldset>
 {{end}}
