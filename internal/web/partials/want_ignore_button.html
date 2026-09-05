@@ -11,19 +11,19 @@
   <input type="hidden" name="series_id" value="{{.SeriesID}}" />
   {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
   <button type="submit" class="{{.Class}}{{if .Icons}} tooltip tooltip-top{{end}}" aria-label="Want" {{if not .DomainActive}}disabled{{end}}{{if .Icons}} data-tip="{{if not .DomainActive}}{{.DomainDisabledTitle}}{{else}}Want{{end}}"{{end}}>
-    {{if .Icons}}<i data-lucide="eye" class="{{$icon}}"></i>{{else}}Want{{end}}
+    {{if .Icons}}<i data-lucide="eye" class="{{$icon}}"></i>{{else}}<i data-lucide="eye" class="size-4"></i> Want{{end}}
   </button>
 </form>
 {{else if eq .Status "downloaded"}}
-{{$delClass := .DeleteClass}}{{if not $delClass}}{{$delClass = "btn btn-soft btn-error"}}{{end}}
-<label for="modal-delete-video-{{.VideoID}}" class="{{$delClass}}{{if .Icons}} tooltip tooltip-top{{end}}" aria-label="Delete"{{if .Icons}} data-tip="Delete"{{end}}>
-  {{if .Icons}}<i data-lucide="trash-2" class="{{$icon}}"></i>{{else}}Delete{{end}}
+{{$delClass := .DeleteClass}}{{if not $delClass}}{{$delClass = "btn btn-soft btn-error btn-square"}}{{end}}
+<label for="modal-delete-video-{{.VideoID}}" class="{{$delClass}} tooltip tooltip-top" aria-label="Delete" data-tip="Delete" data-video-row-delete data-modal-for="modal-delete-video-{{.VideoID}}">
+  <i data-lucide="trash-2" class="{{$icon}}"></i>
 </label>
 {{if not .DeferModal}}{{template "delete_video_modal" .}}{{end}}
 {{else if and (ne .Status "downloaded") (ne .Status "ignored") (ne .Status "missing") (ne .Status "deleted") (ne .Status "verify_failed")}}
 {{if .DownloadRunning}}
-<label for="modal-ignore-video-{{.VideoID}}" class="{{.Class}}{{if .Icons}} tooltip tooltip-top{{end}}" aria-label="Ignore" {{if not .DomainActive}}aria-disabled="true"{{end}}{{if .Icons}} data-tip="{{if not .DomainActive}}{{.DomainDisabledTitle}}{{else}}Ignore{{end}}"{{end}}>
-  {{if .Icons}}<i data-lucide="eye-off" class="{{$icon}}"></i>{{else}}Ignore{{end}}
+<label for="modal-ignore-video-{{.VideoID}}" class="{{.Class}}{{if .Icons}} tooltip tooltip-top{{end}}" aria-label="Ignore" data-modal-for="modal-ignore-video-{{.VideoID}}" {{if not .DomainActive}}aria-disabled="true"{{end}}{{if .Icons}} data-tip="{{if not .DomainActive}}{{.DomainDisabledTitle}}{{else}}Ignore{{end}}"{{end}}>
+  {{if .Icons}}<i data-lucide="eye-off" class="{{$icon}}"></i>{{else}}<i data-lucide="eye-off" class="size-4"></i> Ignore{{end}}
 </label>
 {{else}}
 <form method="post" action="/actions/ignore-video"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/ignore-video" hx-target="#series-videos-live" hx-swap="outerHTML"{{end}}>
@@ -31,7 +31,7 @@
   <input type="hidden" name="series_id" value="{{.SeriesID}}" />
   {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
   <button type="submit" class="{{.Class}}{{if .Icons}} tooltip tooltip-top{{end}}" aria-label="Ignore" {{if not .DomainActive}}disabled{{end}}{{if .Icons}} data-tip="{{if not .DomainActive}}{{.DomainDisabledTitle}}{{else}}Ignore{{end}}"{{end}}>
-    {{if .Icons}}<i data-lucide="eye-off" class="{{$icon}}"></i>{{else}}Ignore{{end}}
+    {{if .Icons}}<i data-lucide="eye-off" class="{{$icon}}"></i>{{else}}<i data-lucide="eye-off" class="size-4"></i> Ignore{{end}}
   </button>
 </form>
 {{end}}

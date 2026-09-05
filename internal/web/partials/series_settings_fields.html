@@ -1,17 +1,18 @@
 {{define "series_settings_fields"}}
 {{/*
-  Shared series fields for Add series (series step) and Edit series.
+  Shared series fields for Add series, Edit series (single), and bulk Edit.
   Expects: Roots, Profiles.
-  Optional: Title, TitleID, TitleInfo, TitlePlaceholder, TitleDisabled, TitleDisabledTitle,
-            RootID, ProfileID, DeliveryMode,
+  Optional: Bulk (bool) - No change sentinels; hide title; monitored/delivery No-change option.
+            Title, TitleID, TitleInfo/Hint, TitlePlaceholder, TitleDisabled, TitleDisabledTitle,
+            RootID, ProfileID, DeliveryMode, Monitored,
             RootInfo, RootDisabled, RootDisabledTitle, ProfileInfo.
+  Order: title (single) → delivery → monitored → root → quality.
 */}}
+{{$bulk := .Bulk}}
 {{$titlePH := .TitlePlaceholder}}{{if not $titlePH}}{{$titlePH = "Series title"}}{{end}}
-{{$val := .DeliveryMode}}{{if not $val}}{{$val = "video"}}{{end}}
-{{$isAudio := eq $val "audio"}}
-{{template "delivery_mode_field" (dict
-  "Value" .DeliveryMode
-)}}
+{{$val := .DeliveryMode}}{{if and (not $bulk) (not $val)}}{{$val = "video"}}{{end}}
+{{$isAudio := and (not $bulk) (eq $val "audio")}}
+{{if not $bulk}}
 {{template "field_input" (dict
   "Name" "title"
   "ID" .TitleID
@@ -25,7 +26,18 @@
   "Disabled" .TitleDisabled
   "DisabledTitle" .TitleDisabledTitle
 )}}
-{{if .RootDisabled}}
+{{end}}
+{{template "delivery_mode_field" (dict "Value" .DeliveryMode "Bulk" $bulk)}}
+<fieldset class="fieldset">
+  <legend class="fieldset-legend">Monitored</legend>
+  <select name="monitored" class="select w-full" aria-label="Monitored">
+    {{if $bulk}}<option value="">No change</option>{{end}}
+    <option value="1"{{if and (not $bulk) .Monitored}} selected{{end}}>Yes</option>
+    <option value="0"{{if and (not $bulk) (not .Monitored)}} selected{{end}}>No</option>
+  </select>
+  <p class="label whitespace-normal">When on, scheduled tip scans and download-wanted include this series. Manual scan and Queue download always run.</p>
+</fieldset>
+{{if and (not $bulk) .RootDisabled}}
 <input type="hidden" name="root_id" value="{{.RootID}}" />
 <fieldset class="fieldset">
   <legend class="fieldset-legend"><span class="opacity-60">Root folder</span></legend>
@@ -40,26 +52,30 @@
 {{else}}
 <fieldset class="fieldset">
   <legend class="fieldset-legend">Root folder</legend>
-  <select name="root_id" class="select w-full validator" required {{if not .Roots}}disabled{{end}}>
+  <select name="root_id" class="select w-full{{if not $bulk}} validator{{end}}" {{if not $bulk}}required{{end}} {{if not .Roots}}disabled{{end}}>
+    {{if $bulk}}<option value="">No change</option>{{end}}
     {{range .Roots}}
-    <option value="{{.ID}}"{{if eq .ID $.RootID}} selected{{end}}>{{if .Name}}{{.Name}} ({{.Path}}){{else}}{{.Path}}{{end}}</option>
+    <option value="{{.ID}}"{{if and (not $bulk) (eq .ID $.RootID)}} selected{{end}}>{{if .Name}}{{.Name}} ({{.Path}}){{else}}{{.Path}}{{end}}</option>
     {{end}}
   </select>
-  <p class="validator-hint hidden">Root folder is required</p>
-  {{if .RootInfo}}<p class="label whitespace-normal">{{.RootInfo}}</p>{{end}}
+  {{if not $bulk}}<p class="validator-hint hidden">Root folder is required</p>{{end}}
+  {{if .RootInfo}}<p class="label whitespace-normal">{{.RootInfo}}</p>{{else if $bulk}}<p class="label whitespace-normal">Changing root moves the series folder on disk.</p>{{end}}
 </fieldset>
 {{end}}
-<fieldset class="fieldset" data-quality-profile-fieldset>
+<fieldset class="fieldset" data-quality-profile-fieldset{{if $bulk}} data-bulk{{end}}>
   <legend class="fieldset-legend">Quality profile</legend>
+  {{if not $bulk}}
   <input type="hidden" value="{{.ProfileID}}" data-quality-profile-hidden {{if $isAudio}}name="quality_profile_id"{{else}}disabled{{end}} />
+  {{end}}
   <span class="{{if $isAudio}}tooltip tooltip-top {{end}}block w-full" data-quality-profile-tip {{if $isAudio}}data-tip="Audio always uses the best available quality."{{end}}>
-    <select class="select w-full{{if not $isAudio}} validator{{end}}" data-quality-profile-select {{if not .Profiles}}disabled{{end}}{{if $isAudio}} disabled{{else}} name="quality_profile_id" required{{end}}>
+    <select class="select w-full{{if and (not $bulk) (not $isAudio)}} validator{{end}}" data-quality-profile-select {{if not .Profiles}}disabled{{end}}{{if and (not $bulk) $isAudio}} disabled{{else}} name="quality_profile_id"{{if not $bulk}} required{{end}}{{end}}>
+      {{if $bulk}}<option value="">No change</option>{{end}}
       {{range .Profiles}}
-      <option value="{{.ID}}"{{if eq .ID $.ProfileID}} selected{{end}}{{if and (not $.ProfileID) (eq .Name "best")}} selected{{end}}>{{.Name}}</option>
+      <option value="{{.ID}}"{{if and (not $bulk) (eq .ID $.ProfileID)}} selected{{end}}{{if and (not $bulk) (not $.ProfileID) (eq .Name "best")}} selected{{end}}>{{.Name}}</option>
       {{end}}
     </select>
   </span>
-  <p class="validator-hint hidden">Quality profile is required</p>
+  {{if not $bulk}}<p class="validator-hint hidden">Quality profile is required</p>{{end}}
   <p class="label whitespace-normal">Quality format used for video downloads. Does not change already downloaded videos.</p>
 </fieldset>
 {{end}}

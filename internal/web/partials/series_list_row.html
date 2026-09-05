@@ -1,5 +1,5 @@
 {{define "series_list_row"}}
-{{/* Dot: seriesListRow with Series fields + PosterURL Line2 KindIcon KindTip MonitorTitle Redirect LiveTarget StatusInd */}}
+{{/* Dot: seriesListRow with Series fields + PosterURL Line2 KindIcon KindTip StatusInd BulkEditBusy */}}
 {{template "list_row_shell" (dict
   "MediaURL" .PosterURL
   "MediaClass" "size-14 shrink-0"
@@ -17,14 +17,16 @@
   "ErrorCount" .ErrorCount
   "WantedCount" .WantedCount
   "Monitored" .Monitored
+  "Select" (dict "ID" .ID "Disabled" .BulkEditBusy)
   "Monitor" (dict
     "Action" "/actions/set-series-monitored"
     "SeriesID" .ID
     "Monitored" .Monitored
-    "Redirect" .Redirect
-    "Title" .MonitorTitle
+    "Redirect" "/series"
+    "LiveTarget" "series-list-live"
     "AsButton" true
-    "LiveTarget" .LiveTarget
+    "Title" "Include this series in scans and download-wanted"
+    "Disabled" .BulkEditBusy
   )
 )}}
 {{end}}

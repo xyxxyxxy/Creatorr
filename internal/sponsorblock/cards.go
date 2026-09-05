@@ -100,12 +100,12 @@ func RenderSkipCard(ctx context.Context, outPath string, plan EncodePlan, text s
 	line2 := strings.TrimSpace(strings.Join(lines[1:], " "))
 	var draw string
 	if line2 == "" {
-		draw = fmt.Sprintf("drawtext=fontfile='%s':text='%s':fontsize=36:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2",
+		draw = fmt.Sprintf("drawtext=fontfile='%s':text='%s':fontsize=28:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2",
 			fontEsc, escapeDrawtext(line1))
 	} else {
 		draw = fmt.Sprintf(
-			"drawtext=fontfile='%s':text='%s':fontsize=36:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2-28,"+
-				"drawtext=fontfile='%s':text='%s':fontsize=36:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2+28",
+			"drawtext=fontfile='%s':text='%s':fontsize=28:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2-22,"+
+				"drawtext=fontfile='%s':text='%s':fontsize=28:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2+22",
 			fontEsc, escapeDrawtext(line1), fontEsc, escapeDrawtext(line2),
 		)
 	}

@@ -149,6 +149,20 @@ func flashFromQuery(r *http.Request) *flash {
 	switch ok {
 	case "updated":
 		return flashOK("Series updated.")
+	case "bulk_edit_queued":
+		return flashOK("Bulk edit queued.")
+	case "bulk_monitored":
+		return flashOK("Monitored updated.")
+	case "bulk_delete_queued":
+		return flashOK("Bulk delete queued.")
+	case "bulk_want":
+		return flashOK("Want updated.")
+	case "bulk_ignore":
+		return flashOK("Ignore updated.")
+	case "bulk_download":
+		return flashOK("Queue download enqueued.")
+	case "bulk_refresh_sidecars":
+		return flashOK("Sidecar refresh enqueued.")
 	case "source":
 		return flashOK("Source added.")
 	case "source-updated":
@@ -369,8 +383,4 @@ func (h *Handler) tryRenderSeriesVideosLive(w http.ResponseWriter, r *http.Reque
 	}
 	render(w, "series_videos_live", data)
 	return true
-}
-
-func renderMonitorToggle(w http.ResponseWriter, data map[string]any) {
-	render(w, "monitor_toggle", data)
 }
