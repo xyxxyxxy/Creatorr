@@ -315,7 +315,7 @@ func TestLoadLibrarySize(t *testing.T) {
 	}
 }
 
-func TestApplyRetentionFixedYear(t *testing.T) {
+func TestApplyRetentionFixedMonth(t *testing.T) {
 	d := openStatsDB(t)
 	older := time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC)
 	baseline := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -327,7 +327,7 @@ func TestApplyRetentionFixedYear(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n == 0 {
-		t.Fatal("expected sample older than baseline pruned with fixed 1-year retention")
+		t.Fatal("expected sample older than baseline pruned with fixed 1-month retention")
 	}
 	var remain int
 	if err := d.SQL.QueryRow(`SELECT COUNT(*) FROM stats_samples WHERE metric = ?`, stats.MetricVideosWanted).Scan(&remain); err != nil {
