@@ -32,7 +32,36 @@
   {{template "detail_row" (dict "Label" "Task")}}
   {{end}}
   <tr><th class="w-40">Title</th><td class="text-sm">{{.Item.Title}}</td></tr>
-  <tr><th class="w-40">Body</th><td><pre class="text-xs whitespace-pre-wrap font-mono max-h-96 overflow-y-auto">{{.Item.Body}}</pre></td></tr>
+  <tr><th class="w-40">Body</th><td class="text-sm min-w-0">
+    {{if .BodySections}}
+    <div class="space-y-3 max-h-96 overflow-y-auto">
+      {{range .BodySections}}
+      <div>
+        <p class="text-xs font-semibold mb-1">{{.Heading}} ({{.Total}}):</p>
+        <ul class="space-y-1">
+          {{range .Items}}
+          <li class="font-mono text-xs flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span class="opacity-60">#{{.ID}}</span>
+            {{if and (not .Missing) .SeriesID}}
+            <a class="link link-hover font-sans text-sm" href="/series/{{.SeriesID}}/videos/{{.ID}}">{{if .Series}}{{.Series}} / {{end}}{{.Title}}</a>
+            {{else}}
+            <span class="font-sans text-sm{{if .Missing}} opacity-60{{end}}">{{if .Series}}{{.Series}} / {{end}}{{if .Title}}{{.Title}}{{else}}#{{.ID}}{{end}}</span>
+            {{if .Missing}}<span class="text-xs opacity-60">not in library</span>{{end}}
+            {{end}}
+            {{if .Detail}}<span class="opacity-60">({{.Detail}})</span>{{end}}
+          </li>
+          {{end}}
+          {{if .Extra}}
+          <li class="text-xs opacity-60">+{{.Extra}} more</li>
+          {{end}}
+        </ul>
+      </div>
+      {{end}}
+    </div>
+    {{else}}
+    <pre class="text-xs whitespace-pre-wrap font-mono max-h-96 overflow-y-auto">{{.Item.Body}}</pre>
+    {{end}}
+  </td></tr>
 </tbody>
 {{template "list_table_end"}}
 {{template "list_panel_end"}}

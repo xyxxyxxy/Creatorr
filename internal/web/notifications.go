@@ -30,17 +30,25 @@ func (h *Handler) notificationDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	view := notificationToView(n, time.Now().UTC())
+	var bodySections []notifyFileSyncIssueSection
+	if view.Event == notify.EventFileSyncIssues && view.TaskID > 0 && h.Queue != nil {
+		if t, gerr := h.Queue.GetTask(view.TaskID); gerr == nil && t != nil {
+			bodySections = fileSyncNotifySectionsFromDetail(t.Detail, h.resolveFileSyncNotifyRef)
+		}
+	}
 	render(w, "notification_detail", struct {
 		pageBase
-		Crumbs []breadcrumb
-		Item   notifyHistoryView
+		Crumbs       []breadcrumb
+		Item         notifyHistoryView
+		BodySections []notifyFileSyncIssueSection
 	}{
 		pageBase: newPage(view.EventLabel, "history", nil),
 		Crumbs: []breadcrumb{
 			crumb("/history", "History", "history"),
 			crumb("", view.EventLabel, "bell"),
 		},
-		Item: view,
+		Item:         view,
+		BodySections: bodySections,
 	})
 }
 
