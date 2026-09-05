@@ -18,6 +18,9 @@ const SeriesPageSize = 20
 // HistoryPageSize is the page length for /history Notifications and Tasks tables.
 const HistoryPageSize = 20
 
+// TaskPageSize is the page length for open tasks in each /tasks domain lane.
+const TaskPageSize = 20
+
 // PageInfo drives the pagination partial under a list table.
 type PageInfo struct {
 	Page       int
@@ -129,9 +132,14 @@ func OffsetSize(page, pageSize int) int {
 
 // SlicePage returns one page of items and matching PageInfo.
 func SlicePage[T any](r *http.Request, param string, items []T) ([]T, PageInfo) {
+	return SlicePageSize(r, param, items, PageSize)
+}
+
+// SlicePageSize is SlicePage with an explicit page length.
+func SlicePageSize[T any](r *http.Request, param string, items []T, pageSize int) ([]T, PageInfo) {
 	page := ParsePage(r, param)
 	total := len(items)
-	info := NewPageInfo(r, param, page, total)
+	info := NewPageInfoSize(r, param, page, total, pageSize)
 	if total == 0 {
 		return nil, info
 	}

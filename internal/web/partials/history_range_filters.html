@@ -13,12 +13,21 @@
     <span class="label">To</span>
     <input type="datetime-local" name="to" value="{{.To}}" aria-label="To (UTC)" />
   </label>
-  <span class="tooltip tooltip-top join-item" data-tip="Clear time range">
-    <a class="btn btn-square join-item{{if not $hasRange}} btn-disabled pointer-events-none{{end}}"
-       href="/history{{if .Hidden}}?{{range $i, $h := .Hidden}}{{if $i}}&{{end}}{{urlquery $h.Name}}={{urlquery $h.Value}}{{end}}{{end}}"
-       aria-label="Clear time range"{{if not $hasRange}} aria-disabled="true" tabindex="-1"{{end}}>
-      <i data-lucide="rotate-ccw" class="size-4"></i>
-    </a>
+  {{/* Join exception: tip on the last join-item (direct child). Wrapper
+       join-item around a btn stacked a nested border. Use .input (not .btn)
+       so the chip shares From/To border and fill. Disabled: aria-disabled,
+       mute the icon only. */}}
+  {{if $hasRange}}
+  <a class="input join-item tooltip tooltip-top shrink-0 w-10 px-0 justify-center" data-tip="Clear time range"
+     href="/history{{if .Hidden}}?{{range $i, $h := .Hidden}}{{if $i}}&{{end}}{{urlquery $h.Name}}={{urlquery $h.Value}}{{end}}{{end}}"
+     aria-label="Clear time range">
+    <i data-lucide="rotate-ccw" class="size-4"></i>
+  </a>
+  {{else}}
+  <span class="input join-item tooltip tooltip-top shrink-0 w-10 px-0 justify-center cursor-not-allowed" data-tip="Clear time range"
+        aria-label="Clear time range" aria-disabled="true" role="button" tabindex="-1">
+    <i data-lucide="rotate-ccw" class="size-4 opacity-50" aria-hidden="true"></i>
   </span>
+  {{end}}
 </form>
 {{end}}

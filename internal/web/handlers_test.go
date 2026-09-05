@@ -486,6 +486,12 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, `id="notifications"`) || !strings.Contains(body, "Finished tasks") {
 				t.Fatalf("/history missing notification/task sections")
 			}
+			if strings.Contains(body, `class="tooltip tooltip-top join-item"`) {
+				t.Fatalf("/history range clear must not wrap join-item around the button")
+			}
+			if !strings.Contains(body, `data-tip="Clear time range"`) || !strings.Contains(body, `input join-item tooltip tooltip-top`) {
+				t.Fatalf("/history range clear missing join-item tip on the control")
+			}
 		}
 		if path == "/tasks" {
 			body := rec.Body.String()
