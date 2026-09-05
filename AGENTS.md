@@ -6,6 +6,7 @@ Mandatory reading for AI agents. Creatorr is a Sonarr-shaped Go daemon for creat
 
 ## Hard rules
 
+- **No commits on main:** GitHub Flow. Never commit or push to `main`; use a short-lived branch and a pull request. If already on `main`, branch first. See `.cursor/rules/github-flow.mdc`.
 - **Metadata suggestion pool:** studio, genres, tags, country, mpaa, actor name, actor role - each field name is one library-wide distinct-value pool across `series` + `videos` (`ListMetaSuggestions`). Series and video Metadata modals share the same pools; never series-only or video-only datalists. Details: [`docs/download-and-library.md`](docs/download-and-library.md).
 - **info.json provenance:** write or replace packed `info.json` only when the video media file changes (archive download / maturity re-download pack). Independent sidecar refresh and metadata rescan must never delete or rewrite `info.json`. Details: [`docs/download-and-library.md`](docs/download-and-library.md).
 - **No em dash:** never write Unicode em dash (U+2014) in docs, UI copy, comments, OpenAPI, flash strings, or commits. Prefer ` - `, `: `, or a period. Empty UI placeholders use ASCII `-`. See `.cursor/rules/no-em-dash.mdc`.
@@ -64,7 +65,7 @@ New domain term → matching docs file (domain-model by default).
 1. Read this file + [`docs/README.md`](docs/README.md), then the topic doc for the task (UI → [`docs/ui.md`](docs/ui.md)).
 2. API: OpenAPI → `make generate` → handlers → tests.
 3. UI: daisyUI + shared partials; follow setting-description rules in `docs/ui.md`.
-4. Before push: `make test vet lint openapi-check` (and `make css` if UI classes/vendors changed). After clone, `make hooks` enables `.githooks/pre-commit` (lint + test on each commit; skip with `SKIP_GITHOOKS=1`).
+4. Branch: never commit on `main`. Before push: `make test vet lint openapi-check` (and `make css` if UI classes/vendors changed). After clone, `make hooks` enables `.githooks/pre-commit` (lint + test on each commit; skip with `SKIP_GITHOOKS=1`).
 5. Prompt on uncertainty; do not guess.
 
 ## Ship
@@ -72,5 +73,5 @@ New domain term → matching docs file (domain-model by default).
 - **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker` (in-process heartbeat, not SQLite), `ytdlp`, `disk`, `flaresolverr`, `pot_provider` (last two skipped if URL unset). Compose healthcheck should use it.
 - **Images:** `ghcr.io/xyxxyxxy/creatorr:latest` and `:vX.Y.Z` from version tags (`v*`) on `main`; `:sha-<short>` on every `main` push for pins and pre-release testing. Compose: [`docker-compose.yml`](docker-compose.yml).
 - **Tests:** unit (domain/settings), yt-dlp fixtures (no live net), integration (temp SQLite + worker/queue), API httptest + schema. Prefer golden fixtures; add tests for behavior changes.
-- **Branching:** GitHub Flow - `main` is the only long-lived branch; use short-lived branches and pull requests into `main`.
+- **Branching:** GitHub Flow - `main` is the only long-lived branch. Never commit on `main`. Short-lived branch, then a pull request into `main`.
 - **Commits:** Conventional Commits; one logical step each; subject ≤72 chars; body explains why when not obvious.
