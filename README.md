@@ -31,7 +31,7 @@ Product behavior: [`docs/`](docs/README.md). REST contract: [`api/openapi.yaml`]
 docker compose up -d
 ```
 
-| | |
+| Item | Detail |
 | --- | --- |
 | Image | `ghcr.io/xyxxyxxy/creatorr:latest` (version tag `v*` on `main`); `:sha-<short>` on every `main` push for pins |
 | UI | `http://127.0.0.1:8787/` (first visit: **Setup** account, then login) |
