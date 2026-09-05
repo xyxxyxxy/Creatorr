@@ -277,7 +277,9 @@ type FileSyncIssueItem struct {
 	Detail string // optional; e.g. "nfo: episode.nfo" for sidecars
 }
 
-const fileSyncIssueListCap = 40
+// FileSyncIssueListCap is the max lines shown per Missing / Size changed section
+// in the digest body and matching in-app notification detail lists.
+const FileSyncIssueListCap = 40
 
 // FileSyncIssues sends one alert digest for missing media/sidecars and/or size
 // mismatches found during a sync_files pass. No-op when both slices are empty.
@@ -300,9 +302,9 @@ func FormatFileSyncIssuesBody(missing, changed []FileSyncIssueItem) string {
 		fmt.Fprintf(&b, "%s (%d):\n", heading, len(items))
 		shown := items
 		extra := 0
-		if len(shown) > fileSyncIssueListCap {
-			extra = len(shown) - fileSyncIssueListCap
-			shown = shown[:fileSyncIssueListCap]
+		if len(shown) > FileSyncIssueListCap {
+			extra = len(shown) - FileSyncIssueListCap
+			shown = shown[:FileSyncIssueListCap]
 		}
 		for _, it := range shown {
 			label := strings.TrimSpace(it.Series)
