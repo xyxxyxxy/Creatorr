@@ -1,5 +1,8 @@
 {{define "series_list_live"}}
-<div id="series-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}>
+<div id="series-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
+     data-filter-total="{{.FilterTotal}}"
+     data-bulk-busy="{{if .BulkEditBusy}}1{{else}}0{{end}}"
+     data-bulk-mode="0">
 {{if or .Series .FilterActive}}
 {{template "list_filters" (dict
   "Query" .SeriesFilter.Query
@@ -8,6 +11,7 @@
   "Selects" .SeriesFilter.Selects
   "LiveTarget" .SeriesFilter.LiveTarget
   "FormAction" .SeriesFilter.FormAction
+  "SeriesBulkMode" true
 )}}
 {{end}}
 {{if not .Series}}
@@ -16,12 +20,66 @@
 {{else}}
 <div class="py-10 px-4 w-full">
   <div class="flex w-full max-w-2xl mx-auto flex-col items-center">
-    <label for="modal-add-series" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal w-full">Add series</label>
+    <label for="modal-add-series" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal w-full">
+      <i data-lucide="plus" class="size-4"></i>
+      Add series
+    </label>
   </div>
 </div>
 {{end}}
 {{else}}
-<ul class="list bg-base-100 rounded-box border border-base-300">
+<ul class="list bg-base-100 rounded-box border border-base-300" id="series-list-rows">
+  {{/* Same --list-grid-cols as bulk rows so page checkbox lines up with row checkboxes. */}}
+  <li id="series-bulk-bar"
+      class="list-row py-2 hidden"
+      data-series-bulk-bar
+      style="--list-grid-cols: max-content minmax(0, auto) 1fr max-content">
+    <div class="self-center">
+      <input type="checkbox" class="checkbox checkbox-sm" id="series-select-page"
+             aria-label="Select all on this page"
+             {{if .BulkEditBusy}}disabled{{end}} />
+    </div>
+    <div class="size-14 shrink-0" aria-hidden="true"></div>
+    <div class="list-col-grow min-w-0 flex flex-wrap items-center gap-2 self-center">
+      <div class="text-sm tabular-nums opacity-70">
+        <span data-series-bulk-count>0/{{.FilterTotal}}</span>
+        <span>selected</span>
+      </div>
+      {{if .Page.Show}}
+      <button type="button"
+              class="btn btn-ghost btn-sm"
+              data-series-select-all-matching
+              {{if .BulkEditBusy}}disabled{{end}}>
+        <i data-lucide="list-checks" class="size-4"></i>
+        Select all
+      </button>
+      {{end}}
+      {{if .BulkEditBusy}}
+      <span class="text-sm opacity-60">Bulk edit running…</span>
+      <a class="link link-hover text-sm" href="/tasks">Tasks</a>
+      {{end}}
+    </div>
+    {{if not .BulkEditBusy}}
+    <div class="self-center justify-self-end">
+      <div class="join">
+        <button type="button" class="btn join-item" data-series-bulk-edit disabled>
+          <i data-lucide="pencil" class="size-4"></i>
+          Edit
+        </button>
+        <button type="button" class="btn join-item" data-series-bulk-metadata disabled>
+          <i data-lucide="file-pen" class="size-4"></i>
+          Edit metadata
+        </button>
+        <button type="button" class="btn btn-soft btn-error join-item" data-series-bulk-delete disabled>
+          <i data-lucide="trash-2" class="size-4"></i>
+          Delete
+        </button>
+      </div>
+    </div>
+    {{else}}
+    <div class="size-10 shrink-0" aria-hidden="true"></div>
+    {{end}}
+  </li>
   {{range .Series}}
   {{template "series_list_row" .}}
   {{end}}

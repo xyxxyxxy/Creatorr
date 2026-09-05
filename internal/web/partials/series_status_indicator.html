@@ -1,7 +1,7 @@
 {{define "series_status_indicator"}}
 {{/* Poster top-left health badge (errors/warnings only). Kind:
      wanted_download_error | verify_failed | scan_error | incomplete.
-     Monitor state is the row action icon (monitor_toggle AsButton). Title = tooltip. */}}
+     Monitor state is list bookmark AsButton (disabled in multi-select) or Edit series / bulk Monitor. Title = tooltip. */}}
 {{$badge := "badge-error"}}{{if eq .Kind "verify_failed"}}{{$badge = "badge-warning"}}{{end}}
 <span class="series-health-badge absolute top-0 left-0 z-10 badge badge-sm {{$badge}} shadow p-1 tooltip tooltip-top inline-flex items-center justify-center"
       data-tip="{{.Title}}"

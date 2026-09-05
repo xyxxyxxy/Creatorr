@@ -15,22 +15,37 @@
   <div class="flex-none flex flex-wrap gap-2 items-center">
     {{if .Deleting}}
     <span class="text-xs opacity-60">Queued for deletion</span>
-    <label for="modal-edit-video-metadata" class="btn btn-outline btn-disabled" aria-disabled="true">Edit metadata</label>
-    <button type="button" class="btn btn-outline btn-disabled" aria-disabled="true" disabled>Refresh sidecars</button>
+    <label for="modal-edit-video-metadata" class="btn btn-outline btn-disabled" aria-disabled="true">
+      <i data-lucide="file-pen" class="size-4"></i>
+      Edit metadata
+    </label>
+    <button type="button" class="btn btn-outline btn-disabled" aria-disabled="true" disabled>
+      <i data-lucide="refresh-cw" class="size-4"></i>
+      Refresh sidecars
+    </button>
     {{else}}
-    <label for="modal-edit-video-metadata" class="btn btn-outline">Edit metadata</label>
+    <label for="modal-edit-video-metadata" class="btn btn-outline">
+      <i data-lucide="file-pen" class="size-4"></i>
+      Edit metadata
+    </label>
     {{$canRefreshSidecars := and .HasPackAnchor .DomainActive}}
     <form method="post" action="/actions/refresh-sidecars-video" class="inline">
       <input type="hidden" name="video_id" value="{{.Video.ID}}" />
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="redirect" value="/series/{{.Series.ID}}/videos/{{.Video.ID}}" />
       {{if $canRefreshSidecars}}
-      <button type="submit" class="btn btn-outline">Refresh sidecars</button>
+      <button type="submit" class="btn btn-outline">
+        <i data-lucide="refresh-cw" class="size-4"></i>
+        Refresh sidecars
+      </button>
       {{else}}
       {{$sideTip := "Needs packed media on disk"}}
       {{if and .HasPackAnchor (not .DomainActive)}}{{$sideTip = .DomainDisabledTitle}}{{end}}
       <span class="tooltip tooltip-bottom" data-tip="{{$sideTip}}">
-        <button type="submit" class="btn btn-outline btn-disabled" disabled aria-label="Refresh sidecars">Refresh sidecars</button>
+        <button type="submit" class="btn btn-outline btn-disabled" disabled aria-label="Refresh sidecars">
+          <i data-lucide="refresh-cw" class="size-4"></i>
+          Refresh sidecars
+        </button>
       </span>
       {{end}}
     </form>

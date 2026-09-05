@@ -54,7 +54,28 @@ func DefaultHandlers(d Deps) map[string]TaskHandler {
 	out[queue.KindSponsorblockCut] = SponsorblockCutHandler(d)
 	out[queue.KindMediaVerify] = MediaVerifyHandler(d)
 	out[queue.KindYtDlpUpdate] = YtDlpUpdateHandler(d)
+	out[queue.KindBulkEditSeries] = BulkEditSeriesHandler(d)
 	return out
+}
+
+// BulkEditSeriesHandler applies bulk series settings/metadata updates.
+func BulkEditSeriesHandler(d Deps) TaskHandler {
+	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
+		if d.Library == nil {
+			return apperrors.New(apperrors.CodeInternal, "bulk edit series deps missing")
+		}
+		updated, skipped, failed, err := d.Library.BulkEditSeriesPass(ctx, t, progress)
+		if err != nil {
+			return err
+		}
+		msg := library.BulkEditSeriesMessage(updated, skipped, failed)
+		progress(msg, ptrFloat(1))
+		detail, _ := json.Marshal(map[string]any{
+			"updated": updated, "skipped": skipped, "failed": failed,
+		})
+		_ = d.Library.Queue.SetDetail(t.ID, string(detail))
+		return nil
+	}
 }
 
 // RegenerateNFOHandler rewrites episode/series NFOs (resumable).

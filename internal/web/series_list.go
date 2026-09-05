@@ -16,12 +16,12 @@ type seriesListRow struct {
 	library.Series
 	HasMonitoredSource bool
 	Busy               bool
+	BulkEditBusy       bool
 	StatusInd          *seriesStatusView // poster top-left: health errors/warnings only
 	PosterURL          string
 	Line2              string
 	KindIcon           string
 	KindTip            string
-	MonitorTitle       string
 	Redirect           string
 	LiveTarget         string
 }
@@ -38,6 +38,8 @@ type seriesListLiveData struct {
 		FormAction       string
 	}
 	FilterActive bool
+	BulkEditBusy bool
+	FilterTotal  int
 	OOB          bool
 }
 
@@ -113,8 +115,8 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 	if redir == "" {
 		redir = "/series"
 	}
-	// Always refresh list on monitor so monitored filter / row state stays in sync.
 	liveTarget := "series-list-live"
+	bulkBusy, _ := h.Library.BulkEditSeriesBusy()
 
 	rows := make([]seriesListRow, 0, len(list))
 	for _, s := range list {
@@ -126,7 +128,6 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 			}
 		}
 		kindIcon, kindTip := "", ""
-		monitorTitle := "Include this series in scans and download-wanted (does not change source flags)"
 		if s.IsAudio() {
 			kindIcon, kindTip = "headphones", "Audio series"
 		}
@@ -157,12 +158,12 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 			Series:             s,
 			HasMonitoredSource: s.Monitored,
 			Busy:               best != nil,
+			BulkEditBusy:       bulkBusy,
 			StatusInd:          statusInd,
 			PosterURL:          posterURL,
 			Line2:              strings.Join(line2Parts, " · "),
 			KindIcon:           kindIcon,
 			KindTip:            kindTip,
-			MonitorTitle:       monitorTitle,
 			Redirect:           redir,
 			LiveTarget:         liveTarget,
 		})
@@ -237,6 +238,8 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 		Page:         pageInfo,
 		SeriesFilter: seriesFilter,
 		FilterActive: filter.Active(),
+		BulkEditBusy: bulkBusy,
+		FilterTotal:  total,
 	}, nil
 }
 

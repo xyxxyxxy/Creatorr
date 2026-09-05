@@ -4,12 +4,101 @@
 {{if and (not .Live.Series) (not .Live.FilterActive)}}
 {{template "list_header" (dict "level" "page" "title" "Series" "icon" .Icon "help" "Channels and playlists mirrored into your library.")}}
 {{else}}
-{{template "list_header" (dict "level" "page" "title" "Series" "icon" .Icon "help" "Channels and playlists mirrored into your library." "add_modal" "modal-add-series" "add_label" "Add series")}}
+{{template "list_header" (dict "level" "page" "title" "Series" "icon" .Icon "help" "Channels and playlists mirrored into your library." "add_modal" "modal-add-series" "add_label" "Add series" "add_icon" "plus")}}
 {{end}}
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 {{template "series_list_live" .Live}}
 {{template "list_panel_end"}}
 
 {{template "add_series_modal" .}}
+
+<input type="checkbox" id="modal-bulk-edit-series" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-bulk-edit-title>Edit series</h3>
+    {{if not .Roots}}
+    <div class="alert alert-warning mb-2"><span>Add a root folder under 'Settings' first.</span></div>
+    {{end}}
+    {{if not .Profiles}}
+    <div class="alert alert-warning mb-2"><span>Add a quality profile under 'Settings' first.</span></div>
+    {{end}}
+    <form method="post" action="/actions/bulk-edit-series" class="space-y-2" id="form-bulk-edit-series">
+      <div data-bulk-series-ids></div>
+      {{template "series_settings_fields" (dict
+        "Bulk" true
+        "Roots" .Roots
+        "Profiles" .Profiles
+        "RootInfo" "Changing root moves the series folder on disk."
+      )}}
+      <div class="modal-action">
+        <label for="modal-bulk-edit-series" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary" {{if or (not .Roots) (not .Profiles)}}disabled{{end}}>Save</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-edit-series-metadata" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg mb-2" data-bulk-meta-title>Edit metadata</h3>
+    <p class="text-sm opacity-70 mb-3">Fields shared by every selected series are pre-filled. Clear a field back to empty for No change. Filled fields replace that value on every selected series. Genres, tags, and actors replace the whole list when you add at least one entry (actor order is kept).</p>
+    <form method="post" action="/actions/bulk-edit-series-metadata" class="space-y-3" id="form-bulk-edit-series-metadata">
+      <div data-bulk-series-ids></div>
+      <div class="grid gap-3 sm:grid-cols-2">
+        {{template "metadata_suggest_row" (dict "Name" "studio" "Label" "Studio" "Value" "" "Placeholder" "No change" "ListID" "bulk-meta-dl-studio" "Options" .Suggestions.Studios)}}
+        {{template "metadata_suggest_row" (dict "Name" "country" "Label" "Country" "Value" "" "Placeholder" "No change" "ListID" "bulk-meta-dl-country" "Options" .Suggestions.Countries)}}
+      </div>
+      {{template "metadata_suggest_row" (dict "Name" "mpaa" "Label" "Content rating" "Value" "" "Placeholder" "No change" "ListID" "bulk-meta-dl-mpaa" "Options" .Suggestions.MPAAs)}}
+      <div class="grid gap-3 sm:grid-cols-2">
+        {{template "metadata_string_list_editor" (dict
+          "Label" "Genres"
+          "Name" "genre"
+          "Singular" "genre"
+          "Items" (list)
+          "Options" .Suggestions.Genres
+          "ListID" "bulk-meta-dl-genres"
+          "Placeholder" "Add a genre"
+          "EmptyText" "No change"
+        )}}
+        {{template "metadata_string_list_editor" (dict
+          "Label" "Tags"
+          "Name" "tag"
+          "Singular" "tag"
+          "Items" (list)
+          "Options" .Suggestions.Tags
+          "ListID" "bulk-meta-dl-tags"
+          "Placeholder" "Add a tag"
+          "EmptyText" "No change"
+        )}}
+      </div>
+      {{template "metadata_actors_editor" (dict "Actors" (list) "NameOptions" .Suggestions.ActorNames "RoleOptions" .Suggestions.ActorRoles "EmptyText" "No change")}}
+      <div class="modal-action">
+        <label for="modal-bulk-edit-series-metadata" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-delete-series" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-bulk-delete-title>Delete series</h3>
+    <p class="text-sm mb-4">Removes selected series from Creatorr including indexed entries and library media on disk. Related tasks are cancelled.</p>
+    <form method="post" action="/actions/bulk-delete-series" class="space-y-3 js-confirm-submit" id="form-bulk-delete-series">
+      <div data-bulk-series-ids></div>
+      {{template "checkbox_field" (dict "Name" "confirm_delete" "Label" "Yes, I want to delete these series, including all library files on disk" "InputClass" "js-confirm-submit-check")}}
+      <div class="modal-action">
+        <label for="modal-bulk-delete-series" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-error" disabled>Delete</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
 {{template "foot" .}}
 {{end}}

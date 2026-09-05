@@ -3,15 +3,17 @@
   Actor name+role pairs: plain locked rows (reorder + remove) + draft add.
   Expects: Actors ([]library.SeriesActor), NameOptions, RoleOptions -
   both from ListMetaSuggestions (library-wide series∪videos pools).
+  Optional: EmptyText (default "none") when Actors empty.
   Form order is NFO/DB actor order. Locked rows: name/role 50/50.
   Draft: one daisyUI join (Name|Role label-for-input + add).
 */}}
-<div class="w-full" data-actors-editor>
+{{$empty := .EmptyText}}{{if not $empty}}{{$empty = "none"}}{{end}}
+<div class="w-full" data-actors-editor{{if .EmptyText}} data-actors-empty-text="{{.EmptyText}}"{{end}}>
   <fieldset class="fieldset gap-2 bg-base-200 border border-base-300 rounded-box p-4">
     <legend class="fieldset-legend">Actors</legend>
     <div class="space-y-1" data-actors-list>
       {{if not .Actors}}
-      <p class="text-sm opacity-60" data-actors-empty>none</p>
+      <p class="text-sm opacity-60" data-actors-empty>{{$empty}}</p>
       {{end}}
       {{range .Actors}}
       <div class="flex gap-1 items-center" data-actor-row>

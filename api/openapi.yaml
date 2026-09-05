@@ -629,6 +629,170 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/series/ids:
+    get:
+      tags: [library]
+      operationId: listSeriesIds
+      summary: List series ids matching the same filters as the series list UI
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Title substring (case-insensitive)
+        - name: root
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: quality
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: delivery
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [video, audio]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [monitored, unmonitored, complete, incomplete, has_errors]
+      responses:
+        "200":
+          description: Matching series ids (title order)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeriesIdsResponse"
+
+  /api/series/bulk-edit:
+    post:
+      tags: [library]
+      operationId: bulkEditSeries
+      summary: Bulk-edit series root folder, quality profile, and/or delivery mode
+      description: >
+        Enqueues a system-lane bulk_edit_series task. Omitted or null fields are unchanged.
+        At least one field besides series_ids is required. Root changes move series folders on disk.
+        Returns Conflict when another bulk_edit_series task is already pending or running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkEditSeriesRequest"
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnqueueTaskResponse"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Bulk edit already queued or running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/series/bulk-metadata:
+    post:
+      tags: [library]
+      operationId: bulkEditSeriesMetadata
+      summary: Bulk-override series catalog metadata fields
+      description: >
+        Enqueues bulk_edit_series for studio, country, mpaa, genres, tags, and/or actors.
+        Included fields replace current values (lists replace entirely). Conflict when busy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkEditSeriesMetadataRequest"
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnqueueTaskResponse"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Bulk edit already queued or running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/series/bulk-monitored:
+    post:
+      tags: [library]
+      operationId: bulkSetSeriesMonitored
+      summary: Set monitored on many series
+      description: Series-level flag only; does not cascade to sources, videos, or domains.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkSetSeriesMonitoredRequest"
+      responses:
+        "200":
+          description: Applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkSetSeriesMonitoredResponse"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/series/bulk-delete:
+    post:
+      tags: [library]
+      operationId: bulkDeleteSeries
+      summary: Enqueue delete_files for many series (removes library files on disk)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkDeleteSeriesRequest"
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnqueueTaskResponse"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/series/{id}:
     get:
       tags: [library]
@@ -1962,6 +2126,130 @@ components:
           items:
             $ref: "#/components/schemas/Video"
           description: Present on series detail GET only
+
+    SeriesIdsResponse:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+
+    BulkEditSeriesRequest:
+      type: object
+      required: [series_ids]
+      properties:
+        series_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          minItems: 1
+        root_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Omit or null = no change
+        quality_profile_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Omit or null = no change
+        delivery_mode:
+          type: string
+          nullable: true
+          enum: [video, audio]
+          description: Omit or null = no change
+        monitored:
+          type: boolean
+          nullable: true
+          description: Omit or null = no change
+
+    BulkEditSeriesMetadataRequest:
+      type: object
+      required: [series_ids]
+      properties:
+        series_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          minItems: 1
+        studio:
+          type: string
+          nullable: true
+          description: When present (including empty), replaces studio
+        country:
+          type: string
+          nullable: true
+        mpaa:
+          type: string
+          nullable: true
+          description: Content rating
+        genres:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: When present, replaces genres list
+        tags:
+          type: array
+          nullable: true
+          items:
+            type: string
+        actors:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/SeriesActor"
+          description: When present, replaces actors list
+
+    SeriesActor:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+        order:
+          type: integer
+
+    BulkSetSeriesMonitoredRequest:
+      type: object
+      required: [series_ids, monitored]
+      properties:
+        series_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          minItems: 1
+        monitored:
+          type: boolean
+
+    BulkSetSeriesMonitoredResponse:
+      type: object
+      required: [updated, skipped]
+      properties:
+        updated:
+          type: integer
+        skipped:
+          type: integer
+          description: Unknown series ids
+
+    BulkDeleteSeriesRequest:
+      type: object
+      required: [series_ids]
+      properties:
+        series_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          minItems: 1
 
     CreateSeriesRequest:
       type: object

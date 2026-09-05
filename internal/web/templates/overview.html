@@ -1,6 +1,6 @@
 {{define "overview"}}
 {{template "head" .}}
-{{template "list_header" (dict "level" "page" "title" "Overview" "icon" .Icon "help" "Library at a glance: series, videos, and packed media on disk." "add_modal" "modal-add-series" "add_label" "Add series")}}
+{{template "list_header" (dict "level" "page" "title" "Overview" "icon" .Icon "help" "Library at a glance: series, videos, and packed media on disk." "add_modal" "modal-add-series" "add_label" "Add series" "add_icon" "plus")}}
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 
 <div class="stats stats-vertical lg:stats-horizontal shadow bg-base-100 border border-base-300 w-full mt-4 mb-4">

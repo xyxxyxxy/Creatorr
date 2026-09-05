@@ -19,18 +19,18 @@
     </div>
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
-    <label for="modal-edit-series" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Edit series</label>
-    <label for="modal-edit-series-metadata" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Edit metadata</label>
-    <label for="modal-delete-series" class="btn btn-soft btn-error{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Delete</label>
-    {{template "monitor_toggle" (dict
-      "Action" "/actions/set-series-monitored"
-      "SeriesID" .Series.ID
-      "Monitored" .Series.Monitored
-      "Redirect" (printf "/series/%d" .Series.ID)
-      "AsButton" true
-      "Disabled" .Deleting
-      "DisabledTitle" "Series is being deleted"
-    )}}
+    <label for="modal-edit-series" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>
+      <i data-lucide="pencil" class="size-4"></i>
+      Edit series
+    </label>
+    <label for="modal-edit-series-metadata" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>
+      <i data-lucide="file-pen" class="size-4"></i>
+      Edit metadata
+    </label>
+    <label for="modal-delete-series" class="btn btn-soft btn-error{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>
+      <i data-lucide="trash-2" class="size-4"></i>
+      Delete
+    </label>
   </div>
 </div>
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
@@ -49,14 +49,20 @@
 <div class="py-10 px-4 w-full">
   <div class="flex w-full max-w-2xl mx-auto flex-col items-center">
     <div class="flex w-full flex-row items-stretch">
-      <label for="modal-add-single" class="btn btn-outline grow h-auto min-h-12 py-3 whitespace-normal">Add single video</label>
+      <label for="modal-add-single" class="btn btn-outline grow h-auto min-h-12 py-3 whitespace-normal">
+        <i data-lucide="film" class="size-4"></i>
+        Add single video
+      </label>
       <div class="divider divider-horizontal">OR</div>
-      <label for="modal-add-source" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal">Add channel/playlist</label>
+      <label for="modal-add-source" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal">
+        <i data-lucide="list-video" class="size-4"></i>
+        Add channel/playlist
+      </label>
     </div>
   </div>
 </div>
 {{else}}
-{{template "list_header" (dict "level" "section" "title" "Sources" "add_modal" "modal-add-source" "add_label" "Add channel/playlist" "add_modal2" "modal-add-single" "add_label2" "Add single video")}}
+{{template "list_header" (dict "level" "section" "title" "Sources" "add_modal" "modal-add-source" "add_label" "Add channel/playlist" "add_icon" "list-video" "add_modal2" "modal-add-single" "add_label2" "Add single video" "add_icon2" "film")}}
 <script type="application/json" id="series-source-urls">{{toJSON .SourceURLs}}</script>
 {{if .Sources}}
 {{template "list_table"}}
@@ -309,13 +315,14 @@
         "TitleInfo" "Changing the title updates Creatorr and renames the on-disk series folder immediately. Episode filenames that include the series name are not rewritten until you run 'Apply episode format' under 'Settings → Library'."
         "TitleDisabled" .FolderRenameBusy
         "TitleDisabledTitle" "'Title' and 'Root folder' are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
+        "Monitored" .Series.Monitored
         "Roots" .Roots
         "RootID" .Series.RootID
+        "RootInfo" "Where downloads and series NFO/art are written. Changing root moves the series folder on disk."
         "RootDisabled" .FolderRenameBusy
         "RootDisabledTitle" "'Title' and 'Root folder' are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
         "Profiles" .Profiles
         "ProfileID" .Series.QualityProfileID
-        "ProfileInfo" "yt-dlp format selector for new video downloads."
       )}}
       <div class="modal-action">
         <label for="modal-edit-series" class="btn modal-cancel">Cancel</label>

@@ -155,6 +155,24 @@ func TestSeriesListAudioQualityShowsBest(t *testing.T) {
 	if strings.Contains(body, library.Profile480Name+" ·") {
 		t.Fatalf("audio series must not show assigned profile name: %s", truncate(body, 800))
 	}
+	if !strings.Contains(body, "js-series-select") || !strings.Contains(body, "data-series-bulk-bar") {
+		t.Fatalf("missing series bulk select/action bar: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, "data-series-bulk-mode") || !strings.Contains(body, "list-checks") {
+		t.Fatalf("missing series multi-select toggle: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, "data-series-select-wrap") {
+		t.Fatalf("missing series select wrap: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, "modal-bulk-edit-series") || !strings.Contains(body, "modal-bulk-edit-series-metadata") {
+		t.Fatalf("missing bulk edit modals: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, "monitor-toggle-root") || !strings.Contains(body, "data-series-monitor-wrap") {
+		t.Fatalf("series list missing monitor AsButton wrap: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, `data-tip="Monitor"`) && !strings.Contains(body, `data-tip="Unmonitor"`) {
+		t.Fatalf("series list missing monitor tip: %s", truncate(body, 400))
+	}
 }
 
 func TestImportPageWithoutSeries(t *testing.T) {
@@ -811,7 +829,7 @@ func TestStaticCSS(t *testing.T) {
 	}
 }
 
-func TestMonitorToggleHTMX(t *testing.T) {
+func TestSetSeriesMonitoredHTMX(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -833,7 +851,7 @@ func TestMonitorToggleHTMX(t *testing.T) {
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	body := strings.NewReader("series_id=" + itoa(ser.ID) + "&monitored=0")
+	body := strings.NewReader("series_id=" + itoa(ser.ID) + "&monitored=0&redirect=/series")
 	req := httptest.NewRequest(http.MethodPost, "/actions/set-series-monitored", body)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
@@ -842,16 +860,19 @@ func TestMonitorToggleHTMX(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
-	if loc := rec.Header().Get("Location"); loc != "" {
-		t.Fatalf("unexpected redirect %s", loc)
+	if loc := rec.Header().Get("HX-Redirect"); loc != "/series" {
+		t.Fatalf("expected HX-Redirect /series, got %q body=%s", loc, truncate(rec.Body.String(), 200))
 	}
-	out := rec.Body.String()
-	if !strings.Contains(out, "monitor-toggle-root") || !strings.Contains(out, "hx-post") {
-		t.Fatalf("expected toggle partial: %s", truncate(out, 300))
+	got, err := lib.GetSeries(ser.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Monitored {
+		t.Fatal("expected series unmonitored")
 	}
 }
 
-func TestSeriesDetailHasMonitorToggle(t *testing.T) {
+func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -880,11 +901,11 @@ func TestSeriesDetailHasMonitorToggle(t *testing.T) {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "monitor-toggle-root") || !strings.Contains(body, `action="/actions/set-series-monitored"`) {
-		t.Fatalf("series detail missing monitor toggle: %s", truncate(body, 400))
+	if strings.Contains(body, "monitor-toggle-root") || strings.Contains(body, `action="/actions/set-series-monitored"`) {
+		t.Fatalf("series detail should not use bookmark monitor toggle: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, `data-tip="Unmonitor"`) {
-		t.Fatalf("series detail missing Unmonitor tip: %s", truncate(body, 400))
+	if !strings.Contains(body, `name="monitored"`) || !strings.Contains(body, "Monitored") {
+		t.Fatalf("series detail edit form missing monitored checkbox: %s", truncate(body, 400))
 	}
 }
 
