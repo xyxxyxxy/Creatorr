@@ -8,99 +8,46 @@
 </div>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Root folders" "help" "Named disk paths where series store files." "add_modal" "modal-add-root" "add_label" "Add root")}}
+{{template "list_header" (dict "level" "section" "title" "Root folders" "help" "Named disk paths where series store files. Each root has its own episode format." "add_modal" "modal-add-root" "add_label" "Add root")}}
+{{if .NamingLocked}}
+<div class="alert alert-info text-sm mb-2"><span>'Episode format' is locked while 'Apply episode format' is pending or running. Cancel that task on 'Tasks' or wait until it finishes.</span></div>
+{{end}}
 {{if not .Roots}}
 {{template "list_empty" "No roots yet."}}
 {{else}}
 {{template "list_table"}}
-<thead><tr><th>Name</th><th>Path</th><th>Retention</th><th></th></tr></thead>
+<thead><tr><th>Name</th><th>Path</th><th>Episode format</th><th>Retention</th><th></th></tr></thead>
 <tbody>
   {{range .Roots}}
   <tr>
     <td>{{if .Name}}{{.Name}}{{else}}{{template "empty_value"}}{{end}}</td>
     <td class="font-mono text-xs">{{.Path}}</td>
+    <td class="font-mono text-xs max-w-[14rem] truncate" title="{{.EpisodeFormat}}">{{.EpisodeFormat}}</td>
     <td>{{if .RetentionTTLSeconds.Valid}}{{retentionDays .RetentionTTLSeconds}} days{{else}}<span class="tooltip tooltip-top inline-flex" data-tip="Keep forever"><i data-lucide="infinity" class="size-4 opacity-70" aria-label="Keep forever"></i></span>{{end}}</td>
-    <td><label for="modal-edit-root-{{.ID}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
-      <i data-lucide="pencil" class="size-3.5"></i>
-    </label></td>
+    <td class="whitespace-nowrap text-end">
+      <div class="join">
+        <label for="modal-edit-root-{{.ID}}" class="btn btn-secondary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+          <i data-lucide="pencil" class="size-3.5"></i>
+        </label>
+        {{if gt .SeriesCount 0}}
+        <span class="tooltip tooltip-top join-item inline-flex border-0" data-tip="{{if eq .SeriesCount 1}}Used by 1 series{{else}}Used by {{.SeriesCount}} series{{end}}">
+          <span class="btn btn-soft btn-error btn-xs btn-square btn-disabled" aria-label="{{if eq .SeriesCount 1}}Used by 1 series{{else}}Used by {{.SeriesCount}} series{{end}}" aria-disabled="true" role="button" tabindex="-1">
+            <i data-lucide="trash-2" class="size-3.5" aria-hidden="true"></i>
+          </span>
+        </span>
+        {{else}}
+        <label for="modal-delete-root-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+          <i data-lucide="trash-2" class="size-3.5"></i>
+        </label>
+        {{end}}
+      </div>
+    </td>
   </tr>
   {{end}}
 </tbody>
 {{template "list_table_end"}}
 {{template "pagination" .RootsPage}}
 {{end}}
-<form method="post" action="/actions/save-settings" class="space-y-3 border-t border-base-300 pt-3 max-w-3xl js-settings-autosave">
-  <input type="hidden" name="redirect" value="/settings/library" />
-  {{if .NamingLocked}}
-  <div class="alert alert-info text-sm"><span>'Episode format' is locked while 'Apply episode format' is pending or running. Cancel that task on 'Tasks' or wait until it finishes.</span></div>
-  {{end}}
-  {{template "field_input" (dict
-    "Name" "episode_format"
-    "Label" "Episode format"
-    "Value" .EpisodeFormat
-    "Mono" true
-    "Required" true
-    "JoinPrefix" "Series/"
-    "JoinSuffix" ".ext"
-    "Disabled" .NamingLocked
-    "DisabledTitle" "'Episode format' is locked while 'Apply episode format' is pending or running."
-    "AutosaveBlur" true
-  )}}
-  <details class="collapse collapse-arrow bg-base-100 border border-base-300 max-w-3xl">
-    <summary class="collapse-title font-medium text-sm min-h-0 py-3">Available format tokens</summary>
-    <div class="collapse-content text-sm text-base-content/70 space-y-2">
-      <div class="overflow-x-auto">
-        <table class="table table-sm w-full">
-          <thead>
-            <tr>
-              <th scope="col">Token</th>
-              <th scope="col">Meaning</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code class="text-xs">{id}</code></td>
-              <td>site video id</td>
-            </tr>
-            <tr>
-              <td><code class="text-xs">{domain}</code></td>
-              <td>source hostname</td>
-            </tr>
-            <tr>
-              <td><code class="text-xs">{series}</code> / <code class="text-xs">{series:N}</code></td>
-              <td>series title for the stem or subfolders (optional); series folder itself is always fixed. <code class="text-xs">:N</code> caps runes</td>
-            </tr>
-            <tr>
-              <td><code class="text-xs">{title}</code> / <code class="text-xs">{title:N}</code></td>
-              <td>video title; <code class="text-xs">:N</code> caps runes</td>
-            </tr>
-            <tr>
-              <td><code class="text-xs">{episode}</code></td>
-              <td><code class="text-xs">MMDD</code> + same-day index (<code class="text-xs">00</code>…; oldest upload first that UTC day). Equal times use arrival order. Zero-padded to 6 digits (January is <code class="text-xs">01…</code>).</td>
-            </tr>
-            <tr>
-              <td><code class="text-xs">{date}</code></td>
-              <td>release date (<code class="text-xs">YYYY-MM-DD</code>)</td>
-            </tr>
-            <tr>
-              <td><code class="text-xs">{year}</code></td>
-              <td>calendar year (year-season, e.g. 2026)</td>
-            </tr>
-            <tr>
-              <td><code class="text-xs">{month}</code> / <code class="text-xs">{month:02}</code></td>
-              <td>UTC release month; <code class="text-xs">:02</code> zero-pads</td>
-            </tr>
-            <tr>
-              <td><code class="text-xs">{day}</code> / <code class="text-xs">{day:02}</code></td>
-              <td>UTC release day; <code class="text-xs">:02</code> zero-pads</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p>The following tokens become available after the release date of a video is known: <code class="text-xs">{date}</code>, <code class="text-xs">{year}</code>, <code class="text-xs">{month}</code>, <code class="text-xs">{day}</code>, and <code class="text-xs">{episode}</code>.</p>
-    </div>
-  </details>
-</form>
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
@@ -204,7 +151,7 @@
 
 <input type="checkbox" id="modal-add-root" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box">
+  <div class="modal-box max-w-3xl">
     <h3 class="font-bold text-lg mb-2">Add root folder</h3>
         <form method="post" action="/actions/add-root" class="space-y-2">
       <input type="hidden" name="redirect" value="/settings/library" />
@@ -224,6 +171,18 @@
         "Placeholder" "Root folder name"
         "Autocomplete" "off"
       )}}
+      {{template "field_input" (dict
+        "Name" "episode_format"
+        "ID" "add-root-episode-format"
+        "Label" "Episode format"
+        "Value" $.DefaultEpisodeFormat
+        "Mono" true
+        "Required" true
+        "JoinPrefix" "{series:100}/"
+        "JoinSuffix" ".ext"
+        "Hint" "Relative path under the series folder for packed episodes (no extension). Apply to existing files with 'Apply episode format' under 'Settings → Maintenance'."
+      )}}
+      {{template "episode_format_tokens"}}
       {{template "field_input" (dict
         "Name" "retention_ttl_days"
         "Label" "Retention days (optional)"
@@ -245,7 +204,7 @@
 {{range .Roots}}
 <input type="checkbox" id="modal-edit-root-{{.ID}}" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box">
+  <div class="modal-box max-w-3xl">
     <h3 class="font-bold text-lg mb-2">Edit root{{if .Name}} {{.Name}}{{end}}</h3>
         <form method="post" action="/actions/update-root" class="space-y-2">
       <input type="hidden" name="id" value="{{.ID}}" />
@@ -264,6 +223,19 @@
         "Placeholder" "Root folder name"
       )}}
       {{template "field_input" (dict
+        "Name" "episode_format"
+        "Label" "Episode format"
+        "Value" .EpisodeFormat
+        "Mono" true
+        "Required" true
+        "JoinPrefix" "{series:100}/"
+        "JoinSuffix" ".ext"
+        "Disabled" $.NamingLocked
+        "DisabledTitle" "'Episode format' is locked while 'Apply episode format' is pending or running."
+        "Hint" "Relative path under the series folder for packed episodes (no extension). Apply to existing files with 'Apply episode format' under 'Settings → Maintenance'."
+      )}}
+      {{template "episode_format_tokens"}}
+      {{template "field_input" (dict
         "Name" "retention_ttl_days"
         "Label" "Retention days (optional)"
         "Type" "number"
@@ -281,6 +253,24 @@
   </div>
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
+{{if eq .SeriesCount 0}}
+<input type="checkbox" id="modal-delete-root-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Delete root{{if .Name}} {{.Name}}{{end}}</h3>
+    <p class="text-sm mb-4">Removes this root folder from Creatorr. Disk files are not deleted.</p>
+    <form method="post" action="/actions/delete-root">
+      <input type="hidden" name="redirect" value="/settings/library" />
+      <input type="hidden" name="id" value="{{.ID}}" />
+      <div class="modal-action">
+        <label for="modal-delete-root-{{.ID}}" class="btn modal-cancel">Keep</label>
+        <button type="submit" class="btn btn-error">Delete</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
 {{end}}
 
 <input type="checkbox" id="modal-add-profile" class="modal-toggle" />

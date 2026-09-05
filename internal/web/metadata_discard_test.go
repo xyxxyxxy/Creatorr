@@ -27,7 +27,7 @@ func TestSeriesMetadataBodyDiscardClearsDraft(t *testing.T) {
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	lib.CacheDir = filepath.Join(t.TempDir(), "cache")
-	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

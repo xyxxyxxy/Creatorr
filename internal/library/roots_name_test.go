@@ -6,7 +6,7 @@ import (
 
 func TestCreateRootRejectsRelativePath(t *testing.T) {
 	s := openLib(t)
-	if _, err := s.CreateRoot("rel", "var/library", nil); err == nil {
+	if _, err := s.CreateRoot("rel", "var/library", "", nil); err == nil {
 		t.Fatal("want error for relative path")
 	}
 }
@@ -14,7 +14,7 @@ func TestCreateRootRejectsRelativePath(t *testing.T) {
 func TestCreateRootEmptyNameAllowed(t *testing.T) {
 	s := openLib(t)
 	dir := t.TempDir()
-	root, err := s.CreateRoot("", dir, nil)
+	root, err := s.CreateRoot("", dir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,12 +26,12 @@ func TestCreateRootEmptyNameAllowed(t *testing.T) {
 func TestUpdateRootEmptyNameAllowed(t *testing.T) {
 	s := openLib(t)
 	dir := t.TempDir()
-	root, err := s.CreateRoot("old", dir, nil)
+	root, err := s.CreateRoot("old", dir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	empty := ""
-	updated, err := s.UpdateRoot(root.ID, &empty, nil, nil, false)
+	updated, err := s.UpdateRoot(root.ID, &empty, nil, nil, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,10 +44,10 @@ func TestCreateRootAllowsDuplicateEmptyNames(t *testing.T) {
 	s := openLib(t)
 	dir1 := t.TempDir()
 	dir2 := t.TempDir()
-	if _, err := s.CreateRoot("", dir1, nil); err != nil {
+	if _, err := s.CreateRoot("", dir1, "", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateRoot("", dir2, nil); err != nil {
+	if _, err := s.CreateRoot("", dir2, "", nil); err != nil {
 		t.Fatal(err)
 	}
 }

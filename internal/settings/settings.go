@@ -12,7 +12,6 @@ import (
 // Keys stored in the settings table (SQLite + UI). Process bootstrap env is config.Load only - never Settings.
 const (
 	KeyPotFetch                     = "pot_fetch"
-	KeyEpisodeFormat                = "episode_format"
 	KeyDownloadWantedCron           = "download_wanted_cron"
 	KeySyncFilesCron                = "sync_files_cron"
 	KeyRetentionDeleteCron          = "retention_delete_cron"
@@ -29,7 +28,6 @@ const (
 // Help is one-line UI help text per key.
 var Help = map[string]string{
 	KeyPotFetch: "A PO token (proof of origin) is an attestation token yt-dlp can attach so media hosts treat traffic as more legitimate when an IP is flagged for bot checks. It may help, but does not guarantee avoiding blocks. Creatorr fetches tokens from the provider sidecar above.",
-	KeyEpisodeFormat:                "Relative path under the series folder for packed episodes (no extension). Apply to existing files with 'Apply episode format' under 'Settings → Maintenance'.",
 	KeyDownloadWantedCron:           "Schedule to enqueue wanted videos for monitored series.",
 	KeySyncFilesCron:                "Library scan will detect changed files in the root folders and cache directories.",
 	KeyRetentionDeleteCron:          "Deleting old data according to root folder retention ('Settings → Library').",
@@ -52,7 +50,6 @@ var Help = map[string]string{
 // Labels are human-readable Settings titles (DB/API keys are snake_case).
 var Labels = map[string]string{
 	KeyPotFetch:                     "PO token fetch",
-	KeyEpisodeFormat:                "Episode format",
 	KeyDownloadWantedCron:           "Download wanted schedule",
 	KeySyncFilesCron:                "File sync schedule",
 	KeyRetentionDeleteCron:          "Retention delete schedule",
@@ -89,7 +86,7 @@ var schedulerOrder = []string{
 	KeyYtDlpUpdateCron,
 }
 
-// libraryOrder is Settings → Library (subtitles; episode_format is separate).
+// libraryOrder is Settings → Library (subtitles).
 var libraryOrder = []string{
 	KeySubtitleLangs,
 	KeySubtitleAuto,
@@ -121,7 +118,6 @@ func SeedDefaults(database *db.DB) error {
 	}
 	defaults := map[string]string{
 		KeyPotFetch:                     PotFetchAuto,
-		KeyEpisodeFormat:                DefaultEpisodeFormat,
 		KeyDownloadWantedCron:           "@hourly",
 		KeySyncFilesCron:                "@daily",
 		KeyRetentionDeleteCron:          "@daily",
@@ -136,7 +132,6 @@ func SeedDefaults(database *db.DB) error {
 	allKeys := append([]string{}, generalOrder...)
 	allKeys = append(allKeys, schedulerOrder...)
 	allKeys = append(allKeys, libraryOrder...)
-	allKeys = append(allKeys, KeyEpisodeFormat)
 	allKeys = append(allKeys, KeyMetadataDomainTag, KeyMetadataGenresFromCategories, KeyArchiveFallback)
 	for _, key := range allKeys {
 		val := defaults[key]
@@ -177,7 +172,7 @@ func migrateLegacySettingKeys(database *db.DB) error {
 		}
 	}
 	// Drop removed settings no longer used.
-	for _, key := range []string{"download_new_on_scan", "stats_retention_days", "source_download_error_threshold", "download_wanted_order"} {
+	for _, key := range []string{"download_new_on_scan", "stats_retention_days", "source_download_error_threshold", "download_wanted_order", "episode_format"} {
 		_, _ = database.SQL.Exec(`DELETE FROM settings WHERE key = ?`, key)
 	}
 	return nil
@@ -211,7 +206,6 @@ func All(database *db.DB) ([]Entry, error) {
 	keys := append(append([]string{}, connectOrder...), generalOrder...)
 	keys = append(keys, schedulerOrder...)
 	keys = append(keys, libraryOrder...)
-	keys = append(keys, KeyEpisodeFormat)
 	return entriesFor(database, keys)
 }
 

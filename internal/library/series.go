@@ -414,7 +414,7 @@ func (s *Store) CreateSeries(p CreateSeriesParams) (*Series, error) {
 
 // seriesFolderTaken reports whether another series on rootID would use the same SeriesDir name.
 func (s *Store) seriesFolderTaken(rootID int64, title string, excludeSeriesID int64) (bool, error) {
-	want := sanitizeName(title, 0)
+	want := sanitizeName(title, SeriesDirMaxRunes)
 	rows, err := s.DB.SQL.Query(`SELECT id, title FROM series WHERE root_id = ?`, rootID)
 	if err != nil {
 		return false, err
@@ -429,7 +429,7 @@ func (s *Store) seriesFolderTaken(rootID int64, title string, excludeSeriesID in
 		if excludeSeriesID > 0 && id == excludeSeriesID {
 			continue
 		}
-		if sanitizeName(t, 0) == want {
+		if sanitizeName(t, SeriesDirMaxRunes) == want {
 			return true, nil
 		}
 	}

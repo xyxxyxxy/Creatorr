@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/library/nametemplate"
 )
 
@@ -27,16 +26,4 @@ func ValidateEpisodeFormat(raw string) error {
 		return fmt.Errorf("episode_format: %w", err)
 	}
 	return nil
-}
-
-// GetEpisodeFormat loads episode_format from the DB (default when missing/empty).
-func GetEpisodeFormat(database *db.DB) (string, error) {
-	if database == nil {
-		return DefaultEpisodeFormat, nil
-	}
-	raw, err := Get(database, KeyEpisodeFormat)
-	if err != nil {
-		return "", err
-	}
-	return NormalizeEpisodeFormat(raw), nil
 }

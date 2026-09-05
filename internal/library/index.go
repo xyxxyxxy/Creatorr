@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
@@ -248,6 +249,8 @@ type DownloadContext struct {
 	Video          Video
 	SeriesTitle    string
 	RootPath       string
+	RootID         int64
+	EpisodeFormat  string
 	FormatSelector string
 	URL            string
 	Profile        QualityProfile
@@ -260,14 +263,14 @@ func (s *Store) PrepareDownload(videoID int64) (*DownloadContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	var title, rootPath, deliveryMode string
-	var profileID int64
+	var title, rootPath, episodeFormat, deliveryMode string
+	var profileID, rootID int64
 	err = s.DB.SQL.QueryRow(`
-		SELECT s.title, r.path, s.quality_profile_id, s.delivery_mode
+		SELECT s.title, r.id, r.path, r.episode_format, s.quality_profile_id, s.delivery_mode
 		FROM series s
 		JOIN root_folders r ON r.id = s.root_id
 		WHERE s.id = ?
-	`, v.SeriesID).Scan(&title, &rootPath, &profileID, &deliveryMode)
+	`, v.SeriesID).Scan(&title, &rootID, &rootPath, &episodeFormat, &profileID, &deliveryMode)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -283,10 +286,13 @@ func (s *Store) PrepareDownload(videoID int64) (*DownloadContext, error) {
 		url = strings.TrimSpace(v.SourceURL.String)
 	}
 	url = DownloadURL(url, v.RemoteID)
+	_ = s.EnsureSeriesDirCapped(rootPath, title)
 	return &DownloadContext{
 		Video:          *v,
 		SeriesTitle:    title,
 		RootPath:       rootPath,
+		RootID:         rootID,
+		EpisodeFormat:  settings.NormalizeEpisodeFormat(episodeFormat),
 		FormatSelector: prof.FormatSelector,
 		URL:            url,
 		Profile:        *prof,

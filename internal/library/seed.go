@@ -49,8 +49,8 @@ func SeedDefaults(database *db.DB, cfg config.Config) error {
 	if roots == 0 {
 		name := filepath.Base(path)
 		_, err = database.SQL.Exec(`
-			INSERT INTO root_folders (name, path, retention_ttl_seconds) VALUES (?, ?, NULL)
-		`, name, path)
+			INSERT INTO root_folders (name, path, retention_ttl_seconds, episode_format) VALUES (?, ?, NULL, ?)
+		`, name, path, DefaultEpisodeFormat)
 		if err != nil {
 			return fmt.Errorf("seed root: %w", err)
 		}

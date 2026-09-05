@@ -11,9 +11,6 @@ func validateValue(key, value string) error {
 	if key == KeyPotFetch {
 		return validatePotFetch(value)
 	}
-	if key == KeyEpisodeFormat {
-		return ValidateEpisodeFormat(value)
-	}
 	if key == KeySubtitleLangs {
 		return validateSubtitleLangs(value)
 	}

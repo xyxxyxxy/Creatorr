@@ -73,7 +73,7 @@ func TestRunnerCancelDoesNotMarkDownloadFailed(t *testing.T) {
 	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
 
 	lib := &library.Store{DB: d, Queue: queue.NewStore(d)}
-	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestRunnerAgeRestrictedDoesNotPauseOrNotify(t *testing.T) {
 	_ = domains.EnsureHost(d, "example.com")
 
 	lib := &library.Store{DB: d, Queue: queue.NewStore(d)}
-	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -382,7 +382,7 @@ func TestRunnerDownloadsDoneDigest(t *testing.T) {
 	_ = domains.EnsureHost(d, "example.com")
 
 	lib := &library.Store{DB: d, Queue: queue.NewStore(d)}
-	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -472,7 +472,7 @@ func TestRunnerMediaTypeExcludedMarksIgnored(t *testing.T) {
 	}
 
 	lib := &library.Store{DB: d, Queue: queue.NewStore(d)}
-	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -571,7 +571,7 @@ func TestRunnerLiveBroadcastSkippedStaysWanted(t *testing.T) {
 	}
 
 	lib := &library.Store{DB: d, Queue: queue.NewStore(d)}
-	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

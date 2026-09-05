@@ -8,7 +8,6 @@ import (
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 func TestBuildEpisodePathsRelDefault(t *testing.T) {
@@ -79,10 +78,13 @@ func TestBuildEpisodePathsNestedSeason(t *testing.T) {
 
 func TestApplyEpisodeNamingRenamesAndHistory(t *testing.T) {
 	s := openLib(t)
-	_ = settings.Set(s.DB, settings.KeyEpisodeFormat, library.DefaultEpisodeFormat)
 	rootID, profileID := seedRootProfile(t, s)
 	root, err := s.GetRoot(rootID)
 	if err != nil {
+		t.Fatal(err)
+	}
+	fmtStr := library.DefaultEpisodeFormat
+	if _, err := s.UpdateRoot(root.ID, nil, nil, &fmtStr, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
@@ -179,7 +181,7 @@ func TestEnqueueRetentionDeleteSkipsWithoutTTL(t *testing.T) {
 		t.Fatalf("expected skip without TTL, got task %d", id)
 	}
 	ttl := int64(3600)
-	if _, err := s.CreateRoot("with-ttl", t.TempDir(), &ttl); err != nil {
+	if _, err := s.CreateRoot("with-ttl", t.TempDir(), "", &ttl); err != nil {
 		t.Fatal(err)
 	}
 	id, err = s.EnqueueRetentionDelete(queue.PriorityRetentionDeleteDue)
@@ -200,7 +202,7 @@ func TestEnqueueSyncFilesSkipsWithoutVideos(t *testing.T) {
 	if id != 0 {
 		t.Fatalf("expected skip with no videos, got task %d", id)
 	}
-	root, err := s.CreateRoot("r", t.TempDir(), nil)
+	root, err := s.CreateRoot("r", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

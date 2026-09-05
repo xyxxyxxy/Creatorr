@@ -477,6 +477,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [library]
+      operationId: deleteRoot
+      summary: Delete a root folder
+      description: |
+        Fails with Conflict when any series still references the root.
+        Move those series to another root before deleting.
+      parameters:
+        - $ref: "#/components/parameters/RootId"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Root is still used by one or more series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/quality-profiles:
     get:
@@ -1539,7 +1563,7 @@ components:
 
     RootFolder:
       type: object
-      required: [id, name, path]
+      required: [id, name, path, episode_format]
       properties:
         id:
           type: integer
@@ -1548,6 +1572,9 @@ components:
           type: string
         path:
           type: string
+        episode_format:
+          type: string
+          description: Relative path under the series folder for packed episodes (no extension).
         retention_ttl_seconds:
           type: integer
           format: int64
@@ -1564,6 +1591,9 @@ components:
         path:
           type: string
           description: Absolute path on disk (relative paths are rejected).
+        episode_format:
+          type: string
+          description: Relative path under the series folder for packed episodes (no extension). Empty uses the default.
         retention_ttl_seconds:
           type: integer
           format: int64
@@ -1576,6 +1606,9 @@ components:
           type: string
         path:
           type: string
+        episode_format:
+          type: string
+          description: Relative path under the series folder for packed episodes (no extension).
         retention_ttl_seconds:
           type: integer
           format: int64

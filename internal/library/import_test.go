@@ -331,7 +331,7 @@ func TestScanImportLibraryOrphanBindInPlace(t *testing.T) {
 	}
 	s.ImportRoot = inbox
 	libRoot := t.TempDir()
-	root, err := s.CreateRoot("archive", libRoot, nil)
+	root, err := s.CreateRoot("archive", libRoot, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +446,7 @@ func TestScanImportSkipsSeriesFolderMeta(t *testing.T) {
 	}
 	s.ImportRoot = inbox
 	libRoot := t.TempDir()
-	root, err := s.CreateRoot("archive", libRoot, nil)
+	root, err := s.CreateRoot("archive", libRoot, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -527,7 +527,7 @@ func TestScanImportSidecarStemAndOther(t *testing.T) {
 	_ = os.MkdirAll(inbox, 0o755)
 	s.ImportRoot = inbox
 	libRoot := t.TempDir()
-	root, err := s.CreateRoot("archive", libRoot, nil)
+	root, err := s.CreateRoot("archive", libRoot, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -648,7 +648,7 @@ func TestAttachInboxSubtitleMovesBesideMedia(t *testing.T) {
 	_ = os.MkdirAll(inbox, 0o755)
 	s.ImportRoot = inbox
 	libRoot := t.TempDir()
-	root, err := s.CreateRoot("archive", libRoot, nil)
+	root, err := s.CreateRoot("archive", libRoot, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

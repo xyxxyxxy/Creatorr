@@ -17,7 +17,7 @@ func TestSeriesWarnLevels(t *testing.T) {
 	defer func() { _ = d.Close() }()
 	q := queue.NewStore(d)
 	s := library.NewStore(d, q)
-	root, err := s.CreateRoot("r", t.TempDir(), nil)
+	root, err := s.CreateRoot("r", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

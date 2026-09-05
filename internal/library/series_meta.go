@@ -76,9 +76,41 @@ type SeriesNFO struct {
 	Monitored     bool
 }
 
-// SeriesDir returns root/sanitizeName(title) with no rune cap.
+// SeriesDirMaxRunes caps the on-disk series folder name (same as {series:100}).
+const SeriesDirMaxRunes = 100
+
+// SeriesDir returns root/sanitizeName(title) with a 100-rune cap.
 func SeriesDir(root, title string) string {
-	return filepath.Join(root, sanitizeName(title, 0))
+	return filepath.Join(root, sanitizeName(title, SeriesDirMaxRunes))
+}
+
+// EnsureSeriesDirCapped renames an uncapped historical series folder to the capped path when needed.
+func (s *Store) EnsureSeriesDirCapped(rootPath, title string) error {
+	capped := SeriesDir(rootPath, title)
+	uncapped := filepath.Join(rootPath, sanitizeName(title, 0))
+	if filepath.Clean(capped) == filepath.Clean(uncapped) {
+		return nil
+	}
+	if !dirExists(uncapped) {
+		return nil
+	}
+	if dirExists(capped) || fileExists(capped) {
+		return fmt.Errorf("%w: capped series folder already exists: %s", ErrConflict, capped)
+	}
+	if err := os.MkdirAll(filepath.Dir(capped), 0o755); err != nil {
+		return err
+	}
+	if err := os.Rename(uncapped, capped); err != nil {
+		return fmt.Errorf("rename series folder to capped name: %w", err)
+	}
+	_, err := s.DB.SQL.Exec(`
+		UPDATE files SET path = ? || substr(path, ?)
+		WHERE path = ? OR path LIKE ?
+	`, capped, len(uncapped)+1, uncapped, uncapped+string(filepath.Separator)+"%")
+	if err != nil {
+		return fmt.Errorf("update file paths after series dir cap: %w", err)
+	}
+	return nil
 }
 
 // WriteSeriesNFO writes Kodi/Emby tvshow.nfo at path.

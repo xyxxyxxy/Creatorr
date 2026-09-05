@@ -2,6 +2,7 @@ package stats_test
 
 import (
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -312,6 +313,65 @@ func TestLoadLibrarySize(t *testing.T) {
 	}
 	if len(bySeries.Slices) != 3 {
 		t.Fatalf("slices=%d", len(bySeries.Slices))
+	}
+}
+
+func TestLoadLibrarySizeSeriesTop10Other(t *testing.T) {
+	d := openStatsDB(t)
+	_, err := d.SQL.Exec(`
+		INSERT INTO root_folders (id, name, path) VALUES (1, 'A', '/a');
+		INSERT INTO quality_profiles (id, name, format_selector) VALUES (1, 'best', 'bv*+ba/b');
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 12 series: sizes 1200..100 so top 10 are S12..S3; S2+S1 (200+100) become Other.
+	for i := 1; i <= 12; i++ {
+		sz := int64(i * 100)
+		is := strconv.Itoa(i)
+		if _, err := d.SQL.Exec(`
+			INSERT INTO series (id, title, root_id, quality_profile_id, monitored, delivery_mode, added_at)
+			VALUES (?, ?, 1, 1, 1, 'video', datetime('now'))
+		`, i, "S"+is); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := d.SQL.Exec(`
+			INSERT INTO videos (id, series_id, remote_id, title, status)
+			VALUES (?, ?, ?, ?, 'downloaded')
+		`, i, i, "r"+is, "T"+is); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := d.SQL.Exec(`
+			INSERT INTO files (video_id, path, kind, acquired_at, size_bytes)
+			VALUES (?, ?, 'video', datetime('now'), ?)
+		`, i, "/a/"+is+".mkv", sz); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bySeries, err := stats.LoadLibrarySize(d, "series")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTotal := int64(12 * 13 / 2 * 100) // 100+200+...+1200
+	if bySeries.TotalBytes != wantTotal {
+		t.Fatalf("total=%d want %d", bySeries.TotalBytes, wantTotal)
+	}
+	if len(bySeries.Slices) != stats.LibrarySizeSeriesMaxSlices+1 {
+		t.Fatalf("slices=%d want %d", len(bySeries.Slices), stats.LibrarySizeSeriesMaxSlices+1)
+	}
+	last := bySeries.Slices[len(bySeries.Slices)-1]
+	if last.Label != stats.LibrarySizeOtherLabel || last.ID != 0 || last.Bytes != 300 {
+		t.Fatalf("other=%+v want label=%q id=0 bytes=300", last, stats.LibrarySizeOtherLabel)
+	}
+	if bySeries.Slices[0].Label != "S12" || bySeries.Slices[0].Bytes != 1200 {
+		t.Fatalf("largest=%+v", bySeries.Slices[0])
+	}
+	byRoot, err := stats.LoadLibrarySize(d, "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byRoot.Slices) != 1 {
+		t.Fatalf("root slices=%d (no Other collapse)", len(byRoot.Slices))
 	}
 }
 

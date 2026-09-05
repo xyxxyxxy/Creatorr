@@ -21,7 +21,15 @@ func (s *Store) MoveSeriesFolder(ser *Series, oldTitle string, oldRootID int64) 
 	if err != nil {
 		return err
 	}
+	_ = s.EnsureSeriesDirCapped(oldRoot.Path, oldTitle)
 	oldDir := SeriesDir(oldRoot.Path, oldTitle)
+	// Compat: uncapped historical folder still on disk.
+	if !dirExists(oldDir) {
+		uncapped := filepath.Join(oldRoot.Path, sanitizeName(oldTitle, 0))
+		if dirExists(uncapped) {
+			oldDir = uncapped
+		}
+	}
 	newDir := SeriesDir(newRoot.Path, ser.Title)
 	if oldDir == newDir {
 		return nil

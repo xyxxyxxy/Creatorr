@@ -34,7 +34,11 @@ func (s *Server) CreateRoot(w http.ResponseWriter, r *http.Request) {
 	if body.Name != nil {
 		name = *body.Name
 	}
-	root, err := s.Library.CreateRoot(name, body.Path, body.RetentionTtlSeconds)
+	epFmt := ""
+	if body.EpisodeFormat != nil {
+		epFmt = *body.EpisodeFormat
+	}
+	root, err := s.Library.CreateRoot(name, body.Path, epFmt, body.RetentionTtlSeconds)
 	if err != nil {
 		writeLibraryErr(w, err, "create root failed")
 		return
@@ -53,12 +57,20 @@ func (s *Server) UpdateRoot(w http.ResponseWriter, r *http.Request, id gen.RootI
 	if body.RetentionTtlSeconds != nil {
 		retention = body.RetentionTtlSeconds
 	}
-	root, err := s.Library.UpdateRoot(int64(id), body.Name, body.Path, retention, clearRetention)
+	root, err := s.Library.UpdateRoot(int64(id), body.Name, body.Path, body.EpisodeFormat, retention, clearRetention)
 	if err != nil {
 		writeLibraryErr(w, err, "update root failed")
 		return
 	}
 	writeJSON(w, http.StatusOK, mapRoot(*root))
+}
+
+func (s *Server) DeleteRoot(w http.ResponseWriter, r *http.Request, id gen.RootId) {
+	if err := s.Library.DeleteRoot(int64(id)); err != nil {
+		writeLibraryErr(w, err, "delete root failed")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) ListQualityProfiles(w http.ResponseWriter, r *http.Request) {
@@ -388,7 +400,7 @@ func writeLibraryErr(w http.ResponseWriter, err error, fallback string) {
 }
 
 func mapRoot(r library.RootFolder) gen.RootFolder {
-	out := gen.RootFolder{Id: r.ID, Name: r.Name, Path: r.Path}
+	out := gen.RootFolder{Id: r.ID, Name: r.Name, Path: r.Path, EpisodeFormat: r.EpisodeFormat}
 	if r.RetentionTTLSeconds.Valid {
 		v := r.RetentionTTLSeconds.Int64
 		out.RetentionTtlSeconds = &v
