@@ -238,66 +238,6 @@ func concatCopy(ctx context.Context, piecePaths []string, outPath, dir string) e
 	return nil
 }
 
-// concatFilter stitches pieces with filter_complex using EncodePlan (timestamp-clean continuous stream).
-// durationSec is expected output length for -progress; onSeg is nil-safe.
-func concatFilter(ctx context.Context, piecePaths []string, outPath string, plan EncodePlan, durationSec float64, onSeg func(frac float64)) error {
-	n := len(piecePaths)
-	if n == 0 {
-		return fmt.Errorf("no pieces to concat")
-	}
-	args := []string{}
-	for _, p := range piecePaths {
-		args = append(args, "-i", p)
-	}
-	layout := "stereo"
-	if plan.Channels == 1 {
-		layout = "mono"
-	}
-	var fc strings.Builder
-	for i := 0; i < n; i++ {
-		fmt.Fprintf(&fc,
-			"[%d:v]fps=%g,scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,setpts=PTS-STARTPTS[v%d];",
-			i, plan.FPS, plan.Width, plan.Height, plan.Width, plan.Height, i,
-		)
-		if plan.HasAudio {
-			fmt.Fprintf(&fc,
-				"[%d:a]aformat=sample_rates=%d:channel_layouts=%s,asetpts=PTS-STARTPTS[a%d];",
-				i, plan.SampleRate, layout, i,
-			)
-		}
-	}
-	for i := 0; i < n; i++ {
-		fmt.Fprintf(&fc, "[v%d]", i)
-		if plan.HasAudio {
-			fmt.Fprintf(&fc, "[a%d]", i)
-		}
-	}
-	if plan.HasAudio {
-		fmt.Fprintf(&fc, "concat=n=%d:v=1:a=1[vout][aout]", n)
-	} else {
-		fmt.Fprintf(&fc, "concat=n=%d:v=1:a=0[vout]", n)
-	}
-	args = append(args, "-filter_complex", fc.String(), "-map", "[vout]")
-	args = plan.AppendVideoEncode(args)
-	if plan.HasAudio {
-		args = append(args, "-map", "[aout]")
-		// audio already filtered; append codec without second -af
-		args = append(args,
-			"-c:a", plan.AudioEncoder,
-			"-ac", fmt.Sprintf("%d", plan.Channels),
-			"-ar", fmt.Sprintf("%d", plan.SampleRate),
-			"-b:a", bitrateK(plan.AudioBitrate),
-		)
-	} else {
-		args = append(args, "-an")
-	}
-	args = append(args, outPath)
-	if err := runFFmpegProgress(ctx, args, durationSec, onSeg); err != nil {
-		return fmt.Errorf("ffmpeg stitch: %w", err)
-	}
-	return nil
-}
-
 func escapeConcatPath(p string) string {
 	return strings.ReplaceAll(p, "'", "'\\''")
 }

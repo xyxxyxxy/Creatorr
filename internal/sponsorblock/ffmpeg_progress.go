@@ -13,7 +13,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/exectrace"
 )
 
-// EncodeProgress reports re-encode progress in [0,1] (keeps + filter-stitch when used).
+// EncodeProgress reports re-encode progress in [0,1] for the single-pass cut ffmpeg.
 // Pass a non-nil *float64 to report; pass nil to clear (spinner). Nil callback is safe.
 type EncodeProgress func(fraction *float64)
 
