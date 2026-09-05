@@ -1,7 +1,7 @@
 {{define "stats"}}
 {{template "head" .}}
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "page" "title" "Stats" "icon" .Icon "help" "Video status and queue depth over time (stored on change, polled every minute). Library size pies are live. Storage development is sampled daily. Chart samples are kept for 1 year. Charts refresh every minute.")}}
+{{template "list_header" (dict "level" "page" "title" "Stats" "icon" .Icon "help" "Video status and queue depth over time (stored on change, polled every minute). Library size pies are live. Storage development is sampled daily. Chart samples are kept for 1 month. Charts refresh every minute.")}}
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
@@ -40,7 +40,7 @@
 
 {{template "list_panel"}}
 <h2 class="text-lg font-semibold">Storage development</h2>
-<p class="text-sm -mt-1 mb-2">Total packed media bytes over time. Sampled daily (UTC); shown for up to 1 year.</p>
+<p class="text-sm -mt-1 mb-2">Total packed media bytes over time. Sampled daily (UTC); shown for up to 1 month.</p>
 <div id="chart-storage" class="w-full h-80 bg-base-200 rounded-box"></div>
 {{template "list_panel_end"}}
 
@@ -82,13 +82,14 @@ document.addEventListener("DOMContentLoaded", function () {
   let sizeRootChart = sizeRootEl ? echarts.init(sizeRootEl, chartThemeName()) : null;
   let sizeSeriesChart = echarts.init(sizeSeriesEl, chartThemeName());
 
-  function formatBytes(n) {
+  function formatBytes(n, digits) {
     n = Number(n) || 0;
-    if (n < 1024) return n + " B";
+    if (digits === undefined) digits = 1;
+    if (n < 1024) return Math.round(n) + " B";
     const u = ["KiB", "MiB", "GiB", "TiB", "PiB"];
     let v = n / 1024, i = 0;
     while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
-    return v.toFixed(1) + " " + u[i];
+    return (digits === 0 ? Math.round(v) : v.toFixed(digits)) + " " + u[i];
   }
 
   function formatAxisTime(v, daily) {
@@ -163,7 +164,7 @@ document.addEventListener("DOMContentLoaded", function () {
         minInterval: bytes ? undefined : 1,
         axisLabel: {
           color: muted,
-          formatter: bytes ? function (v) { return formatBytes(v); } : undefined
+          formatter: bytes ? function (v) { return formatBytes(v, 0); } : undefined
         }
       },
       series: seriesOpts

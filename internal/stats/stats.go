@@ -17,7 +17,7 @@ import (
 )
 
 // RetentionDays is the fixed chart sample retention window (not configurable).
-const RetentionDays = 365
+const RetentionDays = 30
 
 // SampleCron is the fixed schedule for minute metrics (UTC).
 const SampleCron = "* * * * *"
@@ -26,7 +26,7 @@ const SampleCron = "* * * * *"
 const DailySampleCron = "0 0 * * *"
 
 // StorageChartMaxDays caps the Storage development chart display window.
-const StorageChartMaxDays = 365
+const StorageChartMaxDays = 30
 
 // Metric names stored in stats_samples.metric.
 const (
