@@ -1019,6 +1019,210 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/series/{id}/videos/ids:
+    get:
+      tags: [library]
+      operationId: listSeriesVideoIds
+      summary: List video ids for a series matching the same filters as the video list UI
+      parameters:
+        - $ref: "#/components/parameters/SeriesId"
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Title substring (case-insensitive)
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated statuses, or a single status
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: year
+          in: query
+          required: false
+          schema:
+            type: string
+          description: UTC calendar year, or unknown
+      responses:
+        "200":
+          description: Matching video ids (list order)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoIdsResponse"
+        "404":
+          description: Series not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/videos/bulk-metadata:
+    post:
+      tags: [library]
+      operationId: bulkEditVideosMetadata
+      summary: Bulk-override video catalog metadata fields
+      description: >
+        Enqueues bulk_edit_videos for studio, country, mpaa, genres, tags, and/or actors.
+        Included fields replace current values (lists replace entirely). Conflict when busy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkEditVideosMetadataRequest"
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnqueueTaskResponse"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Bulk edit already queued or running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/videos/bulk-want:
+    post:
+      tags: [library]
+      operationId: bulkWantVideos
+      summary: Set wanted on many videos (eligible statuses only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkVideoIdsRequest"
+      responses:
+        "200":
+          description: Applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkVideoActionResponse"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/videos/bulk-ignore:
+    post:
+      tags: [library]
+      operationId: bulkIgnoreVideos
+      summary: Ignore many videos (skips downloaded / verify_failed)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkVideoIdsRequest"
+      responses:
+        "200":
+          description: Applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkVideoActionResponse"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/videos/bulk-download:
+    post:
+      tags: [library]
+      operationId: bulkDownloadVideos
+      summary: Queue download for many videos (Queue download semantics)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkVideoIdsRequest"
+      responses:
+        "200":
+          description: Enqueued counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkVideoActionResponse"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/videos/bulk-refresh-sidecars:
+    post:
+      tags: [library]
+      operationId: bulkRefreshSidecarsVideos
+      summary: Queue sidecar refresh for videos that have packed media
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkVideoIdsRequest"
+      responses:
+        "200":
+          description: Enqueued counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkVideoActionResponse"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/videos/bulk-delete:
+    post:
+      tags: [library]
+      operationId: bulkDeleteVideos
+      summary: Enqueue delete_files for many downloaded/missing videos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkVideoIdsRequest"
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnqueueTaskResponse"
+        "400":
+          description: Invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/videos/{id}:
     get:
       tags: [library]
@@ -2250,6 +2454,73 @@ components:
             type: integer
             format: int64
           minItems: 1
+
+    VideoIdsResponse:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+
+    BulkVideoIdsRequest:
+      type: object
+      required: [video_ids]
+      properties:
+        video_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          minItems: 1
+
+    BulkVideoActionResponse:
+      type: object
+      required: [updated, skipped]
+      properties:
+        updated:
+          type: integer
+          description: Applied or queued count
+        skipped:
+          type: integer
+          description: Ineligible or missing ids
+
+    BulkEditVideosMetadataRequest:
+      type: object
+      required: [video_ids]
+      properties:
+        video_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          minItems: 1
+        studio:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        mpaa:
+          type: string
+          nullable: true
+        genres:
+          type: array
+          nullable: true
+          items:
+            type: string
+        tags:
+          type: array
+          nullable: true
+          items:
+            type: string
+        actors:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/SeriesActor"
 
     CreateSeriesRequest:
       type: object

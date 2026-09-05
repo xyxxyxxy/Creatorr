@@ -448,6 +448,96 @@ func cloneActors(in []SeriesActor) []SeriesActor {
 	return out
 }
 
+// CommonMetaInt64 is a bulk field that is either unanimous or mixed (root / profile ids).
+type CommonMetaInt64 struct {
+	Same  bool  `json:"same"`
+	Value int64 `json:"value,omitempty"`
+}
+
+// CommonMetaBool is a bulk bool field (e.g. monitored).
+type CommonMetaBool struct {
+	Same  bool `json:"same"`
+	Value bool `json:"value"`
+}
+
+// CommonSeriesSettings reports unanimous settings fields across series ids.
+type CommonSeriesSettings struct {
+	DeliveryMode     CommonMetaString `json:"delivery_mode"`
+	Monitored        CommonMetaBool   `json:"monitored"`
+	RootID           CommonMetaInt64  `json:"root_id"`
+	QualityProfileID CommonMetaInt64  `json:"quality_profile_id"`
+}
+
+// CommonSeriesSettings returns unanimous bulk-edit settings for the given series ids.
+// Missing ids are skipped; ErrNotFound if none resolve.
+func (s *Store) CommonSeriesSettings(ids []int64) (CommonSeriesSettings, error) {
+	ids = uniqPositive(ids)
+	if len(ids) == 0 {
+		return CommonSeriesSettings{}, fmt.Errorf("%w: series_ids required", ErrInvalid)
+	}
+	var (
+		delivery              string
+		monitored             bool
+		rootID, profileID     int64
+		deliverySame          = true
+		monitoredSame         = true
+		rootSame              = true
+		profileSame           = true
+		n                     int
+	)
+	for _, id := range ids {
+		ser, err := s.GetSeries(id, false)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return CommonSeriesSettings{}, err
+		}
+		n++
+		if n == 1 {
+			delivery = NormalizeDeliveryMode(ser.DeliveryMode)
+			monitored = ser.Monitored
+			rootID = ser.RootID
+			profileID = ser.QualityProfileID
+			continue
+		}
+		if deliverySame && delivery != NormalizeDeliveryMode(ser.DeliveryMode) {
+			deliverySame = false
+		}
+		if monitoredSame && monitored != ser.Monitored {
+			monitoredSame = false
+		}
+		if rootSame && rootID != ser.RootID {
+			rootSame = false
+		}
+		if profileSame && profileID != ser.QualityProfileID {
+			profileSame = false
+		}
+	}
+	if n == 0 {
+		return CommonSeriesSettings{}, fmt.Errorf("%w: no series found", ErrNotFound)
+	}
+	out := CommonSeriesSettings{
+		DeliveryMode:     CommonMetaString{Same: deliverySame},
+		Monitored:        CommonMetaBool{Same: monitoredSame},
+		RootID:           CommonMetaInt64{Same: rootSame},
+		QualityProfileID: CommonMetaInt64{Same: profileSame},
+	}
+	if deliverySame {
+		out.DeliveryMode.Value = delivery
+	}
+	if monitoredSame {
+		out.Monitored.Value = monitored
+	}
+	if rootSame {
+		out.RootID.Value = rootID
+	}
+	if profileSame {
+		out.QualityProfileID.Value = profileID
+	}
+	return out, nil
+}
+
 // CommonSeriesMetadata returns unanimous bulk-edit metadata fields for the given series ids.
 // Missing ids are skipped; ErrNotFound if none resolve. Actor lists compare in order.
 func (s *Store) CommonSeriesMetadata(ids []int64) (CommonSeriesMetadata, error) {

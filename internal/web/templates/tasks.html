@@ -68,7 +68,7 @@
             {{end}}
             </span>
             <div class="join shrink-0">
-              <a class="btn btn-secondary btn-square join-item tooltip tooltip-top" href="/history?domain={{urlquery .Domain}}#tasks" data-tip="History" aria-label="History">
+              <a class="btn btn-square join-item tooltip tooltip-top" href="/history?domain={{urlquery .Domain}}#tasks" data-tip="History" aria-label="History">
                 <i data-lucide="history" class="size-4"></i>
               </a>
               {{if and .CanPause (not .Paused)}}

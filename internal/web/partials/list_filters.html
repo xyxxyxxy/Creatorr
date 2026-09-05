@@ -6,7 +6,8 @@
           Selects []{Name, AriaLabel, EmptyLabel, Options[{Value,Label,Selected}]},
           Hidden []{Name, Value}, FormAction, LiveTarget,
           FormClass (optional extra classes on the form; default includes mb-3),
-          SeriesBulkMode (bool - leading multi-select join-item for /series).
+          SeriesBulkMode (bool - leading multi-select join-item for /series),
+          VideoBulkMode (bool - leading multi-select join-item for series video list).
      Active filters (non-empty q/date/select) use daisyUI input-primary / select-primary.
      JS: select/date/datetime-local change submits immediately; search submits on blur (js-list-filters). */}}
 {{$live := .LiveTarget}}
@@ -23,6 +24,16 @@
   <button type="button"
           class="btn join-item btn-square shrink-0 tooltip tooltip-bottom"
           data-series-bulk-mode
+          aria-pressed="false"
+          aria-label="Multi-select"
+          data-tip="Multi-select">
+    <i data-lucide="list-checks" class="size-4"></i>
+  </button>
+  {{end}}
+  {{if .VideoBulkMode}}
+  <button type="button"
+          class="btn join-item btn-square shrink-0 tooltip tooltip-bottom"
+          data-video-bulk-mode
           aria-pressed="false"
           aria-label="Multi-select"
           data-tip="Multi-select">

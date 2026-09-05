@@ -155,6 +155,14 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Monitored updated.")
 	case "bulk_delete_queued":
 		return flashOK("Bulk delete queued.")
+	case "bulk_want":
+		return flashOK("Want updated.")
+	case "bulk_ignore":
+		return flashOK("Ignore updated.")
+	case "bulk_download":
+		return flashOK("Queue download enqueued.")
+	case "bulk_refresh_sidecars":
+		return flashOK("Sidecar refresh enqueued.")
 	case "source":
 		return flashOK("Source added.")
 	case "source-updated":

@@ -48,6 +48,7 @@ const (
 	KindMediaVerify        = "media_verify"
 	KindYtDlpUpdate        = "ytdlp_update"
 	KindBulkEditSeries     = "bulk_edit_series"
+	KindBulkEditVideos     = "bulk_edit_videos"
 
 	// SystemDomain is the queue lane for maintenance tasks.
 	SystemDomain = "system"
@@ -294,7 +295,7 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 	// System lane: at most one pending/running task per kind (except import keeps per-video).
 	if p.Domain == SystemDomain {
 		switch p.Kind {
-		case KindSyncFiles, KindRetentionDelete, KindRenameEpisodes, KindRegenerateNFO, KindYtDlpUpdate, KindBulkEditSeries:
+		case KindSyncFiles, KindRetentionDelete, KindRenameEpisodes, KindRegenerateNFO, KindYtDlpUpdate, KindBulkEditSeries, KindBulkEditVideos:
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE domain = ? AND kind = ? AND status IN (?, ?) LIMIT 1
 			`, SystemDomain, p.Kind, StatusPending, StatusRunning)

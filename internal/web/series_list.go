@@ -180,7 +180,7 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 		FormAction       string
 	}
 	seriesFilter.Query = filter.Title
-	seriesFilter.QueryPlaceholder = "Search name"
+	seriesFilter.QueryPlaceholder = "Search title"
 	seriesFilter.AriaLabel = "Series filters"
 	seriesFilter.LiveTarget = "series-list-live"
 	seriesFilter.FormAction = "/series"

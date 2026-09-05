@@ -2,27 +2,16 @@
 {{/*
   Shared series fields for Add series, Edit series (single), and bulk Edit.
   Expects: Roots, Profiles.
-  Optional: Bulk (bool) - No change sentinels; hide title; monitored as No-change select.
+  Optional: Bulk (bool) - No change sentinels; hide title; monitored/delivery No-change option.
             Title, TitleID, TitleInfo/Hint, TitlePlaceholder, TitleDisabled, TitleDisabledTitle,
             RootID, ProfileID, DeliveryMode, Monitored,
             RootInfo, RootDisabled, RootDisabledTitle, ProfileInfo.
+  Order: title (single) → delivery → monitored → root → quality.
 */}}
 {{$bulk := .Bulk}}
 {{$titlePH := .TitlePlaceholder}}{{if not $titlePH}}{{$titlePH = "Series title"}}{{end}}
-{{$val := .DeliveryMode}}{{if not $val}}{{$val = "video"}}{{end}}
+{{$val := .DeliveryMode}}{{if and (not $bulk) (not $val)}}{{$val = "video"}}{{end}}
 {{$isAudio := and (not $bulk) (eq $val "audio")}}
-{{if $bulk}}
-<fieldset class="fieldset">
-  <legend class="fieldset-legend">Delivery method</legend>
-  <select name="delivery_mode" class="select w-full">
-    <option value="">No change</option>
-    <option value="video">Video</option>
-    <option value="audio">Audio</option>
-  </select>
-</fieldset>
-{{else}}
-{{template "delivery_mode_field" (dict "Value" .DeliveryMode)}}
-{{end}}
 {{if not $bulk}}
 {{template "field_input" (dict
   "Name" "title"
@@ -38,24 +27,16 @@
   "DisabledTitle" .TitleDisabledTitle
 )}}
 {{end}}
-{{if $bulk}}
+{{template "delivery_mode_field" (dict "Value" .DeliveryMode "Bulk" $bulk)}}
 <fieldset class="fieldset">
   <legend class="fieldset-legend">Monitored</legend>
-  <select name="monitored" class="select w-full">
-    <option value="">No change</option>
-    <option value="1">Yes</option>
-    <option value="0">No</option>
+  <select name="monitored" class="select w-full" aria-label="Monitored">
+    {{if $bulk}}<option value="">No change</option>{{end}}
+    <option value="1"{{if and (not $bulk) .Monitored}} selected{{end}}>Yes</option>
+    <option value="0"{{if and (not $bulk) (not .Monitored)}} selected{{end}}>No</option>
   </select>
   <p class="label whitespace-normal">When on, scheduled tip scans and download-wanted include this series. Manual scan and Queue download always run.</p>
 </fieldset>
-{{else}}
-{{template "checkbox_field" (dict
-  "Name" "monitored"
-  "Label" "Monitored"
-  "Checked" .Monitored
-  "Hint" "When on, scheduled tip scans and download-wanted include this series. Manual scan and Queue download always run."
-)}}
-{{end}}
 {{if and (not $bulk) .RootDisabled}}
 <input type="hidden" name="root_id" value="{{.RootID}}" />
 <fieldset class="fieldset">

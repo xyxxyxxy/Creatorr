@@ -237,3 +237,69 @@ func TestCommonSeriesMetadata(t *testing.T) {
 		t.Fatalf("reordered actors must not be same: %+v", got.Actors)
 	}
 }
+
+func TestCommonSeriesSettings(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "common-settings.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	rootA, err := lib.CreateRoot("ra", t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootB, err := lib.CreateRoot("rb", t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := lib.CreateProfile("best", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "A", RootID: rootA.ID, QualityProfileID: profile.ID, Monitored: true, DeliveryMode: "video",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "B", RootID: rootA.ID, QualityProfileID: profile.ID, Monitored: true, DeliveryMode: "video",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := lib.CommonSeriesSettings([]int64{a.ID, b.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.DeliveryMode.Same || got.DeliveryMode.Value != "video" {
+		t.Fatalf("delivery=%+v", got.DeliveryMode)
+	}
+	if !got.Monitored.Same || !got.Monitored.Value {
+		t.Fatalf("monitored=%+v", got.Monitored)
+	}
+	if !got.RootID.Same || got.RootID.Value != rootA.ID {
+		t.Fatalf("root=%+v", got.RootID)
+	}
+	if !got.QualityProfileID.Same || got.QualityProfileID.Value != profile.ID {
+		t.Fatalf("profile=%+v", got.QualityProfileID)
+	}
+
+	if _, err := lib.UpdateSeries(b.ID, library.UpdateSeriesParams{
+		RootID: &rootB.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = lib.CommonSeriesSettings([]int64{a.ID, b.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RootID.Same {
+		t.Fatalf("root should differ: %+v", got.RootID)
+	}
+	if !got.DeliveryMode.Same || !got.Monitored.Same || !got.QualityProfileID.Same {
+		t.Fatalf("other fields should stay same: %+v", got)
+	}
+}

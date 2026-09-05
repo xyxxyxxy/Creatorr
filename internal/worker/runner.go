@@ -338,5 +338,6 @@ func StubHandlers() map[string]TaskHandler {
 		queue.KindMediaVerify:        stub(queue.KindMediaVerify),
 		queue.KindYtDlpUpdate:        stub(queue.KindYtDlpUpdate),
 		queue.KindBulkEditSeries:     stub(queue.KindBulkEditSeries),
+		queue.KindBulkEditVideos:     stub(queue.KindBulkEditVideos),
 	}
 }

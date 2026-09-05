@@ -1,5 +1,9 @@
 {{define "series_videos_live"}}
-<div id="series-videos-live" {{if .OOB}}hx-swap-oob="true"{{end}}>
+<div id="series-videos-live" {{if .OOB}}hx-swap-oob="true"{{end}}
+     data-filter-total="{{.FilterTotal}}"
+     data-series-id="{{.SeriesID}}"
+     data-bulk-busy="{{if .BulkEditBusy}}1{{else}}0{{end}}"
+     data-bulk-mode="0">
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Videos" "icon" "square-play" "help" "Indexed from scans. Open a video for details.")}}
 {{template "list_filters" (dict
@@ -9,6 +13,7 @@
   "Selects" .VideoFilter.Selects
   "LiveTarget" .VideoFilter.LiveTarget
   "FormAction" .VideoFilter.FormAction
+  "VideoBulkMode" true
 )}}
 {{if not .Videos}}
 {{if .FilterActive}}
@@ -17,7 +22,65 @@
 {{template "list_empty" "No videos indexed yet. Run a scan."}}
 {{end}}
 {{else}}
-<ul class="list bg-base-100 rounded-box border border-base-300">
+<ul class="list bg-base-100 rounded-box border border-base-300" id="series-videos-rows">
+  {{/* Bulk bar: checkbox+count | grow | actions. Rows keep thumb column for checkbox alignment. */}}
+  <li id="video-bulk-bar"
+      class="list-row py-2 hidden"
+      data-video-bulk-bar
+      style="--list-grid-cols: max-content 1fr max-content">
+    <div class="self-center flex items-center gap-3">
+      <input type="checkbox" class="checkbox checkbox-sm" id="video-select-page"
+             aria-label="Select all on this page"
+             {{if .BulkEditBusy}}disabled{{end}} />
+      <div class="text-sm tabular-nums opacity-70 whitespace-nowrap">
+        <span data-video-bulk-count>0/{{.FilterTotal}}</span>
+        <span>selected</span>
+      </div>
+    </div>
+    <div class="list-col-grow min-w-0 flex flex-wrap items-center gap-2 self-center">
+      {{if .VideosPage.Show}}
+      <button type="button"
+              class="btn btn-ghost btn-sm"
+              data-video-select-all-matching
+              {{if .BulkEditBusy}}disabled{{end}}>
+        <i data-lucide="list-checks" class="size-4"></i>
+        Select all
+      </button>
+      {{end}}
+      {{if .BulkEditBusy}}
+      <span class="text-sm opacity-60">Bulk edit running…</span>
+      <a class="link link-hover text-sm" href="/tasks">Tasks</a>
+      {{end}}
+    </div>
+    {{if not .BulkEditBusy}}
+    <div class="self-center justify-self-end">
+      <div class="join">
+        <button type="button" class="btn join-item" data-video-bulk-refresh disabled>
+          <i data-lucide="refresh-cw" class="size-4"></i>
+          Refresh sidecars
+        </button>
+        <button type="button" class="btn join-item" data-video-bulk-metadata disabled>
+          <i data-lucide="file-pen" class="size-4"></i>
+          Edit metadata
+        </button>
+        <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-video-bulk-want data-tip="Want" aria-label="Want" disabled>
+          <i data-lucide="eye" class="size-4"></i>
+        </button>
+        <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-video-bulk-ignore data-tip="Ignore" aria-label="Ignore" disabled>
+          <i data-lucide="eye-off" class="size-4"></i>
+        </button>
+        <button type="button" class="btn btn-primary btn-square join-item tooltip tooltip-top" data-video-bulk-download data-tip="Queue download" aria-label="Queue download" disabled>
+          <i data-lucide="download" class="size-4"></i>
+        </button>
+        <button type="button" class="btn btn-soft btn-error btn-square join-item tooltip tooltip-top" data-video-bulk-delete data-tip="Delete" aria-label="Delete" disabled>
+          <i data-lucide="trash-2" class="size-4"></i>
+        </button>
+      </div>
+    </div>
+    {{else}}
+    <div class="size-10 shrink-0" aria-hidden="true"></div>
+    {{end}}
+  </li>
   {{range .Videos}}
   {{template "video_list_row" (dict
     "ID" .ID
@@ -39,6 +102,8 @@
     "KeepScroll" true
     "LiveSwap" true
     "FormClass" "inline"
+    "Select" true
+    "BulkEditBusy" $.BulkEditBusy
   )}}
   {{end}}
 </ul>

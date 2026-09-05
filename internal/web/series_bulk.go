@@ -188,3 +188,36 @@ func (h *Handler) seriesBulkMetadataCommonJSON(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(meta)
 }
+
+func (h *Handler) seriesBulkSettingsCommonJSON(w http.ResponseWriter, r *http.Request) {
+	var ids []int64
+	ct := r.Header.Get("Content-Type")
+	if strings.Contains(ct, "application/json") {
+		var body struct {
+			IDs []int64 `json:"ids"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+		ids = body.IDs
+	} else {
+		ids = parseSeriesIDList(r)
+	}
+	settings, err := h.Library.CommonSeriesSettings(ids)
+	if err != nil {
+		if errors.Is(err, library.ErrInvalid) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, library.ErrNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(settings)
+}

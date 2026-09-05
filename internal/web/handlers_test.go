@@ -905,7 +905,25 @@ func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
 		t.Fatalf("series detail should not use bookmark monitor toggle: %s", truncate(body, 400))
 	}
 	if !strings.Contains(body, `name="monitored"`) || !strings.Contains(body, "Monitored") {
-		t.Fatalf("series detail edit form missing monitored checkbox: %s", truncate(body, 400))
+		t.Fatalf("series detail edit form missing monitored select: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, `<option value="1"`) || !strings.Contains(body, `<option value="0"`) {
+		t.Fatalf("series detail monitored should be Yes/No select: %s", truncate(body, 400))
+	}
+	if strings.Contains(body, "delivery-mode-join") {
+		t.Fatalf("series detail should use delivery select, not radio join: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, `name="delivery_mode"`) {
+		t.Fatalf("series detail missing delivery select: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, "data-video-bulk-mode") {
+		t.Fatalf("series detail missing video multi-select toggle: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, "modal-bulk-edit-videos-metadata") || !strings.Contains(body, "modal-bulk-delete-videos") {
+		t.Fatalf("series detail missing video bulk modals: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, `action="/actions/bulk-want-videos"`) {
+		t.Fatalf("series detail missing bulk want form: %s", truncate(body, 400))
 	}
 }
 
