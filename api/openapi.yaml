@@ -219,7 +219,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest, live_skipped]
+            enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest, live_skipped, archive_fallback]
         - name: level
           in: query
           required: false
@@ -1457,7 +1457,7 @@ components:
           format: date-time
         event:
           type: string
-          enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest, live_skipped]
+          enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest, live_skipped, archive_fallback]
         level:
           type: string
           enum: [info, warning, alert]
@@ -1824,7 +1824,11 @@ components:
           description: Video page URL (watch/clip); never the feed channel/playlist URL
         status:
           type: string
-          description: wanted, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored
+          description: wanted, wanted_archive, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored
+        acquired_via:
+          type: string
+          description: How packed media was obtained - source (live download), archive (Web Archive), or import
+          enum: [source, archive, import]
         season:
           type: integer
           nullable: true
@@ -1920,7 +1924,7 @@ components:
         wanted_count:
           type: integer
           format: int64
-          description: Videos with status wanted (excludes wanted_download_error and verify_failed).
+          description: Videos with status wanted or wanted_archive (excludes wanted_download_error and verify_failed).
         source_count:
           type: integer
           format: int64

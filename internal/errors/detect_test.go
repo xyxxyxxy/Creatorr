@@ -69,6 +69,29 @@ func TestDetectAgeRestricted(t *testing.T) {
 	}
 }
 
+func TestDetectVideoUnavailable(t *testing.T) {
+	cases := []struct {
+		msg  string
+		want bool
+	}{
+		{"", false},
+		{"ERROR: Unable to download", false},
+		{"ERROR: [youtube] abc: Video unavailable", true},
+		{"ERROR: This video has been removed by the uploader", true},
+		{"ERROR: This video has been deleted", true},
+		{"ERROR: Account associated with this video has been terminated", true},
+		{"ERROR: cookies are no longer valid", false},
+		{"ERROR: HTTP Error 429: Too Many Requests", false},
+		{"Sign in to confirm your age", false},
+		{"ERROR: Private video. Sign in if you've been granted access", false},
+	}
+	for _, tc := range cases {
+		if got := apperrors.DetectVideoUnavailable(tc.msg); got != tc.want {
+			t.Fatalf("DetectVideoUnavailable(%q)=%v want %v", tc.msg, got, tc.want)
+		}
+	}
+}
+
 func TestIsYtDlpPauseCode(t *testing.T) {
 	if !apperrors.IsYtDlpPauseCode(apperrors.CodeCookieInvalid) ||
 		!apperrors.IsYtDlpPauseCode(apperrors.CodeRateLimited) {

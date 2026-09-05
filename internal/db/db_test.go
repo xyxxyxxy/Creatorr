@@ -24,11 +24,12 @@ func TestOpenFreshSchema(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 3 {
-		t.Fatalf("schema_version=%d want 3", ver)
+	if ver != 4 {
+		t.Fatalf("schema_version=%d want 4", ver)
 	}
 	assertColumn(t, d.SQL, "sources", "full_scan_limit", true)
 	assertColumn(t, d.SQL, "sources", "scan_cutoff", false)
+	assertColumn(t, d.SQL, "videos", "acquired_via", true)
 }
 
 func TestMigrateV2AddsFullScanLimitDropsCutoff(t *testing.T) {
@@ -94,8 +95,8 @@ func TestMigrateV2AddsFullScanLimitDropsCutoff(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 3 {
-		t.Fatalf("schema_version=%d want 3", ver)
+	if ver != 4 {
+		t.Fatalf("schema_version=%d want 4", ver)
 	}
 	assertColumn(t, d.SQL, "sources", "full_scan_limit", true)
 	assertColumn(t, d.SQL, "sources", "scan_cutoff", false)
@@ -177,8 +178,8 @@ func TestMigrateV3ClearsSourceHold(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 3 {
-		t.Fatalf("schema_version=%d want 3", ver)
+	if ver != 4 {
+		t.Fatalf("schema_version=%d want 4", ver)
 	}
 	var st string
 	if err := d.SQL.QueryRow(`SELECT status FROM videos WHERE id = 1`).Scan(&st); err != nil {
@@ -200,6 +201,70 @@ func TestMigrateV3ClearsSourceHold(t *testing.T) {
 	}
 	if ev != "download_failed" {
 		t.Fatalf("legacy event=%q want download_failed", ev)
+	}
+}
+
+func TestMigrateV4AddsAcquiredVia(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "acquired.db")
+	sqlDB, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = sqlDB.Exec(`
+		CREATE TABLE schema_version (version INTEGER NOT NULL);
+		INSERT INTO schema_version (version) VALUES (3);
+		CREATE TABLE videos (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			series_id INTEGER NOT NULL,
+			source_id INTEGER,
+			remote_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'wanted',
+			import_src TEXT
+		);
+		INSERT INTO videos (id, series_id, remote_id, title, status, import_src) VALUES (1, 1, 'a', 'A', 'downloaded', '/import/a.mkv');
+		INSERT INTO videos (id, series_id, remote_id, title, status, import_src) VALUES (2, 1, 'b', 'B', 'wanted', NULL);
+		INSERT INTO videos (id, series_id, remote_id, title, status, import_src) VALUES (3, 1, 'c', 'C', 'downloaded', '');
+	`)
+	if err != nil {
+		_ = sqlDB.Close()
+		t.Fatal(err)
+	}
+	_ = sqlDB.Close()
+
+	d, err := db.Open(path)
+	if err != nil {
+		t.Fatalf("open migrate: %v", err)
+	}
+	defer func() { _ = d.Close() }()
+
+	var ver int
+	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
+		t.Fatal(err)
+	}
+	if ver != 4 {
+		t.Fatalf("schema_version=%d want 4", ver)
+	}
+	assertColumn(t, d.SQL, "videos", "acquired_via", true)
+
+	var via1, via2, via3 string
+	if err := d.SQL.QueryRow(`SELECT acquired_via FROM videos WHERE id = 1`).Scan(&via1); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SQL.QueryRow(`SELECT acquired_via FROM videos WHERE id = 2`).Scan(&via2); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SQL.QueryRow(`SELECT acquired_via FROM videos WHERE id = 3`).Scan(&via3); err != nil {
+		t.Fatal(err)
+	}
+	if via1 != "import" {
+		t.Fatalf("video 1 acquired_via=%q want import", via1)
+	}
+	if via2 != "source" {
+		t.Fatalf("video 2 acquired_via=%q want source", via2)
+	}
+	if via3 != "source" {
+		t.Fatalf("video 3 acquired_via=%q want source", via3)
 	}
 }
 

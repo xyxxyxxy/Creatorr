@@ -178,10 +178,10 @@ func (s *Store) insertListedVideo(seriesID int64, src any, li ListedVideo, uploa
 	return s.DB.SQL.Exec(`
 		INSERT INTO videos (
 		  series_id, source_id, remote_id, title, upload_date,
-		  source_url, status, season, episode, description, thumbnail_url, media_type
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		  source_url, status, season, episode, description, thumbnail_url, media_type, acquired_via
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, seriesID, src, li.RemoteID, li.Title, uploadVal, nullEmpty(li.WebpageURL),
-		status, season, episode, li.Description, thumb, mt)
+		status, season, episode, li.Description, thumb, mt, AcquiredViaSource)
 }
 
 func nullEmpty(s string) any {
@@ -444,6 +444,10 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 	if strings.TrimSpace(meta.ImportSrc) != "" {
 		importSrcVal = strings.TrimSpace(meta.ImportSrc)
 	}
+	acquiredVia := NormalizeAcquiredVia(meta.AcquiredVia)
+	if strings.TrimSpace(meta.ImportSrc) != "" && acquiredVia == AcquiredViaSource {
+		acquiredVia = AcquiredViaImport
+	}
 	var durVal, widthVal, heightVal, fpsVal any
 	if dur > 0 {
 		durVal = dur
@@ -469,6 +473,7 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		  acquired_at = ?,
 		  sidecars_acquired_at = ?,
 		  tool = COALESCE(?, tool),
+		  acquired_via = ?,
 		  download_format_selector = COALESCE(?, download_format_selector),
 		  download_remux_container = ?,
 		  import_src = COALESCE(?, import_src),
@@ -478,7 +483,7 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		  fps = COALESCE(?, fps),
 		  media_type = CASE WHEN (media_type IS NULL OR media_type = '') AND ? != '' THEN ? ELSE media_type END,
 		  description = COALESCE(NULLIF(description, ''), ?)`
-	args := []any{acquired, acquired, toolVal, formatVal, remuxVal, importSrcVal, durVal, widthVal, heightVal, fpsVal, mediaType, mediaType, descVal}
+	args := []any{acquired, acquired, toolVal, acquiredVia, formatVal, remuxVal, importSrcVal, durVal, widthVal, heightVal, fpsVal, mediaType, mediaType, descVal}
 
 	if uploadFromInfo != "" && needDate {
 		var seriesID int64
@@ -570,6 +575,49 @@ func (s *Store) SoftFillUploadDateFromInfoJSON(videoID int64, infoPath string) (
 		return "", err
 	}
 	return fromInfo, nil
+}
+
+// SoftFillArchiveMetaFromInfoJSON fills placeholder title (== remote_id) and empty
+// description / upload_date / thumbnail_url from archive download info.json.
+func (s *Store) SoftFillArchiveMetaFromInfoJSON(videoID int64, infoPath string) error {
+	v, err := s.GetVideo(videoID)
+	if err != nil {
+		return err
+	}
+	meta := MediaMetaFromInfoJSON(infoPath)
+	title := strings.TrimSpace(v.Title)
+	newTitle := ""
+	if TitleIsRemoteIDPlaceholder(title, v.RemoteID) || title == "" {
+		if t := strings.TrimSpace(meta.Title); t != "" && !TitleIsRemoteIDPlaceholder(t, v.RemoteID) {
+			newTitle = t
+		}
+	}
+	desc := ""
+	if strings.TrimSpace(v.Description) == "" && strings.TrimSpace(meta.Description) != "" {
+		desc = meta.Description
+	}
+	thumb := ""
+	if (!v.ThumbnailURL.Valid || strings.TrimSpace(v.ThumbnailURL.String) == "") && meta.ThumbnailURL != "" {
+		thumb = meta.ThumbnailURL
+	}
+	var uploadVal any
+	if (!v.UploadDate.Valid || strings.TrimSpace(v.UploadDate.String) == "") && meta.UploadDate != "" {
+		if u := NormalizeUploadTime(meta.UploadDate); u != "" {
+			uploadVal = u
+		}
+	}
+	if newTitle == "" && desc == "" && thumb == "" && uploadVal == nil {
+		return nil
+	}
+	_, err = s.DB.SQL.Exec(`
+		UPDATE videos SET
+		  title = CASE WHEN ? != '' THEN ? ELSE title END,
+		  description = COALESCE(NULLIF(description, ''), ?),
+		  thumbnail_url = COALESCE(NULLIF(thumbnail_url, ''), NULLIF(?, '')),
+		  upload_date = COALESCE(upload_date, ?)
+		WHERE id = ?
+	`, newTitle, newTitle, desc, thumb, uploadVal, videoID)
+	return err
 }
 
 // DurationSecondsFromInfoJSON reads yt-dlp-style duration (seconds) from a packed info.json.

@@ -72,6 +72,8 @@ func videoStatusLabel(status string) string {
 		return "wanted"
 	case "wanted_download_error":
 		return "wanted (download error)"
+	case "wanted_archive":
+		return "wanted (Web Archive)"
 	case "verify_failed":
 		return "verify failed"
 	case "downloaded":

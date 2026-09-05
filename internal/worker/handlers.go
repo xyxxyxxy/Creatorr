@@ -302,7 +302,8 @@ func ImportHandler(d Deps) TaskHandler {
 			nfoBeside, _ := library.SidecarPathsBeside(abs)
 			infoBeside, thumbBeside, subBeside := library.FindDownloadSidecars(abs)
 			meta := library.MediaCompleteMeta{
-				Tool:      "import",
+				Tool:        "import",
+				AcquiredVia: library.AcquiredViaImport,
 				ImportSrc: abs,
 				InPlace:   true,
 			}
@@ -439,8 +440,9 @@ func ImportHandler(d Deps) TaskHandler {
 			_ = os.Remove(leftover)
 		}
 		meta := library.MediaCompleteMeta{
-			Tool:      "import",
-			ImportSrc: abs,
+			Tool:        "import",
+			AcquiredVia: library.AcquiredViaImport,
+			ImportSrc:   abs,
 		}
 		if err := d.Library.CompleteImport(t.VideoID.Int64, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, t.ID); err != nil {
 			return err
@@ -744,6 +746,18 @@ func DownloadHandler(d Deps) TaskHandler {
 			return apperrors.New(apperrors.CodeDownloadFailed, "video has no source_url")
 		}
 
+		archiveLane := library.IsArchiveDownloadTask(t.Domain, t.Payload)
+		downloadURL := dlctx.URL
+		if archiveLane {
+			downloadURL = library.YtArchiveURL(dlctx.Video.RemoteID)
+			if downloadURL == "" {
+				return apperrors.New(apperrors.CodeDownloadFailed, "archive download missing remote_id")
+			}
+			if library.TaskPayloadMaturity(t.Payload) {
+				return apperrors.New(apperrors.CodeDownloadFailed, "maturity re-download not used for Web Archive media")
+			}
+		}
+
 		tmpRoot := d.TmpRoot
 		if tmpRoot == "" {
 			tmpRoot = os.TempDir()
@@ -754,10 +768,20 @@ func DownloadHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
-		progress("Resolving cookies…", nil)
-		jar, err := domains.TempJarForURL(d.Library.DB, work, dlctx.URL)
-		if err != nil {
-			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
+		var jar string
+		if archiveLane {
+			progress("Web Archive download…", nil)
+			// Optional Access cookies only if operator configured archive.org; never use YouTube jar.
+			jar, err = domains.TempJarForURL(d.Library.DB, work, "https://archive.org/")
+			if err != nil {
+				return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
+			}
+		} else {
+			progress("Resolving cookies…", nil)
+			jar, err = domains.TempJarForURL(d.Library.DB, work, dlctx.URL)
+			if err != nil {
+				return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
+			}
 		}
 
 		audioOnly := dlctx.DeliveryMode == library.DeliveryAudio
@@ -767,7 +791,9 @@ func DownloadHandler(d Deps) TaskHandler {
 			formatSelector = library.AudioFormatSelector
 		}
 
-		progress("Downloading…", nil)
+		if !archiveLane {
+			progress("Downloading…", nil)
+		}
 		lim, _ := settings.LimitsForDomain(d.Library.DB, t.Domain)
 		subOpts, _ := settings.GetSubtitleOpts(d.Library.DB)
 		matchFilter := library.BuildDownloadMatchFilter(nil)
@@ -775,7 +801,7 @@ func DownloadHandler(d Deps) TaskHandler {
 			matchFilter = library.BuildDownloadMatchFilter(exclude)
 		}
 		media, err := downloadMedia(ctx, d, ytdlp.DownloadOpts{
-			URL:            dlctx.URL,
+			URL:            downloadURL,
 			CookiesPath:    jar,
 			FormatSelector: formatSelector,
 			OutDir:         work,
@@ -789,6 +815,20 @@ func DownloadHandler(d Deps) TaskHandler {
 			OnProgress: progress,
 		})
 		if err != nil {
+			if !archiveLane && apperrors.DetectVideoUnavailable(err.Error()) {
+				on, _ := settings.ArchiveFallbackEnabled(d.Library.DB)
+				src := ""
+				if dlctx.Video.SourceURL.Valid {
+					src = dlctx.Video.SourceURL.String
+				}
+				if on && library.IsYouTubeSourceURL(src) {
+					progress("Live unavailable; queuing Web Archive retry…", nil)
+					return apperrors.WithDetail(
+						apperrors.New(apperrors.CodeArchiveFallbackQueued, "live unavailable; Web Archive retry queued"),
+						err.Error(),
+					)
+				}
+			}
 			return err
 		}
 
@@ -942,6 +982,18 @@ func finishArchivePack(
 		upload = filled
 		dlctx.Video.UploadDate = sql.NullString{String: filled, Valid: true}
 	}
+	archiveLane := library.IsArchiveDownloadTask(t.Domain, t.Payload)
+	if archiveLane {
+		if err := d.Library.SoftFillArchiveMetaFromInfoJSON(t.VideoID.Int64, infoSrc); err != nil {
+			return err
+		}
+		if fresh, gerr := d.Library.GetVideo(t.VideoID.Int64); gerr == nil {
+			dlctx.Video = *fresh
+			if fresh.UploadDate.Valid {
+				upload = fresh.UploadDate.String
+			}
+		}
+	}
 
 	season, episode := 0, 0
 	if dlctx.Video.Season.Valid {
@@ -998,13 +1050,29 @@ func finishArchivePack(
 	}
 	meta := library.MediaCompleteMeta{
 		Tool:                   "yt-dlp",
+		AcquiredVia:            library.AcquiredViaSource,
 		DownloadFormatSelector: formatSelector,
+	}
+	if archiveLane {
+		meta.AcquiredVia = library.AcquiredViaArchive
 	}
 	if remuxed {
 		meta.DownloadRemuxContainer = remuxContainer
 	}
 	if err := d.Library.CompleteDownload(t.VideoID.Int64, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, t.ID); err != nil {
 		return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "record install failed"), err.Error())
+	}
+	if archiveLane {
+		seriesTitle := dlctx.SeriesTitle
+		videoTitle := dlctx.Video.Title
+		if fresh, gerr := d.Library.GetVideo(t.VideoID.Int64); gerr == nil {
+			videoTitle = fresh.Title
+		}
+		_ = notify.ArchiveFallback(context.Background(), d.Library.DB, t.ID, seriesTitle, videoTitle, "acquired_via=archive")
+		_ = d.Library.AddVideoHistory(t.VideoID.Int64, "archive_fallback_packed", "Packed from Web Archive", map[string]any{
+			"path": mediaPath,
+		}, t.ID)
+		_ = d.Library.Queue.UpdateProgress(t.ID, "Done (Web Archive)", nil)
 	}
 	if sbPlanPath != "" {
 		if b, err := os.ReadFile(sbPlanPath); err == nil {

@@ -268,7 +268,7 @@
 <div class="modal">
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Retry download errors</h3>
-    <p class="text-sm mb-4">Set wanted_download_error videos back to wanted for this source. Does not enqueue downloads.</p>
+    <p class="text-sm mb-4">Set wanted_download_error / wanted_archive videos back to wanted for this source. Cancels pending Web Archive downloads. Does not enqueue downloads.</p>
     <form method="post" action="/actions/retry-source-errors">
       <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.ID}}" />

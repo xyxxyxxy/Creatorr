@@ -14,6 +14,7 @@ import (
 // MediaCompleteMeta is Creatorr-owned state written on download/import complete.
 type MediaCompleteMeta struct {
 	Tool                   string // yt-dlp | import
+	AcquiredVia            string // source | archive | import
 	DownloadFormatSelector string // archive download only
 	DownloadRemuxContainer string // "mkv" only when remux ran; empty when skipped
 	ImportSrc              string // original path at import
@@ -32,6 +33,9 @@ type InfoJSONMediaMeta struct {
 	FPS             float64
 	MediaType       string
 	Description     string
+	Title           string
+	ThumbnailURL    string
+	UploadDate      string
 }
 
 // MediaMetaFromInfoJSON reads duration/resolution/fps/media_type from a packed info.json.
@@ -61,6 +65,13 @@ func MediaMetaFromInfoJSON(path string) InfoJSONMediaMeta {
 		}
 		out.Description = s
 	}
+	if s, ok := data["title"].(string); ok {
+		out.Title = strings.TrimSpace(s)
+	}
+	if s, ok := data["thumbnail"].(string); ok {
+		out.ThumbnailURL = strings.TrimSpace(s)
+	}
+	out.UploadDate = UploadDateFromInfoJSON(path)
 	return out
 }
 

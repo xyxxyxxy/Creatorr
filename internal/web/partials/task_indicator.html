@@ -29,6 +29,8 @@
     <i data-lucide="download" class="size-5 text-warning"></i>
     {{else if eq .VideoStatus "wanted_download_error"}}
     <i data-lucide="circle-x" class="size-5 text-error"></i>
+    {{else if eq .VideoStatus "wanted_archive"}}
+    <i data-lucide="archive" class="size-5 text-warning"></i>
     {{else if eq .VideoStatus "verify_failed"}}
     <i data-lucide="badge-alert" class="size-5 text-warning"></i>
     {{else if eq .VideoStatus "downloaded"}}

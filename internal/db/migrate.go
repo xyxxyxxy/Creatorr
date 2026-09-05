@@ -26,6 +26,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo3(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 4:
+			if err := d.migrateTo4(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -91,6 +95,38 @@ func (d *DB) migrateTo3() error {
 	}
 	if _, err := d.SQL.Exec(`UPDATE video_history SET event = 'download_failed' WHERE event = 'wanted_download_error'`); err != nil {
 		return fmt.Errorf("rewrite legacy wanted_download_error history: %w", err)
+	}
+	return nil
+}
+
+// migrateTo4 adds videos.acquired_via and backfills existing rows (import vs source).
+func (d *DB) migrateTo4() error {
+	has, err := d.tableHasColumn("videos", "acquired_via")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err := d.SQL.Exec(`ALTER TABLE videos ADD COLUMN acquired_via TEXT NOT NULL DEFAULT 'source'`); err != nil {
+			return fmt.Errorf("add acquired_via: %w", err)
+		}
+	}
+	hasImport, err := d.tableHasColumn("videos", "import_src")
+	if err != nil {
+		return err
+	}
+	if hasImport {
+		if _, err := d.SQL.Exec(`
+			UPDATE videos SET acquired_via = 'import'
+			WHERE import_src IS NOT NULL AND TRIM(import_src) != ''
+		`); err != nil {
+			return fmt.Errorf("backfill acquired_via import: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`
+		UPDATE videos SET acquired_via = 'source'
+		WHERE acquired_via IS NULL OR TRIM(acquired_via) = ''
+	`); err != nil {
+		return fmt.Errorf("backfill acquired_via source: %w", err)
 	}
 	return nil
 }

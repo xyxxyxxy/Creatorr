@@ -61,6 +61,7 @@ const (
 	CodeMediaTypeExcluded = "MediaTypeExcluded"
 	CodeLiveBroadcastSkipped = "LiveBroadcastSkipped"
 	CodeAgeRestricted        = "AgeRestricted"
+	CodeArchiveFallbackQueued = "ArchiveFallbackQueued"
 	CodeMediaVerifyFailed = "MediaVerifyFailed"
 	CodeUnauthorized = "Unauthorized"
 	CodeSetupRequired = "SetupRequired"

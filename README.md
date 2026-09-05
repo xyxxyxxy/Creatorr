@@ -8,6 +8,7 @@ Sonarr for creator VOD: manage creators as TV-style series. Merge multiple sourc
 
 - **Multiple source URLs** - merge channels, playlists, and single-video URLs into one Creatorr series
 - **Index first** - scan sources into a video catalog before any download
+- **Web Archive fallback** - when a cataloged video is gone at the live source, queue a Web Archive download (yt-dlp); original source URL is kept
 - **Metadata fetching & management** - fetch and edit series/video metadata; pack NFO and sidecars for Emby, Jellyfin, and similar
 - **Quality profiles** - format selectors and optional maturity media/sidecar refresh
 - **Domains & queues** - per-host rate limits, credentials (Access cookies), and soft pause

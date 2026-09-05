@@ -9,7 +9,7 @@ func (s *Store) SourceHasRetryableVideos(sourceID int64) (bool, error) {
 	var n int
 	err := s.DB.SQL.QueryRow(`
 		SELECT COUNT(*) FROM videos
-		WHERE source_id = ? AND status = 'wanted_download_error'
+		WHERE source_id = ? AND status IN ('wanted_download_error', 'wanted_archive')
 	`, sourceID).Scan(&n)
 	return n > 0, err
 }
@@ -44,15 +44,15 @@ func (s *Store) MarkDownloadFailed(videoID, taskID int64, code, message string) 
 	return nil
 }
 
-// RetrySourceErrors sets wanted_download_error back to wanted for videos on this source.
-// Does not enqueue downloads.
+// RetrySourceErrors sets wanted_download_error / wanted_archive back to wanted for videos on this source.
+// Cancels pending/running archive.org-lane downloads for those videos. Does not enqueue downloads.
 func (s *Store) RetrySourceErrors(sourceID int64) (int, error) {
 	if _, err := s.GetSourceByID(sourceID); err != nil {
 		return 0, err
 	}
 	rows, err := s.DB.SQL.Query(`
 		SELECT id FROM videos
-		WHERE source_id = ? AND status = 'wanted_download_error'
+		WHERE source_id = ? AND status IN ('wanted_download_error', 'wanted_archive')
 	`, sourceID)
 	if err != nil {
 		return 0, err
@@ -72,6 +72,7 @@ func (s *Store) RetrySourceErrors(sourceID int64) (int, error) {
 	}
 	_ = rows.Close()
 	for _, id := range ids {
+		_ = s.CancelArchiveDownloadsForVideo(id)
 		_, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'wanted' WHERE id = ?`, id)
 		if err != nil {
 			return 0, err

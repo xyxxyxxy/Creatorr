@@ -49,6 +49,18 @@ var (
 		`exceeded your?\s+(?:rate|quota)|` +
 		`slow down` +
 		`)`)
+
+	// Per-video gone / removed (not domain cookie or rate). Narrow gate for archive fallback.
+	videoUnavailableRe = regexp.MustCompile(`(?i)(` +
+		`video\s+unavailable|` +
+		`this\s+video\s+(?:is\s+)?(?:no\s+longer\s+)?available|` +
+		`this\s+video\s+has\s+been\s+removed|` +
+		`has\s+been\s+removed\s+by\s+the\s+(?:uploader|user)|` +
+		`video\s+has\s+been\s+removed|` +
+		`has\s+been\s+deleted|` +
+		`account\s+associated\s+with\s+this\s+video\s+has\s+been\s+terminated|` +
+		`uploader\s+has\s+closed\s+their\s+youtube\s+account` +
+		`)`)
 )
 
 // DetectAgeRestricted reports per-video age-gate failures in yt-dlp stderr.
@@ -57,6 +69,21 @@ func DetectAgeRestricted(message string) bool {
 		return false
 	}
 	return ageRestrictRe.MatchString(message)
+}
+
+// DetectVideoUnavailable reports clear per-video gone/removed failures in yt-dlp stderr.
+// Narrow gate only: not cookie/rate/age. Used to enqueue Web Archive fallback.
+func DetectVideoUnavailable(message string) bool {
+	if strings.TrimSpace(message) == "" {
+		return false
+	}
+	if DetectAgeRestricted(message) {
+		return false
+	}
+	if DetectPauseCode(message) != "" {
+		return false
+	}
+	return videoUnavailableRe.MatchString(message)
 }
 
 // DetectPauseCode inspects external-tool stderr / error text.
@@ -82,7 +109,7 @@ func DetectPauseCode(message string) string {
 func UpgradeCode(code, message string) string {
 	switch code {
 	case CodeCookieInvalid, CodeRateLimited, CodeCookieMissing, CodeRemuxFailed, CodePackFailed, CodeMediaVerifyFailed,
-		CodeMediaTypeExcluded, CodeLiveBroadcastSkipped, CodeAgeRestricted:
+		CodeMediaTypeExcluded, CodeLiveBroadcastSkipped, CodeAgeRestricted, CodeArchiveFallbackQueued:
 		return code
 	}
 	if DetectAgeRestricted(message) {
