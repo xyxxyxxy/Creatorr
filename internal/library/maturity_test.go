@@ -215,3 +215,45 @@ func TestClampMaturityLimits(t *testing.T) {
 		t.Fatalf("media label: %q", got)
 	}
 }
+
+func TestEnqueueMaturityDueSkipsArchiveAcquired(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	hours := 12
+	if _, err := s.UpdateProfileParams(profileID, library.UpdateProfileParams{MaturityRedownloadHours: &hours}); err != nil {
+		t.Fatal(err)
+	}
+	sidecarHours := library.MaturitySidecarDaysToHours(7)
+	if _, err := s.UpdateProfileParams(profileID, library.UpdateProfileParams{MaturitySidecarHours: &sidecarHours}); err != nil {
+		t.Fatal(err)
+	}
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "MatArch", SourceURL: "https://www.example.com/@matarch",
+		RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	upload := time.Now().UTC().Add(-48 * time.Hour)
+	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "v1", Title: "T", WebpageURL: "https://www.example.com/watch?v=v1",
+		UploadDate: upload.Format(time.RFC3339),
+		SourceID:   ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acquired := upload.Add(1 * time.Hour).Format(time.RFC3339)
+	if _, err := s.DB.SQL.Exec(`
+		UPDATE videos SET status='downloaded', acquired_at=?, sidecars_acquired_at=?, acquired_via=? WHERE id=?
+	`, acquired, acquired, library.AcquiredViaArchive, res.VideoID); err != nil {
+		t.Fatal(err)
+	}
+	mn, sn, err := s.EnqueueMaturityDue()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mn != 0 || sn != 0 {
+		t.Fatalf("expected skip archive-acquired, got media=%d sidecars=%d", mn, sn)
+	}
+}

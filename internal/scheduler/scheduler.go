@@ -94,6 +94,11 @@ func (s *Scheduler) TickOnce(_ context.Context, log *slog.Logger) {
 		} else if mn > 0 || sn > 0 {
 			log.Info("scheduled maturity", "media", mn, "sidecars", sn)
 		}
+		if an, err := s.Library.EnqueueWantedArchiveBackfill(32); err != nil {
+			log.Error("schedule archive fallback backfill", "err", err)
+		} else if an > 0 {
+			log.Info("scheduled archive fallback", "enqueued", an)
+		}
 	}
 
 	if cronDue(database, settings.KeySyncFilesCron, s.lastSyncFiles, now, log, "file sync") {

@@ -472,6 +472,7 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 	metadataDomainTag, _ := settings.MetadataDomainTagEnabled(h.Queue.DB)
 	metadataGenresFromCategories, _ := settings.MetadataGenresFromCategoriesEnabled(h.Queue.DB)
+	archiveFallback, _ := settings.ArchiveFallbackEnabled(h.Queue.DB)
 	settingRows := make([]settingsRowView, 0, len(entries))
 	subtitleLangs := settings.ParseSubtitleLangsJSON(settings.DefaultSubtitleLangs)
 	subtitleAuto := false
@@ -506,6 +507,7 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		SubtitleAuto                 bool
 		MetadataDomainTag            bool
 		MetadataGenresFromCategories bool
+		ArchiveFallback              bool
 	}{
 		pageBase:                     newSettingsPage("Settings · Library", "library", flashFromQuery(r)),
 		Settings:                     settingRows,
@@ -520,6 +522,7 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		SubtitleAuto:                 subtitleAuto,
 		MetadataDomainTag:            metadataDomainTag,
 		MetadataGenresFromCategories: metadataGenresFromCategories,
+		ArchiveFallback:              archiveFallback,
 	})
 }
 
@@ -627,6 +630,11 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 				vals[settings.KeyMetadataGenresFromCategories] = "1"
 			} else {
 				vals[settings.KeyMetadataGenresFromCategories] = "0"
+			}
+			if r.FormValue(settings.KeyArchiveFallback) == "1" {
+				vals[settings.KeyArchiveFallback] = "1"
+			} else {
+				vals[settings.KeyArchiveFallback] = "0"
 			}
 		}
 	}

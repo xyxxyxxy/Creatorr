@@ -107,7 +107,10 @@ func (s *Store) SoftFillVideoFromEntry(videoID int64, e ytdlp.Entry, taskID int6
 	}
 	_, err = s.DB.SQL.Exec(`
 		UPDATE videos SET
-		  title = COALESCE(NULLIF(title, ''), ?),
+		  title = CASE
+		    WHEN title = '' OR title = remote_id THEN COALESCE(NULLIF(?, ''), title)
+		    ELSE title
+		  END,
 		  source_url = COALESCE(NULLIF(source_url, ''), NULLIF(?, '')),
 		  description = COALESCE(NULLIF(description, ''), ?),
 		  thumbnail_url = COALESCE(NULLIF(thumbnail_url, ''), ?),

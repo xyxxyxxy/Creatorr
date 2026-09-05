@@ -20,7 +20,8 @@ const videoDownloadOrderOldest = `(v.upload_date IS NULL OR v.upload_date = '') 
 const videoSelectCols = `id, series_id, source_id, remote_id, title, upload_date, source_url,
 		       status, season, episode, COALESCE(description,''), thumbnail_url,
 		       COALESCE(media_type,''), duration_seconds, width, height, fps,
-		       download_format_selector, download_remux_container, tool, import_src, acquired_at, sidecars_acquired_at,
+		       download_format_selector, download_remux_container, tool, import_src,
+		       COALESCE(acquired_via,'source'), acquired_at, sidecars_acquired_at,
 		       COALESCE(sorttitle,''), COALESCE(originaltitle,''), COALESCE(studio,''),
 		       COALESCE(genres,'[]'), COALESCE(tags,'[]'),
 		       COALESCE(uniqueid_type,''), COALESCE(uniqueid_value,''), COALESCE(actors,'[]'),
@@ -49,6 +50,7 @@ type Video struct {
 	DownloadRemuxContainer        sql.NullString
 	Tool                          sql.NullString
 	ImportSrc                     sql.NullString
+	AcquiredVia                   string
 	AcquiredAt                    sql.NullString
 	SidecarsAcquiredAt            sql.NullString
 	SortTitle                     string
@@ -485,7 +487,7 @@ func scanVideo(scanner interface {
 		&v.UploadDate, &v.SourceURL, &v.Status, &v.Season, &v.Episode,
 		&v.Description, &v.ThumbnailURL, &v.MediaType,
 		&v.DurationSeconds, &v.Width, &v.Height, &v.FPS,
-		&v.DownloadFormatSelector, &v.DownloadRemuxContainer, &v.Tool, &v.ImportSrc, &v.AcquiredAt, &v.SidecarsAcquiredAt,
+		&v.DownloadFormatSelector, &v.DownloadRemuxContainer, &v.Tool, &v.ImportSrc, &v.AcquiredVia, &v.AcquiredAt, &v.SidecarsAcquiredAt,
 		&v.SortTitle, &v.OriginalTitle, &v.Studio,
 		&genresRaw, &tagsRaw, &v.UniqueIDType, &v.UniqueIDValue, &actorsRaw,
 		&v.Tagline, &v.Country, &v.MPAA,
@@ -553,7 +555,8 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 		}
 	}
 	switch cur.Status {
-	case "ignored", "deleted", "missing", "wanted_download_error", "verify_failed":
+	case "ignored", "deleted", "missing", "wanted_download_error", "verify_failed", StatusWantedArchive:
+		_ = s.CancelArchiveDownloadsForVideo(videoID)
 		_, _ = s.DB.SQL.Exec(`UPDATE videos SET status = 'wanted' WHERE id = ?`, videoID)
 	}
 	params := enqueueDownloadParams(videoID, cur.SeriesID, domain)

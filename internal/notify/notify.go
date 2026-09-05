@@ -248,6 +248,28 @@ func LiveSkipped(ctx context.Context, database *db.DB, taskID int64, series, tit
 	return SendEvent(ctx, database, EventLiveSkipped, nTitle, body, taskID)
 }
 
+// ArchiveFallback notifies that media was packed via Web Archive instead of the live source URL.
+func ArchiveFallback(ctx context.Context, database *db.DB, taskID int64, series, title, detail string) error {
+	detail = truncateDetailTail(detail)
+	label := strings.TrimSpace(series)
+	vid := strings.TrimSpace(title)
+	if vid != "" {
+		if label != "" {
+			label += " / "
+		}
+		label += vid
+	}
+	if label == "" {
+		label = "(unknown)"
+	}
+	nTitle := "Web Archive fallback used"
+	body := label + "\n\nDownloaded via Web Archive (not the live source URL). Catalog source URL unchanged."
+	if strings.TrimSpace(detail) != "" {
+		body += "\n\n" + detail
+	}
+	return SendEvent(ctx, database, EventArchiveFallback, nTitle, body, taskID)
+}
+
 // FileSyncIssueItem is one media or sidecar row in a file_sync_issues digest.
 type FileSyncIssueItem struct {
 	Series string

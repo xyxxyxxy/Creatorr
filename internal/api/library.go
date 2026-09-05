@@ -472,6 +472,8 @@ func mapVideo(v library.Video) gen.Video {
 		Title:    v.Title,
 		Status:   v.Status,
 	}
+	via := gen.VideoAcquiredVia(library.NormalizeAcquiredVia(v.AcquiredVia))
+	out.AcquiredVia = &via
 	if v.Description != "" {
 		d := v.Description
 		out.Description = &d

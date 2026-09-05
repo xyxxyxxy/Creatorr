@@ -717,6 +717,7 @@
     const s = String(status || "");
     const tips = {
       wanted_download_error: "Last download failed",
+      wanted_archive: "Live source gone; waiting for Web Archive download",
       verify_failed: "Post-pack media verify failed - file kept; Want or Queue download",
       missing: "File path recorded but media not on disk - file sync may restore",
     };
@@ -730,6 +731,7 @@
       success: { icon: "circle-check", color: "text-success" },
       wanted: { icon: "download", color: "text-warning" },
       wanted_download_error: { icon: "circle-x", color: "text-error" },
+      wanted_archive: { icon: "archive", color: "text-warning" },
       verify_failed: { icon: "badge-alert", color: "text-warning" },
       downloaded: { icon: "circle-check", color: "text-success" },
       missing: { icon: "file-question", color: "text-warning" },
@@ -738,6 +740,7 @@
     };
     const labels = {
       wanted_download_error: "wanted (download error)",
+      wanted_archive: "wanted (Web Archive)",
       verify_failed: "Verify failed",
     };
     const meta = icons[s] || { icon: "circle-help", color: "text-base-content/50" };

@@ -47,6 +47,7 @@ func (s *Store) enqueueMaturityMedia(limit int) (int, error) {
 		WHERE ser.monitored = 1
 		  AND qp.maturity_redownload_hours > 0
 		  AND v.status = 'downloaded'
+		  AND COALESCE(v.acquired_via,'source') != 'archive'
 		  AND v.upload_date IS NOT NULL AND TRIM(v.upload_date) != ''
 		  AND v.acquired_at IS NOT NULL AND TRIM(v.acquired_at) != ''
 		  AND datetime('now') >= datetime(v.upload_date, '+' || qp.maturity_redownload_hours || ' hours')
@@ -158,6 +159,7 @@ func (s *Store) enqueueMaturitySidecars(limit int) (int, error) {
 		WHERE ser.monitored = 1
 		  AND qp.maturity_sidecar_hours > 0
 		  AND v.status = 'downloaded'
+		  AND COALESCE(v.acquired_via,'source') != 'archive'
 		  AND v.upload_date IS NOT NULL AND TRIM(v.upload_date) != ''
 		  AND v.acquired_at IS NOT NULL AND TRIM(v.acquired_at) != ''
 		  AND datetime('now') >= datetime(v.upload_date, '+' || qp.maturity_sidecar_hours || ' hours')

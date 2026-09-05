@@ -191,6 +191,13 @@
         "Hint" "Add yt-dlp categories as video genres when categories are known."
         "AutosaveChange" true
       )}}
+      {{template "checkbox_field" (dict
+        "Name" "archive_fallback"
+        "Label" "Web Archive fallback"
+        "Checked" .ArchiveFallback
+        "Hint" "When a cataloged video is gone at the live source, queue a Web Archive download (yt-dlp). Original source URL is kept. Operator is notified when archive media packs."
+        "AutosaveChange" true
+      )}}
     </div>
   </form>
 </section>

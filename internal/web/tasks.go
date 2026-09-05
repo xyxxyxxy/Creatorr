@@ -356,7 +356,12 @@ func (h *Handler) actionRunScheduled(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
 			return
 		}
-		if n == 0 {
+		an, err := h.Library.EnqueueWantedArchiveBackfill(32)
+		if err != nil {
+			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
+			return
+		}
+		if n+an == 0 {
 			http.Redirect(w, r, redir+"?ok=download-wanted-empty", http.StatusSeeOther)
 			return
 		}

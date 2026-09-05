@@ -11,14 +11,15 @@ import (
 
 // Event ids stored on notification_channels.events and used by SendEvent.
 const (
-	EventCookieInvalid  = "cookie_invalid"
-	EventRateLimited    = "rate_limited"
-	EventYtDlpFailed    = "ytdlp_failed"
-	EventVerifyFailed   = "verify_failed"
-	EventFileSyncIssues = "file_sync_issues"
-	EventPOTProvider    = "pot_provider"
-	EventDownloadDigest = "download_digest"
-	EventLiveSkipped    = "live_skipped"
+	EventCookieInvalid   = "cookie_invalid"
+	EventRateLimited     = "rate_limited"
+	EventYtDlpFailed     = "ytdlp_failed"
+	EventVerifyFailed    = "verify_failed"
+	EventFileSyncIssues  = "file_sync_issues"
+	EventPOTProvider     = "pot_provider"
+	EventDownloadDigest  = "download_digest"
+	EventLiveSkipped     = "live_skipped"
+	EventArchiveFallback = "archive_fallback"
 )
 
 // Notification levels (in-app icon / API). Warning matches alert for unread behavior.
@@ -38,6 +39,7 @@ const (
 var AllEvents = []string{
 	EventDownloadDigest,
 	EventLiveSkipped,
+	EventArchiveFallback,
 	EventYtDlpFailed,
 	EventVerifyFailed,
 	EventFileSyncIssues,
@@ -48,14 +50,15 @@ var AllEvents = []string{
 
 // EventLabels are short UI labels for event checkboxes.
 var EventLabels = map[string]string{
-	EventCookieInvalid:  "Cookie / auth failure",
-	EventRateLimited:    "Rate limit / IP block",
-	EventYtDlpFailed:    "yt-dlp / site failure",
-	EventVerifyFailed:   "Verify failed",
-	EventFileSyncIssues: "File sync issues",
-	EventPOTProvider:    "PO token provider",
-	EventDownloadDigest: "Downloads finished (digest)",
-	EventLiveSkipped:    "Live broadcast skipped",
+	EventCookieInvalid:   "Cookie / auth failure",
+	EventRateLimited:     "Rate limit / IP block",
+	EventYtDlpFailed:     "yt-dlp / site failure",
+	EventVerifyFailed:    "Verify failed",
+	EventFileSyncIssues:  "File sync issues",
+	EventPOTProvider:     "PO token provider",
+	EventDownloadDigest:  "Downloads finished (digest)",
+	EventLiveSkipped:     "Live broadcast skipped",
+	EventArchiveFallback: "Web Archive fallback used",
 }
 
 // AlertEvents are unread-eligible failure notifications (red megaphone in UI).
@@ -201,7 +204,7 @@ func notifyTypeFor(event string) apprise.NotifyType {
 		return apprise.NotifyFailure
 	case EventDownloadDigest:
 		return apprise.NotifySuccess
-	case EventLiveSkipped:
+	case EventLiveSkipped, EventArchiveFallback:
 		return apprise.NotifyInfo
 	default:
 		return apprise.NotifyInfo

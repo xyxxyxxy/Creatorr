@@ -220,6 +220,22 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 			log.Info("task done (media type excluded)", "id", task.ID, "kind", task.Kind)
 			return
 		}
+		if code == apperrors.CodeArchiveFallbackQueued &&
+			task.Kind == queue.KindDownload &&
+			task.VideoID.Valid && r.Library != nil {
+			failMsg := "Live unavailable; Web Archive retry queued"
+			_ = r.Queue.SetDetail(task.ID, runErr.Error())
+			r.Events.TaskFailed(task.ID, task.Kind, task.Domain, failMsg, code, sid, vid)
+			_ = r.Queue.Finish(task.ID, queue.StatusFailed, failMsg, code, runErr.Error())
+			if _, err := r.Library.QueueArchiveFallbackAfterUnavailable(task.VideoID.Int64, task.ID, runErr.Error()); err != nil {
+				log.Warn("queue archive fallback", "video", task.VideoID.Int64, "err", err)
+			}
+			if mediaKind(task.Kind) {
+				r.maybeScheduleDigest(ctx, log)
+			}
+			log.Info("task failed (archive fallback queued)", "id", task.ID, "kind", task.Kind)
+			return
+		}
 		_ = r.Queue.SetDetail(task.ID, runErr.Error())
 		r.Events.TaskFailed(task.ID, task.Kind, task.Domain, msg, code, sid, vid)
 		if task.Kind == queue.KindDownload && task.VideoID.Valid && r.Library != nil {

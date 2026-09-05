@@ -95,16 +95,14 @@
     <td>
       <div class="inline-flex items-center gap-2 flex-wrap">
         {{template "task_indicator" .TaskInd}}
-        {{if or (eq .Video.Status "wanted_download_error") (eq .Video.Status "verify_failed")}}
+        {{if or (eq .Video.Status "wanted_download_error") (eq .Video.Status "wanted_archive") (eq .Video.Status "verify_failed")}}
         {{if .ErrorHistoryID}}
         <a class="link link-hover text-error text-xs" href="/task/{{.ErrorHistoryID}}">Open task for details</a>
-        {{else}}
-        <a class="link link-hover text-error text-xs" href="#video-history">See History below for details</a>
         {{end}}
         {{end}}
       </div>
     </td>
-    <td class="align-top video-detail-thumb" rowspan="5">
+    <td class="align-top video-detail-thumb" rowspan="6">
       <div class="relative video-detail-thumb-frame aspect-video">
         {{if .ThumbURL}}
         <img class="size-full rounded object-cover border border-base-300" src="{{.ThumbURL}}" alt="" />
@@ -131,6 +129,7 @@
   {{else}}
   <tr><th class="w-40">Acquired</th><td class="opacity-60">none</td></tr>
   {{end}}
+  <tr><th class="w-40">Acquired via</th><td>{{if eq .Video.AcquiredVia "archive"}}Web Archive{{else if eq .Video.AcquiredVia "import"}}Import{{else}}Source{{end}}</td></tr>
   {{if eq .SizeLabel "-"}}
   <tr><th class="w-40">Size</th><td class="opacity-60">none</td></tr>
   {{else}}

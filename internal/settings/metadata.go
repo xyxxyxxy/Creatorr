@@ -9,6 +9,7 @@ import (
 const (
 	DefaultMetadataDomainTag            = "1"
 	DefaultMetadataGenresFromCategories = "1"
+	DefaultArchiveFallback              = "1"
 )
 
 // NormalizeMetadataFlag returns "1" or "0".
@@ -45,6 +46,18 @@ func MetadataGenresFromCategoriesEnabled(database *db.DB) (bool, error) {
 	}
 	if strings.TrimSpace(raw) == "" {
 		return NormalizeMetadataFlag(DefaultMetadataGenresFromCategories) == "1", nil
+	}
+	return NormalizeMetadataFlag(raw) == "1", nil
+}
+
+// ArchiveFallbackEnabled reports whether Web Archive download fallback is on.
+func ArchiveFallbackEnabled(database *db.DB) (bool, error) {
+	raw, err := Get(database, KeyArchiveFallback)
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(raw) == "" {
+		return NormalizeMetadataFlag(DefaultArchiveFallback) == "1", nil
 	}
 	return NormalizeMetadataFlag(raw) == "1", nil
 }

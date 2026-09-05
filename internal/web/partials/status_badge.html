@@ -36,6 +36,10 @@
 <span class="inline-flex tooltip tooltip-top text-error" data-tip="Last download failed" aria-label="wanted (download error)">
   <i data-lucide="circle-x" class="size-4"></i>
 </span>
+{{else if eq . "wanted_archive"}}
+<span class="inline-flex tooltip tooltip-top text-warning" data-tip="Live source gone; waiting for Web Archive download" aria-label="wanted (Web Archive)">
+  <i data-lucide="archive" class="size-4"></i>
+</span>
 {{else if eq . "verify_failed"}}
 <span class="inline-flex tooltip tooltip-top text-warning" data-tip="Post-pack media verify failed - file kept; use 'Want' or 'Queue download'" aria-label="Verify failed">
   <i data-lucide="badge-alert" class="size-4"></i>
