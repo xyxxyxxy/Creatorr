@@ -142,7 +142,6 @@ func TestCreateSeriesPassesSourceOptions(t *testing.T) {
 		ScanCron:         "0 0 * * 0",
 		IndexAsIgnored:   true,
 		TitleRegexpInclude: `(?i)show`,
-		AutoIgnoreMediaTypes: []string{"short"},
 		FullScanLimit:    50,
 		SourceLabel:      "My feed",
 	})
@@ -151,9 +150,6 @@ func TestCreateSeriesPassesSourceOptions(t *testing.T) {
 	}
 	if len(ser.Sources) != 1 {
 		t.Fatalf("sources=%d", len(ser.Sources))
-	}
-	if len(ser.AutoIgnoreMediaTypes) != 1 || ser.AutoIgnoreMediaTypes[0] != "short" {
-		t.Fatalf("series auto_ignore_media_types=%v", ser.AutoIgnoreMediaTypes)
 	}
 	src := ser.Sources[0]
 	if src.ScanCron != "0 0 * * 0" {

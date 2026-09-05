@@ -103,9 +103,8 @@ func TestIsYtDlpPauseCode(t *testing.T) {
 		apperrors.IsYtDlpPauseCode(apperrors.CodePackFailed) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodeMediaVerifyFailed) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodeLiveBroadcastSkipped) ||
-		apperrors.IsYtDlpPauseCode(apperrors.CodeMediaTypeExcluded) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodeAgeRestricted) {
-		t.Fatal("download/resolve/remux/pack/verify/live-skip/media-type/age-restrict must not pause")
+		t.Fatal("download/resolve/remux/pack/verify/live-skip/age-restrict must not pause")
 	}
 }
 

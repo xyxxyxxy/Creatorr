@@ -48,8 +48,7 @@ CREATE TABLE IF NOT EXISTS series (
   tagline TEXT NOT NULL DEFAULT '',
   country TEXT NOT NULL DEFAULT '',
   mpaa TEXT NOT NULL DEFAULT '',
-  premiered TEXT NOT NULL DEFAULT '',
-  auto_ignore_media_types TEXT NOT NULL DEFAULT '[]'
+  premiered TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS sources (

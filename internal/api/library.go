@@ -200,9 +200,6 @@ func (s *Server) CreateSeries(w http.ResponseWriter, r *http.Request) {
 	if body.TitleRegexpExclude != nil {
 		p.TitleRegexpExclude = *body.TitleRegexpExclude
 	}
-	if body.AutoIgnoreMediaTypes != nil {
-		p.AutoIgnoreMediaTypes = *body.AutoIgnoreMediaTypes
-	}
 	ser, err := s.Library.CreateSeries(p)
 	if err != nil {
 		writeLibraryErr(w, err, "create series failed")
@@ -555,10 +552,6 @@ func mapSeries(lib *library.Store, ser library.Series, withVideos bool, sizes ma
 	out.DownloadedCount = &dc
 	out.WantedCount = &wc
 	out.SourceCount = &sc
-	if len(ser.AutoIgnoreMediaTypes) > 0 {
-		ex := append([]string(nil), ser.AutoIgnoreMediaTypes...)
-		out.AutoIgnoreMediaTypes = &ex
-	}
 	srcs := make([]gen.Source, 0, len(ser.Sources))
 	for _, src := range ser.Sources {
 		srcs = append(srcs, mapSource(lib, src))

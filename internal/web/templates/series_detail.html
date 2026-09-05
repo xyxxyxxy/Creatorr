@@ -134,7 +134,7 @@
 
 <input type="checkbox" id="modal-add-source" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box">
+  <div class="modal-box max-w-xl">
     <h3 class="font-bold text-lg mb-2">Add channel/playlist source</h3>
         <form method="post" action="/actions/add-source" class="space-y-2 js-source-url-form">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
@@ -158,7 +158,9 @@
         "ID" "add-source-scan-cron"
         "CronDescriptors" .ScanCronDescriptors
       )}}
-      {{template "source_filter_fields" (dict "FullScanLimitID" "add-source-full-scan-limit")}}
+      {{template "source_filter_fields" (dict
+        "FullScanLimitID" "add-source-full-scan-limit"
+      )}}
       <div class="modal-action">
         <label for="modal-add-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
@@ -201,7 +203,7 @@
 {{range .Sources}}
 <input type="checkbox" id="modal-edit-source-{{.ID}}" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box">
+  <div class="modal-box max-w-xl">
     <h3 class="font-bold text-lg mb-2">Edit {{if eq .Kind "single"}}single{{else}}feed{{end}}</h3>
         <form method="post" action="/actions/update-source" class="space-y-2">
       <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
@@ -311,9 +313,6 @@
         "Profiles" .Profiles
         "ProfileID" .Series.QualityProfileID
         "ProfileInfo" "yt-dlp format selector for new video downloads."
-        "AutoIgnoreItems" .Series.AutoIgnoreMediaTypes
-        "AutoIgnoreOptions" .AutoIgnoreMediaTypeOptions
-        "AutoIgnoreListID" "edit-series-auto-ignore-media-types"
       )}}
       <div class="modal-action">
         <label for="modal-edit-series" class="btn modal-cancel">Cancel</label>

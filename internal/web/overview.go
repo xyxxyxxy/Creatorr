@@ -30,25 +30,23 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 
 	render(w, "overview", struct {
 		pageBase
-		SeriesCount                int
-		VideoCount                 int
-		SizeHuman                  string
-		RecentVideos               []seriesVideoRow
-		SeriesTitles               map[int64]string
-		Roots                      []library.RootFolder
-		Profiles                   []library.QualityProfile
-		ScanCronDescriptors        []string
-		AutoIgnoreMediaTypeOptions []string
+		SeriesCount         int
+		VideoCount          int
+		SizeHuman           string
+		RecentVideos        []seriesVideoRow
+		SeriesTitles        map[int64]string
+		Roots               []library.RootFolder
+		Profiles            []library.QualityProfile
+		ScanCronDescriptors []string
 	}{
-		pageBase:                   newPage("Overview", "overview", flashFromQuery(r)),
-		SeriesCount:                totals.SeriesCount,
-		VideoCount:                 totals.VideoCount,
-		SizeHuman:                  library.FormatBytes(totals.SizeBytes),
-		RecentVideos:               recentRows,
-		SeriesTitles:               seriesTitles,
-		Roots:                      roots,
-		Profiles:                   profiles,
-		ScanCronDescriptors:        scanCronDescriptors(),
-		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
+		pageBase:            newPage("Overview", "overview", flashFromQuery(r)),
+		SeriesCount:         totals.SeriesCount,
+		VideoCount:          totals.VideoCount,
+		SizeHuman:           library.FormatBytes(totals.SizeBytes),
+		RecentVideos:        recentRows,
+		SeriesTitles:        seriesTitles,
+		Roots:               roots,
+		Profiles:            profiles,
+		ScanCronDescriptors: scanCronDescriptors(),
 	})
 }

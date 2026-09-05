@@ -1,7 +1,7 @@
 {{define "add_series_modal"}}
 <input type="checkbox" id="modal-add-series" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box max-w-lg">
+  <div class="modal-box max-w-xl">
     <h3 class="font-bold text-lg mb-2">Add series</h3>
     {{if not .Roots}}
     <div class="alert alert-warning mb-2"><span>Add a root folder under 'Settings' first.</span></div>
@@ -62,7 +62,9 @@
           "ID" "add-series-scan-cron"
           "CronDescriptors" .ScanCronDescriptors
         )}}
-        {{template "source_filter_fields" (dict "FullScanLimitID" "add-series-full-scan-limit")}}
+        {{template "source_filter_fields" (dict
+          "FullScanLimitID" "add-series-full-scan-limit"
+        )}}
       </div>
 
       <div class="hidden" data-add-series-step="fetching">
@@ -78,8 +80,6 @@
           "TitleID" "add-series-title"
           "Roots" .Roots
           "Profiles" .Profiles
-          "AutoIgnoreOptions" .AutoIgnoreMediaTypeOptions
-          "AutoIgnoreListID" "add-series-auto-ignore-media-types"
         )}}
       </div>
 

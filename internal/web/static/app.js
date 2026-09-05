@@ -1867,6 +1867,7 @@
     initQualityProfileGate();
     syncAllRateLimitJoins();
     syncAllScanCronJoins();
+    snapshotStringListEditors(document);
     document.querySelectorAll("form.js-add-series-form").forEach(syncAddSeriesForm);
     openAddSeriesModal();
     openSeriesMetadataModal();
@@ -2582,6 +2583,7 @@
     modal.querySelectorAll("form").forEach((form) => {
       form.reset();
       resetArtSlots(form);
+      resetStringListEditors(form);
       resetCredentialsPasswordUI(form);
       delete form.dataset.addSeriesMode;
       delete form.dataset.addSeriesStep;
@@ -2599,6 +2601,29 @@
       syncAddSeriesForm(form);
     });
   });
+
+  function snapshotStringListEditors(root) {
+    (root || document).querySelectorAll("[data-string-list-editor]").forEach((editor) => {
+      if (editor.dataset.stringListOrig != null) return;
+      const list = editor.querySelector("[data-string-list]");
+      if (!list) return;
+      editor.dataset.stringListOrig = list.innerHTML;
+    });
+  }
+
+  function resetStringListEditors(form) {
+    if (!form) return;
+    snapshotStringListEditors(form);
+    form.querySelectorAll("[data-string-list-editor]").forEach((editor) => {
+      const list = editor.querySelector("[data-string-list]");
+      if (!list || editor.dataset.stringListOrig == null) return;
+      list.innerHTML = editor.dataset.stringListOrig;
+      createLucideIcons(list);
+      syncStringListEmptyLabel(editor);
+      const draft = editor.querySelector("[data-string-list-draft-value]");
+      if (draft instanceof HTMLInputElement) draft.value = "";
+    });
+  }
 
   function resetArtSlots(form) {
     if (!form) return;

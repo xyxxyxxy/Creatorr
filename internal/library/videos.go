@@ -614,45 +614,6 @@ func (s *Store) RecordLiveBroadcastSkipped(videoID, taskID int64) error {
 	}, taskID)
 }
 
-// MarkIgnoredMediaType sets status ignored after a media_type exclude match (download).
-// Writes video history; cancels other pending downloads for the video.
-func (s *Store) MarkIgnoredMediaType(videoID, taskID int64, mediaType string) error {
-	cur, err := s.GetVideo(videoID)
-	if err != nil {
-		return err
-	}
-	switch cur.Status {
-	case "downloaded":
-		return fmt.Errorf("cannot ignore %s video for media_type", cur.Status)
-	}
-	mediaType = NormalizeMediaType(mediaType)
-	if mediaType != "" {
-		_ = s.SetMediaType(videoID, mediaType)
-	}
-	_, err = s.DB.SQL.Exec(`UPDATE videos SET status = 'ignored' WHERE id = ?`, videoID)
-	if err != nil {
-		return err
-	}
-	detail := map[string]any{
-		"previous_status": cur.Status,
-		"reason":          IgnoreReasonMediaType,
-	}
-	if mediaType != "" {
-		detail["media_type"] = mediaType
-	}
-	msg := "Ignored (excluded media type)"
-	if mediaType != "" {
-		msg = "Ignored (excluded media type: " + mediaType + ")"
-	}
-	if taskID > 0 {
-		_ = s.AddVideoHistory(videoID, "ignored", msg, detail, taskID)
-	}
-	if s.Queue != nil {
-		_, _ = s.Queue.CancelDownloadsForVideo(videoID, "Cancelled (video ignored)")
-	}
-	return nil
-}
-
 // ListSeriesMediaTypes returns distinct non-empty media_type values for a series (alpha).
 func (s *Store) ListSeriesMediaTypes(seriesID int64) ([]string, error) {
 	rows, err := s.DB.SQL.Query(`
