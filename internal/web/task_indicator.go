@@ -275,19 +275,11 @@ func videoIndicatorID(videoID int64) string {
 	return fmt.Sprintf("task-ind-video-%d", videoID)
 }
 
-// seriesStatusView drives partials/series_status_indicator.html and series_monitor_indicator.html.
+// seriesStatusView drives partials/series_status_indicator.html (poster health badge).
 type seriesStatusView struct {
-	Kind  string // wanted_download_error | verify_failed | scan_error | incomplete | monitored | unmonitored
+	Kind  string // wanted_download_error | verify_failed | scan_error | incomplete
 	Title string
 	Count int // video error count for health badge; 0 = icon only
-}
-
-// buildSeriesMonitorStatus is left of series list title: always monitored | unmonitored.
-func buildSeriesMonitorStatus(monitored bool) seriesStatusView {
-	if monitored {
-		return seriesStatusView{Kind: "monitored", Title: "Monitored"}
-	}
-	return seriesStatusView{Kind: "unmonitored", Title: "Unmonitored"}
 }
 
 func seriesHealthTitle(label string, count int) string {

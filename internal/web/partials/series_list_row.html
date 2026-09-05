@@ -1,5 +1,5 @@
 {{define "series_list_row"}}
-{{/* Dot: seriesListRow with Series fields + PosterURL Line2 KindIcon KindTip MonitorTitle Redirect LiveTarget MonitorInd StatusInd */}}
+{{/* Dot: seriesListRow with Series fields + PosterURL Line2 KindIcon KindTip MonitorTitle Redirect LiveTarget StatusInd */}}
 {{template "list_row_shell" (dict
   "MediaURL" .PosterURL
   "MediaClass" "size-14 shrink-0"
@@ -9,7 +9,6 @@
   "Title" .Title
   "KindIcon" .KindIcon
   "KindTip" .KindTip
-  "MonitorInd" .MonitorInd
   "StatusInd" .StatusInd
   "Line2" .Line2
   "ShowProgress" true
@@ -17,6 +16,7 @@
   "DownloadedCount" .DownloadedCount
   "ErrorCount" .ErrorCount
   "WantedCount" .WantedCount
+  "Monitored" .Monitored
   "Monitor" (dict
     "Action" "/actions/set-series-monitored"
     "SeriesID" .ID

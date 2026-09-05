@@ -16,7 +16,6 @@ type seriesListRow struct {
 	library.Series
 	HasMonitoredSource bool
 	Busy               bool
-	MonitorInd         seriesStatusView  // left of title: always monitored | unmonitored
 	StatusInd          *seriesStatusView // poster top-left: health errors/warnings only
 	PosterURL          string
 	Line2              string
@@ -114,7 +113,7 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 	if redir == "" {
 		redir = "/series"
 	}
-	// Always refresh list on monitor so status indicator stays in sync.
+	// Always refresh list on monitor so monitored filter / row state stays in sync.
 	liveTarget := "series-list-live"
 
 	rows := make([]seriesListRow, 0, len(list))
@@ -158,7 +157,6 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 			Series:             s,
 			HasMonitoredSource: s.Monitored,
 			Busy:               best != nil,
-			MonitorInd:         buildSeriesMonitorStatus(s.Monitored),
 			StatusInd:          statusInd,
 			PosterURL:          posterURL,
 			Line2:              strings.Join(line2Parts, " · "),

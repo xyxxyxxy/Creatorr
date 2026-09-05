@@ -3,7 +3,6 @@
      MediaURL?, MediaClass?, ImgClass?, Circle?, PlaceholderIcon?, Badge?,
      TitleHref, Title, KindIcon?, KindTip? (optional delivery badge on media bottom-right; audio only),
      StatusInd? (series_status_indicator health on media top-left),
-     MonitorInd? (series_monitor_indicator left of title; always monitor state),
      TaskInd?, WarnLevel?,
      Line2? (plain text), ShowProgress? (uses series_progress on .; shares Line2 row 50/50),
      Monitor? (dict for monitor_toggle). */}}
@@ -31,7 +30,6 @@
   </div>
   <div class="list-col-grow min-w-0">
     <div class="flex items-center gap-2 min-w-0">
-      {{with .MonitorInd}}{{template "series_monitor_indicator" .}}{{end}}
       {{with .TaskInd}}{{if .ID}}{{template "task_indicator" .}}{{end}}{{end}}
       <a class="link link-hover font-medium truncate" href="{{.TitleHref}}">{{.Title}}</a>
       {{with .WarnLevel}}{{template "series_warn_icon" .}}{{end}}

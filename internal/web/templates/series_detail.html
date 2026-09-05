@@ -5,12 +5,18 @@
   (dict "Label" .Series.Title "Icon" "clapperboard")
 )}}
 <div class="navbar bg-base-100 border border-base-300 rounded-box px-3 mb-4 min-h-14 gap-2 flex-wrap">
-  <div class="flex-1 min-w-0">
-    <h1 class="text-xl font-semibold truncate inline-flex items-center gap-2 max-w-full">
-      <i data-lucide="clapperboard" class="size-5 shrink-0"></i>
-      <span class="truncate">{{.Series.Title}}</span>
-    </h1>
-    <p class="text-xs opacity-60">{{if .Series.RootName}}{{.Series.RootName}} · {{end}}{{.Series.QualityProfileName}}</p>
+  <div class="flex-1 min-w-0 flex items-center gap-3">
+    {{if .MetaForm.Art.Poster}}
+    <img src="/series/{{.Series.ID}}/art/poster?v={{index .MetaForm.ArtMtimes "poster"}}" alt="" class="size-14 shrink-0 rounded-full object-cover" />
+    {{else}}
+    <div class="size-14 shrink-0 rounded-full bg-base-200 flex items-center justify-center" aria-hidden="true">
+      <i data-lucide="tv" class="size-6 opacity-40"></i>
+    </div>
+    {{end}}
+    <div class="min-w-0">
+      <h1 class="text-xl font-semibold truncate">{{.Series.Title}}</h1>
+      <p class="text-xs opacity-60">{{if .Series.RootName}}{{.Series.RootName}} · {{end}}{{.Series.QualityProfileName}}</p>
+    </div>
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
     <label for="modal-edit-series" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Edit series</label>
@@ -149,7 +155,6 @@
           "Validator" true
           "ValidatorHint" "Enter a valid http(s) URL with a host."
           "SupportedSitesLink" "feed"
-          "Info" "Channel or playlist URL. After 'Full scan' is done, 'Scan' runs on schedule."
         )}}
       </div>
       {{template "field_input" (dict "Name" "label" "Label" "Name (optional)" "Placeholder" "Source name")}}
@@ -187,7 +192,6 @@
           "Validator" true
           "ValidatorHint" "Enter a valid http(s) URL with a host."
           "SupportedSitesLink" "video"
-          "Info" "One video URL. Indexed once; skipped by 'Scan'. Use 'Full scan' to re-index."
         )}}
       </div>
       {{template "field_input" (dict "Name" "label" "Label" "Name (optional)" "Placeholder" "Source name")}}
@@ -307,7 +311,6 @@
         "TitleDisabledTitle" "'Title' and 'Root folder' are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
         "Roots" .Roots
         "RootID" .Series.RootID
-        "RootInfo" "Where downloads and series NFO/art are written. Changing root moves the series folder on disk."
         "RootDisabled" .FolderRenameBusy
         "RootDisabledTitle" "'Title' and 'Root folder' are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
         "Profiles" .Profiles

@@ -1,31 +1,66 @@
 {{define "series_progress"}}
-{{/* Dot: ProgressTotal, DownloadedCount, ErrorCount, WantedCount.
-     Three-segment bar: downloaded (primary) | errors (error) | wanted (secondary).
-     Counts under (centered); fills parent width (series list shares Line2 row 50/50). */}}
-<span class="tooltip tooltip-top block w-full min-w-0"
-      data-tip="Downloaded {{.DownloadedCount}} · Errors {{.ErrorCount}} · Wanted {{.WantedCount}}">
+{{/* Dot: ProgressTotal, DownloadedCount, ErrorCount, WantedCount, Monitored.
+     Bar: downloaded (primary) | errors (error) | wanted.
+     Wanted: no fill when monitored (track shows through); grey when unmonitored.
+     Label: omit zero counts. One non-zero status → status name only, no tip.
+     Several → `N | N` (non-zero only, order Downloaded|Errors|Wanted) + tip with names. */}}
+{{$d := .DownloadedCount}}{{$e := .ErrorCount}}{{$w := .WantedCount}}
+{{$onlyD := and (gt $d 0) (eq $e 0) (eq $w 0)}}
+{{$onlyE := and (eq $d 0) (gt $e 0) (eq $w 0)}}
+{{$onlyW := and (eq $d 0) (eq $e 0) (gt $w 0)}}
+{{$single := or $onlyD $onlyE $onlyW}}
+{{$tip := ""}}{{$sep := ""}}
+{{if gt $d 0}}{{$tip = printf "%s%sDownloaded %d" $tip $sep $d}}{{$sep = " · "}}{{end}}
+{{if gt $e 0}}{{$tip = printf "%s%sErrors %d" $tip $sep $e}}{{$sep = " · "}}{{end}}
+{{if gt $w 0}}{{$tip = printf "%s%sWanted %d" $tip $sep $w}}{{end}}
+{{$nums := ""}}{{$nsep := ""}}
+{{if gt $d 0}}{{$nums = printf "%s%s%d" $nums $nsep $d}}{{$nsep = " | "}}{{end}}
+{{if gt $e 0}}{{$nums = printf "%s%s%d" $nums $nsep $e}}{{$nsep = " | "}}{{end}}
+{{if gt $w 0}}{{$nums = printf "%s%s%d" $nums $nsep $w}}{{end}}
+{{$label := $nums}}
+{{if $onlyD}}{{$label = "Downloaded"}}{{else if $onlyE}}{{$label = "Errors"}}{{else if $onlyW}}{{$label = "Wanted"}}{{end}}
+{{if $single}}
+<div class="flex flex-col gap-0.5 w-full min-w-0 items-center">
+  {{template "series_progress_bar" .}}
+  {{if $label}}<span class="text-xs tabular-nums whitespace-nowrap opacity-80">{{$label}}</span>{{end}}
+</div>
+{{else if $tip}}
+<span class="tooltip tooltip-top block w-full min-w-0" data-tip="{{$tip}}">
   <div class="flex flex-col gap-0.5 w-full min-w-0 items-center">
-    {{if gt .ProgressTotal 0}}
-    <div class="flex w-full h-2 rounded-box overflow-hidden bg-base-content/20"
-         role="progressbar"
-         aria-valuemin="0"
-         aria-valuemax="{{.ProgressTotal}}"
-         aria-valuenow="{{.DownloadedCount}}"
-         aria-label="Downloaded {{.DownloadedCount}}, errors {{.ErrorCount}}, wanted {{.WantedCount}}, of {{.ProgressTotal}}">
-      {{if gt .DownloadedCount 0}}
-      <div class="bg-primary h-full min-w-0" style="flex: {{.DownloadedCount}} 0 0"></div>
-      {{end}}
-      {{if gt .ErrorCount 0}}
-      <div class="bg-error h-full min-w-0" style="flex: {{.ErrorCount}} 0 0"></div>
-      {{end}}
-      {{if gt .WantedCount 0}}
-      <div class="bg-secondary h-full min-w-0" style="flex: {{.WantedCount}} 0 0"></div>
-      {{end}}
-    </div>
-    {{else}}
-    <div class="w-full h-2 rounded-box bg-base-content/20" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="1" aria-label="No videos in progress"></div>
-    {{end}}
-    <span class="text-xs tabular-nums whitespace-nowrap opacity-80">{{.DownloadedCount}} / {{.ProgressTotal}}</span>
+    {{template "series_progress_bar" .}}
+    <span class="text-xs tabular-nums whitespace-nowrap opacity-80">{{$nums}}</span>
   </div>
 </span>
+{{else}}
+<div class="flex flex-col gap-0.5 w-full min-w-0 items-center">
+  {{template "series_progress_bar" .}}
+</div>
+{{end}}
+{{end}}
+
+{{define "series_progress_bar"}}
+{{if gt .ProgressTotal 0}}
+<div class="flex w-full h-2 rounded-box overflow-hidden bg-base-content/20"
+     role="progressbar"
+     aria-valuemin="0"
+     aria-valuemax="{{.ProgressTotal}}"
+     aria-valuenow="{{.DownloadedCount}}"
+     aria-label="Downloaded {{.DownloadedCount}}, errors {{.ErrorCount}}, wanted {{.WantedCount}}, of {{.ProgressTotal}}">
+  {{if gt .DownloadedCount 0}}
+  <div class="bg-primary h-full min-w-0" style="flex: {{.DownloadedCount}} 0 0"></div>
+  {{end}}
+  {{if gt .ErrorCount 0}}
+  <div class="bg-error h-full min-w-0" style="flex: {{.ErrorCount}} 0 0"></div>
+  {{end}}
+  {{if gt .WantedCount 0}}
+  {{if .Monitored}}
+  <div class="h-full min-w-0" style="flex: {{.WantedCount}} 0 0" aria-hidden="true"></div>
+  {{else}}
+  <div class="bg-base-content/40 h-full min-w-0" style="flex: {{.WantedCount}} 0 0"></div>
+  {{end}}
+  {{end}}
+</div>
+{{else}}
+<div class="w-full h-2 rounded-box bg-base-content/20" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="1" aria-label="No videos in progress"></div>
+{{end}}
 {{end}}
