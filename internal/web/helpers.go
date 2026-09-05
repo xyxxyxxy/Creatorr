@@ -207,6 +207,8 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Quality profile deleted.")
 	case "nfo-regen-queued":
 		return flashOK("NFO regenerate queued.")
+	case "verify-all-queued":
+		return flashOK("'Verify all downloaded videos' queued.")
 	case "sync-files-queued":
 		return flashOK("File sync queued.")
 	case "sync-files-empty":

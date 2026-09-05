@@ -18,7 +18,7 @@ type notifyFileSyncIssueRef struct {
 	Missing  bool   // video no longer in library
 }
 
-// notifyFileSyncIssueSection is Missing or Size changed for the notification detail UI.
+// notifyFileSyncIssueSection is Missing or Size changed for the notification Related to UI.
 type notifyFileSyncIssueSection struct {
 	Heading string
 	Total   int
@@ -26,7 +26,7 @@ type notifyFileSyncIssueSection struct {
 	Extra   int // items beyond FileSyncIssueListCap
 }
 
-// fileSyncNotifySectionsFromDetail builds linked body sections from sync_files
+// fileSyncNotifySectionsFromDetail builds Related to video sections from sync_files
 // tasks.detail JSON. Returns nil when detail has no issue lists.
 func fileSyncNotifySectionsFromDetail(detail string, resolve func(videoID int64) notifyFileSyncIssueRef) []notifyFileSyncIssueSection {
 	detail = strings.TrimSpace(detail)

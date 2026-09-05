@@ -333,6 +333,7 @@ func StubHandlers() map[string]TaskHandler {
 		queue.KindRetentionDelete:    stub(queue.KindRetentionDelete),
 		queue.KindRenameEpisodes:     stub(queue.KindRenameEpisodes),
 		queue.KindRegenerateNFO:      stub(queue.KindRegenerateNFO),
+		queue.KindVerifyAllMedia:     stub(queue.KindVerifyAllMedia),
 		queue.KindDeleteFiles:        stub(queue.KindDeleteFiles),
 		queue.KindSponsorblockCut:    stub(queue.KindSponsorblockCut),
 		queue.KindMediaVerify:        stub(queue.KindMediaVerify),

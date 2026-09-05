@@ -60,6 +60,8 @@ When SponsorBlock **remove** is set, remux runs in the **`sponsorblock_cut`** ta
 
 **Regenerate all NFO files** (Settings → Maintenance): enqueues system-lane **`regenerate_nfo`** (one pending/running; resumable cursors after restart). Rewrites episode `.nfo` beside every on-disk video from current DB metadata when bytes differ, and rewrites `tvshow.nfo` when the series folder exists; does not touch media/json/thumb and does **not** update `videos.acquired_at`. Per-episode history only when rewritten; one History outcome on the finished task on completion.
 
+**Verify all downloaded videos** (Settings → Maintenance): enqueues system-lane **`verify_all_media`** (one pending/running; resumable cursor). Null-decodes every packed `downloaded` / `verify_failed` video (same ffmpeg path as post-pack `media_verify`; ignores profile verify gate). Success → history `verified` and status `downloaded`. Fail → keep files, `verify_failed`, notify. Skips videos busy with download / SponsorBlock cut / `media_verify`.
+
 **Apply episode format** (Settings → Maintenance): system-lane task `rename_episodes` renames packed `downloaded` episode file sets to each video's root `episode_format` (per-root snapshot at enqueue). Skips videos with pending/running download/sponsorblock_cut/media_verify (`skipped_busy`); double busy-check before rename. Collision / mid-set failure → fail that video, continue. Per-video history only on success (`renamed`). Root episode format fields locked while the task is pending/running. Series title or root changes move the series folder immediately (blocked while download/cut/verify tasks are busy); episode filenames that still embed the old series title need this Apply to rewrite.
 
 ## Series metadata (tvshow.nfo)

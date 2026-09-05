@@ -53,6 +53,7 @@ func (r *Runner) noteDigestSuccess(task *queue.Task) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	it := d.items[vid]
+	it.VideoID = vid
 	it.Domain = task.Domain
 	if seriesTitle != "" {
 		it.Series = seriesTitle
@@ -115,7 +116,10 @@ func (r *Runner) flushDigest(ctx context.Context, log *slog.Logger) {
 		return
 	}
 	items := make([]notify.DigestItem, 0, len(d.items))
-	for _, it := range d.items {
+	for vid, it := range d.items {
+		if it.VideoID <= 0 {
+			it.VideoID = vid
+		}
 		items = append(items, it)
 	}
 	d.items = map[int64]notify.DigestItem{}

@@ -42,6 +42,7 @@ const (
 	KindRetentionDelete    = "retention_delete"
 	KindRenameEpisodes     = "rename_episodes"
 	KindRegenerateNFO      = "regenerate_nfo"
+	KindVerifyAllMedia     = "verify_all_media"
 	KindDeleteFiles        = "delete_files"
 	KindDeleteSidecar      = "delete_sidecar"
 	KindSponsorblockCut    = "sponsorblock_cut"
@@ -295,7 +296,7 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 	// System lane: at most one pending/running task per kind (except import keeps per-video).
 	if p.Domain == SystemDomain {
 		switch p.Kind {
-		case KindSyncFiles, KindRetentionDelete, KindRenameEpisodes, KindRegenerateNFO, KindYtDlpUpdate, KindBulkEditSeries, KindBulkEditVideos:
+		case KindSyncFiles, KindRetentionDelete, KindRenameEpisodes, KindRegenerateNFO, KindVerifyAllMedia, KindYtDlpUpdate, KindBulkEditSeries, KindBulkEditVideos:
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE domain = ? AND kind = ? AND status IN (?, ?) LIMIT 1
 			`, SystemDomain, p.Kind, StatusPending, StatusRunning)

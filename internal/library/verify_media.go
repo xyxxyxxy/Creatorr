@@ -224,7 +224,14 @@ func (s *Store) MarkVerifyFailed(videoID, taskID int64, message string) error {
 	}, taskID)
 }
 
-// MarkVerified appends verified history; status stays downloaded.
+// MarkVerified appends verified history and restores status to downloaded
+// (including videos previously marked verify_failed).
 func (s *Store) MarkVerified(videoID, taskID int64) error {
+	if _, err := s.DB.SQL.Exec(`
+		UPDATE videos SET status = 'downloaded'
+		WHERE id = ? AND status IN ('downloaded', 'verify_failed')
+	`, videoID); err != nil {
+		return err
+	}
 	return s.AddVideoHistory(videoID, VideoHistVerified, "Media verified", nil, taskID)
 }

@@ -304,6 +304,73 @@ func TestOverviewRenders(t *testing.T) {
 	if !strings.Contains(body, "Recent additions") {
 		t.Fatalf("missing recent additions section: %s", truncate(body, 400))
 	}
+	if strings.Contains(body, "Running tasks") {
+		t.Fatalf("running tasks section should hide when empty: %s", truncate(body, 400))
+	}
+}
+
+func TestOverviewShowsRunningTasks(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+
+	pendingID, err := q.Enqueue(queue.EnqueueParams{
+		Kind: queue.KindScan, Domain: "example.com", Message: "queued only",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runningID, err := q.Enqueue(queue.EnqueueParams{
+		Kind: queue.KindDownload, Domain: "cdn.example", Message: "Fetching",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SQL.Exec(`UPDATE tasks SET status = ? WHERE id = ?`, queue.StatusRunning, runningID); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Running tasks") {
+		t.Fatalf("missing running tasks section: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, `data-overview-running-task="`+strconv.FormatInt(runningID, 10)+`"`) {
+		t.Fatalf("missing running task row: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, "download") || !strings.Contains(body, "cdn.example") {
+		t.Fatalf("missing kind/domain on running row: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `href="/task/`+strconv.FormatInt(runningID, 10)+`"`) {
+		t.Fatalf("running row must link to task detail: %s", truncate(body, 600))
+	}
+	if strings.Contains(body, `data-overview-running-task="`+strconv.FormatInt(pendingID, 10)+`"`) {
+		t.Fatalf("pending task must not appear in running list")
+	}
+	if strings.Contains(body, "/actions/cancel-task") {
+		t.Fatalf("overview running list must not offer cancel")
+	}
+	idxRun := strings.Index(body, "Running tasks")
+	idxRecent := strings.Index(body, "Recent additions")
+	if idxRun < 0 || idxRecent < 0 || idxRun > idxRecent {
+		t.Fatalf("running tasks must appear above recent additions")
+	}
 }
 
 func TestActionRunScheduledQueuesSyncFiles(t *testing.T) {
@@ -616,6 +683,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			}
 			if !strings.Contains(body, "Apply episode format") {
 				t.Fatalf("%s missing apply episode format", path)
+			}
+			if !strings.Contains(body, "Verify all downloaded videos") {
+				t.Fatalf("%s missing verify all media", path)
 			}
 			if !strings.Contains(body, "list-panel") {
 				t.Fatalf("%s missing list-panel", path)

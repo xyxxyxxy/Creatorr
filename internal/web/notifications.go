@@ -30,26 +30,58 @@ func (h *Handler) notificationDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	view := notificationToView(n, time.Now().UTC())
-	var bodySections []notifyFileSyncIssueSection
-	if view.Event == notify.EventFileSyncIssues && view.TaskID > 0 && h.Queue != nil {
+	var related []notifyFileSyncIssueSection
+	var relatedTask *notifyRelatedTaskView
+	messageBody := view.Body
+	if view.Event == notify.EventDownloadDigest {
+		messageBody = notify.DigestBodyDisplay(view.Body)
+		related = digestRelatedSectionsFromBody(view.Body, h.resolveFileSyncNotifyRef, h.resolveDigestNotifyByTitles)
+	}
+	if view.TaskID > 0 && h.Queue != nil {
 		if t, gerr := h.Queue.GetTask(view.TaskID); gerr == nil && t != nil {
-			bodySections = fileSyncNotifySectionsFromDetail(t.Detail, h.resolveFileSyncNotifyRef)
+			relatedTask = &notifyRelatedTaskView{
+				ID:      t.ID,
+				Kind:    t.Kind,
+				Status:  t.Status,
+				Domain:  t.Domain,
+				Message: strings.TrimSpace(t.Message),
+			}
+			if view.Event == notify.EventFileSyncIssues {
+				related = fileSyncNotifySectionsFromDetail(t.Detail, h.resolveFileSyncNotifyRef)
+			}
 		}
+	}
+	pageTitle := view.Title
+	if strings.TrimSpace(pageTitle) == "" {
+		pageTitle = view.EventLabel
 	}
 	render(w, "notification_detail", struct {
 		pageBase
-		Crumbs       []breadcrumb
-		Item         notifyHistoryView
-		BodySections []notifyFileSyncIssueSection
+		Crumbs          []breadcrumb
+		Item            notifyHistoryView
+		MessageBody     string
+		RelatedTask     *notifyRelatedTaskView
+		RelatedSections []notifyFileSyncIssueSection
 	}{
-		pageBase: newPage(view.EventLabel, "history", nil),
+		pageBase: newPage(pageTitle, "history", nil),
 		Crumbs: []breadcrumb{
 			crumb("/history", "History", "history"),
-			crumb("", view.EventLabel, "bell"),
+			crumb("", pageTitle, "bell"),
 		},
-		Item:         view,
-		BodySections: bodySections,
+		Item:            view,
+		MessageBody:     messageBody,
+		RelatedTask:     relatedTask,
+		RelatedSections: related,
 	})
+}
+
+// notifyRelatedTaskView is high-level task chrome for notification Related to.
+type notifyRelatedTaskView struct {
+	ID      int64
+	Kind    string
+	Status  string
+	Domain  string
+	Message string
 }
 
 func (h *Handler) actionMarkNotificationRead(w http.ResponseWriter, r *http.Request) {
