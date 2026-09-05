@@ -601,6 +601,11 @@ func forwardFillSeries(times []string, byTime map[string]map[string]int, specs [
 const (
 	LibrarySizeGroupRoot   = "root"
 	LibrarySizeGroupSeries = "series"
+
+	// LibrarySizeSeriesMaxSlices is how many named series slices the series pie keeps;
+	// remaining series bytes roll into LibrarySizeOtherLabel.
+	LibrarySizeSeriesMaxSlices = 10
+	LibrarySizeOtherLabel      = "Other"
 )
 
 // LibrarySizeSlice is one pie segment.
@@ -677,5 +682,17 @@ func LoadLibrarySize(database *db.DB, group string) (LibrarySizePayload, error) 
 		}
 		return out.Slices[i].Label < out.Slices[j].Label
 	})
+	if group == LibrarySizeGroupSeries && len(out.Slices) > LibrarySizeSeriesMaxSlices {
+		var otherBytes int64
+		for _, s := range out.Slices[LibrarySizeSeriesMaxSlices:] {
+			otherBytes += s.Bytes
+		}
+		top := make([]LibrarySizeSlice, LibrarySizeSeriesMaxSlices, LibrarySizeSeriesMaxSlices+1)
+		copy(top, out.Slices[:LibrarySizeSeriesMaxSlices])
+		if otherBytes > 0 {
+			top = append(top, LibrarySizeSlice{ID: 0, Label: LibrarySizeOtherLabel, Bytes: otherBytes})
+		}
+		out.Slices = top
+	}
 	return out, nil
 }
