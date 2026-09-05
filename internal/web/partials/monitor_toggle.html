@@ -6,7 +6,7 @@
 
   HTMX swaps this root so the page does not reload (no scroll jump / button twitch).
   When LiveTarget is set (element id without #), swap that panel instead (filter refresh).
-  AsButton: icon button instead of checkbox toggle (series list).
+  AsButton: clickable icon (no btn chrome) instead of checkbox toggle (series list / detail).
 */}}
 {{$on := .Monitored}}
 {{$field := "monitored"}}
@@ -23,9 +23,10 @@
   {{$hxSelect = (printf "#%s" .LiveTarget)}}
 {{end}}
 {{$tip := .Title}}{{if not $tip}}{{$tip = $label}}{{end}}
-{{/* AsButton shows the action that will apply (opposite of current state). */}}
-{{$icon := "bookmark-off"}}{{if not $on}}{{$icon = "bookmark"}}{{end}}
-{{if .Domain}}{{$icon = "globe-off"}}{{if not $on}}{{$icon = "globe"}}{{end}}{{end}}
+{{/* AsButton shows current state; tip is the action that will apply. */}}
+{{$icon := "bookmark-off"}}{{$iconClass := "size-5 opacity-50"}}
+{{if $on}}{{$icon = "bookmark"}}{{$iconClass = "size-5 text-success"}}{{end}}
+{{if .Domain}}{{$icon = "globe-off"}}{{$iconClass = "size-5 opacity-50"}}{{if $on}}{{$icon = "globe"}}{{$iconClass = "size-5 text-success"}}{{end}}{{end}}
 {{if .AsButton}}
   {{if $on}}{{$tip = "Unmonitor"}}{{else}}{{$tip = "Monitor"}}{{end}}
   {{if .Domain}}{{if $on}}{{$tip = "Deactivate"}}{{else}}{{$tip = "Activate"}}{{end}}{{end}}
@@ -34,9 +35,9 @@
 {{if .Disabled}}
 <span class="tooltip tooltip-top inline-flex items-center" data-tip="{{if .DisabledTitle}}{{.DisabledTitle}}{{else}}Disabled{{end}}">
   {{if .AsButton}}
-  <button type="button" class="btn btn-soft btn-square" disabled aria-label="{{if .DisabledTitle}}{{.DisabledTitle}}{{else}}{{$label}}{{end}}">
-    <i data-lucide="{{$icon}}" class="size-4 opacity-40"></i>
-  </button>
+  <span class="inline-flex size-10 items-center justify-center shrink-0" aria-label="{{if .DisabledTitle}}{{.DisabledTitle}}{{else}}{{$label}}{{end}}" aria-disabled="true">
+    <i data-lucide="{{$icon}}" class="size-5 opacity-40"></i>
+  </span>
   {{else}}
   <input type="checkbox" class="toggle" {{if $on}}checked{{end}} disabled
          aria-label="{{if .DisabledTitle}}{{.DisabledTitle}}{{else}}{{$label}}{{end}}" />
@@ -57,8 +58,8 @@
   {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
   {{if .AsButton}}
   <input type="hidden" name="{{$field}}" value="{{if $on}}0{{else}}1{{end}}" />
-  <button type="submit" class="btn btn-soft btn-square tooltip tooltip-top" data-tip="{{$tip}}" aria-label="{{$tip}}">
-    <i data-lucide="{{$icon}}" class="size-4"></i>
+  <button type="submit" class="inline-flex size-10 items-center justify-center shrink-0 cursor-pointer bg-transparent border-0 p-0 tooltip tooltip-top" data-tip="{{$tip}}" aria-label="{{$tip}}">
+    <i data-lucide="{{$icon}}" class="{{$iconClass}}"></i>
   </button>
   {{else}}
   <input type="hidden" name="{{$field}}" value="{{if $on}}1{{else}}0{{end}}" class="monitor-toggle-value" />
