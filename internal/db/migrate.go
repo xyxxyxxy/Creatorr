@@ -36,6 +36,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo5(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 6:
+			if err := d.migrateTo6(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -177,6 +181,29 @@ func (d *DB) migrateTo5() error {
 	if _, err := d.SQL.Exec(`DELETE FROM settings WHERE key = 'episode_format'`); err != nil {
 		if !strings.Contains(err.Error(), "no such table") {
 			return fmt.Errorf("delete settings episode_format: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateTo6 drops auto_ignore_media_types from series and/or sources (feature removed).
+func (d *DB) migrateTo6() error {
+	hasSer, err := d.tableHasColumn("series", "auto_ignore_media_types")
+	if err != nil {
+		return err
+	}
+	if hasSer {
+		if _, err := d.SQL.Exec(`ALTER TABLE series DROP COLUMN auto_ignore_media_types`); err != nil {
+			return fmt.Errorf("drop series.auto_ignore_media_types: %w", err)
+		}
+	}
+	hasSrc, err := d.tableHasColumn("sources", "auto_ignore_media_types")
+	if err != nil {
+		return err
+	}
+	if hasSrc {
+		if _, err := d.SQL.Exec(`ALTER TABLE sources DROP COLUMN auto_ignore_media_types`); err != nil {
+			return fmt.Errorf("drop sources.auto_ignore_media_types: %w", err)
 		}
 	}
 	return nil

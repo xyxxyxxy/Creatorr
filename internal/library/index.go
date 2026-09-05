@@ -33,7 +33,7 @@ type UpsertResult struct {
 	Skipped      bool   // true when title filter rejects create (no row)
 	SkipReason   string // title_regexp_include | title_regexp_exclude when Skipped
 	Status       string
-	IgnoreReason string // "" | media_type | index_as_ignored (create only)
+	IgnoreReason string // "" | index_as_ignored (create only)
 }
 
 // NormalizeUploadTime validates and canonicalizes handler/DB upload_date as RFC3339 UTC.
@@ -100,14 +100,7 @@ func (s *Store) UpsertListed(seriesID int64, li ListedVideo, taskID int64) (Upse
 					out.SkipReason = reason
 					return out, nil
 				}
-				exclude, xerr := s.SeriesAutoIgnoreMediaTypes(seriesID)
-				if xerr != nil {
-					return out, xerr
-				}
-				if MediaTypeExcluded(exclude, li.MediaType) {
-					status = "ignored"
-					ignoreReason = IgnoreReasonMediaType
-				} else if src.IndexAsIgnored {
+				if src.IndexAsIgnored {
 					status = "ignored"
 					ignoreReason = IgnoreReasonIndexAsIgnored
 				}

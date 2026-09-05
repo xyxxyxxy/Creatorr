@@ -1932,14 +1932,6 @@ components:
         monitored:
           type: boolean
           description: Series-level monitored; never rewrites source/video/domain monitored flags
-        auto_ignore_media_types:
-          type: array
-          items:
-            type: string
-          description: >
-            yt-dlp media_type values to auto-ignore (e.g. short, livestream). Empty = none.
-            Missing media_type is never auto-ignored. Applied at index create when type is known,
-            and at download via --match-filters (indexed, then marked ignored).
         added_at:
           type: string
           format: date-time
@@ -2000,11 +1992,6 @@ components:
         title_regexp_exclude:
           type: string
           description: Title exclude filter for first source; empty = none; wins over include when both match
-        auto_ignore_media_types:
-          type: array
-          items:
-            type: string
-          description: Series-level media types to auto-ignore; empty = none
 
     CreateVideoRequest:
       type: object

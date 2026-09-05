@@ -4,11 +4,9 @@
   Expects: Roots, Profiles.
   Optional: Title, TitleID, TitleInfo, TitlePlaceholder, TitleDisabled, TitleDisabledTitle,
             RootID, ProfileID, DeliveryMode,
-            AutoIgnoreItems, AutoIgnoreOptions, AutoIgnoreListID,
             RootInfo, RootDisabled, RootDisabledTitle, ProfileInfo.
 */}}
 {{$titlePH := .TitlePlaceholder}}{{if not $titlePH}}{{$titlePH = "Series title"}}{{end}}
-{{$ignoreListID := .AutoIgnoreListID}}{{if not $ignoreListID}}{{$ignoreListID = "series-auto-ignore-media-types"}}{{end}}
 {{$val := .DeliveryMode}}{{if not $val}}{{$val = "video"}}{{end}}
 {{$isAudio := eq $val "audio"}}
 {{template "delivery_mode_field" (dict
@@ -77,9 +75,4 @@
   </span>
   <p class="validator-hint hidden">Quality profile is required</p>
 </fieldset>
-{{template "auto_ignore_media_types_field" (dict
-  "Items" .AutoIgnoreItems
-  "Options" .AutoIgnoreOptions
-  "ListID" $ignoreListID
-)}}
 {{end}}

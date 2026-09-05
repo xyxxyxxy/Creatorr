@@ -20,22 +20,20 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 
 	render(w, "import", struct {
 		pageBase
-		ImportPath                 string
-		Roots                      []library.RootFolder
-		Profiles                   []library.QualityProfile
-		ScanCronDescriptors        []string
-		AutoIgnoreMediaTypeOptions []string
-		IncompleteFullScan         bool
-		ImportBusy                 bool
+		ImportPath          string
+		Roots               []library.RootFolder
+		Profiles            []library.QualityProfile
+		ScanCronDescriptors []string
+		IncompleteFullScan  bool
+		ImportBusy          bool
 	}{
-		pageBase:                   newPage("Import", "import", nil),
-		ImportPath:                 h.Library.ImportRoot,
-		Roots:                      roots,
-		Profiles:                   profiles,
-		ScanCronDescriptors:        scanCronDescriptors(),
-		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
-		IncompleteFullScan:         incompleteFullScan,
-		ImportBusy:                 importBusy,
+		pageBase:            newPage("Import", "import", nil),
+		ImportPath:          h.Library.ImportRoot,
+		Roots:               roots,
+		Profiles:            profiles,
+		ScanCronDescriptors: scanCronDescriptors(),
+		IncompleteFullScan:  incompleteFullScan,
+		ImportBusy:          importBusy,
 	})
 }
 

@@ -24,11 +24,13 @@ func TestOpenFreshSchema(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 5 {
-		t.Fatalf("schema_version=%d want 5", ver)
+	if ver != 6 {
+		t.Fatalf("schema_version=%d want 6", ver)
 	}
 	assertColumn(t, d.SQL, "sources", "full_scan_limit", true)
 	assertColumn(t, d.SQL, "sources", "scan_cutoff", false)
+	assertColumn(t, d.SQL, "sources", "auto_ignore_media_types", false)
+	assertColumn(t, d.SQL, "series", "auto_ignore_media_types", false)
 	assertColumn(t, d.SQL, "videos", "acquired_via", true)
 	assertColumn(t, d.SQL, "root_folders", "episode_format", true)
 }
@@ -96,8 +98,8 @@ func TestMigrateV2AddsFullScanLimitDropsCutoff(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 5 {
-		t.Fatalf("schema_version=%d want 5", ver)
+	if ver != 6 {
+		t.Fatalf("schema_version=%d want 6", ver)
 	}
 	assertColumn(t, d.SQL, "sources", "full_scan_limit", true)
 	assertColumn(t, d.SQL, "sources", "scan_cutoff", false)
@@ -179,8 +181,8 @@ func TestMigrateV3ClearsSourceHold(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 5 {
-		t.Fatalf("schema_version=%d want 5", ver)
+	if ver != 6 {
+		t.Fatalf("schema_version=%d want 6", ver)
 	}
 	var st string
 	if err := d.SQL.QueryRow(`SELECT status FROM videos WHERE id = 1`).Scan(&st); err != nil {
@@ -243,8 +245,8 @@ func TestMigrateV4AddsAcquiredVia(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 5 {
-		t.Fatalf("schema_version=%d want 5", ver)
+	if ver != 6 {
+		t.Fatalf("schema_version=%d want 6", ver)
 	}
 	assertColumn(t, d.SQL, "videos", "acquired_via", true)
 
@@ -307,8 +309,8 @@ func TestMigrateV5AddsRootEpisodeFormat(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 5 {
-		t.Fatalf("schema_version=%d want 5", ver)
+	if ver != 6 {
+		t.Fatalf("schema_version=%d want 6", ver)
 	}
 	assertColumn(t, d.SQL, "root_folders", "episode_format", true)
 
@@ -329,6 +331,151 @@ func TestMigrateV5AddsRootEpisodeFormat(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("settings episode_format rows=%d want 0", n)
 	}
+}
+
+func TestMigrateV6DropsAutoIgnoreColumns(t *testing.T) {
+	t.Run("series column only", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "autoignore-series.db")
+		sqlDB, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?_pragma=foreign_keys(ON)")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = sqlDB.Exec(`
+			CREATE TABLE schema_version (version INTEGER NOT NULL);
+			INSERT INTO schema_version (version) VALUES (5);
+			CREATE TABLE root_folders (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				name TEXT NOT NULL DEFAULT '',
+				path TEXT NOT NULL UNIQUE,
+				retention_ttl_seconds INTEGER,
+				episode_format TEXT NOT NULL DEFAULT 'S{year}/S{year}E{episode} [{id}]'
+			);
+			CREATE TABLE quality_profiles (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				name TEXT NOT NULL UNIQUE,
+				format_selector TEXT NOT NULL
+			);
+			CREATE TABLE series (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				title TEXT NOT NULL,
+				root_id INTEGER NOT NULL REFERENCES root_folders(id),
+				quality_profile_id INTEGER NOT NULL REFERENCES quality_profiles(id),
+				monitored INTEGER NOT NULL DEFAULT 1,
+				added_at TEXT NOT NULL,
+				auto_ignore_media_types TEXT NOT NULL DEFAULT '[]'
+			);
+			CREATE TABLE sources (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				series_id INTEGER NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+				url TEXT NOT NULL,
+				kind TEXT NOT NULL DEFAULT 'feed',
+				scan_cron TEXT NOT NULL DEFAULT '',
+				index_as_ignored INTEGER NOT NULL DEFAULT 0,
+				full_scan_limit INTEGER NOT NULL DEFAULT 0,
+				full_scan_done INTEGER NOT NULL DEFAULT 0,
+				UNIQUE(series_id, url)
+			);
+			INSERT INTO root_folders (path) VALUES ('/tmp/root');
+			INSERT INTO quality_profiles (name, format_selector) VALUES ('Default', 'bv*+ba/b');
+			INSERT INTO series (id, title, root_id, quality_profile_id, added_at, auto_ignore_media_types)
+				VALUES (1, 'S', 1, 1, '2026-01-01T00:00:00Z', '["short","clip"]');
+			INSERT INTO sources (id, series_id, url, kind, index_as_ignored) VALUES
+				(1, 1, 'https://www.example.com/@wanted', 'feed', 0);
+		`)
+		if err != nil {
+			_ = sqlDB.Close()
+			t.Fatal(err)
+		}
+		_ = sqlDB.Close()
+
+		d, err := db.Open(path)
+		if err != nil {
+			t.Fatalf("open migrate: %v", err)
+		}
+		defer func() { _ = d.Close() }()
+
+		var ver int
+		if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
+			t.Fatal(err)
+		}
+		if ver != 6 {
+			t.Fatalf("schema_version=%d want 6", ver)
+		}
+		assertColumn(t, d.SQL, "sources", "auto_ignore_media_types", false)
+		assertColumn(t, d.SQL, "series", "auto_ignore_media_types", false)
+	})
+
+	t.Run("both columns", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "autoignore-both.db")
+		sqlDB, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?_pragma=foreign_keys(ON)")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = sqlDB.Exec(`
+			CREATE TABLE schema_version (version INTEGER NOT NULL);
+			INSERT INTO schema_version (version) VALUES (5);
+			CREATE TABLE root_folders (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				name TEXT NOT NULL DEFAULT '',
+				path TEXT NOT NULL UNIQUE,
+				retention_ttl_seconds INTEGER,
+				episode_format TEXT NOT NULL DEFAULT 'S{year}/S{year}E{episode} [{id}]'
+			);
+			CREATE TABLE quality_profiles (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				name TEXT NOT NULL UNIQUE,
+				format_selector TEXT NOT NULL
+			);
+			CREATE TABLE series (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				title TEXT NOT NULL,
+				root_id INTEGER NOT NULL REFERENCES root_folders(id),
+				quality_profile_id INTEGER NOT NULL REFERENCES quality_profiles(id),
+				monitored INTEGER NOT NULL DEFAULT 1,
+				added_at TEXT NOT NULL,
+				auto_ignore_media_types TEXT NOT NULL DEFAULT '[]'
+			);
+			CREATE TABLE sources (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				series_id INTEGER NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+				url TEXT NOT NULL,
+				kind TEXT NOT NULL DEFAULT 'feed',
+				scan_cron TEXT NOT NULL DEFAULT '',
+				index_as_ignored INTEGER NOT NULL DEFAULT 0,
+				full_scan_limit INTEGER NOT NULL DEFAULT 0,
+				full_scan_done INTEGER NOT NULL DEFAULT 0,
+				auto_ignore_media_types TEXT NOT NULL DEFAULT '[]',
+				UNIQUE(series_id, url)
+			);
+			INSERT INTO root_folders (path) VALUES ('/tmp/root');
+			INSERT INTO quality_profiles (name, format_selector) VALUES ('Default', 'bv*+ba/b');
+			INSERT INTO series (id, title, root_id, quality_profile_id, added_at, auto_ignore_media_types)
+				VALUES (1, 'S', 1, 1, '2026-01-01T00:00:00Z', '["short"]');
+			INSERT INTO sources (id, series_id, url, kind, index_as_ignored, auto_ignore_media_types) VALUES
+				(1, 1, 'https://www.example.com/@wanted', 'feed', 0, '["clip"]');
+		`)
+		if err != nil {
+			_ = sqlDB.Close()
+			t.Fatal(err)
+		}
+		_ = sqlDB.Close()
+
+		d, err := db.Open(path)
+		if err != nil {
+			t.Fatalf("open migrate: %v", err)
+		}
+		defer func() { _ = d.Close() }()
+
+		var ver int
+		if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
+			t.Fatal(err)
+		}
+		if ver != 6 {
+			t.Fatalf("schema_version=%d want 6", ver)
+		}
+		assertColumn(t, d.SQL, "sources", "auto_ignore_media_types", false)
+		assertColumn(t, d.SQL, "series", "auto_ignore_media_types", false)
+	})
 }
 
 func assertColumn(t *testing.T, sqlDB *sql.DB, table, column string, want bool) {

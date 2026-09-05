@@ -109,7 +109,7 @@ func DetectPauseCode(message string) string {
 func UpgradeCode(code, message string) string {
 	switch code {
 	case CodeCookieInvalid, CodeRateLimited, CodeCookieMissing, CodeRemuxFailed, CodePackFailed, CodeMediaVerifyFailed,
-		CodeMediaTypeExcluded, CodeLiveBroadcastSkipped, CodeAgeRestricted, CodeArchiveFallbackQueued:
+		CodeLiveBroadcastSkipped, CodeAgeRestricted, CodeArchiveFallbackQueued:
 		return code
 	}
 	if DetectAgeRestricted(message) {

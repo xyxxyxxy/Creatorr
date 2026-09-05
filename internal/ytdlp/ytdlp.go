@@ -442,8 +442,7 @@ func classifyMatchFilterReject(stderr, matchFilter string) (code, message string
 		return "", ""
 	}
 	low := strings.ToLower(stderr)
-	looksLikeSkip := strings.Contains(low, "media_type") ||
-		strings.Contains(low, "is_live") ||
+	looksLikeSkip := strings.Contains(low, "is_live") ||
 		(strings.Contains(low, "[download]") && (strings.Contains(low, "does not pass filter") ||
 			strings.Contains(low, "did not match") || strings.Contains(low, "skipping"))) ||
 		strings.Contains(low, "does not pass filter") ||
@@ -451,25 +450,10 @@ func classifyMatchFilterReject(stderr, matchFilter string) (code, message string
 	if !looksLikeSkip {
 		return "", ""
 	}
-	hasLive := strings.Contains(mf, "is_live")
-	hasMedia := strings.Contains(mf, "media_type")
-	stderrMedia := strings.Contains(low, "media_type")
-	stderrLive := strings.Contains(low, "is_live")
-	switch {
-	case stderrMedia && !stderrLive:
-		return apperrors.CodeMediaTypeExcluded, "media type excluded"
-	case stderrLive && !stderrMedia:
-		return apperrors.CodeLiveBroadcastSkipped, "currently live"
-	case hasLive && hasMedia:
-		// Ambiguous: prefer soft-skip over permanent ignore.
-		return apperrors.CodeLiveBroadcastSkipped, "currently live"
-	case hasMedia:
-		return apperrors.CodeMediaTypeExcluded, "media type excluded"
-	case hasLive:
-		return apperrors.CodeLiveBroadcastSkipped, "currently live"
-	default:
-		return apperrors.CodeMediaTypeExcluded, "media type excluded"
+	if !strings.Contains(mf, "is_live") {
+		return "", ""
 	}
+	return apperrors.CodeLiveBroadcastSkipped, "currently live"
 }
 
 // upgradeCode reclassifies a generic failure as AgeRestricted / CookieInvalid /

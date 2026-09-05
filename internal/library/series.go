@@ -42,17 +42,17 @@ func NormalizeSourceKind(k string) string {
 
 // Source is a feed or single URL on a series.
 type Source struct {
-	ID                 int64
-	SeriesID           int64
-	URL                string
-	Label              sql.NullString
-	Kind               string
-	ScanCron           string // empty = never (Scan schedule); feed default weekly
-	IndexAsIgnored     bool   // new videos → ignored instead of wanted
-	TitleRegexpInclude string // empty = no include filter; Go regexp must match to index
-	TitleRegexpExclude string // empty = no exclude filter; matching titles are not indexed (wins over include)
-	FullScanLimit      int    // 0 = unlimited; yt-dlp --playlist-end on full scan only
-	FullScanDone       bool
+	ID                   int64
+	SeriesID             int64
+	URL                  string
+	Label                sql.NullString
+	Kind                 string
+	ScanCron             string // empty = never (Scan schedule); feed default weekly
+	IndexAsIgnored       bool   // new videos → ignored instead of wanted
+	TitleRegexpInclude   string // empty = no include filter; Go regexp must match to index
+	TitleRegexpExclude   string // empty = no exclude filter; matching titles are not indexed (wins over include)
+	FullScanLimit        int    // 0 = unlimited; yt-dlp --playlist-end on full scan only
+	FullScanDone         bool
 }
 
 // IsSingle reports kind=single (one-shot index; no tip Scan).
@@ -84,7 +84,6 @@ type Series struct {
 	SourceCount        int64
 	Sources            []Source
 	Videos             []Video
-	AutoIgnoreMediaTypes []string // excluded yt-dlp media_type values; empty = all active
 }
 
 // IsAudio reports delivery_mode=audio.
@@ -108,19 +107,18 @@ func (ser Series) ErrorCount() int64 {
 
 // CreateSeriesParams creates a series and optional first source.
 type CreateSeriesParams struct {
-	Title            string
-	SourceURL        string
-	RootID           int64
-	QualityProfileID int64
-	Monitored        bool
-	DeliveryMode     string
-	FullScanLimit    int // first source full-scan playlist cap; 0 = unlimited
-	ScanCron         string // feed default weekly when SourceURL set and empty
-	IndexAsIgnored   bool
+	Title              string
+	SourceURL          string
+	RootID             int64
+	QualityProfileID   int64
+	Monitored          bool
+	DeliveryMode       string
+	FullScanLimit      int // first source full-scan playlist cap; 0 = unlimited
+	ScanCron           string // feed default weekly when SourceURL set and empty
+	IndexAsIgnored     bool
 	TitleRegexpInclude string
 	TitleRegexpExclude string
-	AutoIgnoreMediaTypes []string // series-level exclude; applied on create + download
-	SourceLabel      string
+	SourceLabel        string
 }
 
 const (
@@ -161,7 +159,6 @@ func seriesListStatusActive(status string) bool {
 const seriesProgressOpenStatuses = `'wanted', 'wanted_archive', 'wanted_download_error', 'verify_failed'`
 
 const seriesListSelectCols = `s.id, s.title, s.root_id, s.quality_profile_id, s.monitored, s.delivery_mode, s.added_at,
-		       COALESCE(s.auto_ignore_media_types,'[]'),
 		       r.name, q.name,
 		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id),
 		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status = 'downloaded'),
@@ -226,10 +223,8 @@ func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilt
 func scanSeriesListRow(rows *sql.Rows) (Series, error) {
 	var ser Series
 	var mon int
-	var mediaTypeExclude string
 	if err := rows.Scan(
 		&ser.ID, &ser.Title, &ser.RootID, &ser.QualityProfileID, &mon, &ser.DeliveryMode, &ser.AddedAt,
-		&mediaTypeExclude,
 		&ser.RootName, &ser.QualityProfileName,
 		&ser.VideoCount, &ser.DownloadedCount, &ser.WantedCount, &ser.PendingCount,
 		&ser.SourceCount,
@@ -238,7 +233,6 @@ func scanSeriesListRow(rows *sql.Rows) (Series, error) {
 	}
 	ser.Monitored = mon != 0
 	ser.DeliveryMode = NormalizeDeliveryMode(ser.DeliveryMode)
-	ser.AutoIgnoreMediaTypes = ParseAutoIgnoreMediaTypesJSON(mediaTypeExclude)
 	return ser, nil
 }
 
@@ -308,13 +302,11 @@ func (s *Store) ListSeriesFiltered(filter SeriesListFilter, limit, offset int) (
 func (s *Store) GetSeries(id int64, withVideos bool) (*Series, error) {
 	var ser Series
 	var genresJSON, tagsJSON, actorsJSON string
-	var mediaTypeExclude string
 	var mon int
 	err := s.DB.SQL.QueryRow(`
 		SELECT s.id, s.title, s.root_id, s.quality_profile_id, s.monitored, s.delivery_mode, s.added_at,
 		       s.plot, s.sorttitle, s.originaltitle, s.studio, s.genres, s.tags,
 		       s.uniqueid_type, s.uniqueid_value, s.actors, s.tagline, s.country, s.mpaa, s.premiered,
-		       COALESCE(s.auto_ignore_media_types,'[]'),
 		       r.name, q.name,
 		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id),
 		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status = 'downloaded'),
@@ -329,7 +321,6 @@ func (s *Store) GetSeries(id int64, withVideos bool) (*Series, error) {
 		&ser.ID, &ser.Title, &ser.RootID, &ser.QualityProfileID, &mon, &ser.DeliveryMode, &ser.AddedAt,
 		&ser.Meta.Plot, &ser.Meta.SortTitle, &ser.Meta.OriginalTitle, &ser.Meta.Studio, &genresJSON, &tagsJSON,
 		&ser.Meta.UniqueIDType, &ser.Meta.UniqueIDValue, &actorsJSON, &ser.Meta.Tagline, &ser.Meta.Country, &ser.Meta.MPAA, &ser.Meta.Premiered,
-		&mediaTypeExclude,
 		&ser.RootName, &ser.QualityProfileName,
 		&ser.VideoCount, &ser.DownloadedCount, &ser.WantedCount, &ser.PendingCount,
 		&ser.SourceCount,
@@ -342,7 +333,6 @@ func (s *Store) GetSeries(id int64, withVideos bool) (*Series, error) {
 	}
 	ser.Monitored = mon != 0
 	ser.DeliveryMode = NormalizeDeliveryMode(ser.DeliveryMode)
-	ser.AutoIgnoreMediaTypes = ParseAutoIgnoreMediaTypesJSON(mediaTypeExclude)
 	ser.Meta.Genres = decodeStringSlice(genresJSON)
 	ser.Meta.Tags = decodeStringSlice(tagsJSON)
 	ser.Meta.Actors = decodeActors(actorsJSON)
@@ -388,9 +378,9 @@ func (s *Store) CreateSeries(p CreateSeriesParams) (*Series, error) {
 	}
 	mode := NormalizeDeliveryMode(p.DeliveryMode)
 	res, err := s.DB.SQL.Exec(`
-		INSERT INTO series (title, root_id, quality_profile_id, monitored, delivery_mode, added_at, auto_ignore_media_types)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, title, p.RootID, p.QualityProfileID, mon, mode, nowRFC3339(), AutoIgnoreMediaTypesJSON(p.AutoIgnoreMediaTypes))
+		INSERT INTO series (title, root_id, quality_profile_id, monitored, delivery_mode, added_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, title, p.RootID, p.QualityProfileID, mon, mode, nowRFC3339())
 	if err != nil {
 		return nil, err
 	}
@@ -442,7 +432,6 @@ type UpdateSeriesParams struct {
 	RootID           *int64
 	QualityProfileID *int64
 	DeliveryMode     *string
-	AutoIgnoreMediaTypes *[]string
 }
 
 // UpdateSeries updates title, root folder, quality profile, and/or delivery mode.
@@ -457,7 +446,6 @@ func (s *Store) UpdateSeries(id int64, p UpdateSeriesParams) (*Series, error) {
 	rootID := cur.RootID
 	qpID := cur.QualityProfileID
 	mode := cur.DeliveryMode
-	mediaTypeExclude := cur.AutoIgnoreMediaTypes
 	if p.Title != nil {
 		title = strings.TrimSpace(*p.Title)
 		if title == "" {
@@ -479,9 +467,6 @@ func (s *Store) UpdateSeries(id int64, p UpdateSeriesParams) (*Series, error) {
 	if p.DeliveryMode != nil {
 		mode = NormalizeDeliveryMode(*p.DeliveryMode)
 	}
-	if p.AutoIgnoreMediaTypes != nil {
-		mediaTypeExclude = NormalizeAutoIgnoreMediaTypes(*p.AutoIgnoreMediaTypes)
-	}
 	titleChanged := title != cur.Title
 	rootChanged := rootID != cur.RootID
 	if titleChanged || rootChanged {
@@ -495,8 +480,8 @@ func (s *Store) UpdateSeries(id int64, p UpdateSeriesParams) (*Series, error) {
 	}
 
 	if _, err := s.DB.SQL.Exec(`
-		UPDATE series SET title = ?, root_id = ?, quality_profile_id = ?, delivery_mode = ?, auto_ignore_media_types = ? WHERE id = ?
-	`, title, rootID, qpID, mode, AutoIgnoreMediaTypesJSON(mediaTypeExclude), id); err != nil {
+		UPDATE series SET title = ?, root_id = ?, quality_profile_id = ?, delivery_mode = ? WHERE id = ?
+	`, title, rootID, qpID, mode, id); err != nil {
 		return nil, err
 	}
 
@@ -640,40 +625,6 @@ func (s *Store) listSources(seriesID int64) ([]Source, error) {
 	return out, rows.Err()
 }
 
-// SeriesAutoIgnoreMediaTypes returns the series exclude list (empty = all types active).
-func (s *Store) SeriesAutoIgnoreMediaTypes(seriesID int64) ([]string, error) {
-	var raw string
-	err := s.DB.SQL.QueryRow(`SELECT COALESCE(auto_ignore_media_types,'[]') FROM series WHERE id = ?`, seriesID).Scan(&raw)
-	if err == sql.ErrNoRows {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	return ParseAutoIgnoreMediaTypesJSON(raw), nil
-}
-
-// ListAutoIgnoreMediaTypeSuggestions returns YouTube seed ∪ customs from all series exclude lists.
-func (s *Store) ListAutoIgnoreMediaTypeSuggestions() ([]string, error) {
-	rows, err := s.DB.SQL.Query(`SELECT COALESCE(auto_ignore_media_types,'[]') FROM series`)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	var customs []string
-	for rows.Next() {
-		var raw string
-		if err := rows.Scan(&raw); err != nil {
-			return nil, err
-		}
-		customs = append(customs, ParseAutoIgnoreMediaTypesJSON(raw)...)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return MergeMediaTypeSuggestions(customs), nil
-}
-
 // ListSourceDomains returns sorted unique hostnames from all source URLs.
 func (s *Store) ListSourceDomains() ([]string, error) {
 	rows, err := s.DB.SQL.Query(`SELECT DISTINCT url FROM sources WHERE url != ''`)
@@ -707,14 +658,14 @@ func (s *Store) ListSourceDomains() ([]string, error) {
 
 // AddSourceParams adds a source URL to a series.
 type AddSourceParams struct {
-	URL                string
-	Label              string
-	Kind               string // feed (default) or single
-	ScanCron           string // empty = never; feed default weekly if omitted
-	IndexAsIgnored     bool
-	TitleRegexpInclude string
-	TitleRegexpExclude string
-	FullScanLimit      int // 0 = unlimited; ignored for single
+	URL                  string
+	Label                string
+	Kind                 string // feed (default) or single
+	ScanCron             string // empty = never; feed default weekly if omitted
+	IndexAsIgnored       bool
+	TitleRegexpInclude   string
+	TitleRegexpExclude   string
+	FullScanLimit        int // 0 = unlimited; ignored for single
 }
 
 func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
@@ -808,12 +759,12 @@ func (s *Store) GetSource(seriesID, sourceID int64) (*Source, error) {
 // UpdateSourceParams patches a source; nil pointers mean unchanged.
 // Kind and URL are immutable after create. Single sources force scan_cron empty and clear limit/filters.
 type UpdateSourceParams struct {
-	Label              *string
-	ScanCron           *string
-	IndexAsIgnored     *bool
-	TitleRegexpInclude *string
-	TitleRegexpExclude *string
-	FullScanLimit      *int
+	Label                *string
+	ScanCron             *string
+	IndexAsIgnored       *bool
+	TitleRegexpInclude   *string
+	TitleRegexpExclude   *string
+	FullScanLimit        *int
 }
 
 func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*Source, error) {

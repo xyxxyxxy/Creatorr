@@ -55,18 +55,16 @@ func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
 	profiles, _ := h.Library.ListProfiles()
 	render(w, "series_list", struct {
 		pageBase
-		Live                       seriesListLiveData
-		Roots                      []library.RootFolder
-		Profiles                   []library.QualityProfile
-		ScanCronDescriptors        []string
-		AutoIgnoreMediaTypeOptions []string
+		Live                seriesListLiveData
+		Roots               []library.RootFolder
+		Profiles            []library.QualityProfile
+		ScanCronDescriptors []string
 	}{
-		pageBase:                   newPage("Series", "series", flashFromQuery(r)),
-		Live:                       live,
-		Roots:                      roots,
-		Profiles:                   profiles,
-		ScanCronDescriptors:        scanCronDescriptors(),
-		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
+		pageBase:            newPage("Series", "series", flashFromQuery(r)),
+		Live:                live,
+		Roots:               roots,
+		Profiles:            profiles,
+		ScanCronDescriptors: scanCronDescriptors(),
 	})
 }
 
@@ -286,7 +284,6 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		HasMonitoredSource         bool
 		TaskIndicatorsPath         string
 		ScanCronDescriptors        []string
-		AutoIgnoreMediaTypeOptions []string
 		Roots                      []library.RootFolder
 		Profiles                   []library.QualityProfile
 		FolderRenameBusy           bool
@@ -307,7 +304,6 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		HasMonitoredSource:         ser.Monitored,
 		TaskIndicatorsPath:         indicatorsQ,
 		ScanCronDescriptors:        scanCronDescriptors(),
-		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
 		Roots:                      roots,
 		Profiles:                   profiles,
 		FolderRenameBusy:           folderRenameBusy,
@@ -497,7 +493,6 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 		ScanActive                 bool
 		ScanCronLabel              string
 		ScanCronDescriptors        []string
-		AutoIgnoreMediaTypeOptions []string
 		HasRetryable               bool
 		VideoCount                 int
 		History                    []videoHistoryView
@@ -521,23 +516,11 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 		ScanActive:                 scanActive,
 		ScanCronLabel:              cronLabel,
 		ScanCronDescriptors:        scanCronDescriptors(),
-		AutoIgnoreMediaTypeOptions: autoIgnoreMediaTypeOptions(h),
 		HasRetryable:               retryable,
 		VideoCount:                 videoTotal,
 		History:                    histViews,
 		HistoryPage:                histPageInfo,
 	})
-}
-
-func autoIgnoreMediaTypeOptions(h *Handler) []string {
-	if h == nil || h.Library == nil {
-		return append([]string(nil), library.YouTubeMediaTypeSeed...)
-	}
-	opts, err := h.Library.ListAutoIgnoreMediaTypeSuggestions()
-	if err != nil || len(opts) == 0 {
-		return library.MergeMediaTypeSuggestions(nil)
-	}
-	return opts
 }
 
 // createdAgoPair returns absolute tip text and relative "… ago" display (same as History).
@@ -1028,7 +1011,6 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 			IndexAsIgnored:       r.FormValue("index_as_ignored") == "1",
 			TitleRegexpInclude:   strings.TrimSpace(r.FormValue("title_regexp_include")),
 			TitleRegexpExclude:   strings.TrimSpace(r.FormValue("title_regexp_exclude")),
-			AutoIgnoreMediaTypes: library.NormalizeAutoIgnoreMediaTypes(r.Form["auto_ignore_media_types"]),
 			SourceLabel:          strings.TrimSpace(r.FormValue("source_label")),
 		})
 		if err != nil {
@@ -1064,12 +1046,11 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ser, err := h.Library.CreateSeries(library.CreateSeriesParams{
-		Title:                title,
-		RootID:               rootID,
-		QualityProfileID:     qpID,
-		Monitored:            true,
-		DeliveryMode:         delivery,
-		AutoIgnoreMediaTypes: library.NormalizeAutoIgnoreMediaTypes(r.Form["auto_ignore_media_types"]),
+		Title:            title,
+		RootID:           rootID,
+		QualityProfileID: qpID,
+		Monitored:        true,
+		DeliveryMode:     delivery,
 	})
 	if err != nil {
 		redirErr(err.Error())
@@ -1093,13 +1074,11 @@ func (h *Handler) actionUpdateSeries(w http.ResponseWriter, r *http.Request) {
 	rootID, _ := strconv.ParseInt(r.FormValue("root_id"), 10, 64)
 	qpID, _ := strconv.ParseInt(r.FormValue("quality_profile_id"), 10, 64)
 	dm := library.NormalizeDeliveryMode(r.FormValue("delivery_mode"))
-	ex := library.NormalizeAutoIgnoreMediaTypes(r.Form["auto_ignore_media_types"])
 	_, err := h.Library.UpdateSeries(sid, library.UpdateSeriesParams{
-		Title:                &title,
-		RootID:               &rootID,
-		QualityProfileID:     &qpID,
-		DeliveryMode:         &dm,
-		AutoIgnoreMediaTypes: &ex,
+		Title:            &title,
+		RootID:           &rootID,
+		QualityProfileID: &qpID,
+		DeliveryMode:     &dm,
 	})
 	if err != nil {
 		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)

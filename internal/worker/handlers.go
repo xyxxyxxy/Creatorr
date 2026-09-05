@@ -559,7 +559,7 @@ func ScanHandler(d Deps) TaskHandler {
 		}
 
 		var createdIDs, updatedIDs []int64
-		var ignoredMediaTypeIDs, ignoredIndexAsIgnoredIDs []int64
+		var ignoredIndexAsIgnoredIDs []int64
 		var skippedTitleInclude, skippedTitleExclude []map[string]string
 		var created, updated int
 		hitKnown := false
@@ -584,10 +584,7 @@ func ScanHandler(d Deps) TaskHandler {
 			if res.Created {
 				created++
 				createdIDs = append(createdIDs, res.VideoID)
-				switch res.IgnoreReason {
-				case library.IgnoreReasonMediaType:
-					ignoredMediaTypeIDs = append(ignoredMediaTypeIDs, res.VideoID)
-				case library.IgnoreReasonIndexAsIgnored:
+				if res.IgnoreReason == library.IgnoreReasonIndexAsIgnored {
 					ignoredIndexAsIgnoredIDs = append(ignoredIndexAsIgnoredIDs, res.VideoID)
 				}
 			} else {
@@ -663,9 +660,6 @@ func ScanHandler(d Deps) TaskHandler {
 		if n := len(skippedTitleExclude); n > 0 {
 			scanMsg += fmt.Sprintf(", %d skipped by title exclude", n)
 		}
-		if n := len(ignoredMediaTypeIDs); n > 0 {
-			scanMsg += fmt.Sprintf(", %d ignored by media type", n)
-		}
 		if n := len(ignoredIndexAsIgnoredIDs); n > 0 {
 			scanMsg += fmt.Sprintf(", %d marked as ignored", n)
 		}
@@ -678,7 +672,6 @@ func ScanHandler(d Deps) TaskHandler {
 			"updated_ids":                  updatedIDs,
 			"skipped_title_regexp_include": skippedTitleInclude,
 			"skipped_title_regexp_exclude": skippedTitleExclude,
-			"ignored_media_type_ids":       ignoredMediaTypeIDs,
 			"ignored_index_as_ignored_ids": ignoredIndexAsIgnoredIDs,
 			"hit_known":                    hitKnown,
 			"full_scan_limit":              playlistEnd,
@@ -693,7 +686,6 @@ func ScanHandler(d Deps) TaskHandler {
 			"updated_ids":                  updatedIDs,
 			"skipped_title_regexp_include": skippedTitleInclude,
 			"skipped_title_regexp_exclude": skippedTitleExclude,
-			"ignored_media_type_ids":       ignoredMediaTypeIDs,
 			"ignored_index_as_ignored_ids": ignoredIndexAsIgnoredIDs,
 			"source_id":                    src.ID,
 			"full":                         fullScan,
@@ -796,10 +788,7 @@ func DownloadHandler(d Deps) TaskHandler {
 		}
 		lim, _ := settings.LimitsForDomain(d.Library.DB, t.Domain)
 		subOpts, _ := settings.GetSubtitleOpts(d.Library.DB)
-		matchFilter := library.BuildDownloadMatchFilter(nil)
-		if exclude, err := d.Library.SeriesAutoIgnoreMediaTypes(dlctx.Video.SeriesID); err == nil {
-			matchFilter = library.BuildDownloadMatchFilter(exclude)
-		}
+		matchFilter := library.BuildDownloadMatchFilter()
 		media, err := downloadMedia(ctx, d, ytdlp.DownloadOpts{
 			URL:            downloadURL,
 			CookiesPath:    jar,

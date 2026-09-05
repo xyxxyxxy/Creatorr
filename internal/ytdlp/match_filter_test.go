@@ -8,19 +8,15 @@ import (
 
 func TestClassifyMatchFilterReject(t *testing.T) {
 	const liveOnly = "is_live!=?1"
-	const mediaOnly = "media_type!=short"
-	const both = "media_type!=short & is_live!=?1"
 
 	cases := []struct {
 		name, stderr, filter, wantCode string
 	}{
 		{"empty filter", "does not pass filter", "", ""},
 		{"live stderr", "[download] … is_live … does not pass filter", liveOnly, apperrors.CodeLiveBroadcastSkipped},
-		{"media stderr", "[download] media_type!=short does not pass filter", mediaOnly, apperrors.CodeMediaTypeExcluded},
-		{"ambiguous both prefer live", "[download] does not pass filter", both, apperrors.CodeLiveBroadcastSkipped},
-		{"media named in both filter", "media_type excluded", both, apperrors.CodeMediaTypeExcluded},
 		{"live only generic", "[download] skipping", liveOnly, apperrors.CodeLiveBroadcastSkipped},
 		{"not a skip", "HTTP Error 403", liveOnly, ""},
+		{"no is_live in filter", "[download] does not pass filter", "media_type!=short", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

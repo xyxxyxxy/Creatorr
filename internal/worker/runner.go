@@ -206,20 +206,6 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 			log.Info("task done (live broadcast skipped)", "id", task.ID, "kind", task.Kind)
 			return
 		}
-		if code == apperrors.CodeMediaTypeExcluded && task.Kind == queue.KindDownload && task.VideoID.Valid && r.Library != nil {
-			doneMsg := "Ignored (excluded media type)"
-			_ = r.Queue.Finish(task.ID, queue.StatusDone, doneMsg, code, runErr.Error())
-			_ = r.Queue.SetDetail(task.ID, runErr.Error())
-			if err := r.Library.MarkIgnoredMediaType(task.VideoID.Int64, task.ID, ""); err != nil {
-				log.Warn("mark ignored media_type", "video", task.VideoID.Int64, "err", err)
-			}
-			r.Events.TaskDone(task.ID, task.Kind, task.Domain, doneMsg, sid, vid)
-			if mediaKind(task.Kind) {
-				r.maybeScheduleDigest(ctx, log)
-			}
-			log.Info("task done (media type excluded)", "id", task.ID, "kind", task.Kind)
-			return
-		}
 		if code == apperrors.CodeArchiveFallbackQueued &&
 			task.Kind == queue.KindDownload &&
 			task.VideoID.Valid && r.Library != nil {
@@ -275,7 +261,7 @@ func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task 
 	switch code {
 	case apperrors.CodeCookieInvalid, apperrors.CodeRateLimited,
 		apperrors.CodeRemuxFailed, apperrors.CodePackFailed, apperrors.CodeMediaVerifyFailed,
-		apperrors.CodeMediaTypeExcluded, apperrors.CodeLiveBroadcastSkipped, apperrors.CodeAgeRestricted:
+		apperrors.CodeLiveBroadcastSkipped, apperrors.CodeAgeRestricted:
 		// keep classified code (do not re-detect remux/pack/verify/age into pause)
 	default:
 		if d := apperrors.DetectPauseCode(runErr.Error()); d != "" {
