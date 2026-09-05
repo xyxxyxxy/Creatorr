@@ -39,6 +39,18 @@
       {{template "field_info" (dict "Join" true "Info" "Rewrite episode and series NFO from the library. Skips unchanged files.")}}
     </form>
     {{end}}
+
+    {{if .VerifyAllMediaBusy}}
+    <div class="join w-full">
+      <button type="button" class="btn btn-warning join-item grow" disabled>Verify all downloaded videos (queued)</button>
+      {{template "field_info" (dict "Join" true "Info" "Null-decode every packed 'downloaded' and 'verify_failed' video. Failures keep files and set 'verify_failed'. Busy videos are skipped.")}}
+    </div>
+    {{else}}
+    <form method="post" action="/actions/verify-all-media" class="join w-full">
+      <button type="submit" class="btn btn-warning join-item grow">Verify all downloaded videos</button>
+      {{template "field_info" (dict "Join" true "Info" "Null-decode every packed 'downloaded' and 'verify_failed' video. Failures keep files and set 'verify_failed'. Busy videos are skipped.")}}
+    </form>
+    {{end}}
   </div>
 {{template "list_panel_end"}}
 </div>

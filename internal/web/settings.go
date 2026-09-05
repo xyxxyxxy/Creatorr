@@ -551,21 +551,24 @@ func (h *Handler) settingsMaintenance(w http.ResponseWriter, r *http.Request) {
 
 type maintenancePageData struct {
 	pageBase
-	OOB             bool
-	ApplyNamingBusy bool
-	NFORegenBusy    bool
-	SyncFilesBusy   bool
+	OOB                bool
+	ApplyNamingBusy    bool
+	NFORegenBusy       bool
+	SyncFilesBusy      bool
+	VerifyAllMediaBusy bool
 }
 
 func (h *Handler) maintenancePageData(r *http.Request) maintenancePageData {
 	applyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain)
 	nfoBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateNFO, queue.SystemDomain)
 	syncBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain)
+	verifyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindVerifyAllMedia, queue.SystemDomain)
 	return maintenancePageData{
-		pageBase:        newSettingsPage("Settings · Maintenance", "maintenance", flashFromQuery(r)),
-		ApplyNamingBusy: applyBusy,
-		NFORegenBusy:    nfoBusy,
-		SyncFilesBusy:   syncBusy,
+		pageBase:           newSettingsPage("Settings · Maintenance", "maintenance", flashFromQuery(r)),
+		ApplyNamingBusy:    applyBusy,
+		NFORegenBusy:       nfoBusy,
+		SyncFilesBusy:      syncBusy,
+		VerifyAllMediaBusy: verifyBusy,
 	}
 }
 
@@ -1142,6 +1145,23 @@ func (h *Handler) actionRegenerateNFOs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirectSettings(w, r, "/settings/maintenance", "ok=nfo-regen-queued")
+}
+
+func (h *Handler) actionVerifyAllMedia(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	if h.Library == nil {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
+		return
+	}
+	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindVerifyAllMedia, queue.SystemDomain); busy {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("'Verify all downloaded videos' already queued"))
+		return
+	}
+	if _, err := h.Library.EnqueueVerifyAllMedia(); err != nil {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
+		return
+	}
+	redirectSettings(w, r, "/settings/maintenance", "ok=verify-all-queued")
 }
 
 func (h *Handler) actionApplyEpisodeNaming(w http.ResponseWriter, r *http.Request) {

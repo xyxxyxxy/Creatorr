@@ -5,65 +5,92 @@
   <div class="flex-1 min-w-0">
     <h1 class="text-xl font-semibold truncate inline-flex items-center gap-2 max-w-full">
       {{if eq .Item.Level "alert"}}
-      <i data-lucide="megaphone" class="size-5 shrink-0 text-error"></i>
+      <span class="inline-flex tooltip tooltip-bottom text-error" data-tip="alert" aria-label="alert">
+        <i data-lucide="megaphone" class="size-5 shrink-0"></i>
+      </span>
       {{else if eq .Item.Level "warning"}}
-      <i data-lucide="siren" class="size-5 shrink-0 text-warning"></i>
+      <span class="inline-flex tooltip tooltip-bottom text-warning" data-tip="warning" aria-label="warning">
+        <i data-lucide="siren" class="size-5 shrink-0"></i>
+      </span>
       {{else}}
-      <i data-lucide="bell" class="size-5 shrink-0"></i>
+      <span class="inline-flex tooltip tooltip-bottom" data-tip="info" aria-label="info">
+        <i data-lucide="bell" class="size-5 shrink-0"></i>
+      </span>
       {{end}}
-      <span class="truncate">{{.Item.EventLabel}}</span>
+      <span class="truncate">{{.Item.Title}}</span>
     </h1>
-    <p class="text-xs opacity-60">#{{.Item.ID}} · {{.Item.CreatedAgo}}</p>
+    <p class="text-xs opacity-60">{{.Item.EventLabel}} · {{.Item.CreatedAgo}} <span class="opacity-50">({{.Item.CreatedAt}})</span></p>
   </div>
 </div>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Details" "help" "In-app notification record. Title and body are the message sent to Apprise when channels are configured.")}}
-{{template "list_table"}}
-<tbody>
-  <tr><th class="w-40">Level</th><td class="text-sm">{{.Item.Level}}</td></tr>
-  <tr><th class="w-40">Event</th><td>{{.Item.EventLabel}} <span class="font-mono text-xs opacity-60">({{.Item.Event}})</span></td></tr>
-  <tr><th class="w-40">When</th><td class="text-xs">{{.Item.CreatedAgo}} <span class="opacity-50">({{.Item.CreatedAt}})</span></td></tr>
-  <tr><th class="w-40">Read</th><td class="text-xs">{{if .Item.Unread}}<span class="text-error">Unread</span>{{else if .Item.ReadAt}}{{.Item.ReadAgo}} <span class="opacity-50">({{.Item.ReadAt}})</span>{{else}}Read{{end}}</td></tr>
-  <tr><th class="w-40">Channels</th><td class="text-sm">{{if .Item.ExternalOK}}in-app, Apprise{{else}}in-app{{end}}</td></tr>
-  {{if .Item.TaskID}}
-  <tr><th class="w-40">Task</th><td><a class="link link-hover font-mono" href="/task/{{.Item.TaskID}}">#{{.Item.TaskID}}</a></td></tr>
-  {{else}}
-  {{template "detail_row" (dict "Label" "Task")}}
-  {{end}}
-  <tr><th class="w-40">Title</th><td class="text-sm">{{.Item.Title}}</td></tr>
-  <tr><th class="w-40">Body</th><td class="text-sm min-w-0">
-    {{if .BodySections}}
-    <div class="space-y-3 max-h-96 overflow-y-auto">
-      {{range .BodySections}}
-      <div>
-        <p class="text-xs font-semibold mb-1">{{.Heading}} ({{.Total}}):</p>
-        <ul class="space-y-1">
-          {{range .Items}}
-          <li class="font-mono text-xs flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span class="opacity-60">#{{.ID}}</span>
-            {{if and (not .Missing) .SeriesID}}
-            <a class="link link-hover font-sans text-sm" href="/series/{{.SeriesID}}/videos/{{.ID}}">{{if .Series}}{{.Series}} / {{end}}{{.Title}}</a>
-            {{else}}
-            <span class="font-sans text-sm{{if .Missing}} opacity-60{{end}}">{{if .Series}}{{.Series}} / {{end}}{{if .Title}}{{.Title}}{{else}}#{{.ID}}{{end}}</span>
-            {{if .Missing}}<span class="text-xs opacity-60">not in library</span>{{end}}
-            {{end}}
-            {{if .Detail}}<span class="opacity-60">({{.Detail}})</span>{{end}}
-          </li>
-          {{end}}
-          {{if .Extra}}
-          <li class="text-xs opacity-60">+{{.Extra}} more</li>
-          {{end}}
-        </ul>
-      </div>
-      {{end}}
-    </div>
-    {{else}}
-    <pre class="text-xs whitespace-pre-wrap font-mono max-h-96 overflow-y-auto">{{.Item.Body}}</pre>
-    {{end}}
-  </td></tr>
-</tbody>
-{{template "list_table_end"}}
+{{template "list_header" (dict "level" "section" "title" "Message")}}
+<pre class="text-sm whitespace-pre-wrap font-sans max-h-[32rem] overflow-y-auto">{{.MessageBody}}</pre>
 {{template "list_panel_end"}}
+
+{{if or .RelatedTask .RelatedSections}}
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Related to")}}
+<ul class="list bg-base-100 rounded-box border border-base-300">
+  {{if .RelatedTask}}
+  <li class="list-row items-center">
+    <span class="shrink-0 self-center opacity-60" aria-hidden="true">
+      <i data-lucide="list-todo" class="size-4"></i>
+    </span>
+    <div class="list-col-grow min-w-0">
+      <div class="flex items-center gap-2 min-w-0">
+        <a class="link link-hover font-medium truncate" href="/task/{{.RelatedTask.ID}}">{{.RelatedTask.Kind}}</a>
+        {{template "status_badge" .RelatedTask.Status}}
+      </div>
+      <div class="text-xs opacity-60 flex flex-wrap gap-x-2 min-w-0">
+        <span class="font-mono">#{{.RelatedTask.ID}}</span>
+        {{if .RelatedTask.Domain}}<span class="truncate">{{.RelatedTask.Domain}}</span>{{end}}
+        {{if .RelatedTask.Message}}<span class="truncate">{{.RelatedTask.Message}}</span>{{end}}
+      </div>
+    </div>
+  </li>
+  {{else if .Item.TaskID}}
+  <li class="list-row items-center">
+    <span class="shrink-0 self-center opacity-60" aria-hidden="true">
+      <i data-lucide="list-todo" class="size-4"></i>
+    </span>
+    <div class="list-col-grow min-w-0">
+      <a class="link link-hover font-medium truncate" href="/task/{{.Item.TaskID}}">Task #{{.Item.TaskID}}</a>
+      <div class="text-xs opacity-60">Task no longer in History</div>
+    </div>
+  </li>
+  {{end}}
+  {{range .RelatedSections}}
+  {{$heading := .Heading}}
+  {{range .Items}}
+  <li class="list-row items-center">
+    <span class="shrink-0 self-center opacity-60" aria-hidden="true">
+      <i data-lucide="square-play" class="size-4"></i>
+    </span>
+    <div class="list-col-grow min-w-0">
+      {{if and (not .Missing) .SeriesID}}
+      <a class="link link-hover font-medium truncate block" href="/series/{{.SeriesID}}/videos/{{.ID}}">{{if .Series}}{{.Series}} / {{end}}{{.Title}}</a>
+      {{else}}
+      <span class="font-medium truncate block{{if .Missing}} opacity-60{{end}}">{{if .Series}}{{.Series}} / {{end}}{{if .Title}}{{.Title}}{{else}}#{{.ID}}{{end}}</span>
+      {{end}}
+      <div class="text-xs opacity-60 flex flex-wrap gap-x-2 min-w-0">
+        <span>{{$heading}}</span>
+        <span class="font-mono">#{{.ID}}</span>
+        {{if .Missing}}<span>not in library</span>{{end}}
+        {{if .Detail}}<span>{{.Detail}}</span>{{end}}
+      </div>
+    </div>
+  </li>
+  {{end}}
+  {{if .Extra}}
+  <li class="list-row">
+    <span class="text-xs opacity-60">{{.Heading}}: +{{.Extra}} more</span>
+  </li>
+  {{end}}
+  {{end}}
+</ul>
+{{template "list_panel_end"}}
+{{end}}
+
 {{template "foot" .}}
 {{end}}

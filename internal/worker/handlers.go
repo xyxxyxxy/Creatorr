@@ -50,6 +50,7 @@ func DefaultHandlers(d Deps) map[string]TaskHandler {
 	out[queue.KindRetentionDelete] = RetentionDeleteHandler(d)
 	out[queue.KindRenameEpisodes] = RenameEpisodesHandler(d)
 	out[queue.KindRegenerateNFO] = RegenerateNFOHandler(d)
+	out[queue.KindVerifyAllMedia] = VerifyAllMediaHandler(d)
 	out[queue.KindDeleteFiles] = DeleteFilesHandler(d)
 	out[queue.KindSponsorblockCut] = SponsorblockCutHandler(d)
 	out[queue.KindMediaVerify] = MediaVerifyHandler(d)
@@ -65,6 +66,28 @@ func RegenerateNFOHandler(d Deps) TaskHandler {
 			return err
 		}
 		d.Library.RecordNFORegenerateActivity(t.ID, rewrote, skipped, failed)
+		return nil
+	}
+}
+
+// VerifyAllMediaHandler null-decodes all packed downloaded/verify_failed media (resumable).
+func VerifyAllMediaHandler(d Deps) TaskHandler {
+	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
+		if d.Library == nil {
+			return apperrors.New(apperrors.CodeInternal, "verify all media deps missing")
+		}
+		verified, skipped, failed, err := d.Library.VerifyAllMediaPass(ctx, t, progress, func(f library.VerifyAllMediaFail) {
+			_ = notify.VerifyFailed(ctx, d.Library.DB, t.ID, f.SeriesTitle, f.VideoTitle, f.Detail)
+		})
+		if err != nil {
+			return err
+		}
+		msg := library.VerifyAllMediaMessage(verified, skipped, failed)
+		progress(msg, ptrFloat(1))
+		detail, _ := json.Marshal(map[string]any{
+			"verified": verified, "skipped": skipped, "failed": failed,
+		})
+		_ = d.Library.Queue.SetDetail(t.ID, string(detail))
 		return nil
 	}
 }

@@ -8,6 +8,8 @@ package notify
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -212,6 +214,7 @@ func POTProvider(ctx context.Context, database *db.DB, taskID int64, domain, det
 
 // DigestItem is one completed media item in a download_digest.
 type DigestItem struct {
+	VideoID   int64  // library video id when known (for Related to links)
 	Domain    string
 	Series    string
 	Title     string
@@ -338,6 +341,7 @@ func FormatFileSyncIssuesBody(missing, changed []FileSyncIssueItem) string {
 }
 
 // FormatDigestBody builds the download_digest message body.
+// When VideoID > 0, each line ends with " [#id]" so the detail page can link Related to.
 func FormatDigestBody(items []DigestItem) string {
 	var b strings.Builder
 	for _, it := range items {
@@ -363,7 +367,63 @@ func FormatDigestBody(items []DigestItem) string {
 				suffix = "stream"
 			}
 		}
-		fmt.Fprintf(&b, "- %s (%s)\n", label, suffix)
+		if it.VideoID > 0 {
+			fmt.Fprintf(&b, "- %s (%s) [#%d]\n", label, suffix, it.VideoID)
+		} else {
+			fmt.Fprintf(&b, "- %s (%s)\n", label, suffix)
+		}
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// DigestBodyDisplay strips trailing " [#id]" markers from FormatDigestBody lines for UI Message.
+func DigestBodyDisplay(body string) string {
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if loc := digestLineID.FindStringIndex(line); loc != nil {
+			lines[i] = strings.TrimSpace(line[:loc[0]])
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// DigestLineRef is one download_digest body line for Related to linking.
+type DigestLineRef struct {
+	VideoID int64
+	Series  string
+	Title   string
+	Suffix  string
+}
+
+var digestLineID = regexp.MustCompile(`\s\[#(\d+)\]\s*$`)
+var digestLine = regexp.MustCompile(`^-\s+(.+?)\s+\(([^)]+)\)(?:\s\[#(\d+)\])?\s*$`)
+
+// ParseDigestBodyLines extracts series/title/optional video id from FormatDigestBody text.
+func ParseDigestBodyLines(body string) []DigestLineRef {
+	var out []DigestLineRef
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		m := digestLine.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		label, suffix := m[1], m[2]
+		ref := DigestLineRef{Suffix: suffix}
+		if m[3] != "" {
+			if id, err := strconv.ParseInt(m[3], 10, 64); err == nil {
+				ref.VideoID = id
+			}
+		}
+		if i := strings.Index(label, " / "); i >= 0 {
+			ref.Series = strings.TrimSpace(label[:i])
+			ref.Title = strings.TrimSpace(label[i+3:])
+		} else {
+			ref.Title = strings.TrimSpace(label)
+		}
+		out = append(out, ref)
+	}
+	return out
 }

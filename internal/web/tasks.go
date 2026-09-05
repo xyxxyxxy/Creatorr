@@ -18,6 +18,7 @@ type taskView struct {
 	Position    int
 	Status      string
 	Kind        string
+	Domain      string // set for cross-domain overview list
 	SeriesID    int64
 	SeriesTitle string
 	VideoID     int64

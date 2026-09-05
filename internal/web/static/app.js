@@ -1225,6 +1225,7 @@
     "sync_files",
     "rename_episodes",
     "regenerate_nfo",
+    "verify_all_media",
   ]);
 
   function refreshMaintenanceLive() {

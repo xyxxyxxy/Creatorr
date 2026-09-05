@@ -1,0 +1,32 @@
+{{define "overview_running_task_row"}}
+<li class="list-row" data-overview-running-task="{{.ID}}">
+  <div class="list-col-grow min-w-0">
+    <div class="flex items-center gap-2 min-w-0">
+      <a class="link link-hover font-medium truncate" href="/task/{{.ID}}">{{.Kind}}</a>
+      {{if .Domain}}<span class="text-xs opacity-60 truncate shrink-0">{{.Domain}}</span>{{end}}
+    </div>
+    <div class="text-xs opacity-60 flex flex-wrap gap-x-2 min-w-0">
+      {{if .SeriesID}}
+      <a class="link link-hover truncate" href="/series/{{.SeriesID}}">{{if .SeriesTitle}}{{.SeriesTitle}}{{else}}#{{.SeriesID}}{{end}}</a>
+      {{end}}
+      {{if .VideoTitle}}
+      {{if and .SeriesID .VideoID}}
+      <a class="link link-hover truncate" href="/series/{{.SeriesID}}/videos/{{.VideoID}}">{{.VideoTitle}}</a>
+      {{else}}
+      <span class="truncate">{{.VideoTitle}}</span>
+      {{end}}
+      {{else if not .SeriesID}}{{template "empty_value"}}{{end}}
+    </div>
+  </div>
+  <div class="justify-self-end self-center flex items-center gap-2 min-w-0 max-w-full">
+    <span class="text-xs opacity-60 truncate min-w-0 max-w-[12rem] sm:max-w-xs text-right">{{if .Message}}{{.Message}}{{else}}{{template "empty_value"}}{{end}}</span>
+    <div class="w-24 sm:w-32 shrink-0">
+      {{if progressActive .Progress}}
+      <progress class="progress progress-secondary w-full" value="{{pct .Progress}}" max="100" aria-label="{{pct .Progress}}%"></progress>
+      {{else}}
+      <progress class="progress progress-secondary w-full" max="100" aria-label="In progress"></progress>
+      {{end}}
+    </div>
+  </div>
+</li>
+{{end}}
