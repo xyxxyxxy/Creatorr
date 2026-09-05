@@ -71,8 +71,8 @@ type laneView struct {
 	DefaultRate         string
 	DefaultSleep        float64
 	DefaultFlare        bool
-	Tasks               []taskView           // pending + running (ListActive order)
-	ScheduledTasks      []scheduledTaskView  // system lane: upcoming scheduler jobs
+	Tasks               []taskView          // pending + running (ListActive order)
+	ScheduledTasks      []scheduledTaskView // system lane: upcoming scheduler jobs
 }
 
 func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
@@ -300,7 +300,8 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 				lv.ShowActive = true
 			}
 		}
-		pageTasks, pageInfo := SlicePage(r, "page", lv.Tasks)
+		pageTasks, pageInfo := SlicePageSize(r, lanePageParam(d), lv.Tasks, TaskPageSize)
+		pageInfo.LiveTarget = "tasks-live"
 		lv.Tasks = pageTasks
 		lv.Page = pageInfo
 		lanes = append(lanes, *lv)
@@ -426,6 +427,24 @@ func (h *Handler) actionRunScheduled(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, redir+"?err="+urlQuery("unknown schedule"), http.StatusSeeOther)
 		return
 	}
+}
+
+// lanePageParam is the /tasks pager query key for one domain lane (p_example_com).
+func lanePageParam(domain string) string {
+	var b strings.Builder
+	b.WriteString("p_")
+	for _, r := range strings.ToLower(domain) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	s := b.String()
+	if s == "p_" {
+		return "p_unknown"
+	}
+	return s
 }
 
 func (h *Handler) actionCancelTask(w http.ResponseWriter, r *http.Request) {
