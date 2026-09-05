@@ -19,18 +19,25 @@
     </div>
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
-    <label for="modal-edit-series" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Edit series</label>
-    <label for="modal-edit-series-metadata" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Edit metadata</label>
-    <label for="modal-delete-series" class="btn btn-soft btn-error{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>Delete</label>
-    {{template "monitor_toggle" (dict
-      "Action" "/actions/set-series-monitored"
-      "SeriesID" .Series.ID
-      "Monitored" .Series.Monitored
-      "Redirect" (printf "/series/%d" .Series.ID)
-      "AsButton" true
-      "Disabled" .Deleting
-      "DisabledTitle" "Series is being deleted"
-    )}}
+    <label for="modal-edit-series" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>
+      <i data-lucide="pencil" class="size-4"></i>
+      Edit series
+    </label>
+    <label for="modal-edit-series-metadata" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>
+      <i data-lucide="file-pen" class="size-4"></i>
+      Edit metadata
+    </label>
+    {{if .Deleting}}
+    <span class="tooltip tooltip-top" data-tip="Delete">
+      <label for="modal-delete-series" class="btn btn-soft btn-error btn-square btn-disabled" aria-disabled="true" aria-label="Delete">
+        <i data-lucide="trash-2" class="size-4"></i>
+      </label>
+    </span>
+    {{else}}
+    <label for="modal-delete-series" class="btn btn-soft btn-error btn-square tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+      <i data-lucide="trash-2" class="size-4"></i>
+    </label>
+    {{end}}
   </div>
 </div>
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
@@ -49,14 +56,20 @@
 <div class="py-10 px-4 w-full">
   <div class="flex w-full max-w-2xl mx-auto flex-col items-center">
     <div class="flex w-full flex-row items-stretch">
-      <label for="modal-add-single" class="btn btn-outline grow h-auto min-h-12 py-3 whitespace-normal">Add single video</label>
+      <label for="modal-add-single" class="btn btn-outline grow h-auto min-h-12 py-3 whitespace-normal">
+        <i data-lucide="film" class="size-4"></i>
+        Add single video
+      </label>
       <div class="divider divider-horizontal">OR</div>
-      <label for="modal-add-source" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal">Add channel/playlist</label>
+      <label for="modal-add-source" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal">
+        <i data-lucide="list-video" class="size-4"></i>
+        Add channel/playlist
+      </label>
     </div>
   </div>
 </div>
 {{else}}
-{{template "list_header" (dict "level" "section" "title" "Sources" "add_modal" "modal-add-source" "add_label" "Add channel/playlist" "add_modal2" "modal-add-single" "add_label2" "Add single video")}}
+{{template "list_header" (dict "level" "section" "title" "Sources" "add_modal" "modal-add-source" "add_label" "Add channel/playlist" "add_icon" "list-video" "add_modal2" "modal-add-single" "add_label2" "Add single video" "add_icon2" "film")}}
 <script type="application/json" id="series-source-urls">{{toJSON .SourceURLs}}</script>
 {{if .Sources}}
 {{template "list_table"}}
@@ -309,13 +322,14 @@
         "TitleInfo" "Changing the title updates Creatorr and renames the on-disk series folder immediately. Episode filenames that include the series name are not rewritten until you run 'Apply episode format' under 'Settings → Library'."
         "TitleDisabled" .FolderRenameBusy
         "TitleDisabledTitle" "'Title' and 'Root folder' are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
+        "Monitored" .Series.Monitored
         "Roots" .Roots
         "RootID" .Series.RootID
+        "RootInfo" "Where downloads and series NFO/art are written. Changing root moves the series folder on disk."
         "RootDisabled" .FolderRenameBusy
         "RootDisabledTitle" "'Title' and 'Root folder' are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
         "Profiles" .Profiles
         "ProfileID" .Series.QualityProfileID
-        "ProfileInfo" "yt-dlp format selector for new video downloads."
       )}}
       <div class="modal-action">
         <label for="modal-edit-series" class="btn modal-cancel">Cancel</label>
@@ -337,6 +351,136 @@
       <div class="modal-action">
         <label for="modal-delete-series" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-error" disabled>Delete series</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-want-videos" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-video-bulk-want-title>Want videos</h3>
+    <p class="text-sm mb-4">Mark selected videos as wanted. Ineligible statuses are skipped.</p>
+    <form method="post" action="/actions/bulk-want-videos" id="form-bulk-want-videos">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <div data-bulk-video-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-want-videos" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Want</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-ignore-videos" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-video-bulk-ignore-title>Ignore videos</h3>
+    <p class="text-sm mb-4">Mark selected videos as ignored. Ineligible statuses are skipped. Running download tasks for those videos are cancelled.</p>
+    <form method="post" action="/actions/bulk-ignore-videos" id="form-bulk-ignore-videos">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <div data-bulk-video-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-ignore-videos" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Ignore</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-download-videos" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-video-bulk-download-title>Queue download</h3>
+    <p class="text-sm mb-4">Enqueue Queue download for the selected videos. Ineligible or already-queued videos are skipped.</p>
+    <form method="post" action="/actions/bulk-download-videos" id="form-bulk-download-videos">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <div data-bulk-video-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-download-videos" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Queue download</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-refresh-sidecars-videos" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-video-bulk-refresh-title>Refresh sidecars</h3>
+    <p class="text-sm mb-4">Enqueue sidecar refresh (thumb / subs / NFO) for selected videos with packed media. Others are skipped. Never rewrites info.json.</p>
+    <form method="post" action="/actions/bulk-refresh-sidecars-videos" id="form-bulk-refresh-sidecars-videos">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <div data-bulk-video-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-refresh-sidecars-videos" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Refresh sidecars</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-edit-videos-metadata" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg mb-2" data-video-bulk-meta-title>Edit metadata</h3>
+    <p class="text-sm opacity-70 mb-3">Fields shared by every selected video are pre-filled. Clear a field back to empty for No change. Filled fields replace that value on every selected video. Genres, tags, and actors replace the whole list when you add at least one entry (actor order is kept). Upload date is preserved.</p>
+    <form method="post" action="/actions/bulk-edit-videos-metadata" class="space-y-3" id="form-bulk-edit-videos-metadata">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <div data-bulk-video-ids></div>
+      <div class="grid gap-3 sm:grid-cols-2">
+        {{template "metadata_suggest_row" (dict "Name" "studio" "Label" "Studio" "Value" "" "Placeholder" "No change" "ListID" "video-bulk-meta-dl-studio" "Options" .MetaForm.Suggestions.Studios)}}
+        {{template "metadata_suggest_row" (dict "Name" "country" "Label" "Country" "Value" "" "Placeholder" "No change" "ListID" "video-bulk-meta-dl-country" "Options" .MetaForm.Suggestions.Countries)}}
+      </div>
+      {{template "metadata_suggest_row" (dict "Name" "mpaa" "Label" "Content rating" "Value" "" "Placeholder" "No change" "ListID" "video-bulk-meta-dl-mpaa" "Options" .MetaForm.Suggestions.MPAAs)}}
+      <div class="grid gap-3 sm:grid-cols-2">
+        {{template "metadata_string_list_editor" (dict
+          "Label" "Genres"
+          "Name" "genre"
+          "Singular" "genre"
+          "Items" (list)
+          "Options" .MetaForm.Suggestions.Genres
+          "ListID" "video-bulk-meta-dl-genres"
+          "Placeholder" "Add a genre"
+          "EmptyText" "No change"
+        )}}
+        {{template "metadata_string_list_editor" (dict
+          "Label" "Tags"
+          "Name" "tag"
+          "Singular" "tag"
+          "Items" (list)
+          "Options" .MetaForm.Suggestions.Tags
+          "ListID" "video-bulk-meta-dl-tags"
+          "Placeholder" "Add a tag"
+          "EmptyText" "No change"
+        )}}
+      </div>
+      {{template "metadata_actors_editor" (dict "Actors" (list) "NameOptions" .MetaForm.Suggestions.ActorNames "RoleOptions" .MetaForm.Suggestions.ActorRoles "EmptyText" "No change")}}
+      <div class="modal-action">
+        <label for="modal-bulk-edit-videos-metadata" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-delete-videos" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-video-bulk-delete-title>Delete downloaded files</h3>
+    <p class="text-sm mb-4">Removes library media and sidecars for the selected videos and sets status to deleted. Ineligible statuses are skipped.</p>
+    <form method="post" action="/actions/bulk-delete-videos" id="form-bulk-delete-videos">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <div data-bulk-video-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-delete-videos" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-error">Delete files</button>
       </div>
     </form>
   </div>

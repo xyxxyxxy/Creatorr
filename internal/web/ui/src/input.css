@@ -115,6 +115,16 @@
 }
 
 /*
+  App column floor: Tailwind md (48rem). Below that, main p-4 vs md:p-6 (and
+  other md: rules) jump the content width; keep the floor at md so the column
+  never sits in that band. Cap stays max-w-5xl in markup; narrower viewports
+  scroll horizontally.
+*/
+.app-shell {
+  min-width: 48rem;
+}
+
+/*
   Series list poster health badge: badge-sm height comes from --size; force the same
   min-width so single-digit counts stay square. Wider counts (10+) may grow.
 */

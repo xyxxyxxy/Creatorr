@@ -114,10 +114,12 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 }
 
 type seriesVideosLiveData struct {
-	SeriesID    int64
-	Videos      []seriesVideoRow
-	VideosPage  PageInfo
-	VideoFilter struct {
+	SeriesID     int64
+	Videos       []seriesVideoRow
+	VideosPage   PageInfo
+	FilterTotal  int
+	BulkEditBusy bool
+	VideoFilter  struct {
 		Query            string
 		QueryPlaceholder string
 		AriaLabel        string
@@ -217,10 +219,13 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 		listFilterSelect{Name: "status", AriaLabel: "Status", EmptyLabel: "Any status", Options: statusOpts},
 	)
 
+	bulkBusy, _ := h.Library.BulkEditVideosBusy()
 	return seriesVideosLiveData{
 		SeriesID:     id,
 		Videos:       videos,
 		VideosPage:   videosPageInfo,
+		FilterTotal:  videoTotal,
+		BulkEditBusy: bulkBusy,
 		VideoFilter:  videoFilter,
 		FilterActive: filter.Active(),
 	}, nil

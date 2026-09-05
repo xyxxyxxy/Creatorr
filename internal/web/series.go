@@ -53,17 +53,20 @@ func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
 	}
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
+	suggestions, _ := h.Library.ListMetaSuggestions()
 	render(w, "series_list", struct {
 		pageBase
 		Live                seriesListLiveData
 		Roots               []library.RootFolder
 		Profiles            []library.QualityProfile
+		Suggestions         library.MetaSuggestions
 		ScanCronDescriptors []string
 	}{
 		pageBase:            newPage("Series", "series", flashFromQuery(r)),
 		Live:                live,
 		Roots:               roots,
 		Profiles:            profiles,
+		Suggestions:         suggestions,
 		ScanCronDescriptors: scanCronDescriptors(),
 	})
 }
@@ -1004,7 +1007,7 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 			SourceURL:            sourceURL,
 			RootID:               rootID,
 			QualityProfileID:     qpID,
-			Monitored:            true,
+			Monitored:            r.FormValue("monitored") == "1",
 			DeliveryMode:         delivery,
 			FullScanLimit:        fullScanLimit,
 			ScanCron:             scanCron,
@@ -1081,6 +1084,11 @@ func (h *Handler) actionUpdateSeries(w http.ResponseWriter, r *http.Request) {
 		DeliveryMode:     &dm,
 	})
 	if err != nil {
+		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
+		return
+	}
+	monitored := r.FormValue("monitored") == "1"
+	if err := h.Library.SetSeriesMonitored(sid, monitored); err != nil {
 		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
 		return
 	}
@@ -1367,23 +1375,8 @@ func (h *Handler) actionSetSeriesMonitored(w http.ResponseWriter, r *http.Reques
 		if h.tryRenderSeriesListLive(w, r) {
 			return
 		}
-		// Detail page scan buttons depend on series monitored - full refresh.
-		if strings.HasPrefix(redir, "/series/") {
-			hxRedirect(w, redir)
-			return
-		}
-		asButton := false
-		if path, _, _ := strings.Cut(redir, "?"); path == "/series" {
-			asButton = true
-		}
-		renderMonitorToggle(w, map[string]any{
-			"Action":    "/actions/set-series-monitored",
-			"SeriesID":  sid,
-			"Monitored": monitored,
-			"Redirect":  redir,
-			"Title":     "Include this series in scans and download-wanted",
-			"AsButton":  asButton,
-		})
+		// Detail (and other pages): monitored is on Edit form; refresh whole page.
+		hxRedirect(w, redir)
 		return
 	}
 	http.Redirect(w, r, redir, http.StatusSeeOther)

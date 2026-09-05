@@ -1,15 +1,24 @@
 {{define "list_row_shell"}}
-{{/* Shared daisyUI list-row: media | title+meta | actions.
+{{/* Shared daisyUI list-row: media | title+meta | optional actions.
      MediaURL?, MediaClass?, ImgClass?, Circle?, PlaceholderIcon?, Badge?,
      TitleHref, Title, KindIcon?, KindTip? (optional delivery badge on media bottom-right; audio only),
      StatusInd? (series_status_indicator health on media top-left),
      TaskInd?, WarnLevel?,
      Line2? (plain text), ShowProgress? (uses series_progress on .; shares Line2 row 50/50),
-     Monitor? (dict for monitor_toggle). */}}
+     Select? (dict: ID, Disabled?) - starts hidden; bulk mode shows it,
+     Monitor? (dict for monitor_toggle AsButton; stays visible in bulk but disabled via app.js).
+     Grid: normal = media|grow|monitor; bulk = checkbox|media|grow|monitor. */}}
 {{$mediaClass := .MediaClass}}{{if not $mediaClass}}{{$mediaClass = "relative shrink-0 w-[112px] aspect-video"}}{{end}}
 {{$imgClass := .ImgClass}}{{if not $imgClass}}{{if .Circle}}{{$imgClass = "size-full rounded-full object-cover"}}{{else}}{{$imgClass = "size-full rounded object-cover"}}{{end}}{{end}}
 {{$ph := .PlaceholderIcon}}{{if not $ph}}{{$ph = "square-play"}}{{end}}
-<li class="list-row">
+<li class="list-row" {{if .Select}}data-series-id="{{.Select.ID}}"{{end}}{{if .Monitor}} style="--list-grid-cols: minmax(0, auto) 1fr max-content"{{end}}>
+  {{with .Select}}
+  <div class="self-center hidden" data-series-select-wrap>
+    <input type="checkbox" class="checkbox checkbox-sm js-series-select" value="{{.ID}}"
+           aria-label="Select series"
+           {{if .Disabled}}disabled{{end}} />
+  </div>
+  {{end}}
   <div class="relative self-start {{$mediaClass}}">
     {{if .MediaURL}}
     <img class="{{$imgClass}}" src="{{.MediaURL}}" alt="" loading="lazy" />
@@ -43,8 +52,10 @@
     </div>
     {{end}}
   </div>
-  <div class="justify-self-end self-center">
-    {{with .Monitor}}{{template "monitor_toggle" .}}{{end}}
+  {{with .Monitor}}
+  <div class="justify-self-end self-center" data-series-monitor-wrap>
+    {{template "monitor_toggle" .}}
   </div>
+  {{end}}
 </li>
 {{end}}

@@ -49,10 +49,12 @@
   <div class="join radio-btn-join w-full" role="group" aria-label="Discovered video status" data-index-as-ignored-join>
     <label class="btn join-item flex-1">
       <input type="radio" name="index_as_ignored" value="0" class="sr-only" {{if not .IndexAsIgnored}}checked{{end}} />
+      <i data-lucide="eye" class="size-4"></i>
       <span>Wanted</span>
     </label>
     <label class="btn join-item flex-1">
       <input type="radio" name="index_as_ignored" value="1" class="sr-only" {{if .IndexAsIgnored}}checked{{end}} />
+      <i data-lucide="eye-off" class="size-4"></i>
       <span>Ignored</span>
     </label>
   </div>

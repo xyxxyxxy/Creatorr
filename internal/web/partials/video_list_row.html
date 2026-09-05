@@ -1,8 +1,16 @@
 {{define "video_list_row"}}
 {{/* Dot is a dict: ID Title Status UploadDate SizeLabel ResolutionLabel DurationLabel MediaTypeLabel ThumbURL TaskInd DownloadRunning
      DeliveryQueued DomainActive DomainDisabledTitle SeriesID KeepScroll LiveSwap Redirect FormClass Deleting
-     SeriesTitle? (cross-series lists: link in meta), NoActions - thumb + title + meta only */}}
-<li class="list-row">
+     SeriesTitle? (cross-series lists: link in meta), NoActions - thumb + title + meta only,
+     Select? BulkEditBusy? - multi-select checkbox (hidden until video bulk mode). */}}
+<li class="list-row" {{if .Select}}data-video-id="{{.ID}}"{{end}}{{if .Select}} style="--list-grid-cols: minmax(0, auto) 1fr max-content"{{end}}>
+  {{if .Select}}
+  <div class="self-center hidden" data-video-select-wrap>
+    <input type="checkbox" class="checkbox checkbox-sm js-video-select" value="{{.ID}}"
+           aria-label="Select video"
+           {{if .BulkEditBusy}}disabled{{end}} />
+  </div>
+  {{end}}
   <div class="relative shrink-0 w-[112px] aspect-video">
     {{if .ThumbURL}}
     <img class="size-full rounded object-cover" src="{{.ThumbURL}}" alt="" width="112" height="63" loading="lazy" />
@@ -29,11 +37,11 @@
     </div>
   </div>
   {{if not .NoActions}}
-  <div class="justify-self-end self-center">
+  <div class="justify-self-end self-center flex items-center justify-end gap-1" data-video-row-actions>
     {{if .Deleting}}
     <span class="text-xs opacity-60">Queued for deletion</span>
     {{else}}
-    <div class="join justify-end">
+    <div class="join justify-end" data-video-row-primary-actions>
       {{$delivery := dict
         "VideoID" .ID
         "SeriesID" .SeriesID
@@ -61,13 +69,16 @@
         "Redirect" .Redirect
         "Icons" true
         "DeferModal" true
-        "Class" "btn btn-neutral btn-square join-item"
-        "DeleteClass" "btn btn-soft btn-error btn-square join-item"
+        "Class" "btn btn-square join-item"
+        "DeleteClass" "btn btn-soft btn-error btn-square"
       }}
       {{template "video_delivery_actions" $delivery}}
+      {{if ne .Status "downloaded"}}
       {{template "want_ignore_button" $wantIgnore}}
+      {{end}}
     </div>
     {{if eq .Status "downloaded"}}
+    {{template "want_ignore_button" $wantIgnore}}
     {{template "delete_video_modal" $wantIgnore}}
     {{end}}
     {{end}}
