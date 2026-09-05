@@ -27,7 +27,7 @@ type ApplyResult struct {
 
 // ApplyArchive runs remove/mark/embed on remuxed media using info.json for creator chapters.
 // infoPath may be empty. Never mutates info.json contents.
-// onProg reports keep-segment re-encode fractions only when cfg.ReencodeCut (nil-safe); copy-cut ignores it.
+// onProg reports single-pass re-encode fractions only when cfg.ReencodeCut (nil-safe); copy-cut ignores it.
 func ApplyArchive(ctx context.Context, mediaPath, infoPath, pageURL, remoteID string, cfg ProfileConfig, workDir string, onProg EncodeProgress) (ApplyResult, error) {
 	res := ApplyResult{MediaPath: mediaPath}
 	mark := NormalizeCategoryList(cfg.Mark)
