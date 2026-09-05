@@ -29,7 +29,7 @@ func TestLibrarySettingsInUseProfileDeleteDisabled(t *testing.T) {
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
-	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestActionDeleteProfileConflict(t *testing.T) {
 	_ = settings.SeedDefaults(d)
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
-	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

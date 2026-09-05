@@ -141,9 +141,8 @@ func (s *Store) repackEpisodeNumberChanges(videoIDs []int64, taskID int64) error
 	if len(videoIDs) == 0 {
 		return nil
 	}
-	cfg := LoadNamingConfig(s.DB)
 	for _, videoID := range videoIDs {
-		if err := s.repackOneEpisodeNumbers(videoID, cfg, taskID); err != nil {
+		if err := s.repackOneEpisodeNumbers(videoID, taskID); err != nil {
 			// Best-effort: continue other videos
 			continue
 		}
@@ -151,7 +150,7 @@ func (s *Store) repackEpisodeNumberChanges(videoIDs []int64, taskID int64) error
 	return nil
 }
 
-func (s *Store) repackOneEpisodeNumbers(videoID int64, cfg NamingConfig, taskID int64) error {
+func (s *Store) repackOneEpisodeNumbers(videoID int64, taskID int64) error {
 	busy, err := s.videoBusyForRename(videoID, taskID)
 	if err != nil || busy {
 		return err
@@ -179,6 +178,7 @@ func (s *Store) repackOneEpisodeNumbers(videoID int64, cfg NamingConfig, taskID 
 	if err != nil {
 		return err
 	}
+	cfg := NamingConfigFromRoot(root)
 	aired := ""
 	if v.UploadDate.Valid {
 		aired = v.UploadDate.String

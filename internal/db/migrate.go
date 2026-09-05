@@ -1,6 +1,8 @@
 package db
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -28,6 +30,10 @@ func (d *DB) migrate() error {
 			}
 		case 4:
 			if err := d.migrateTo4(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
+		case 5:
+			if err := d.migrateTo5(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
 		default:
@@ -127,6 +133,51 @@ func (d *DB) migrateTo4() error {
 		WHERE acquired_via IS NULL OR TRIM(acquired_via) = ''
 	`); err != nil {
 		return fmt.Errorf("backfill acquired_via source: %w", err)
+	}
+	return nil
+}
+
+// defaultEpisodeFormat matches settings.DefaultEpisodeFormat (kept here to avoid import cycles).
+const defaultEpisodeFormat = "S{year}/S{year}E{episode} [{id}]"
+
+// migrateTo5 adds root_folders.episode_format, copies legacy settings.episode_format, then drops that key.
+func (d *DB) migrateTo5() error {
+	has, err := d.tableHasColumn("root_folders", "episode_format")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err := d.SQL.Exec(`
+			ALTER TABLE root_folders ADD COLUMN episode_format TEXT NOT NULL DEFAULT '` + defaultEpisodeFormat + `'
+		`); err != nil {
+			return fmt.Errorf("add episode_format: %w", err)
+		}
+	}
+	fmtStr := defaultEpisodeFormat
+	var raw sql.NullString
+	err = d.SQL.QueryRow(`SELECT value FROM settings WHERE key = 'episode_format'`).Scan(&raw)
+	switch {
+	case err == nil && raw.Valid:
+		if trimmed := strings.TrimSpace(raw.String); trimmed != "" {
+			fmtStr = trimmed
+		}
+	case errors.Is(err, sql.ErrNoRows):
+		// no legacy key
+	case err != nil && strings.Contains(err.Error(), "no such table"):
+		// settings missing on minimal fixtures
+	case err != nil:
+		return fmt.Errorf("read settings episode_format: %w", err)
+	}
+	if _, err := d.SQL.Exec(`UPDATE root_folders SET episode_format = ?`, fmtStr); err != nil {
+		if strings.Contains(err.Error(), "no such table") {
+			return nil
+		}
+		return fmt.Errorf("backfill root episode_format: %w", err)
+	}
+	if _, err := d.SQL.Exec(`DELETE FROM settings WHERE key = 'episode_format'`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("delete settings episode_format: %w", err)
+		}
 	}
 	return nil
 }

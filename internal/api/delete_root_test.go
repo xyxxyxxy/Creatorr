@@ -18,7 +18,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
-func TestDeleteQualityProfileConflict(t *testing.T) {
+func TestDeleteRootConflict(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "api.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -31,7 +31,7 @@ func TestDeleteQualityProfileConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile, err := lib.CreateProfile("used", "bv*+ba/b")
+	profile, err := lib.CreateProfile("p", "bv*+ba/b")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestDeleteQualityProfileConflict(t *testing.T) {
 	gen.HandlerFromMux(srv, r)
 
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/quality-profiles/"+strconv.FormatInt(profile.ID, 10), nil))
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/roots/"+strconv.FormatInt(root.ID, 10), nil))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
@@ -58,7 +58,7 @@ func TestDeleteQualityProfileConflict(t *testing.T) {
 	}
 }
 
-func TestDeleteQualityProfileOK(t *testing.T) {
+func TestDeleteRootOK(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "api.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func TestDeleteQualityProfileOK(t *testing.T) {
 	_ = settings.SeedDefaults(d)
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
-	profile, err := lib.CreateProfile("temp", "bv*+ba/b")
+	root, err := lib.CreateRoot("temp", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestDeleteQualityProfileOK(t *testing.T) {
 	gen.HandlerFromMux(srv, r)
 
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/quality-profiles/"+strconv.FormatInt(profile.ID, 10), nil))
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/roots/"+strconv.FormatInt(root.ID, 10), nil))
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}

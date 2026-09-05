@@ -195,7 +195,7 @@ func TestImportPageWithoutSeries(t *testing.T) {
 		t.Fatalf("scan button should be removed: %s", truncate(body, 400))
 	}
 
-	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +298,7 @@ func TestActionRunScheduledQueuesSyncFiles(t *testing.T) {
 	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
-	root, err := lib.CreateRoot("r", t.TempDir(), nil)
+	root, err := lib.CreateRoot("r", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

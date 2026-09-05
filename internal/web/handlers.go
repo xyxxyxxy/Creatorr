@@ -131,6 +131,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/delete-cookie", h.actionDeleteCookie)
 	r.Post("/actions/add-root", h.actionAddRoot)
 	r.Post("/actions/update-root", h.actionUpdateRoot)
+	r.Post("/actions/delete-root", h.actionDeleteRoot)
 	r.Post("/actions/add-profile", h.actionAddProfile)
 	r.Post("/actions/update-profile", h.actionUpdateProfile)
 	r.Post("/actions/delete-profile", h.actionDeleteProfile)

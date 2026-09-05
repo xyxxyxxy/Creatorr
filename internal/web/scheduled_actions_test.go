@@ -41,7 +41,7 @@ func TestBuildScheduledTasks(t *testing.T) {
 	}
 
 	ttl := int64(86400)
-	if _, err := lib.CreateRoot("keep", t.TempDir(), &ttl); err != nil {
+	if _, err := lib.CreateRoot("keep", t.TempDir(), "", &ttl); err != nil {
 		t.Fatal(err)
 	}
 	got, err = buildScheduledTasks(lib, now)

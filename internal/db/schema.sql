@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS root_folders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL DEFAULT '',
   path TEXT NOT NULL UNIQUE,
-  retention_ttl_seconds INTEGER
+  retention_ttl_seconds INTEGER,
+  episode_format TEXT NOT NULL DEFAULT 'S{year}/S{year}E{episode} [{id}]'
 );
 
 CREATE TABLE IF NOT EXISTS quality_profiles (

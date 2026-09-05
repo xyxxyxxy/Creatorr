@@ -33,9 +33,9 @@ func TestSeedDefaults(t *testing.T) {
 	if roots != 1 || profiles != 4 {
 		t.Fatalf("roots=%d profiles=%d", roots, profiles)
 	}
-	var name, path string
+	var name, path, epFmt string
 	var ttl any
-	_ = d.SQL.QueryRow(`SELECT name, path, retention_ttl_seconds FROM root_folders`).Scan(&name, &path, &ttl)
+	_ = d.SQL.QueryRow(`SELECT name, path, retention_ttl_seconds, episode_format FROM root_folders`).Scan(&name, &path, &ttl, &epFmt)
 	absRoot, err := filepath.Abs(rootPath)
 	if err != nil {
 		t.Fatal(err)
@@ -43,6 +43,9 @@ func TestSeedDefaults(t *testing.T) {
 	wantName := filepath.Base(absRoot)
 	if name != wantName || path != absRoot || ttl != nil {
 		t.Fatalf("root name=%q path=%q ttl=%v want name %q path %q", name, path, ttl, wantName, absRoot)
+	}
+	if epFmt != library.DefaultEpisodeFormat {
+		t.Fatalf("episode_format=%q want %q", epFmt, library.DefaultEpisodeFormat)
 	}
 
 	rows, err := d.SQL.Query(`SELECT id, name, format_selector, verify_media FROM quality_profiles ORDER BY id`)

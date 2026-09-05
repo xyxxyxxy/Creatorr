@@ -26,7 +26,7 @@ func TestSyncFilesHandlerDigestOnce(t *testing.T) {
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	rootDir := t.TempDir()
-	root, err := lib.CreateRoot("r", rootDir, nil)
+	root, err := lib.CreateRoot("r", rootDir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

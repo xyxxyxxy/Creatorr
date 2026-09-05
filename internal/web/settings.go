@@ -42,6 +42,12 @@ type profileSettingsRow struct {
 	SeriesCount int
 }
 
+// rootSettingsRow is a root folder plus series usage for Settings → Library.
+type rootSettingsRow struct {
+	library.RootFolder
+	SeriesCount int
+}
+
 type notifyChannelView struct {
 	ID          int64
 	Name        string
@@ -451,13 +457,20 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
-	episodeFormat, _ := settings.GetEpisodeFormat(h.Queue.DB)
 	applyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain)
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
+	seriesByRoot, _ := h.Library.SeriesCountsByRoot()
 	seriesByProfile, _ := h.Library.SeriesCountsByProfile()
 	pageRoots, rootsPage := SlicePage(r, "page", roots)
 	pageProfiles, profilesPage := SlicePage(r, "profiles_page", profiles)
+	rootRows := make([]rootSettingsRow, 0, len(pageRoots))
+	for _, root := range pageRoots {
+		rootRows = append(rootRows, rootSettingsRow{
+			RootFolder:  root,
+			SeriesCount: seriesByRoot[root.ID],
+		})
+	}
 	profileRows := make([]profileSettingsRow, 0, len(pageProfiles))
 	for _, p := range pageProfiles {
 		profileRows = append(profileRows, profileSettingsRow{
@@ -496,9 +509,9 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 	render(w, "settings_library", struct {
 		pageBase
 		Settings                     []settingsRowView
-		EpisodeFormat                string
 		NamingLocked                 bool
-		Roots                        []library.RootFolder
+		DefaultEpisodeFormat         string
+		Roots                        []rootSettingsRow
 		RootsPage                    PageInfo
 		Profiles                     []profileSettingsRow
 		ProfilesPage                 PageInfo
@@ -511,9 +524,9 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 	}{
 		pageBase:                     newSettingsPage("Settings · Library", "library", flashFromQuery(r)),
 		Settings:                     settingRows,
-		EpisodeFormat:                episodeFormat,
 		NamingLocked:                 applyBusy,
-		Roots:                        pageRoots,
+		DefaultEpisodeFormat:         library.DefaultEpisodeFormat,
+		Roots:                        rootRows,
 		RootsPage:                    rootsPage,
 		Profiles:                     profileRows,
 		ProfilesPage:                 profilesPage,
@@ -592,7 +605,6 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 		settings.KeyRetentionDeleteCron,
 		settings.KeyYtDlpUpdateCron,
 		settings.KeyYtDlpUpdateChannel,
-		settings.KeyEpisodeFormat,
 	} {
 		if _, ok := r.Form[e]; !ok {
 			continue
@@ -606,12 +618,7 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 			vals[settings.KeyPotFetch] = settings.NormalizePotFetch(raw)
 		}
 	}
-	namingPosted := false
 	if r.FormValue("redirect") == "/settings/library" {
-		if _, ok := r.Form[settings.KeyEpisodeFormat]; ok {
-			namingPosted = true
-			vals[settings.KeyEpisodeFormat] = strings.TrimSpace(r.FormValue(settings.KeyEpisodeFormat))
-		}
 		if r.FormValue("subtitle_settings") == "1" {
 			vals[settings.KeySubtitleLangs] = settings.SubtitleLangsJSON(r.Form["subtitle_langs"])
 			if r.FormValue(settings.KeySubtitleAuto) == "1" {
@@ -636,13 +643,6 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 			} else {
 				vals[settings.KeyArchiveFallback] = "0"
 			}
-		}
-	}
-	// Reject naming changes while Apply rename is pending/running.
-	if namingPosted {
-		if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain); busy {
-			redirectSettings(w, r, "/settings/library", "err="+urlQuery("Cancel or wait for 'Apply episode format' before changing formats"))
-			return
 		}
 	}
 	if err := settings.SetMany(h.Queue.DB, vals); err != nil {
@@ -953,7 +953,8 @@ func (h *Handler) actionAddRoot(w http.ResponseWriter, r *http.Request) {
 		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
 		return
 	}
-	_, err = h.Library.CreateRoot(strings.TrimSpace(r.FormValue("name")), strings.TrimSpace(r.FormValue("path")), ttl)
+	epFmt := strings.TrimSpace(r.FormValue("episode_format"))
+	_, err = h.Library.CreateRoot(strings.TrimSpace(r.FormValue("name")), strings.TrimSpace(r.FormValue("path")), epFmt, ttl)
 	if err != nil {
 		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
 		return
@@ -966,6 +967,7 @@ func (h *Handler) actionUpdateRoot(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
 	name := strings.TrimSpace(r.FormValue("name"))
 	path := strings.TrimSpace(r.FormValue("path"))
+	epFmt := strings.TrimSpace(r.FormValue("episode_format"))
 	ttlRaw := strings.TrimSpace(r.FormValue("retention_ttl_days"))
 	clearRetention := ttlRaw == ""
 	var retention *int64
@@ -981,12 +983,32 @@ func (h *Handler) actionUpdateRoot(w http.ResponseWriter, r *http.Request) {
 			retention = ttl
 		}
 	}
-	_, err := h.Library.UpdateRoot(id, &name, &path, retention, clearRetention)
+	if _, ok := r.Form["episode_format"]; ok {
+		if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain); busy {
+			redirectSettings(w, r, "/settings/library", "err="+urlQuery("Cancel or wait for 'Apply episode format' before changing formats"))
+			return
+		}
+	}
+	var epPtr *string
+	if _, ok := r.Form["episode_format"]; ok {
+		epPtr = &epFmt
+	}
+	_, err := h.Library.UpdateRoot(id, &name, &path, epPtr, retention, clearRetention)
 	if err != nil {
 		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
 		return
 	}
 	redirectSettings(w, r, "/settings/library", "ok=root-updated")
+}
+
+func (h *Handler) actionDeleteRoot(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	if err := h.Library.DeleteRoot(id); err != nil {
+		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+		return
+	}
+	redirectSettings(w, r, "/settings/library", "ok=root-deleted")
 }
 
 // parseRetentionTTLDays reads UI days and returns stored seconds (nil = keep forever).

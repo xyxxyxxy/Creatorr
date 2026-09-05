@@ -30,7 +30,7 @@ func TestTickEnqueuesCatchupScanAndDownloadWanted(t *testing.T) {
 
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
-	root, err := lib.CreateRoot("r", t.TempDir(), nil)
+	root, err := lib.CreateRoot("r", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestRunSkipsMissedSchedulesAtBoot(t *testing.T) {
 
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
-	root, err := lib.CreateRoot("r", t.TempDir(), nil)
+	root, err := lib.CreateRoot("r", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestTickEnqueuesFullScanWhenBackfillIncomplete(t *testing.T) {
 
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
-	root, err := lib.CreateRoot("r", t.TempDir(), nil)
+	root, err := lib.CreateRoot("r", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestFileSyncMarksMissing(t *testing.T) {
 	_ = settings.SeedDefaults(d)
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
-	root, err := lib.CreateRoot("r", t.TempDir(), nil)
+	root, err := lib.CreateRoot("r", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestFileSyncRestoresMissing(t *testing.T) {
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
 	rootDir := t.TempDir()
-	root, err := lib.CreateRoot("r", rootDir, nil)
+	root, err := lib.CreateRoot("r", rootDir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +378,7 @@ func TestFileSyncSkipsOfflineRoot(t *testing.T) {
 	if err := os.MkdirAll(offline, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	root, err := lib.CreateRoot("r", offline, nil)
+	root, err := lib.CreateRoot("r", offline, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -436,7 +436,7 @@ func TestRetentionPurge(t *testing.T) {
 	lib := library.NewStore(d, q)
 	ttl := int64(60)
 	rootDir := t.TempDir()
-	root, err := lib.CreateRoot("r", rootDir, &ttl)
+	root, err := lib.CreateRoot("r", rootDir, "", &ttl)
 	if err != nil {
 		t.Fatal(err)
 	}

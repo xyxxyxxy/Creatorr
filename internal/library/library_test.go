@@ -39,7 +39,7 @@ func openLib(t *testing.T) *library.Store {
 
 func seedRootProfile(t *testing.T, s *library.Store) (rootID, profileID int64) {
 	t.Helper()
-	r, err := s.CreateRoot("archive", t.TempDir(), nil)
+	r, err := s.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestSeriesCRUDAndScan(t *testing.T) {
 	}
 
 	newTitle := "Demo Renamed"
-	r2, err := s.CreateRoot("other", t.TempDir(), nil)
+	r2, err := s.CreateRoot("other", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,7 +353,7 @@ func TestEnqueueDownloadRequiresSeriesMonitored(t *testing.T) {
 func TestListSeriesFiltered(t *testing.T) {
 	s := openLib(t)
 	rootA, profileA := seedRootProfile(t, s)
-	rootB, err := s.CreateRoot("inbox", t.TempDir(), nil)
+	rootB, err := s.CreateRoot("inbox", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1200,7 +1200,7 @@ func TestEnqueueDownloadWantedSkipsOrphanAndUnmonitoredDomain(t *testing.T) {
 func TestDeleteSeriesKeepsOrRemovesFiles(t *testing.T) {
 	s := openLib(t)
 	libRoot := t.TempDir()
-	root, err := s.CreateRoot("archive", libRoot, nil)
+	root, err := s.CreateRoot("archive", libRoot, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1301,7 +1301,7 @@ func TestDeleteSeriesKeepsOrRemovesFiles(t *testing.T) {
 func TestDeleteSourcePurgesVideosAndFiles(t *testing.T) {
 	s := openLib(t)
 	libRoot := t.TempDir()
-	root, err := s.CreateRoot("archive", libRoot, nil)
+	root, err := s.CreateRoot("archive", libRoot, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

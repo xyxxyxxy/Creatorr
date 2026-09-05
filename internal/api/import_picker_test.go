@@ -26,7 +26,7 @@ func TestGetImportPicker(t *testing.T) {
 	_ = settings.SeedDefaults(d)
 	q := queue.NewStore(d)
 	lib := library.NewStore(d, q)
-	root, err := lib.CreateRoot("archive", t.TempDir(), nil)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

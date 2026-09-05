@@ -24,12 +24,13 @@ func TestOpenFreshSchema(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 4 {
-		t.Fatalf("schema_version=%d want 4", ver)
+	if ver != 5 {
+		t.Fatalf("schema_version=%d want 5", ver)
 	}
 	assertColumn(t, d.SQL, "sources", "full_scan_limit", true)
 	assertColumn(t, d.SQL, "sources", "scan_cutoff", false)
 	assertColumn(t, d.SQL, "videos", "acquired_via", true)
+	assertColumn(t, d.SQL, "root_folders", "episode_format", true)
 }
 
 func TestMigrateV2AddsFullScanLimitDropsCutoff(t *testing.T) {
@@ -95,8 +96,8 @@ func TestMigrateV2AddsFullScanLimitDropsCutoff(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 4 {
-		t.Fatalf("schema_version=%d want 4", ver)
+	if ver != 5 {
+		t.Fatalf("schema_version=%d want 5", ver)
 	}
 	assertColumn(t, d.SQL, "sources", "full_scan_limit", true)
 	assertColumn(t, d.SQL, "sources", "scan_cutoff", false)
@@ -178,8 +179,8 @@ func TestMigrateV3ClearsSourceHold(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 4 {
-		t.Fatalf("schema_version=%d want 4", ver)
+	if ver != 5 {
+		t.Fatalf("schema_version=%d want 5", ver)
 	}
 	var st string
 	if err := d.SQL.QueryRow(`SELECT status FROM videos WHERE id = 1`).Scan(&st); err != nil {
@@ -242,8 +243,8 @@ func TestMigrateV4AddsAcquiredVia(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 4 {
-		t.Fatalf("schema_version=%d want 4", ver)
+	if ver != 5 {
+		t.Fatalf("schema_version=%d want 5", ver)
 	}
 	assertColumn(t, d.SQL, "videos", "acquired_via", true)
 
@@ -265,6 +266,68 @@ func TestMigrateV4AddsAcquiredVia(t *testing.T) {
 	}
 	if via3 != "source" {
 		t.Fatalf("video 3 acquired_via=%q want source", via3)
+	}
+}
+
+func TestMigrateV5AddsRootEpisodeFormat(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "epfmt.db")
+	sqlDB, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = sqlDB.Exec(`
+		CREATE TABLE schema_version (version INTEGER NOT NULL);
+		INSERT INTO schema_version (version) VALUES (4);
+		CREATE TABLE root_folders (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL DEFAULT '',
+			path TEXT NOT NULL UNIQUE,
+			retention_ttl_seconds INTEGER
+		);
+		CREATE TABLE settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);
+		INSERT INTO root_folders (name, path) VALUES ('A', '/a'), ('B', '/b');
+		INSERT INTO settings (key, value) VALUES ('episode_format', '{date} [{id}]');
+	`)
+	if err != nil {
+		_ = sqlDB.Close()
+		t.Fatal(err)
+	}
+	_ = sqlDB.Close()
+
+	d, err := db.Open(path)
+	if err != nil {
+		t.Fatalf("open migrate: %v", err)
+	}
+	defer func() { _ = d.Close() }()
+
+	var ver int
+	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
+		t.Fatal(err)
+	}
+	if ver != 5 {
+		t.Fatalf("schema_version=%d want 5", ver)
+	}
+	assertColumn(t, d.SQL, "root_folders", "episode_format", true)
+
+	var fmtA, fmtB string
+	if err := d.SQL.QueryRow(`SELECT episode_format FROM root_folders WHERE path = '/a'`).Scan(&fmtA); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SQL.QueryRow(`SELECT episode_format FROM root_folders WHERE path = '/b'`).Scan(&fmtB); err != nil {
+		t.Fatal(err)
+	}
+	if fmtA != "{date} [{id}]" || fmtB != "{date} [{id}]" {
+		t.Fatalf("episode_format A=%q B=%q want {date} [{id}]", fmtA, fmtB)
+	}
+	var n int
+	if err := d.SQL.QueryRow(`SELECT COUNT(*) FROM settings WHERE key = 'episode_format'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("settings episode_format rows=%d want 0", n)
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/library/nametemplate"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
@@ -19,18 +18,23 @@ type NamingConfig struct {
 	EpisodeFormat string // relative path under series folder (may include /); required non-empty after Load
 }
 
-// LoadNamingConfig reads pack naming settings from the DB.
-func LoadNamingConfig(database *db.DB) NamingConfig {
+// NamingConfigFromRoot builds NamingConfig from a root folder row.
+func NamingConfigFromRoot(root *RootFolder) NamingConfig {
 	cfg := NamingConfig{EpisodeFormat: DefaultEpisodeFormat}
-	if database == nil {
+	if root == nil {
 		return cfg
 	}
-	raw, err := settings.GetEpisodeFormat(database)
-	if err != nil {
-		return cfg
-	}
-	cfg.EpisodeFormat = raw
+	cfg.EpisodeFormat = settings.NormalizeEpisodeFormat(root.EpisodeFormat)
 	return cfg
+}
+
+// LoadNamingConfigForRoot loads pack naming from the root folder row.
+func (s *Store) LoadNamingConfigForRoot(rootID int64) NamingConfig {
+	root, err := s.GetRoot(rootID)
+	if err != nil {
+		return NamingConfig{EpisodeFormat: DefaultEpisodeFormat}
+	}
+	return NamingConfigFromRoot(root)
 }
 
 // EpisodePaths is the on-disk layout for one packed episode (stem without ext).

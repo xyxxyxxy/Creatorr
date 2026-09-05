@@ -420,7 +420,7 @@ func ImportHandler(d Deps) TaskHandler {
 				SourceSite:    uidType,
 				Domain:        library.NamingDomain(dlctx.URL),
 			},
-			library.LoadNamingConfig(d.Library.DB), infoSrc, thumbSrc, subSrcs,
+			library.NamingConfig{EpisodeFormat: dlctx.EpisodeFormat}, infoSrc, thumbSrc, subSrcs,
 		)
 		if err != nil {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "install failed"), err.Error())
@@ -1043,7 +1043,7 @@ func finishArchivePack(
 	epMeta := library.EpisodeMetaFromVideo(v, dlctx.SeriesTitle, season, episode, aired, runtime)
 	mediaPath, nfoPath, infoPath, thumbPath, subPaths, err := library.PackMedia(
 		media, dlctx.RootPath, epMeta,
-		library.LoadNamingConfig(d.Library.DB), infoSrc, thumbSrc, subSrcs,
+		library.NamingConfig{EpisodeFormat: dlctx.EpisodeFormat}, infoSrc, thumbSrc, subSrcs,
 	)
 	if err != nil {
 		return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "pack failed"), err.Error())
