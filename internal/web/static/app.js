@@ -1100,6 +1100,21 @@
     let incoming = detail.fragment;
     if (incoming && incoming.nodeType === 11) incoming = incoming.firstElementChild;
     if (!target || !incoming) return;
+    // Edit series Title/Root lock: skip while modal open; skip when busy flag unchanged.
+    if (target.id === "edit-series-settings-fields") {
+      const modal = document.getElementById("modal-edit-series");
+      if (modal && modal.checked) {
+        detail.shouldSwap = false;
+        return;
+      }
+      if (
+        target.getAttribute("data-folder-rename-busy") ===
+        incoming.getAttribute("data-folder-rename-busy")
+      ) {
+        detail.shouldSwap = false;
+      }
+      return;
+    }
     if (
       target.classList.contains("source-status-cell") &&
       incoming.classList.contains("source-status-cell")
@@ -2314,6 +2329,98 @@
     root.querySelectorAll("[aria-invalid]").forEach((el) => el.removeAttribute("aria-invalid"));
   }
   window.clearFormControlValidity = clearFormControlValidity;
+
+  /** Absolute path: Unix "/" or Windows drive "C:\\" / "C:/". */
+  function isAbsolutePathClient(p) {
+    const s = String(p || "").trim();
+    if (!s) return false;
+    if (s.startsWith("/")) return true;
+    return /^[A-Za-z]:[\\/]/.test(s);
+  }
+
+  function setRootFolderFormErr(form, data) {
+    if (!form) return;
+    clearFormControlValidity(form);
+    const msg = String((data && (data.error || data.message)) || "").replace(/^invalid:\s*/i, "").trim();
+    if (!msg) return;
+    const fieldName = String((data && data.field) || "").trim();
+    let field = fieldName ? form.querySelector('[name="' + fieldName + '"]') : null;
+    if (!field) {
+      const lower = msg.toLowerCase();
+      if (/\bpath\b/.test(lower)) field = form.querySelector('input[name="path"]');
+      else if (/episode/.test(lower)) field = form.querySelector('input[name="episode_format"]');
+      else if (/retention/.test(lower)) field = form.querySelector('input[name="retention_ttl_days"]');
+    }
+    if (field) {
+      setControlValidity(field, msg);
+      try {
+        field.focus();
+        if (typeof field.select === "function") field.select();
+      } catch (_) {}
+      return;
+    }
+    if (typeof window.showFlashToast === "function") {
+      window.showFlashToast(msg, { error: true });
+    }
+  }
+
+  // AJAX root folder save: keep modal open and invalidate Path (etc.) on error.
+  document.body.addEventListener("submit", async (ev) => {
+    const form = ev.target.closest("form.js-root-folder-form");
+    if (!form) return;
+    ev.preventDefault();
+    clearFormControlValidity(form);
+    const pathEl = form.querySelector('input[name="path"]');
+    const pathVal = String((pathEl && pathEl.value) || "").trim();
+    if (!pathVal) {
+      setControlValidity(pathEl, "path required");
+      try {
+        pathEl && pathEl.focus();
+      } catch (_) {}
+      return;
+    }
+    if (!isAbsolutePathClient(pathVal)) {
+      setControlValidity(pathEl, "path must be absolute");
+      try {
+        pathEl.focus();
+        if (typeof pathEl.select === "function") pathEl.select();
+      } catch (_) {}
+      return;
+    }
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+    const body = new URLSearchParams();
+    form.querySelectorAll("input, select, textarea").forEach((el) => {
+      if (!el.name || el.disabled || el.type === "submit" || el.type === "button") return;
+      if (el.type === "checkbox" || el.type === "radio") {
+        if (el.checked) body.append(el.name, el.value || "1");
+        return;
+      }
+      body.append(el.name, el.value);
+    });
+    try {
+      const res = await fetch(form.getAttribute("action") || "/actions/add-root", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        },
+        body: body.toString(),
+        credentials: "same-origin",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRootFolderFormErr(form, data);
+        return;
+      }
+      const loc = (data && data.redirect) || "/settings/library";
+      location.assign(loc);
+    } catch (e) {
+      setRootFolderFormErr(form, { error: e && e.message ? e.message : "Save failed" });
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
 
   function addSeriesURLInvalid(form) {
     if (!form) return false;

@@ -153,7 +153,7 @@
 <div class="modal">
   <div class="modal-box max-w-3xl">
     <h3 class="font-bold text-lg mb-2">Add root folder</h3>
-        <form method="post" action="/actions/add-root" class="space-y-2">
+        <form method="post" action="/actions/add-root" class="space-y-2 js-root-folder-form">
       <input type="hidden" name="redirect" value="/settings/library" />
       {{template "field_input" (dict
         "Name" "path"
@@ -162,6 +162,8 @@
         "Required" true
         "Placeholder" "/library"
         "Autocomplete" "off"
+        "Validator" true
+        "ValidatorHint" "Path must be absolute"
         "Hint" "Absolute path on disk."
       )}}
       {{template "field_input" (dict
@@ -180,6 +182,8 @@
         "Required" true
         "JoinPrefix" "{series:100}/"
         "JoinSuffix" ".ext"
+        "Validator" true
+        "ValidatorHint" "Episode format is required"
         "Hint" "Relative path under the series folder for packed episodes (no extension). Apply to existing files with 'Apply episode format' under 'Settings → Maintenance'."
       )}}
       {{template "episode_format_tokens"}}
@@ -190,6 +194,8 @@
         "Min" "1"
         "Placeholder" "Forever"
         "JoinSuffix" "days"
+        "Validator" true
+        "ValidatorHint" "Invalid retention"
         "Hint" "Days after pack before retention delete may remove artifacts."
       )}}
       <div class="modal-action">
@@ -206,7 +212,7 @@
 <div class="modal">
   <div class="modal-box max-w-3xl">
     <h3 class="font-bold text-lg mb-2">Edit root{{if .Name}} {{.Name}}{{end}}</h3>
-        <form method="post" action="/actions/update-root" class="space-y-2">
+        <form method="post" action="/actions/update-root" class="space-y-2 js-root-folder-form">
       <input type="hidden" name="id" value="{{.ID}}" />
       <input type="hidden" name="redirect" value="/settings/library" />
       {{template "field_input" (dict
@@ -214,6 +220,8 @@
         "Label" "Path"
         "Value" .Path
         "Required" true
+        "Validator" true
+        "ValidatorHint" "Path must be absolute"
         "Hint" "Absolute path on disk."
       )}}
       {{template "field_input" (dict
@@ -232,6 +240,8 @@
         "JoinSuffix" ".ext"
         "Disabled" $.NamingLocked
         "DisabledTitle" "'Episode format' is locked while 'Apply episode format' is pending or running."
+        "Validator" true
+        "ValidatorHint" "Episode format is required"
         "Hint" "Relative path under the series folder for packed episodes (no extension). Apply to existing files with 'Apply episode format' under 'Settings → Maintenance'."
       )}}
       {{template "episode_format_tokens"}}
@@ -243,6 +253,8 @@
         "Placeholder" "Forever"
         "Value" (retentionDaysValue .RetentionTTLSeconds)
         "JoinSuffix" "days"
+        "Validator" true
+        "ValidatorHint" "Invalid retention"
         "Hint" "Days after pack before retention delete may remove artifacts."
       )}}
       <div class="modal-action">

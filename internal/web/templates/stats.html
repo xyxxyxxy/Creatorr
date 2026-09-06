@@ -6,21 +6,19 @@
 
 {{template "list_panel"}}
 <h2 class="text-lg font-semibold">Library size</h2>
-<p class="text-sm opacity-60 -mt-1 mb-2">
+<p class="text-sm opacity-60 mt-0.5 mb-2">
   Total media bytes (<span class="font-mono">kind=video</span>).{{if gt .RootCount 1}} Split by root folder and by series.{{else}} Split by series.{{end}}
   Click a series slice to open that series.
 </p>
 <div class="grid gap-4{{if gt .RootCount 1}} lg:grid-cols-2{{end}}">
   {{if gt .RootCount 1}}
-  <div>
+  <div class="min-w-0">
     <h3 class="text-base font-semibold mb-1">By root folder</h3>
-    <p class="label mb-2">Share of library media bytes per root folder.</p>
     <div id="chart-library-size-root" class="w-full h-80 bg-base-200 rounded-box"></div>
   </div>
   {{end}}
-  <div>
+  <div class="min-w-0">
     <h3 class="text-base font-semibold mb-1">By series</h3>
-    <p class="label mb-2">Top 10 series by media bytes; remaining series are Other. Click a series slice to open it.</p>
     <div id="chart-library-size-series" class="w-full h-80 bg-base-200 rounded-box"></div>
   </div>
 </div>
@@ -28,19 +26,19 @@
 
 {{template "list_panel"}}
 <h2 class="text-lg font-semibold">Video status</h2>
-<p class="text-sm -mt-1 mb-2">Wanted and downloaded (archive) video counts over time.</p>
+<p class="text-sm opacity-60 mt-0.5 mb-2">Wanted and downloaded (archive) video counts over time.</p>
 <div id="chart-video-status" class="w-full h-80 bg-base-200 rounded-box"></div>
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
 <h2 class="text-lg font-semibold">Queue depth</h2>
-<p class="text-sm -mt-1 mb-2">Pending + running download and scan tasks.</p>
+<p class="text-sm opacity-60 mt-0.5 mb-2">Pending + running download and scan tasks.</p>
 <div id="chart-queue" class="w-full h-80 bg-base-200 rounded-box"></div>
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
 <h2 class="text-lg font-semibold">Storage development</h2>
-<p class="text-sm -mt-1 mb-2">Total packed media bytes over time. Sampled daily (UTC); shown for up to 1 month.</p>
+<p class="text-sm opacity-60 mt-0.5 mb-2">Total packed media bytes over time. Sampled daily (UTC); shown for up to 1 month.</p>
 <div id="chart-storage" class="w-full h-80 bg-base-200 rounded-box"></div>
 {{template "list_panel_end"}}
 

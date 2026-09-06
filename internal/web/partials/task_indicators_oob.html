@@ -5,4 +5,6 @@
 {{template "source_stalled" .}}
 {{template "source_scan_actions" .}}
 {{end}}
+{{if .EditSettings}}{{template "edit_series_settings_fields" .EditSettings}}{{end}}
 {{end}}
+

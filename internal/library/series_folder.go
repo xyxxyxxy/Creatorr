@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// ErrSeriesBusy is returned when title/root change is blocked by media tasks.
-var ErrSeriesBusy = fmt.Errorf("%w: series has pending or running download/pack tasks - wait or cancel first", ErrInvalid)
+// ErrSeriesBusy is returned when title/root change is blocked by media tasks for this series.
+var ErrSeriesBusy = fmt.Errorf("%w: series has pending or running download, SponsorBlock cut, or media verify tasks - wait or cancel first", ErrInvalid)
 
 // MoveSeriesFolder renames/moves the on-disk series directory and rewrites files.path prefixes.
 // oldTitle/oldRootID describe the previous location; ser reflects the new title/root already in DB.
