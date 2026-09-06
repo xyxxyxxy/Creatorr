@@ -212,6 +212,53 @@ func POTProvider(ctx context.Context, database *db.DB, taskID int64, domain, det
 	return SendEvent(ctx, database, EventPOTProvider, title, body, taskID)
 }
 
+// PathCollisionSample is one leftover or newly-suffixed episode path.
+type PathCollisionSample struct {
+	VideoID int64
+	Path    string
+	Ideal   string
+}
+
+// PathCollisionPacked warns that pack installed under a _N stem to avoid overwrite.
+func PathCollisionPacked(ctx context.Context, database *db.DB, taskID int64, series, title, idealBase, chosenBase string, suffix int) error {
+	ser := strings.TrimSpace(series)
+	vid := strings.TrimSpace(title)
+	if ser == "" {
+		ser = "series"
+	}
+	if vid == "" {
+		vid = "episode"
+	}
+	nTitle := fmt.Sprintf("Path collision: %s", vid)
+	body := fmt.Sprintf(
+		"Packed %s / %s under _%d because the ideal path was occupied.\nIdeal: %s\nChosen: %s\nUpdate episode format or resolve the other file, then Apply episode format.",
+		ser, vid, suffix, idealBase, chosenBase,
+	)
+	return SendEvent(ctx, database, EventPathCollision, nTitle, body, taskID)
+}
+
+// PathCollisionRemaining warns that collision _N stems remain after Apply.
+func PathCollisionRemaining(ctx context.Context, database *db.DB, taskID int64, samples []PathCollisionSample) error {
+	if len(samples) == 0 {
+		return nil
+	}
+	nTitle := fmt.Sprintf("Path collision leftover (%d)", len(samples))
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d episode path(s) still use a _N collision suffix after Apply. Update format or resolve conflicts, then Apply again.\n", len(samples))
+	limit := len(samples)
+	if limit > 8 {
+		limit = 8
+	}
+	for i := 0; i < limit; i++ {
+		s := samples[i]
+		fmt.Fprintf(&b, "\n[#%d] %s\n  ideal: %s", s.VideoID, s.Path, s.Ideal)
+	}
+	if len(samples) > limit {
+		fmt.Fprintf(&b, "\n…and %d more", len(samples)-limit)
+	}
+	return SendEvent(ctx, database, EventPathCollision, nTitle, b.String(), taskID)
+}
+
 // DigestItem is one completed media item in a download_digest.
 type DigestItem struct {
 	VideoID   int64  // library video id when known (for Related to links)

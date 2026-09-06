@@ -461,7 +461,7 @@ func ImportHandler(d Deps) TaskHandler {
 		}
 		thumbSrc, cleanupThumb := library.MaterializeThumbSrc(thumbCompanion, thumbURL)
 		defer cleanupThumb()
-		mediaPath, nfoPath, infoPath, thumbPath, subPaths, err := library.PackMedia(
+		mediaPath, nfoPath, infoPath, thumbPath, subPaths, pathSuffix, err := library.PackMedia(
 			abs, dlctx.RootPath,
 			library.EpisodeNFO{
 				SeriesTitle:   dlctx.SeriesTitle,
@@ -488,6 +488,11 @@ func ImportHandler(d Deps) TaskHandler {
 		)
 		if err != nil {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "install failed"), err.Error())
+		}
+		if pathSuffix > 0 {
+			chosen := strings.TrimSuffix(mediaPath, filepath.Ext(mediaPath))
+			ideal := strings.TrimSuffix(chosen, fmt.Sprintf("_%d", pathSuffix))
+			_ = notify.PathCollisionPacked(ctx, d.Library.DB, t.ID, dlctx.SeriesTitle, dlctx.Video.Title, ideal, chosen, pathSuffix)
 		}
 		// Drop leftover inbox sidecars after a successful pack (media was moved).
 		leftovers := []string{srcNFO, infoSrc}
@@ -1093,12 +1098,17 @@ func finishArchivePack(
 		runtime = int(v.DurationSeconds.Int64)
 	}
 	epMeta := library.EpisodeMetaFromVideo(v, dlctx.SeriesTitle, season, episode, aired, runtime)
-	mediaPath, nfoPath, infoPath, thumbPath, subPaths, err := library.PackMedia(
+	mediaPath, nfoPath, infoPath, thumbPath, subPaths, pathSuffix, err := library.PackMedia(
 		media, dlctx.RootPath, epMeta,
 		library.NamingConfig{EpisodeFormat: dlctx.EpisodeFormat}, infoSrc, thumbSrc, subSrcs,
 	)
 	if err != nil {
 		return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "pack failed"), err.Error())
+	}
+	if pathSuffix > 0 {
+		chosen := strings.TrimSuffix(mediaPath, filepath.Ext(mediaPath))
+		ideal := strings.TrimSuffix(chosen, fmt.Sprintf("_%d", pathSuffix))
+		_ = notify.PathCollisionPacked(context.Background(), d.Library.DB, t.ID, dlctx.SeriesTitle, v.Title, ideal, chosen, pathSuffix)
 	}
 	meta := library.MediaCompleteMeta{
 		AcquiredVia:            library.AcquiredViaSource,

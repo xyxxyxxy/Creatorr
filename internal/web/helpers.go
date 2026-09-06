@@ -149,6 +149,8 @@ func flashFromQuery(r *http.Request) *flash {
 	switch ok {
 	case "updated":
 		return flashOK("Series updated.")
+	case "series-rename":
+		return flashOK("Series updated. File rename queued.")
 	case "bulk_edit_queued":
 		return flashOK("Bulk edit queued.")
 	case "bulk_monitored":
@@ -177,6 +179,8 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Series metadata saved (tvshow.nfo + art).")
 	case "video-metadata":
 		return flashOK("Episode metadata saved.")
+	case "video-metadata-rename":
+		return flashOK("Episode metadata saved. File rename queued.")
 	case "video-metadata-busy":
 		return flashOK("Episode metadata saved. Rename skipped while a download or pack task is busy - run Apply episode format later.")
 	case "download":

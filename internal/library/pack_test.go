@@ -89,7 +89,7 @@ func TestPackMediaCopiesSidecars(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	mediaPath, nfoPath, infoPath, thumbPath, subPaths, err := library.PackMedia(
+	mediaPath, nfoPath, infoPath, thumbPath, subPaths, _, err := library.PackMedia(
 		media, root,
 		library.EpisodeNFO{
 			SeriesTitle: "Show", Title: "Ep", Season: 1, Episode: 2,
@@ -131,7 +131,7 @@ func TestPackMediaCopiesDashThumb(t *testing.T) {
 	if err := os.WriteFile(thumb, []byte("t"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, _, _, thumbPath, _, err := library.PackMedia(
+	_, _, _, thumbPath, _, _, err := library.PackMedia(
 		media, root,
 		library.EpisodeNFO{
 			SeriesTitle: "Show", Title: "Ep", Season: 1, Episode: 2,

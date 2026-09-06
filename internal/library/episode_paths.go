@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library/nametemplate"
@@ -151,4 +152,56 @@ func DestinationOccupied(dst string, currentPaths []string) bool {
 		}
 	}
 	return true
+}
+
+// MaxEpisodePathSuffix is the highest _N tried when packing around a collision.
+const MaxEpisodePathSuffix = 99
+
+// DisambiguateEpisodeBase returns base, or base_N when base+ext is occupied.
+// currentPaths are treated as free (same video's files). n is 0 when base is free.
+func DisambiguateEpisodeBase(base, ext string, currentPaths []string) (newBase string, n int, err error) {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return "", 0, fmt.Errorf("empty episode base")
+	}
+	if ext != "" && !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+	if !DestinationOccupied(base+ext, currentPaths) {
+		return base, 0, nil
+	}
+	for i := 1; i <= MaxEpisodePathSuffix; i++ {
+		cand := fmt.Sprintf("%s_%d", base, i)
+		if !DestinationOccupied(cand+ext, currentPaths) {
+			return cand, i, nil
+		}
+	}
+	return "", 0, fmt.Errorf("no free path suffix for %s", base)
+}
+
+// CollisionSuffixN reports whether actualBase is idealBase plus _N (N >= 1).
+func CollisionSuffixN(actualBase, idealBase string) (n int, ok bool) {
+	actualBase = filepath.Clean(strings.TrimSpace(actualBase))
+	idealBase = filepath.Clean(strings.TrimSpace(idealBase))
+	if actualBase == "" || idealBase == "" || actualBase == idealBase {
+		return 0, false
+	}
+	prefix := idealBase + "_"
+	if !strings.HasPrefix(actualBase, prefix) {
+		return 0, false
+	}
+	suf := strings.TrimPrefix(actualBase, prefix)
+	if suf == "" {
+		return 0, false
+	}
+	for _, r := range suf {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.Atoi(suf)
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	return n, true
 }

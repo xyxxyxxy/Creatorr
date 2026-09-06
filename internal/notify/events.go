@@ -17,6 +17,7 @@ const (
 	EventVerifyFailed    = "verify_failed"
 	EventFileSyncIssues  = "file_sync_issues"
 	EventPOTProvider     = "pot_provider"
+	EventPathCollision   = "path_collision"
 	EventDownloadDigest  = "download_digest"
 	EventLiveSkipped     = "live_skipped"
 	EventArchiveFallback = "archive_fallback"
@@ -46,6 +47,7 @@ var AllEvents = []string{
 	EventCookieInvalid,
 	EventRateLimited,
 	EventPOTProvider,
+	EventPathCollision,
 }
 
 // EventLabels are short UI labels for event checkboxes.
@@ -56,6 +58,7 @@ var EventLabels = map[string]string{
 	EventVerifyFailed:    "Verify failed",
 	EventFileSyncIssues:  "File sync issues",
 	EventPOTProvider:     "PO token provider",
+	EventPathCollision:   "Episode path collision",
 	EventDownloadDigest:  "Downloads finished (digest)",
 	EventLiveSkipped:     "Live broadcast skipped",
 	EventArchiveFallback: "Web Archive fallback used",
@@ -73,6 +76,7 @@ var AlertEvents = []string{
 // WarningEvents are unread-eligible warnings (same in-app unread rules as alerts).
 var WarningEvents = []string{
 	EventPOTProvider,
+	EventPathCollision,
 }
 
 func validEvent(id string) bool {
@@ -198,7 +202,7 @@ func NormalizeEvents(ids []string) ([]string, error) {
 
 func notifyTypeFor(event string) apprise.NotifyType {
 	switch event {
-	case EventCookieInvalid, EventRateLimited, EventPOTProvider:
+	case EventCookieInvalid, EventRateLimited, EventPOTProvider, EventPathCollision:
 		return apprise.NotifyWarning
 	case EventYtDlpFailed, EventVerifyFailed, EventFileSyncIssues:
 		return apprise.NotifyFailure

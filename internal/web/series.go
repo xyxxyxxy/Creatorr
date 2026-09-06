@@ -1127,7 +1127,7 @@ func (h *Handler) actionUpdateSeries(w http.ResponseWriter, r *http.Request) {
 	rootID, _ := strconv.ParseInt(r.FormValue("root_id"), 10, 64)
 	qpID, _ := strconv.ParseInt(r.FormValue("quality_profile_id"), 10, 64)
 	dm := library.NormalizeDeliveryMode(r.FormValue("delivery_mode"))
-	_, err := h.Library.UpdateSeries(sid, library.UpdateSeriesParams{
+	out, err := h.Library.UpdateSeriesDetailed(sid, library.UpdateSeriesParams{
 		Title:            &title,
 		RootID:           &rootID,
 		QualityProfileID: &qpID,
@@ -1142,7 +1142,11 @@ func (h *Handler) actionUpdateSeries(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/series/%d?ok=updated", sid), http.StatusSeeOther)
+	ok := "updated"
+	if out.RenameQueued {
+		ok = "series-rename"
+	}
+	http.Redirect(w, r, fmt.Sprintf("/series/%d?ok=%s", sid, ok), http.StatusSeeOther)
 }
 
 func (h *Handler) actionAddSource(w http.ResponseWriter, r *http.Request) {

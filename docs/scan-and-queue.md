@@ -25,7 +25,7 @@ There is **no** global Settings `scan_cron`.
 | `import` | `system` | Per-video duplicate guard |
 | `sync_files` | `system` | One pending/running; cron or Maintenance → Scan root folders; higher priority than Apply |
 | `retention_delete` | `system` | One pending/running; cron enqueues at higher priority than Apply |
-| `rename_episodes` | `system` | One pending/running; Settings → Maintenance → Apply episode format |
+| `rename_episodes` | `system` | Full Apply: one pending/running library-wide. Scoped (`series_id` / `video_ids`) may coexist with full Apply; pending video-scoped tasks merge `video_ids`. Maintenance → Apply episode format; also Metadata title/date and Edit series |
 | `regenerate_nfo` | `system` | One pending/running; Settings → Maintenance → Regenerate NFO; resumable cursors |
 | `verify_all_media` | `system` | One pending/running; Settings → Maintenance → Verify all downloaded videos; resumable cursor |
 | `bulk_edit_series` | `system` | One pending/running; bulk settings and/or metadata override for selected series (UI + `POST /api/series/bulk-edit` / `bulk-metadata`) |

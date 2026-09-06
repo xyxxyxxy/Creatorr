@@ -253,8 +253,8 @@ func (s *Store) BulkEditSeriesPass(ctx context.Context, task *queue.Task, progre
 }
 
 func (s *Store) applyBulkEditOne(ser *Series, p bulkEditSeriesPayload) error {
-	if p.RootID != nil || p.QualityProfileID != nil || p.DeliveryMode != nil {
-		up := UpdateSeriesParams{}
+		if p.RootID != nil || p.QualityProfileID != nil || p.DeliveryMode != nil {
+		up := UpdateSeriesParams{SyncDisk: true}
 		if p.RootID != nil {
 			up.RootID = p.RootID
 		}

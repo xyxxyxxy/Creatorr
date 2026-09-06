@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
@@ -168,6 +169,81 @@ func TestSystemApplyDuplicateRejected(t *testing.T) {
 	}
 	if _, err := s.EnqueueRenameEpisodes(); err == nil {
 		t.Fatal("expected duplicate")
+	}
+}
+
+func TestScopedRenameCoexistsWithFullApply(t *testing.T) {
+	s := openLib(t)
+	if _, err := s.EnqueueRenameEpisodes(); err != nil {
+		t.Fatal(err)
+	}
+	tid, err := s.EnqueueRenameEpisodesVideos([]int64{1, 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tid <= 0 {
+		t.Fatal("expected scoped task")
+	}
+	tid2, err := s.EnqueueRenameEpisodesVideos([]int64{2, 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tid2 != tid {
+		t.Fatalf("expected merge into pending scoped task, got %d want %d", tid2, tid)
+	}
+	task, err := s.Queue.GetTask(tid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(task.Payload, "3") {
+		t.Fatalf("merged payload missing id 3: %s", task.Payload)
+	}
+}
+
+func TestDisambiguateEpisodeBase(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "ep")
+	if err := os.WriteFile(base+".mkv", []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, n, err := library.DisambiguateEpisodeBase(base, ".mkv", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || got != base+"_1" {
+		t.Fatalf("got %q n=%d", got, n)
+	}
+}
+
+func TestPackMediaCollisionSuffix(t *testing.T) {
+	root := t.TempDir()
+	meta := library.EpisodeNFO{
+		SeriesTitle: "Show", Title: "Ep", Season: 2024, Episode: 31500, UniqueID: "abc",
+	}
+	cfg := library.NamingConfig{EpisodeFormat: library.DefaultEpisodeFormat}
+	paths, err := library.BuildEpisodePaths(root, meta, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(paths.EpisodeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.PrimaryBase+".mkv", []byte("occupied"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(root, "src.mkv")
+	if err := os.WriteFile(src, []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mediaPath, _, _, _, _, suffix, err := library.PackMedia(src, root, meta, cfg, "", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if suffix != 1 {
+		t.Fatalf("suffix=%d", suffix)
+	}
+	if !strings.HasSuffix(mediaPath, "_1.mkv") {
+		t.Fatalf("mediaPath=%q", mediaPath)
 	}
 }
 
