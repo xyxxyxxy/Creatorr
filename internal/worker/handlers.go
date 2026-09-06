@@ -367,7 +367,6 @@ func ImportHandler(d Deps) TaskHandler {
 			nfoBeside, _ := library.SidecarPathsBeside(abs)
 			infoBeside, thumbBeside, subBeside := library.FindDownloadSidecars(abs)
 			meta := library.MediaCompleteMeta{
-				Tool:        "import",
 				AcquiredVia: library.AcquiredViaImport,
 				ImportSrc: abs,
 				InPlace:   true,
@@ -505,7 +504,6 @@ func ImportHandler(d Deps) TaskHandler {
 			_ = os.Remove(leftover)
 		}
 		meta := library.MediaCompleteMeta{
-			Tool:        "import",
 			AcquiredVia: library.AcquiredViaImport,
 			ImportSrc:   abs,
 		}
@@ -1103,7 +1101,6 @@ func finishArchivePack(
 		return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "pack failed"), err.Error())
 	}
 	meta := library.MediaCompleteMeta{
-		Tool:                   "yt-dlp",
 		AcquiredVia:            library.AcquiredViaSource,
 		DownloadFormatSelector: formatSelector,
 	}

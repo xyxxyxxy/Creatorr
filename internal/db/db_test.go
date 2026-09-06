@@ -24,14 +24,15 @@ func TestOpenFreshSchema(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 6 {
-		t.Fatalf("schema_version=%d want 6", ver)
+	if ver != 7 {
+		t.Fatalf("schema_version=%d want 7", ver)
 	}
 	assertColumn(t, d.SQL, "sources", "full_scan_limit", true)
 	assertColumn(t, d.SQL, "sources", "scan_cutoff", false)
 	assertColumn(t, d.SQL, "sources", "auto_ignore_media_types", false)
 	assertColumn(t, d.SQL, "series", "auto_ignore_media_types", false)
 	assertColumn(t, d.SQL, "videos", "acquired_via", true)
+	assertColumn(t, d.SQL, "videos", "tool", false)
 	assertColumn(t, d.SQL, "root_folders", "episode_format", true)
 }
 
@@ -98,8 +99,8 @@ func TestMigrateV2AddsFullScanLimitDropsCutoff(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 6 {
-		t.Fatalf("schema_version=%d want 6", ver)
+	if ver != 7 {
+		t.Fatalf("schema_version=%d want 7", ver)
 	}
 	assertColumn(t, d.SQL, "sources", "full_scan_limit", true)
 	assertColumn(t, d.SQL, "sources", "scan_cutoff", false)
@@ -181,8 +182,8 @@ func TestMigrateV3ClearsSourceHold(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 6 {
-		t.Fatalf("schema_version=%d want 6", ver)
+	if ver != 7 {
+		t.Fatalf("schema_version=%d want 7", ver)
 	}
 	var st string
 	if err := d.SQL.QueryRow(`SELECT status FROM videos WHERE id = 1`).Scan(&st); err != nil {
@@ -245,8 +246,8 @@ func TestMigrateV4AddsAcquiredVia(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 6 {
-		t.Fatalf("schema_version=%d want 6", ver)
+	if ver != 7 {
+		t.Fatalf("schema_version=%d want 7", ver)
 	}
 	assertColumn(t, d.SQL, "videos", "acquired_via", true)
 
@@ -309,8 +310,8 @@ func TestMigrateV5AddsRootEpisodeFormat(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 6 {
-		t.Fatalf("schema_version=%d want 6", ver)
+	if ver != 7 {
+		t.Fatalf("schema_version=%d want 7", ver)
 	}
 	assertColumn(t, d.SQL, "root_folders", "episode_format", true)
 
@@ -398,8 +399,8 @@ func TestMigrateV6DropsAutoIgnoreColumns(t *testing.T) {
 		if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 			t.Fatal(err)
 		}
-		if ver != 6 {
-			t.Fatalf("schema_version=%d want 6", ver)
+		if ver != 7 {
+			t.Fatalf("schema_version=%d want 7", ver)
 		}
 		assertColumn(t, d.SQL, "sources", "auto_ignore_media_types", false)
 		assertColumn(t, d.SQL, "series", "auto_ignore_media_types", false)
@@ -470,12 +471,58 @@ func TestMigrateV6DropsAutoIgnoreColumns(t *testing.T) {
 		if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 			t.Fatal(err)
 		}
-		if ver != 6 {
-			t.Fatalf("schema_version=%d want 6", ver)
+		if ver != 7 {
+			t.Fatalf("schema_version=%d want 7", ver)
 		}
 		assertColumn(t, d.SQL, "sources", "auto_ignore_media_types", false)
 		assertColumn(t, d.SQL, "series", "auto_ignore_media_types", false)
 	})
+}
+
+
+func TestMigrateV7DropsVideosTool(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tool.db")
+	sqlDB, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = sqlDB.Exec(`
+		CREATE TABLE schema_version (version INTEGER NOT NULL);
+		INSERT INTO schema_version (version) VALUES (6);
+		CREATE TABLE videos (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			series_id INTEGER NOT NULL,
+			source_id INTEGER,
+			remote_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'wanted',
+			tool TEXT,
+			acquired_via TEXT NOT NULL DEFAULT 'source'
+		);
+		INSERT INTO videos (id, series_id, remote_id, title, status, tool, acquired_via)
+			VALUES (1, 1, 'a', 'A', 'downloaded', 'yt-dlp', 'source');
+	`)
+	if err != nil {
+		_ = sqlDB.Close()
+		t.Fatal(err)
+	}
+	_ = sqlDB.Close()
+
+	d, err := db.Open(path)
+	if err != nil {
+		t.Fatalf("open migrate: %v", err)
+	}
+	defer func() { _ = d.Close() }()
+
+	var ver int
+	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
+		t.Fatal(err)
+	}
+	if ver != 7 {
+		t.Fatalf("schema_version=%d want 7", ver)
+	}
+	assertColumn(t, d.SQL, "videos", "tool", false)
+	assertColumn(t, d.SQL, "videos", "acquired_via", true)
 }
 
 func assertColumn(t *testing.T, sqlDB *sql.DB, table, column string, want bool) {

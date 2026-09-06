@@ -534,10 +534,10 @@
       '<progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="0" max="100" aria-hidden="true"></progress>';
   }
 
-  /** Short span like "3min 2sec" (at most two units). Matches Go formatDurationCompact. */
+  /** Short span like "3min 2 sec" (at most two units). Matches Go formatDurationCompact. */
   function formatDurationCompact(totalSec) {
     let sec = Math.max(0, Math.floor(Number(totalSec) || 0));
-    if (sec < 1) return "1sec";
+    if (sec < 1) return "1 sec";
     const days = Math.floor(sec / 86400);
     sec -= days * 86400;
     const hours = Math.floor(sec / 3600);
@@ -551,23 +551,23 @@
     add(days, "d");
     add(hours, "h");
     add(minutes, "min");
-    if (days === 0) add(sec, "sec");
-    if (!parts.length) return "1sec";
+    if (days === 0) add(sec, " sec");
+    if (!parts.length) return "1 sec";
     if (parts.length > 2) parts.length = 2;
     return parts.join(" ");
   }
 
-  /** Short span with only the largest unit ("3min", "2h"). Matches Go formatDurationLargest. */
+  /** Short span with only the largest unit ("3min", "2h", "5 sec"). Matches Go formatDurationLargest. */
   function formatDurationLargest(totalSec) {
     let sec = Math.max(0, Math.floor(Number(totalSec) || 0));
-    if (sec < 1) return "1sec";
+    if (sec < 1) return "1 sec";
     const days = Math.floor(sec / 86400);
     if (days > 0) return days + "d";
     const hours = Math.floor(sec / 3600);
     if (hours > 0) return hours + "h";
     const minutes = Math.floor(sec / 60);
     if (minutes > 0) return minutes + "min";
-    return Math.max(1, sec) + "sec";
+    return Math.max(1, sec) + " sec";
   }
 
   function cooldownWaitTip(remSec) {
@@ -878,54 +878,45 @@
     const root = document.querySelector('[data-task-detail="' + id + '"]');
     if (!root) return false;
     const page = root.closest("main") || document;
-    if (typeof data.status === "string" && data.status) {
+    const statusChanged = typeof data.status === "string" && data.status;
+    if (statusChanged) {
       patchStatusCell(page, data.status);
+      if (root.hasAttribute("data-task-row-status")) {
+        root.setAttribute("data-task-row-status", data.status);
+      }
     }
     const msgEl = page.querySelector("[data-task-message]");
     if (msgEl) {
-      const st =
-        typeof data.status === "string" && data.status
-          ? data.status
-          : page.querySelector("[data-task-status]")?.getAttribute("aria-label") || "";
+      const st = statusChanged
+        ? data.status
+        : root.getAttribute("data-task-row-status") ||
+          page.querySelector("[data-task-status]")?.getAttribute("aria-label") ||
+          "";
       if (st === "pending") {
         msgEl.textContent = "Queued";
       } else if (typeof data.message === "string") {
         msgEl.textContent = data.message || "-";
       }
     }
-    if (Object.prototype.hasOwnProperty.call(data, "progress")) {
-      const cell = page.querySelector("[data-task-progress-cell]");
-      if (!cell) return true;
-      const raw =
-        data.progress != null && Number.isFinite(Number(data.progress))
-          ? Number(data.progress)
-          : null;
-      const mid = raw != null && raw > 0 && raw < 1;
-      let bar = page.querySelector("progress[data-task-progress]");
-      if (!bar) {
-        cell.textContent = "";
-        bar = document.createElement("progress");
-        bar.setAttribute("data-task-progress", "");
-        bar.className = "progress progress-primary w-full max-w-xs";
-        cell.appendChild(bar);
-      }
-      // Always set max before value. SSR indeterminate bars omit max (HTML
-      // default max=1), so value=4 would clamp to full bar.
-      bar.max = 100;
-      if (mid) {
-        const pct = Math.max(1, Math.min(99, Math.round(raw * 100)));
-        if (!bar.hasAttribute("value") || Number(bar.value) !== pct) {
-          bar.value = pct;
-          bar.setAttribute("aria-label", pct + "%");
-        }
-      } else if (!bar.hasAttribute("value")) {
-        if (bar.getAttribute("aria-label") !== "In progress") {
-          bar.setAttribute("aria-label", "In progress");
-        }
+    const progressChanged = Object.prototype.hasOwnProperty.call(data, "progress");
+    if (statusChanged || progressChanged) {
+      const st = statusChanged
+        ? data.status
+        : root.getAttribute("data-task-row-status") || "running";
+      if (st === "done" || st === "failed" || st === "cancelled") {
+        const wrap = root.querySelector("[data-task-progress-wrap]");
+        if (wrap) wrap.hidden = true;
       } else {
-        // 0% / 100% / null while running: busy indeterminate (in place).
-        bar.removeAttribute("value");
-        bar.setAttribute("aria-label", "In progress");
+        let progress = null;
+        if (progressChanged) {
+          progress = data.progress;
+        } else {
+          const bar = root.querySelector("progress[data-task-progress]");
+          if (bar && bar.hasAttribute("value") && Number(bar.max) > 0) {
+            progress = Number(bar.value) / Number(bar.max);
+          }
+        }
+        syncTaskRowProgress(root, st, progress);
       }
     }
     return true;
@@ -959,7 +950,7 @@
     });
   }
 
-  /** Refresh Detail panel on /task/{id} while that task progresses (video history → linked lists). */
+  /** Refresh Stages/Commands/Detail on /task/{id} while that task progresses. */
   function refreshTaskVideoHistoryIfMatch(ev) {
     if (!window.htmx) return;
     let data;
@@ -3846,6 +3837,7 @@
       row.classList.toggle("cursor-pointer", seriesBulkMode);
       const id = row.getAttribute("data-series-id");
       row.classList.toggle("bg-base-200", seriesBulkMode && seriesBulkSelected.has(id));
+      row.classList.toggle("rounded-none", seriesBulkMode && seriesBulkSelected.has(id));
       // Bulk: checkbox|media|grow|monitor. Normal: media|grow|monitor.
       if (seriesBulkMode) {
         row.style.setProperty("--list-grid-cols", "max-content minmax(0, auto) 1fr max-content");
@@ -4305,6 +4297,7 @@
       row.classList.toggle("cursor-pointer", videoBulkMode);
       const id = row.getAttribute("data-video-id");
       row.classList.toggle("bg-base-200", videoBulkMode && videoBulkSelected.has(id));
+      row.classList.toggle("rounded-none", videoBulkMode && videoBulkSelected.has(id));
       if (videoBulkMode) {
         row.style.setProperty("--list-grid-cols", "max-content minmax(0, auto) 1fr max-content");
       } else {

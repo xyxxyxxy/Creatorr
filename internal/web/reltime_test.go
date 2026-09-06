@@ -36,13 +36,13 @@ func TestFormatAgoShort(t *testing.T) {
 		want string
 	}{
 		{now.Add(-30 * time.Second), "just now"},
-		{now.Add(-1 * time.Minute), "1 m ago"},
-		{now.Add(-3*time.Minute - 20*time.Second), "3 m ago"},
-		{now.Add(-1*time.Hour - 3*time.Minute), "1 h 3 m ago"},
-		{now.Add(-9*time.Hour - 54*time.Minute), "9 h 54 m ago"},
-		{now.Add(-26 * time.Hour), "1 d 2 h ago"},
+		{now.Add(-1 * time.Minute), "1 min ago"},
+		{now.Add(-3*time.Minute - 20*time.Second), "3 min ago"},
+		{now.Add(-1*time.Hour - 3*time.Minute), "1 h ago"},
+		{now.Add(-9*time.Hour - 54*time.Minute), "9 h ago"},
+		{now.Add(-26 * time.Hour), "1 d ago"},
 		{now.AddDate(0, 0, -7), "7 d ago"},
-		{now.AddDate(-1, -4, 0), "1 y 4 mo ago"},
+		{now.AddDate(-1, -4, 0), "1 y ago"},
 		{now.AddDate(-2, 0, 0), "2 y ago"},
 	}
 	for _, tc := range cases {
@@ -62,8 +62,8 @@ func TestFormatInShort(t *testing.T) {
 		{now.Add(-30 * time.Second), "now"},
 		{now, "now"},
 		{now.Add(30 * time.Second), "now"},
-		{now.Add(1 * time.Minute), "1 m"},
-		{now.Add(1*time.Hour + 3*time.Minute), "1 h 3 m"},
+		{now.Add(1 * time.Minute), "1 min"},
+		{now.Add(1*time.Hour + 3*time.Minute), "1 h 3 min"},
 		{now.Add(26 * time.Hour), "1 d 2 h"},
 		{now.AddDate(0, 0, 7), "7 d"},
 	}
@@ -116,9 +116,9 @@ func TestCooldownWaitTip(t *testing.T) {
 		rem  int
 		want string
 	}{
-		{0, "Waiting 1sec"},
-		{3, "Waiting 3sec"},
-		{63, "Waiting 1min 3sec"},
+		{0, "Waiting 1 sec"},
+		{3, "Waiting 3 sec"},
+		{63, "Waiting 1min 3 sec"},
 		{3680, "Waiting 1h 1min"},
 	}
 	for _, tc := range cases {

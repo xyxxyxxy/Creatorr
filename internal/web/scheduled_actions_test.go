@@ -95,7 +95,7 @@ func TestScheduledTaskWaitTip(t *testing.T) {
 		want string
 	}{
 		{90, "in 1min"},
-		{45, "in 45sec"},
+		{45, "in 45 sec"},
 		{3600 + 120, "in 1h"},
 		{86400 + 3600, "in 1d"},
 	}

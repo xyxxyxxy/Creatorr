@@ -40,6 +40,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo6(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 7:
+			if err := d.migrateTo7(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -205,6 +209,21 @@ func (d *DB) migrateTo6() error {
 		if _, err := d.SQL.Exec(`ALTER TABLE sources DROP COLUMN auto_ignore_media_types`); err != nil {
 			return fmt.Errorf("drop sources.auto_ignore_media_types: %w", err)
 		}
+	}
+	return nil
+}
+
+// migrateTo7 drops videos.tool (redundant with acquired_via).
+func (d *DB) migrateTo7() error {
+	has, err := d.tableHasColumn("videos", "tool")
+	if err != nil {
+		return err
+	}
+	if !has {
+		return nil
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE videos DROP COLUMN tool`); err != nil {
+		return fmt.Errorf("drop videos.tool: %w", err)
 	}
 	return nil
 }

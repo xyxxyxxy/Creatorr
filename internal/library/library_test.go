@@ -1227,7 +1227,7 @@ func TestDeleteSeriesKeepsOrRemovesFiles(t *testing.T) {
 	if err := os.WriteFile(keepMedia, []byte("data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CompleteImport(resKeep.VideoID, keepMedia, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(resKeep.VideoID, keepMedia, "", "", "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteSeries(keepSer.ID, false); err != nil {
@@ -1267,7 +1267,7 @@ func TestDeleteSeriesKeepsOrRemovesFiles(t *testing.T) {
 	if err := os.WriteFile(nfo, []byte("<tvshow/>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CompleteImport(resPurge.VideoID, purgeMedia, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(resPurge.VideoID, purgeMedia, "", "", "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteSeries(purgeSer.ID, true); err != nil {
@@ -1334,7 +1334,7 @@ func TestDeleteSourcePurgesVideosAndFiles(t *testing.T) {
 	if err := os.WriteFile(media, []byte("data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CompleteImport(resGone.VideoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(resGone.VideoID, media, "", "", "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 

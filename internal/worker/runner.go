@@ -213,7 +213,12 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 			_ = r.Queue.SetDetail(task.ID, runErr.Error())
 			r.Events.TaskFailed(task.ID, task.Kind, task.Domain, failMsg, code, sid, vid)
 			_ = r.Queue.Finish(task.ID, queue.StatusFailed, failMsg, code, runErr.Error())
-			if _, err := r.Library.QueueArchiveFallbackAfterUnavailable(task.VideoID.Int64, task.ID, runErr.Error()); err != nil {
+			histDetail := runErr.Error()
+			var ae *apperrors.AppError
+			if errors.As(runErr, &ae) && ae != nil && strings.TrimSpace(ae.Detail) != "" {
+				histDetail = ae.Detail
+			}
+			if _, err := r.Library.QueueArchiveFallbackAfterUnavailable(task.VideoID.Int64, task.ID, histDetail); err != nil {
 				log.Warn("queue archive fallback", "video", task.VideoID.Int64, "err", err)
 			}
 			if mediaKind(task.Kind) {

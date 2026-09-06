@@ -537,7 +537,18 @@ func createdAgoPair(createdAt string, now time.Time) (absolute, ago string) {
 	return absolute, ago
 }
 
-// sourceStatusSummary is the non-error Status cell: "2 h 3 m ago (1 new)" or "never".
+// createdAgoPairShort is like createdAgoPair but uses compact largest-unit labels ("1 h ago").
+func createdAgoPairShort(createdAt string, now time.Time) (absolute, ago string) {
+	absolute = createdAt
+	ago = createdAt
+	if t, ok := parseActivityTime(createdAt); ok {
+		absolute = formatAbsoluteTip(t)
+		ago = formatAgoShort(t, now)
+	}
+	return absolute, ago
+}
+
+// sourceStatusSummary is the non-error Status cell: "2 h ago (1 new)" or "never".
 func sourceStatusFields(lib *library.Store, sourceID int64, now time.Time) (summary, lastScannedAt, errMsg, errCode string, taskID int64, hasScanned, hasError bool) {
 	st, err := lib.LatestSourceScanStatus(sourceID)
 	if err != nil || st.LastScannedAt == "" {
@@ -564,6 +575,7 @@ type videoHistoryView struct {
 	Message    string
 	Detail     string
 	TaskID     int64
+	TaskKind   string // tasks.kind when TaskID set (grouped Event label)
 	HasTask    bool
 	HistoryID  int64
 	VideoID    int64
@@ -587,6 +599,30 @@ func videoHistoryToView(e library.VideoHistoryEvent, now time.Time) videoHistory
 		v.HistoryID = e.TaskID.Int64
 	}
 	return v
+}
+
+// fillVideoHistoryTaskKinds sets TaskKind from tasks.kind for each task_id on the page.
+func fillVideoHistoryTaskKinds(q *queue.Store, views []videoHistoryView) {
+	if q == nil || len(views) == 0 {
+		return
+	}
+	cache := map[int64]string{}
+	for i := range views {
+		id := views[i].TaskID
+		if !views[i].HasTask || id <= 0 {
+			continue
+		}
+		if kind, ok := cache[id]; ok {
+			views[i].TaskKind = kind
+			continue
+		}
+		kind := ""
+		if t, err := q.GetTask(id); err == nil && t != nil {
+			kind = t.Kind
+		}
+		cache[id] = kind
+		views[i].TaskKind = kind
+	}
 }
 
 func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
@@ -616,17 +652,23 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 			errorHistoryID = v.HistoryID
 		}
 	}
-	histGroups := groupVideoHistoryByTask(histViews)
+	fillVideoHistoryTaskKinds(h.Queue, histViews)
+	histTimeline := videoHistoryGroupsToTimeline(groupVideoHistoryByTask(histViews))
 	t, _ := h.Queue.ActiveTaskForVideo(vid)
 	dlRunning := deliveryTaskActive(t) && t.Status == queue.StatusRunning
 	deliveryQueued := deliveryTaskActive(t)
 	deleting := taskIsFileDelete(t)
 	detailRows := videoDetailRows(h.Library, video)
-	sizeLabel := "-"
-	if n, ok, _ := h.Library.VideoSizeBytes(vid); ok {
-		sizeLabel = library.FormatBytes(n)
+	mediaResolution := ""
+	if video.Width.Valid && video.Height.Valid && video.Width.Int64 > 0 && video.Height.Int64 > 0 {
+		mediaResolution = fmt.Sprintf("%dx%d", video.Width.Int64, video.Height.Int64)
+	}
+	mediaDuration := ""
+	if video.DurationSeconds.Valid && video.DurationSeconds.Int64 > 0 {
+		mediaDuration = formatDetailDuration(float64(video.DurationSeconds.Int64))
 	}
 	fileRows := videoAllFileViews(h.Library, sid, vid)
+	mediaRaw, mediaAudio, hasMediaPlay := videoMediaPlay(fileRows, sid, vid, ser.IsAudio())
 	metaForm := h.buildVideoMetadataView(ser, video)
 	if tidStr := r.URL.Query().Get("meta_prefetch"); tidStr != "" {
 		if tid, err := strconv.ParseInt(tidStr, 10, 64); err == nil && tid > 0 {
@@ -678,10 +720,14 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		Video               *library.Video
 		ResolvedSourceURL   string
 		ThumbURL            string
-		SizeLabel           string
+		MediaRawHref        string
+		MediaIsAudio        bool
+		HasMediaPlay        bool
+		MediaResolution     string
+		MediaDuration       string
 		Files               []videoFileView
 		DetailRows          []videoDetailRow
-		History             []videoHistoryGroup
+		History             []taskStageView
 		HistoryPage         PageInfo
 		ErrorHistoryID      int64
 		TaskInd             taskIndicatorView
@@ -698,10 +744,14 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		Video:               video,
 		ResolvedSourceURL:   resolvedSourceURL,
 		ThumbURL:            thumbURL,
-		SizeLabel:           sizeLabel,
+		MediaRawHref:        mediaRaw,
+		MediaIsAudio:        mediaAudio,
+		HasMediaPlay:        hasMediaPlay,
+		MediaResolution:     mediaResolution,
+		MediaDuration:       mediaDuration,
 		Files:               fileRows,
 		DetailRows:          detailRows,
-		History:             histGroups,
+		History:             histTimeline,
 		HistoryPage:         histPageInfo,
 		ErrorHistoryID:      errorHistoryID,
 		TaskInd:             h.videoIndicator(vid, t, video.Status),

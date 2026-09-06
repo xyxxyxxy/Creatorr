@@ -435,10 +435,6 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 	if strings.TrimSpace(meta.DownloadFormatSelector) != "" {
 		formatVal = strings.TrimSpace(meta.DownloadFormatSelector)
 	}
-	var toolVal any
-	if strings.TrimSpace(meta.Tool) != "" {
-		toolVal = strings.TrimSpace(meta.Tool)
-	}
 	var importSrcVal any
 	if strings.TrimSpace(meta.ImportSrc) != "" {
 		importSrcVal = strings.TrimSpace(meta.ImportSrc)
@@ -471,7 +467,6 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		UPDATE videos SET status = 'downloaded',
 		  acquired_at = ?,
 		  sidecars_acquired_at = ?,
-		  tool = COALESCE(?, tool),
 		  acquired_via = ?,
 		  download_format_selector = COALESCE(?, download_format_selector),
 		  download_remux_container = ?,
@@ -482,7 +477,7 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		  fps = COALESCE(?, fps),
 		  media_type = CASE WHEN (media_type IS NULL OR media_type = '') AND ? != '' THEN ? ELSE media_type END,
 		  description = COALESCE(NULLIF(description, ''), ?)`
-	args := []any{acquired, acquired, toolVal, acquiredVia, formatVal, remuxVal, importSrcVal, durVal, widthVal, heightVal, fpsVal, mediaType, mediaType, descVal}
+	args := []any{acquired, acquired, acquiredVia, formatVal, remuxVal, importSrcVal, durVal, widthVal, heightVal, fpsVal, mediaType, mediaType, descVal}
 
 	if uploadFromInfo != "" && needDate {
 		var seriesID int64

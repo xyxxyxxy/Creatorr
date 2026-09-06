@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"strings"
 )
 
 // videoHistoryGroup is one video-detail History row. Multi-stage download/remux/pack
@@ -9,7 +10,7 @@ import (
 type videoHistoryGroup struct {
 	CreatedAt  string
 	CreatedAgo string
-	Event      string // single-stage event label, or "Task #N"
+	Event      string // single-stage event label, or task kind (e.g. download)
 	Message    string
 	TaskID     int64
 	HasTask    bool
@@ -20,8 +21,8 @@ type videoHistoryGroup struct {
 }
 
 // groupVideoHistoryByTask collapses consecutive timeline rows that share the same
-// task_id (>0) into one group. Timeline input is newest-first; Stages inside a
-// multi-row group are oldest-first so download / remux / pack reads top-to-bottom.
+// task_id (>0) into one group. Timeline input and output are newest-first (latest
+// at top). Stages inside a multi-row group stay newest-first too.
 // Rows without a task_id stay single (including projected discover/update).
 func groupVideoHistoryByTask(rows []videoHistoryView) []videoHistoryGroup {
 	if len(rows) == 0 {
@@ -67,25 +68,25 @@ func singleHistoryGroup(r videoHistoryView) videoHistoryGroup {
 }
 
 func multiHistoryGroup(newestFirst []videoHistoryView) videoHistoryGroup {
-	// newestFirst[0] is the latest stage (When column).
+	// newestFirst[0] is the latest stage (When + top of substages).
 	head := newestFirst[0]
 	stages := make([]videoHistoryView, len(newestFirst))
 	copy(stages, newestFirst)
-	// Oldest first for display.
-	for a, b := 0, len(stages)-1; a < b; a, b = a+1, b-1 {
-		stages[a], stages[b] = stages[b], stages[a]
-	}
 	hasErr := false
 	for _, s := range stages {
 		if historyEventError(s.Event) {
 			hasErr = true
 		}
 	}
+	event := strings.TrimSpace(head.TaskKind)
+	if event == "" {
+		event = fmt.Sprintf("Task #%d", head.TaskID)
+	}
 	return videoHistoryGroup{
 		CreatedAt:  head.CreatedAt,
 		CreatedAgo: head.CreatedAgo,
-		Event:      fmt.Sprintf("Task #%d", head.TaskID),
-		Message:    fmt.Sprintf("%d stages", len(stages)),
+		Event:      event,
+		Message:    "",
 		TaskID:     head.TaskID,
 		HasTask:    true,
 		HistoryID:  head.HistoryID,
@@ -93,4 +94,38 @@ func multiHistoryGroup(newestFirst []videoHistoryView) videoHistoryGroup {
 		Stages:     stages,
 		HasError:   hasErr,
 	}
+}
+
+// videoHistoryGroupsToTimeline maps History groups onto the shared Stages timeline shape.
+func videoHistoryGroupsToTimeline(groups []videoHistoryGroup) []taskStageView {
+	if len(groups) == 0 {
+		return nil
+	}
+	out := make([]taskStageView, 0, len(groups))
+	for _, g := range groups {
+		item := taskStageView{
+			Event:      g.Event,
+			Message:    g.Message,
+			CreatedAt:  g.CreatedAt,
+			CreatedAgo: g.CreatedAgo,
+			HasError:   g.HasError,
+			HistoryID:  g.HistoryID,
+		}
+		if g.Grouped {
+			subs := make([]taskStageSubview, 0, len(g.Stages))
+			for _, s := range g.Stages {
+				subs = append(subs, taskStageSubview{
+					Event:    s.Event,
+					Message:  s.Message,
+					HasError: historyEventError(s.Event),
+				})
+			}
+			item.Substages = subs
+			item.Message = ""
+		}
+		out = append(out, item)
+	}
+	out[0].IsFirst = true
+	out[len(out)-1].IsLast = true
+	return out
 }

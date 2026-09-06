@@ -80,8 +80,8 @@ func formatAgo(then, now time.Time) string {
 	return b.String()
 }
 
-// formatAgoShort returns a compact relative past time (at most two units).
-// Examples: "just now", "3 m ago", "1 h 3 m ago", "1 d 2 h ago", "7 d ago", "1 y 4 mo ago".
+// formatAgoShort returns a compact relative past time using only the largest unit.
+// Examples: "just now", "3 min ago", "1 h ago", "1 d ago", "7 d ago", "1 y ago".
 func formatAgoShort(then, now time.Time) string {
 	then = then.UTC()
 	now = now.UTC()
@@ -130,27 +130,16 @@ func formatAgoShort(then, now time.Time) string {
 	add(months, "mo")
 	add(days, "d")
 	add(hours, "h")
-	add(minutes, "m")
+	add(minutes, "min")
 
 	if len(parts) == 0 {
 		return "just now"
 	}
-	if len(parts) > 2 {
-		parts = parts[:2]
-	}
-	var b strings.Builder
-	for i, p := range parts {
-		if i > 0 {
-			b.WriteByte(' ')
-		}
-		fmt.Fprintf(&b, "%d %s", p.n, p.u)
-	}
-	b.WriteString(" ago")
-	return b.String()
+	return fmt.Sprintf("%d %s ago", parts[0].n, parts[0].u)
 }
 
 // formatInShort returns a compact relative future span (at most two units).
-// Examples: "now", "3 m", "1 h 3 m", "1 d 2 h".
+// Examples: "now", "3 min", "1 h 3 min", "1 d 2 h".
 func formatInShort(now, then time.Time) string {
 	now = now.UTC()
 	then = then.UTC()
@@ -199,7 +188,7 @@ func formatInShort(now, then time.Time) string {
 	add(months, "mo")
 	add(days, "d")
 	add(hours, "h")
-	add(minutes, "m")
+	add(minutes, "min")
 
 	if len(parts) == 0 {
 		return "now"
@@ -253,13 +242,13 @@ func scheduledTaskWaitTip(remSec int) string {
 	return "in " + formatDurationLargest(time.Duration(remSec)*time.Second)
 }
 
-// formatDurationLargest is a short span using only the largest unit ("3min", "2h").
+// formatDurationLargest is a short span using only the largest unit ("3min", "2h", "5 sec").
 func formatDurationLargest(d time.Duration) string {
 	if d < 0 {
 		d = -d
 	}
 	if d < time.Second {
-		return "1sec"
+		return "1 sec"
 	}
 	days := int(d / (24 * time.Hour))
 	if days > 0 {
@@ -277,16 +266,27 @@ func formatDurationLargest(d time.Duration) string {
 	if sec < 1 {
 		sec = 1
 	}
-	return fmt.Sprintf("%dsec", sec)
+	return fmt.Sprintf("%d sec", sec)
 }
 
-// formatDurationCompact is a short span like "3min 2sec" (at most two units).
+// stageDurationLabel is formatDurationLargest for task Stages; empty when ≤1s.
+func stageDurationLabel(d time.Duration) string {
+	if d < 0 {
+		d = -d
+	}
+	if d < 2*time.Second {
+		return ""
+	}
+	return formatDurationLargest(d)
+}
+
+// formatDurationCompact is a short span like "3min 2 sec" (at most two units).
 func formatDurationCompact(d time.Duration) string {
 	if d < 0 {
 		d = -d
 	}
 	if d < time.Second {
-		return "1sec"
+		return "1 sec"
 	}
 	days := int(d / (24 * time.Hour))
 	d -= time.Duration(days) * 24 * time.Hour
@@ -310,10 +310,10 @@ func formatDurationCompact(d time.Duration) string {
 	add(hours, "h")
 	add(minutes, "min")
 	if days == 0 {
-		add(seconds, "sec")
+		add(seconds, " sec")
 	}
 	if len(parts) == 0 {
-		return "1sec"
+		return "1 sec"
 	}
 	if len(parts) > 2 {
 		parts = parts[:2]

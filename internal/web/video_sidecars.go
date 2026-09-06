@@ -101,6 +101,29 @@ func videoAllFileViews(lib *library.Store, seriesID, videoID int64) []videoFileV
 	return out
 }
 
+// videoMediaPlay picks the first on-disk packed media file for in-page playback.
+// isAudio is true for audio delivery or common audio extensions (.mka / .m4a / …).
+func videoMediaPlay(files []videoFileView, seriesID, videoID int64, audioSeries bool) (rawHref string, isAudio bool, ok bool) {
+	for _, f := range files {
+		if f.Kind != "video" || f.Missing || f.ID <= 0 {
+			continue
+		}
+		rawHref = fmt.Sprintf("/series/%d/videos/%d/files/%d/raw", seriesID, videoID, f.ID)
+		isAudio = audioSeries || sidecarIsAudio(f.Path)
+		return rawHref, isAudio, true
+	}
+	return "", false, false
+}
+
+func sidecarIsAudio(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".mka", ".m4a", ".mp3", ".opus", ".ogg", ".flac", ".aac", ".wav":
+		return true
+	default:
+		return false
+	}
+}
+
 func sidecarKindLabel(kind string) string {
 	switch kind {
 	case "video":

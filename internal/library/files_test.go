@@ -65,7 +65,7 @@ func TestCompleteDownloadStoresVideoSizeBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := s.CompleteDownload(videoID, media, nfo, "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteDownload(videoID, media, nfo, "", "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -148,7 +148,7 @@ func TestCompleteDownloadSoftFillsMediaType(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := s.CompleteDownload(videoID, media, nfo, info, "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteDownload(videoID, media, nfo, info, "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 	v, err := s.GetVideo(videoID)
@@ -197,7 +197,7 @@ func TestListVideoSidecarsStemPrefix(t *testing.T) {
 	if err := s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'stem1'`).Scan(&videoID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CompleteDownload(videoID, media, nfo, info, thumb, nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteDownload(videoID, media, nfo, info, thumb, nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.RegisterFileKind(videoID, sb, "sponsorblock"); err != nil {
@@ -276,7 +276,7 @@ func TestDeleteVideoSidecar(t *testing.T) {
 	}
 	var videoID int64
 	_ = s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'del1'`).Scan(&videoID)
-	if err := s.CompleteDownload(videoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteDownload(videoID, media, "", "", "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -445,7 +445,7 @@ func TestCompleteDownloadRenamesAfterInfoJSONDateWhileDownloadRunning(t *testing
 		t.Fatal(err)
 	}
 
-	if err := s.CompleteDownload(videoID, media, nfo, info, "", nil, library.MediaCompleteMeta{Tool: "yt-dlp"}, dlTask); err != nil {
+	if err := s.CompleteDownload(videoID, media, nfo, info, "", nil, library.MediaCompleteMeta{}, dlTask); err != nil {
 		t.Fatal(err)
 	}
 

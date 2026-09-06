@@ -87,7 +87,7 @@ volumes:
 
 ## Video metadata columns + info.json
 
-Downloads/imports set Creatorr-owned columns (`tool`, `download_format_selector`, `download_remux_container` when remux ran, `import_src`, duration/resolution/fps). Site-specific detail stays in packed **`info.json`** (opaque - Creatorr never edits its content; copy/move/rename only; write/replace only when media changes). No sticky `handler_id` on sources/videos.
+Downloads/imports set Creatorr-owned columns (`download_format_selector`, `download_remux_container` when remux ran, `import_src`, `acquired_via`, duration/resolution/fps). Site-specific detail stays in packed **`info.json`** (opaque - Creatorr never edits its content; copy/move/rename only; write/replace only when media changes). No sticky `handler_id` on sources/videos.
 
 ## Entry `upload_date`
 

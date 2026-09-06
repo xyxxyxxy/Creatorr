@@ -23,6 +23,7 @@ type detailVideoRef struct {
 	Missing       bool
 	State         string // wanted|ignored; set for created_ids rows
 	IgnoredReason string // media_type|index_as_ignored; only when State=ignored
+	StatusTip     string // badge tooltip when HasState (includes ignore reason)
 	HasState      bool   // true when State is meaningful for this list
 }
 
@@ -158,14 +159,17 @@ func (h *Handler) resolveCreatedDetailVideos(ids []int64, mediaTypeIDs, indexAsI
 	for i := range out {
 		out[i].HasState = true
 		out[i].State = "wanted"
+		out[i].StatusTip = "wanted"
 		if _, ok := mediaTypeIDs[out[i].ID]; ok {
 			out[i].State = "ignored"
 			out[i].IgnoredReason = library.IgnoreReasonMediaType
+			out[i].StatusTip = "ignored (media type)"
 			continue
 		}
 		if _, ok := indexAsIgnoredIDs[out[i].ID]; ok {
 			out[i].State = "ignored"
 			out[i].IgnoredReason = library.IgnoreReasonIndexAsIgnored
+			out[i].StatusTip = "ignored (indexed as ignored)"
 		}
 	}
 	return out
@@ -237,6 +241,25 @@ func formatDetailScalar(v any) string {
 	}
 }
 
+func detailJSONInt(v any) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case json.Number:
+		i, err := n.Int64()
+		if err != nil {
+			return 0
+		}
+		return int(i)
+	case int:
+		return n
+	case int64:
+		return int(n)
+	default:
+		return 0
+	}
+}
+
 func (h *Handler) taskDetailFields(detail string) []detailField {
 	detail = strings.TrimSpace(detail)
 	if detail == "" {
@@ -256,6 +279,7 @@ func (h *Handler) taskDetailFields(detail string) []detailField {
 	mediaTypeIDs := idSetFromJSON(raw["ignored_media_type_ids"])
 	indexAsIgnoredIDs := idSetFromJSON(raw["ignored_index_as_ignored_ids"])
 	out := make([]detailField, 0, len(keys))
+	indexedShown := false
 	for _, k := range keys {
 		v := raw[k]
 		switch k {
@@ -264,6 +288,15 @@ func (h *Handler) taskDetailFields(detail string) []detailField {
 			continue
 		case domains.DetailKeyDomainAccess:
 			// Shown as dedicated Details row (Domain access chips).
+			continue
+		case "created", "updated":
+			// Scan counts: show one "Videos indexed" = created+updated (new + touched).
+			if indexedShown {
+				continue
+			}
+			indexedShown = true
+			n := detailJSONInt(raw["created"]) + detailJSONInt(raw["updated"])
+			out = append(out, detailField{Key: "Videos indexed", Text: strconv.Itoa(n)})
 			continue
 		case "ignored_media_type_ids", "ignored_index_as_ignored_ids":
 			if ids, ok := jsonNumberIDs(v); ok {
@@ -325,9 +358,150 @@ type taskDetailHistRow struct {
 	SeriesID   int64
 }
 
+// taskStageView is one daisyUI vertical-timeline node (task Stages + video History).
+type taskStageView struct {
+	Event      string
+	Message    string
+	CreatedAt  string
+	CreatedAgo string
+	Duration   string // chrono gap onto this stage (omit ≤1s); kept after reverse for display
+	HasError   bool
+	IsFirst    bool
+	IsLast     bool
+	HistoryID  int64             // optional /task/{id} link on Event (0 = none)
+	Substages  []taskStageSubview // nested stages under a grouped video-history node
+}
+
+// taskStageSubview is one line inside a grouped timeline box (e.g. downloaded / remuxed / packed).
+type taskStageSubview struct {
+	Event    string
+	Message  string
+	HasError bool
+}
+
+// singleVideoHistory is true when every video_history row shares one video_id > 0.
+func singleVideoHistory(events []library.VideoHistoryEvent) bool {
+	if len(events) == 0 || events[0].VideoID <= 0 {
+		return false
+	}
+	vid := events[0].VideoID
+	for _, e := range events[1:] {
+		if e.VideoID != vid {
+			return false
+		}
+	}
+	return true
+}
+
+// taskStages builds the Stages timeline for every task view (latest at top, oldest at bottom).
+// Always includes enqueued from created_at when set. Single-video video_history
+// appends those events; otherwise appends started. Terminal done/failed/cancelled
+// is always included when the task has finished.
+func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, taskStarted, taskFinished, status string) []taskStageView {
+	out := make([]taskStageView, 0, len(events)+4)
+	rawTimes := make([]time.Time, 0, len(events)+4)
+
+	appendStage := func(event, message, rawAt string, err bool) {
+		if event == "" {
+			return
+		}
+		tAt, ok := parseActivityTime(rawAt)
+		if !ok {
+			tAt = time.Time{}
+		}
+		abs, ago := "", ""
+		if rawAt != "" {
+			abs, ago = createdAgoPairShort(rawAt, now)
+		}
+		rawTimes = append(rawTimes, tAt)
+		out = append(out, taskStageView{
+			Event:      event,
+			Message:    message,
+			CreatedAt:  abs,
+			CreatedAgo: ago,
+			HasError:   err,
+		})
+	}
+
+	createdAt := strings.TrimSpace(taskCreated)
+	if createdAt == "" {
+		createdAt = now.UTC().Format(time.RFC3339Nano)
+	}
+	appendStage("enqueued", "", createdAt, false)
+
+	if singleVideoHistory(events) {
+		for _, e := range events {
+			label := historyEventLabel(e.Event, e.Detail)
+			if label == "" {
+				continue
+			}
+			appendStage(label, e.Message, e.CreatedAt, historyEventError(e.Event))
+		}
+	} else if strings.TrimSpace(taskStarted) != "" {
+		appendStage("started", "", taskStarted, false)
+	}
+
+	if term, termErr, ok := taskTerminalStage(status); ok {
+		at := taskFinished
+		if strings.TrimSpace(at) == "" {
+			at = taskStarted
+		}
+		if strings.TrimSpace(at) == "" {
+			at = createdAt
+		}
+		appendStage(term, "", at, termErr)
+	}
+
+	// Durations are chrono gaps (older → newer) before reversing for display.
+	for i := 1; i < len(out); i++ {
+		start, end := rawTimes[i-1], rawTimes[i]
+		if start.IsZero() || end.IsZero() {
+			continue
+		}
+		d := end.Sub(start)
+		if d < 0 {
+			continue
+		}
+		out[i].Duration = stageDurationLabel(d)
+	}
+
+	// Latest at top, oldest at bottom.
+	for a, b := 0, len(out)-1; a < b; a, b = a+1, b-1 {
+		out[a], out[b] = out[b], out[a]
+	}
+	var prevAgo string
+	for i := range out {
+		ago := out[i].CreatedAgo
+		if ago != "" && ago == prevAgo {
+			out[i].CreatedAt = ""
+			out[i].CreatedAgo = ""
+		} else if ago != "" {
+			prevAgo = ago
+		}
+	}
+	out[0].IsFirst = true
+	out[len(out)-1].IsLast = true
+	return out
+}
+
+// taskTerminalStage maps finished task status to a Stages event label.
+func taskTerminalStage(status string) (label string, hasError bool, ok bool) {
+	switch status {
+	case "done":
+		return "done", false, true
+	case "failed":
+		return "failed", true, true
+	case "cancelled":
+		return "cancelled", true, true
+	default:
+		return "", false, false
+	}
+}
+
 // mergeVideoHistoryDetailFields appends per-event video lists from video_history
 // (same shape as discover created_ids). Skips event keys already present in fields.
 // Cancelled rows use detail.kind as the list key when set (e.g. download).
+// Call for multi-video history; single-video stages use taskStages.
 func mergeVideoHistoryDetailFields(fields []detailField, rows []taskDetailHistRow) []detailField {
 	if len(rows) == 0 {
 		return fields
@@ -418,13 +592,10 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	createdAt, createdAgo := createdAgoPair(t.CreatedAt, now)
-	queuedLabel, queuedMuted := "", false
-	runtimeLabel, runtimeMuted := "", false
-	if t.StartedAt.Valid {
-		queuedLabel, queuedMuted = taskQueuedLabel(t.CreatedAt, t.StartedAt.String)
-		if t.FinishedAt.Valid {
-			runtimeLabel, runtimeMuted = taskRuntimeLabel(t.StartedAt.String, t.FinishedAt.String)
+	var videoRow *seriesVideoRow
+	if videoLib != nil {
+		if rows := h.buildSeriesVideoRows([]library.Video{*videoLib}, nil, nil); len(rows) > 0 {
+			videoRow = &rows[0]
 		}
 	}
 
@@ -447,21 +618,32 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	histRows := make([]taskDetailHistRow, 0, len(events))
-	for _, e := range events {
-		row := taskDetailHistRow{Event: e.Event, Detail: e.Detail, VideoID: e.VideoID}
-		if vv, err := h.Library.GetVideo(e.VideoID); err == nil {
-			row.VideoTitle = vv.Title
-			row.SeriesID = vv.SeriesID
-		} else {
-			row.VideoTitle = fmt.Sprintf("#%d", e.VideoID)
+	taskStarted, taskFinished := "", ""
+	if t.StartedAt.Valid {
+		taskStarted = t.StartedAt.String
+	}
+	if t.FinishedAt.Valid {
+		taskFinished = t.FinishedAt.String
+	}
+	stages := taskStages(events, now, t.CreatedAt, taskStarted, taskFinished, t.Status)
+	detailFields := h.taskDetailFields(t.Detail)
+	if !singleVideoHistory(events) {
+		histRows := make([]taskDetailHistRow, 0, len(events))
+		for _, e := range events {
+			row := taskDetailHistRow{Event: e.Event, Detail: e.Detail, VideoID: e.VideoID}
+			if vv, err := h.Library.GetVideo(e.VideoID); err == nil {
+				row.VideoTitle = vv.Title
+				row.SeriesID = vv.SeriesID
+			} else {
+				row.VideoTitle = fmt.Sprintf("#%d", e.VideoID)
+			}
+			histRows = append(histRows, row)
 		}
-		histRows = append(histRows, row)
+		detailFields = mergeVideoHistoryDetailFields(detailFields, histRows)
 	}
 
 	payload := t.Payload
 	payloadMuted := isEmptyJSONPayload(payload)
-	detailFields := mergeVideoHistoryDetailFields(h.taskDetailFields(t.Detail), histRows)
 	pot := parsePOTDetail(t.Detail)
 	domainAccess := parseDomainAccessDetail(t.Detail)
 
@@ -472,10 +654,8 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	live := !isHistoryStatus(t.Status)
-	detailsHelp := "Finished task outcome."
 	nav := "history"
 	if live {
-		detailsHelp = "Live task status."
 		nav = "tasks"
 	}
 	logLines := h.Queue.Logs.Snapshot(id)
@@ -488,23 +668,18 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		Payload      string
 		PayloadMuted bool
 		DetailFields []detailField
+		Stages       []taskStageView
 		POT          *potDetailView
 		DomainAccess *domains.DomainAccessSnapshot
 		Commands     []string
-		CreatedAt    string
-		CreatedAgo   string
-		QueuedLabel  string
-		QueuedMuted  bool
-		RuntimeLabel string
-		RuntimeMuted bool
 		Progress     *float64
 		Live         bool
-		DetailsHelp  string
 		LogText      string
 		LogLines     []string
 		Series       *seriesLink
 		Source       *sourceLink
 		Video        *videoLink
+		VideoRow     *seriesVideoRow
 		Crumbs       []breadcrumb
 	}{
 		pageBase:     newPage(fmt.Sprintf("Task #%d", id), nav, nil),
@@ -512,23 +687,18 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		Payload:      payload,
 		PayloadMuted: payloadMuted,
 		DetailFields: detailFields,
+		Stages:       stages,
 		POT:          pot,
 		DomainAccess: domainAccess,
 		Commands:     commands,
-		CreatedAt:    createdAt,
-		CreatedAgo:   createdAgo,
-		QueuedLabel:  queuedLabel,
-		QueuedMuted:  queuedMuted,
-		RuntimeLabel: runtimeLabel,
-		RuntimeMuted: runtimeMuted,
 		Progress:     progress,
 		Live:         live,
-		DetailsHelp:  detailsHelp,
 		LogText:      logText,
 		LogLines:     logLines,
 		Series:       series,
 		Source:       source,
 		Video:        video,
+		VideoRow:     videoRow,
 		Crumbs:       taskBreadcrumbs(series, source, video, view.Kind, live),
 	})
 }

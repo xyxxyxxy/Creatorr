@@ -11,10 +11,16 @@
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
     {{if not .Missing}}
-    <a class="btn btn-outline" href="{{.RawHref}}?download=1">Download</a>
+    <a class="btn btn-outline" href="{{.RawHref}}?download=1">
+      <i data-lucide="download" class="size-4"></i>
+      Download
+    </a>
     {{end}}
     {{if .CanDelete}}
-    <label for="modal-delete-sidecar-{{.FileID}}" class="btn btn-soft btn-error">Delete</label>
+    <label for="modal-delete-sidecar-{{.FileID}}" class="btn btn-soft btn-error">
+      <i data-lucide="trash-2" class="size-4"></i>
+      Delete
+    </label>
     {{end}}
   </div>
 </div>
