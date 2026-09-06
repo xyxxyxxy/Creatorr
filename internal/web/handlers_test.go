@@ -50,6 +50,9 @@ func TestSeriesListRenders(t *testing.T) {
 	if !strings.Contains(body, "Series") || !strings.Contains(body, "Creatorr") {
 		t.Fatalf("unexpected body: %s", truncate(body, 200))
 	}
+	if !strings.Contains(body, `class="footer footer-center`) || !strings.Contains(body, "GitHub") {
+		t.Fatalf("missing supportability footer: %s", truncate(body, 400))
+	}
 	if !strings.Contains(body, "list-panel") || !strings.Contains(body, "Add series") {
 		t.Fatalf("missing list chrome: %s", truncate(body, 300))
 	}
