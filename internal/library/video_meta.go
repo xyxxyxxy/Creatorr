@@ -13,7 +13,6 @@ import (
 
 // MediaCompleteMeta is Creatorr-owned state written on download/import complete.
 type MediaCompleteMeta struct {
-	Tool                   string // yt-dlp | import
 	AcquiredVia            string // source | archive | import
 	DownloadFormatSelector string // archive download only
 	DownloadRemuxContainer string // "mkv" only when remux ran; empty when skipped

@@ -29,12 +29,6 @@ func videoDetailRows(store *library.Store, v *library.Video) []videoDetailRow {
 		out = append(out, videoDetailRow{Label: label, Value: value, IsURL: isURL, IsPath: isPath})
 	}
 
-	if v.DurationSeconds.Valid && v.DurationSeconds.Int64 > 0 {
-		add("Duration", formatDetailDuration(float64(v.DurationSeconds.Int64)), false, false)
-	}
-	if v.Width.Valid && v.Height.Valid && v.Width.Int64 > 0 && v.Height.Int64 > 0 {
-		add("Resolution", fmt.Sprintf("%dx%d", v.Width.Int64, v.Height.Int64), false, false)
-	}
 	if v.FPS.Valid && v.FPS.Float64 > 0 {
 		add("FPS", fmt.Sprintf("%g", v.FPS.Float64), false, false)
 	}
@@ -43,9 +37,6 @@ func videoDetailRows(store *library.Store, v *library.Video) []videoDetailRow {
 	}
 	if v.DownloadRemuxContainer.Valid {
 		add("Remux", v.DownloadRemuxContainer.String, false, false)
-	}
-	if v.Tool.Valid {
-		add("Tool", v.Tool.String, false, false)
 	}
 	if v.ImportSrc.Valid && strings.TrimSpace(v.ImportSrc.String) != "" {
 		add("Import path", v.ImportSrc.String, false, true)

@@ -408,7 +408,7 @@ func TestScanImportLibraryOrphanBindInPlace(t *testing.T) {
 		t.Fatal("expected nfo sidecar")
 	}
 	if err := s.CompleteImport(videoID, orphan.Path, nfoPath, infoPath, "", nil, library.MediaCompleteMeta{
-		Tool: "import", InPlace: true, ImportSrc: orphan.Path,
+		InPlace: true, ImportSrc: orphan.Path,
 	}, taskID); err != nil {
 		t.Fatal(err)
 	}
@@ -555,7 +555,7 @@ func TestScanImportSidecarStemAndOther(t *testing.T) {
 	_ = os.MkdirAll(dir, 0o755)
 	media := filepath.Join(dir, "Ep One [side1].mkv")
 	_ = os.WriteFile(media, []byte("media"), 0o644)
-	if err := s.CompleteImport(videoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(videoID, media, "", "", "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -676,7 +676,7 @@ func TestAttachInboxSubtitleMovesBesideMedia(t *testing.T) {
 	_ = os.MkdirAll(dir, 0o755)
 	media := filepath.Join(dir, "Ep Sub [sub1].mkv")
 	_ = os.WriteFile(media, []byte("media"), 0o644)
-	if err := s.CompleteImport(videoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(videoID, media, "", "", "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -833,7 +833,7 @@ func TestCompleteImportRegistersDashThumb(t *testing.T) {
 	if foundThumb != thumb {
 		t.Fatalf("FindDownloadSidecars thumb=%q", foundThumb)
 	}
-	if err := s.CompleteImport(res.VideoID, media, "", "", foundThumb, nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(res.VideoID, media, "", "", foundThumb, nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 	got, ok, err := s.VideoThumbPath(res.VideoID)

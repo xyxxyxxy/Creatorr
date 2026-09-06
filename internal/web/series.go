@@ -659,6 +659,14 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 	deliveryQueued := deliveryTaskActive(t)
 	deleting := taskIsFileDelete(t)
 	detailRows := videoDetailRows(h.Library, video)
+	mediaResolution := ""
+	if video.Width.Valid && video.Height.Valid && video.Width.Int64 > 0 && video.Height.Int64 > 0 {
+		mediaResolution = fmt.Sprintf("%dx%d", video.Width.Int64, video.Height.Int64)
+	}
+	mediaDuration := ""
+	if video.DurationSeconds.Valid && video.DurationSeconds.Int64 > 0 {
+		mediaDuration = formatDetailDuration(float64(video.DurationSeconds.Int64))
+	}
 	fileRows := videoAllFileViews(h.Library, sid, vid)
 	mediaRaw, mediaAudio, hasMediaPlay := videoMediaPlay(fileRows, sid, vid, ser.IsAudio())
 	metaForm := h.buildVideoMetadataView(ser, video)
@@ -715,6 +723,8 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		MediaRawHref        string
 		MediaIsAudio        bool
 		HasMediaPlay        bool
+		MediaResolution     string
+		MediaDuration       string
 		Files               []videoFileView
 		DetailRows          []videoDetailRow
 		History             []taskStageView
@@ -737,6 +747,8 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		MediaRawHref:        mediaRaw,
 		MediaIsAudio:        mediaAudio,
 		HasMediaPlay:        hasMediaPlay,
+		MediaResolution:     mediaResolution,
+		MediaDuration:       mediaDuration,
 		Files:               fileRows,
 		DetailRows:          detailRows,
 		History:             histTimeline,

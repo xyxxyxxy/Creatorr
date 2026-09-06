@@ -124,6 +124,12 @@
 {{else}}
 {{template "list_empty" "No packed media on disk yet."}}
 {{end}}
+{{if or .MediaResolution .MediaDuration}}
+<div class="flex items-baseline justify-between gap-3 text-sm tabular-nums">
+  <span>{{.MediaResolution}}</span>
+  <span>{{.MediaDuration}}</span>
+</div>
+{{end}}
     </div>
   </section>
 

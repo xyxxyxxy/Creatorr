@@ -49,7 +49,7 @@ func TestMarkVerifiedRestoresFromVerifyFailed(t *testing.T) {
 	_ = os.MkdirAll(dir, 0o755)
 	media := filepath.Join(dir, "ep.mkv")
 	_ = os.WriteFile(media, []byte("MEDIA"), 0o644)
-	if err := s.CompleteImport(res.VideoID, media, "", "", "", nil, library.MediaCompleteMeta{Tool: "test"}, seedTaskID(t, s)); err != nil {
+	if err := s.CompleteImport(res.VideoID, media, "", "", "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
 	tid := seedTaskID(t, s)
