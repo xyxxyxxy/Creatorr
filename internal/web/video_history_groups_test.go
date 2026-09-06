@@ -9,7 +9,7 @@ func TestGroupVideoHistoryByTask(t *testing.T) {
 		{Event: "downloaded", Message: "Download finished", TaskID: 19, TaskKind: "download", HasTask: true, HistoryID: 19, CreatedAgo: "2m"},
 		{Event: "discovered", Message: "Indexed from scan", HasTask: false, CreatedAgo: "1h"},
 		{Event: "verified", Message: "OK", TaskID: 20, HasTask: true, HistoryID: 20, CreatedAgo: "3h"},
-		{Event: "download_failed", Message: "fail", TaskID: 21, HasTask: true, HistoryID: 21, CreatedAgo: "4h"},
+		{Event: "download_failed", Message: "fail", TaskID: 21, HasTask: true, HistoryID: 21, CreatedAgo: "4h", HasError: true},
 	}
 	got := groupVideoHistoryByTask(rows)
 	if len(got) != 4 {
@@ -30,6 +30,21 @@ func TestGroupVideoHistoryByTask(t *testing.T) {
 	}
 	if !got[3].HasError || got[3].Event != "download_failed" {
 		t.Fatalf("group3: %+v", got[3])
+	}
+}
+
+func TestGroupVideoHistoryCancelledHasError(t *testing.T) {
+	// Event label is remapped to media_verify; HasError must come from raw cancelled.
+	rows := []videoHistoryView{
+		{Event: "media_verify", Message: "Cancelled", TaskID: 42, TaskKind: "media_verify", HasTask: true, HistoryID: 42, HasError: true},
+	}
+	got := groupVideoHistoryByTask(rows)
+	if len(got) != 1 || !got[0].HasError || got[0].Event != "media_verify" {
+		t.Fatalf("cancelled group: %+v", got)
+	}
+	tl := videoHistoryGroupsToTimeline(got)
+	if len(tl) != 1 || !tl[0].HasError {
+		t.Fatalf("timeline: %+v", tl)
 	}
 }
 

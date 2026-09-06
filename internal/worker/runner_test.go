@@ -150,6 +150,214 @@ func TestRunnerCancelDoesNotMarkDownloadFailed(t *testing.T) {
 	t.Fatal("timeout waiting for cancelled task")
 }
 
+func TestRunnerCancelHistoryUsesCancelledNotLiveProgress(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "cancel-msg.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+
+	store := queue.NewStore(d)
+	lib := library.NewStore(d, store)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, err := lib.CreateProfile("default", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "M", SourceURL: "https://example.com/m", RootID: root.ID, QualityProfileID: prof.ID, Monitored: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = store.CancelAll()
+	res, err := d.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, source_url, status)
+		VALUES (?, 'vid1', 'Ep', 'https://example.com/v/1', 'downloaded')
+	`, ser.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	videoID, _ := res.LastInsertId()
+
+	id, err := store.Enqueue(queue.EnqueueParams{
+		Kind: queue.KindMediaVerify, Domain: queue.SystemDomain, SeriesID: ser.ID, VideoID: videoID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	started := make(chan struct{})
+	done := make(chan struct{})
+	handlers := worker.StubHandlers()
+	handlers[queue.KindMediaVerify] = func(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) error {
+		progress("Verifying…", nil)
+		close(started)
+		<-ctx.Done()
+		close(done)
+		return ctx.Err()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go (&worker.Runner{
+		Queue:    store,
+		Library:  lib,
+		Handlers: handlers,
+		Interval: 20 * time.Millisecond,
+	}).Run(ctx)
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not start")
+	}
+	if err := store.Cancel(id); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not finish")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		hist, err := lib.ListVideoHistory(videoID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range hist {
+			if e.Event == library.VideoHistCancelled && e.TaskID.Valid && e.TaskID.Int64 == id {
+				if e.Message != "Cancelled" {
+					t.Fatalf("history message=%q want Cancelled", e.Message)
+				}
+				var dbMsg string
+				if err := d.SQL.QueryRow(`SELECT message FROM tasks WHERE id = ?`, id).Scan(&dbMsg); err != nil {
+					t.Fatal(err)
+				}
+				if dbMsg != "Cancelled" {
+					t.Fatalf("task message=%q want Cancelled", dbMsg)
+				}
+				return
+			}
+		}
+		time.Sleep(30 * time.Millisecond)
+	}
+	t.Fatal("timeout waiting for cancelled video history")
+}
+
+func TestRunnerShutdownLeavesRunningForRequeue(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "shutdown-requeue.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+
+	store := queue.NewStore(d)
+	lib := library.NewStore(d, store)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, err := lib.CreateProfile("default", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "S", SourceURL: "https://example.com/s", RootID: root.ID, QualityProfileID: prof.ID, Monitored: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = store.CancelAll()
+	res, err := d.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, source_url, status)
+		VALUES (?, 'vid1', 'Ep', 'https://example.com/v/1', 'downloaded')
+	`, ser.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	videoID, _ := res.LastInsertId()
+
+	id, err := store.Enqueue(queue.EnqueueParams{
+		Kind: queue.KindMediaVerify, Domain: queue.SystemDomain, SeriesID: ser.ID, VideoID: videoID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	started := make(chan struct{})
+	done := make(chan struct{})
+	handlers := worker.StubHandlers()
+	handlers[queue.KindMediaVerify] = func(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) error {
+		progress("Verifying…", nil)
+		close(started)
+		<-ctx.Done()
+		close(done)
+		return ctx.Err()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go (&worker.Runner{
+		Queue:    store,
+		Library:  lib,
+		Handlers: handlers,
+		Interval: 20 * time.Millisecond,
+	}).Run(ctx)
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not start")
+	}
+	cancel() // graceful shutdown: parent ctx cancel, not operator Cancel
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not finish after shutdown")
+	}
+	time.Sleep(50 * time.Millisecond) // let execute finish post-handler path
+
+	var status string
+	if err := d.SQL.QueryRow(`SELECT status FROM tasks WHERE id = ?`, id).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != queue.StatusRunning {
+		t.Fatalf("status=%q want running (left for requeue)", status)
+	}
+	hist, err := lib.ListVideoHistory(videoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range hist {
+		if e.Event == library.VideoHistCancelled {
+			t.Fatalf("unexpected cancelled history on shutdown: %+v", e)
+		}
+	}
+
+	n, err := store.RequeueStaleRunning()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n < 1 {
+		t.Fatalf("requeued=%d", n)
+	}
+	var message string
+	if err := d.SQL.QueryRow(`SELECT status, message FROM tasks WHERE id = ?`, id).Scan(&status, &message); err != nil {
+		t.Fatal(err)
+	}
+	if status != queue.StatusPending || message != "Requeued after restart" {
+		t.Fatalf("after requeue status=%q message=%q", status, message)
+	}
+}
 
 func TestRunnerRateLimitedNotifiesWithoutUnmonitor(t *testing.T) {
 	testRunnerDomainIssueNotify(t, apperrors.CodeDownloadFailed, "HTTP Error 429: Too Many Requests", true)

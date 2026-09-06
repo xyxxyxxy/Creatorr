@@ -460,6 +460,7 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 		v := videoHistoryView{
 			CreatedAt: abs, CreatedAgo: ago,
 			Event: historyEventLabel(e.Event, e.Detail), Message: e.Message, Detail: e.Detail,
+			HasError: historyEventError(e.Event),
 		}
 		if e.TaskID > 0 {
 			v.HasTask = true
@@ -577,6 +578,7 @@ type videoHistoryView struct {
 	TaskID     int64
 	TaskKind   string // tasks.kind when TaskID set (grouped Event label)
 	HasTask    bool
+	HasError   bool // from raw event before historyEventLabel remap
 	HistoryID  int64
 	VideoID    int64
 	VideoTitle string
@@ -591,6 +593,7 @@ func videoHistoryToView(e library.VideoHistoryEvent, now time.Time) videoHistory
 		Event:      historyEventLabel(e.Event, e.Detail),
 		Message:    e.Message,
 		Detail:     e.Detail,
+		HasError:   historyEventError(e.Event),
 		VideoID:    e.VideoID,
 	}
 	if e.TaskID.Valid {
@@ -648,7 +651,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 	for _, e := range hist {
 		v := videoHistoryToView(e, now)
 		histViews = append(histViews, v)
-		if errorHistoryID == 0 && historyEventError(v.Event) && v.HistoryID > 0 {
+		if errorHistoryID == 0 && v.HasError && v.HistoryID > 0 {
 			errorHistoryID = v.HistoryID
 		}
 	}
