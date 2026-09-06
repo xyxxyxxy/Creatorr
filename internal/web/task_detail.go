@@ -358,16 +358,25 @@ type taskDetailHistRow struct {
 	SeriesID   int64
 }
 
-// taskStageView is one row on the task detail vertical Stages timeline.
+// taskStageView is one daisyUI vertical-timeline node (task Stages + video History).
 type taskStageView struct {
 	Event      string
 	Message    string
 	CreatedAt  string
 	CreatedAgo string
-	Duration   string // previous row → this row (largest unit; omit ≤1s)
+	Duration   string // chrono gap onto this stage (omit ≤1s); kept after reverse for display
 	HasError   bool
 	IsFirst    bool
 	IsLast     bool
+	HistoryID  int64             // optional /task/{id} link on Event (0 = none)
+	Substages  []taskStageSubview // nested stages under a grouped video-history node
+}
+
+// taskStageSubview is one line inside a grouped timeline box (e.g. downloaded / remuxed / packed).
+type taskStageSubview struct {
+	Event    string
+	Message  string
+	HasError bool
 }
 
 // singleVideoHistory is true when every video_history row shares one video_id > 0.
@@ -384,14 +393,13 @@ func singleVideoHistory(events []library.VideoHistoryEvent) bool {
 	return true
 }
 
-// taskStages builds the Stages timeline for every task view.
+// taskStages builds the Stages timeline for every task view (latest at top, oldest at bottom).
 // Always includes enqueued from created_at when set. Single-video video_history
 // appends those events; otherwise appends started. Terminal done/failed/cancelled
-// is always appended last when the task has finished.
+// is always included when the task has finished.
 func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, taskStarted, taskFinished, status string) []taskStageView {
 	out := make([]taskStageView, 0, len(events)+4)
 	rawTimes := make([]time.Time, 0, len(events)+4)
-	var prevAgo string
 
 	appendStage := func(event, message, rawAt string, err bool) {
 		if event == "" {
@@ -404,11 +412,6 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 		abs, ago := "", ""
 		if rawAt != "" {
 			abs, ago = createdAgoPairShort(rawAt, now)
-			if ago != "" && ago == prevAgo {
-				abs, ago = "", ""
-			} else if ago != "" {
-				prevAgo = ago
-			}
 		}
 		rawTimes = append(rawTimes, tAt)
 		out = append(out, taskStageView{
@@ -449,6 +452,7 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 		appendStage(term, "", at, termErr)
 	}
 
+	// Durations are chrono gaps (older → newer) before reversing for display.
 	for i := 1; i < len(out); i++ {
 		start, end := rawTimes[i-1], rawTimes[i]
 		if start.IsZero() || end.IsZero() {
@@ -459,6 +463,21 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 			continue
 		}
 		out[i].Duration = stageDurationLabel(d)
+	}
+
+	// Latest at top, oldest at bottom.
+	for a, b := 0, len(out)-1; a < b; a, b = a+1, b-1 {
+		out[a], out[b] = out[b], out[a]
+	}
+	var prevAgo string
+	for i := range out {
+		ago := out[i].CreatedAgo
+		if ago != "" && ago == prevAgo {
+			out[i].CreatedAt = ""
+			out[i].CreatedAgo = ""
+		} else if ago != "" {
+			prevAgo = ago
+		}
 	}
 	out[0].IsFirst = true
 	out[len(out)-1].IsLast = true

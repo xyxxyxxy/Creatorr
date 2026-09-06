@@ -3,10 +3,7 @@
 {{template "breadcrumbs" .Crumbs}}
 <div class="navbar bg-base-100 border border-base-300 rounded-box px-3 mb-4 min-h-14 gap-2 flex-wrap" data-task-detail="{{.Item.ID}}"{{if .Live}} data-task-row-status="{{.Item.Status}}"{{end}}>
   <div class="flex-1 min-w-0">
-    <h1 class="text-xl font-semibold truncate inline-flex items-center gap-2 max-w-full">
-      <span class="shrink-0 self-center" data-task-status>{{template "status_badge" .Item.Status}}</span>
-      <span class="truncate">Task - {{.Item.Kind}}</span>
-    </h1>
+    <h1 class="text-xl font-semibold truncate">Task - {{.Item.Kind}}</h1>
     <p class="text-xs opacity-60">#{{.Item.ID}}</p>
   </div>
   {{if .Live}}
@@ -20,7 +17,10 @@
       <progress data-task-progress class="progress progress-secondary w-full" max="100" aria-label="In progress"></progress>
       {{end}}
     </div>
-    <label for="modal-cancel-task" class="btn btn-ghost text-error">Cancel</label>
+    <label for="modal-cancel-task" class="btn btn-ghost text-error">
+      <i data-lucide="x" class="size-4"></i>
+      Cancel
+    </label>
   </div>
   {{end}}
 </div>
@@ -30,27 +30,7 @@
   <section class="list-panel card bg-base-100 border border-base-300 h-full">
     <div class="card-body gap-3">
   {{template "list_header" (dict "level" "section" "title" "Stages")}}
-  <ul class="timeline timeline-vertical">
-    {{range .Stages}}
-    <li>
-      {{if not .IsFirst}}<hr />{{end}}
-      {{if .CreatedAgo}}
-      <div class="timeline-start pe-6">
-        <span class="tooltip tooltip-left text-xs opacity-60 whitespace-nowrap" data-tip="{{.CreatedAt}}">{{.CreatedAgo}}</span>
-      </div>
-      {{end}}
-      <div class="timeline-middle">
-        <i data-lucide="{{if .HasError}}circle-x{{else}}circle-check{{end}}" class="size-5{{if .HasError}} text-error{{else}} text-success{{end}}"></i>
-      </div>
-      <div class="timeline-end timeline-box{{if .HasError}} border-error{{end}}">
-        <div class="font-mono text-xs{{if .HasError}} text-error{{end}}">{{.Event}}</div>
-        {{if .Message}}<div class="text-sm mt-0.5">{{.Message}}</div>{{end}}
-        {{if .Duration}}<div class="text-xs opacity-60 mt-0.5 tabular-nums">{{.Duration}}</div>{{end}}
-      </div>
-      {{if not .IsLast}}<hr />{{end}}
-    </li>
-    {{end}}
-  </ul>
+  {{template "timeline_vertical" .Stages}}
     </div>
   </section>
 

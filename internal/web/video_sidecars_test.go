@@ -27,3 +27,26 @@ func TestSidecarIsVideo(t *testing.T) {
 		t.Fatal("json not video")
 	}
 }
+
+func TestVideoMediaPlay(t *testing.T) {
+	files := []videoFileView{
+		{ID: 0, Kind: "video", Path: "gone.mkv", Missing: true},
+		{ID: 9, Kind: "nfo", Path: "ep.nfo"},
+		{ID: 12, Kind: "video", Path: "/lib/ep.mkv"},
+	}
+	href, audio, ok := videoMediaPlay(files, 3, 7, false)
+	if !ok || audio || href != "/series/3/videos/7/files/12/raw" {
+		t.Fatalf("got %q audio=%v ok=%v", href, audio, ok)
+	}
+	_, audio, ok = videoMediaPlay([]videoFileView{{ID: 1, Kind: "video", Path: "a.mka"}}, 1, 2, false)
+	if !ok || !audio {
+		t.Fatalf("mka audio=%v ok=%v", audio, ok)
+	}
+	_, audio, ok = videoMediaPlay([]videoFileView{{ID: 1, Kind: "video", Path: "a.mkv"}}, 1, 2, true)
+	if !ok || !audio {
+		t.Fatalf("audio series=%v ok=%v", audio, ok)
+	}
+	if _, _, ok := videoMediaPlay(nil, 1, 2, false); ok {
+		t.Fatal("empty")
+	}
+}

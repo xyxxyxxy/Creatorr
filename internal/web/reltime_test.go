@@ -38,11 +38,11 @@ func TestFormatAgoShort(t *testing.T) {
 		{now.Add(-30 * time.Second), "just now"},
 		{now.Add(-1 * time.Minute), "1 min ago"},
 		{now.Add(-3*time.Minute - 20*time.Second), "3 min ago"},
-		{now.Add(-1*time.Hour - 3*time.Minute), "1 h 3 min ago"},
-		{now.Add(-9*time.Hour - 54*time.Minute), "9 h 54 min ago"},
-		{now.Add(-26 * time.Hour), "1 d 2 h ago"},
+		{now.Add(-1*time.Hour - 3*time.Minute), "1 h ago"},
+		{now.Add(-9*time.Hour - 54*time.Minute), "9 h ago"},
+		{now.Add(-26 * time.Hour), "1 d ago"},
 		{now.AddDate(0, 0, -7), "7 d ago"},
-		{now.AddDate(-1, -4, 0), "1 y 4 mo ago"},
+		{now.AddDate(-1, -4, 0), "1 y ago"},
 		{now.AddDate(-2, 0, 0), "2 y ago"},
 	}
 	for _, tc := range cases {

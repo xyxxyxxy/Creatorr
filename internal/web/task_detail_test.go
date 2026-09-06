@@ -171,22 +171,25 @@ func TestTaskStages(t *testing.T) {
 	if len(got) != 5 || !got[0].IsFirst || !got[4].IsLast {
 		t.Fatalf("stages: %+v", got)
 	}
-	if got[0].Event != "enqueued" || got[1].Event != "downloaded" || got[2].Event != "remuxed" || got[3].Event != "packed" || got[4].Event != "done" {
-		t.Fatalf("order: %+v", got)
+	if got[0].Event != "done" || got[1].Event != "packed" || got[2].Event != "remuxed" || got[3].Event != "downloaded" || got[4].Event != "enqueued" {
+		t.Fatalf("order (latest top): %+v", got)
 	}
-	// previous row → this row (enqueued has no prior → empty); terminal done after pack.
-	if got[0].Duration != "" || got[1].Duration != "2min" || got[2].Duration != "1min" || got[3].Duration != "30 sec" || got[4].Duration != "30 sec" {
+	// Durations stay on the newer chrono stage (packed/remuxed/downloaded/done).
+	if got[0].Duration != "30 sec" || got[1].Duration != "30 sec" || got[2].Duration != "1min" || got[3].Duration != "2min" || got[4].Duration != "" {
 		t.Fatalf("durations: %q %q %q %q %q", got[0].Duration, got[1].Duration, got[2].Duration, got[3].Duration, got[4].Duration)
 	}
-	if got[0].CreatedAgo == "" || got[1].CreatedAgo == "" {
-		t.Fatalf("want times on enqueued+downloaded: %+v", got)
+	if got[3].CreatedAgo == "" || got[4].CreatedAgo == "" {
+		t.Fatalf("want times on downloaded+enqueued: %+v", got)
 	}
 	// 1s gap between rows → omit duration on the later stage.
 	oneSec := []library.VideoHistoryEvent{
 		{VideoID: 7, Event: "downloaded", Message: "a", CreatedAt: "2026-09-06T11:56:01Z"},
 	}
 	got = taskStages(oneSec, now, created, started, "", "running")
-	if len(got) != 2 || got[0].Duration != "" || got[1].Duration != "" {
+	if len(got) != 2 || got[0].Event != "downloaded" || got[1].Event != "enqueued" {
+		t.Fatalf("running order: %+v", got)
+	}
+	if got[0].Duration != "" || got[1].Duration != "" {
 		t.Fatalf("1sec stage omit duration: %+v", got)
 	}
 	ts := "2026-09-05T14:33:00Z"
@@ -195,40 +198,41 @@ func TestTaskStages(t *testing.T) {
 		{VideoID: 7, Event: "remuxed", Message: "b", CreatedAt: ts},
 		{VideoID: 7, Event: "packed", Message: "c", CreatedAt: ts},
 	}
-	got = taskStages(sameLabel, now, "2026-09-05T14:30:00Z", "", "2026-09-05T14:33:00Z", "done")
-	if len(got) != 5 || got[0].Event != "enqueued" || got[4].Event != "done" {
-		t.Fatalf("want enqueued+3+done: %+v", got)
+	got = taskStages(sameLabel, now, "2026-09-04T14:30:00Z", "", "2026-09-05T14:33:00Z", "done")
+	if len(got) != 5 || got[0].Event != "done" || got[4].Event != "enqueued" {
+		t.Fatalf("want done…enqueued: %+v", got)
 	}
-	if got[0].CreatedAgo == "" || got[1].CreatedAgo == "" || got[2].CreatedAgo != "" || got[3].CreatedAgo != "" {
+	// Display top→bottom: first compact time kept, later duplicates blanked; enqueued differs by day.
+	if got[0].CreatedAgo == "" || got[1].CreatedAgo != "" || got[2].CreatedAgo != "" || got[3].CreatedAgo != "" || got[4].CreatedAgo == "" {
 		t.Fatalf("duplicate compact time: %+v", got)
 	}
-	if got[0].Duration != "" || got[1].Duration != "3min" || got[2].Duration != "" || got[3].Duration != "" {
-		t.Fatalf("row-gap durations: %q %q %q %q", got[0].Duration, got[1].Duration, got[2].Duration, got[3].Duration)
+	if got[0].Duration != "" || got[1].Duration != "" || got[2].Duration != "" || got[3].Duration == "" || got[4].Duration != "" {
+		t.Fatalf("row-gap durations: %q %q %q %q %q", got[0].Duration, got[1].Duration, got[2].Duration, got[3].Duration, got[4].Duration)
 	}
 	fail := []library.VideoHistoryEvent{
 		{VideoID: 7, Event: "download_failed", Message: "boom", CreatedAt: "2026-09-06T11:58:00Z"},
 	}
 	got = taskStages(fail, now, created, started, finished, "failed")
-	if len(got) != 3 || got[0].Event != "enqueued" || !got[1].HasError || got[2].Event != "failed" || !got[2].HasError {
+	if len(got) != 3 || got[0].Event != "failed" || !got[0].HasError || !got[1].HasError || got[2].Event != "enqueued" {
 		t.Fatalf("fail stage: %+v", got)
 	}
 	if got[1].Duration != "2min" {
 		t.Fatalf("fail duration: %q", got[1].Duration)
 	}
-	// Multi-video / no history: lifecycle enqueued → started → done.
+	// Multi-video / no history: lifecycle done → started → enqueued (latest top).
 	multi := []library.VideoHistoryEvent{
 		{VideoID: 1, Event: "sidecar_missing", CreatedAt: "2026-09-06T11:58:00Z"},
 		{VideoID: 2, Event: "sidecar_missing", CreatedAt: "2026-09-06T11:59:00Z"},
 	}
 	got = taskStages(multi, now, created, started, finished, "done")
-	if len(got) != 3 || got[0].Event != "enqueued" || got[1].Event != "started" || got[2].Event != "done" {
+	if len(got) != 3 || got[0].Event != "done" || got[1].Event != "started" || got[2].Event != "enqueued" {
 		t.Fatalf("lifecycle: %+v", got)
 	}
-	if got[1].Duration != "1min" || got[2].Duration != "3min" {
-		t.Fatalf("lifecycle durations: %q %q", got[1].Duration, got[2].Duration)
+	if got[0].Duration != "3min" || got[1].Duration != "1min" {
+		t.Fatalf("lifecycle durations: %q %q", got[0].Duration, got[1].Duration)
 	}
 	got = taskStages(nil, now, created, started, finished, "failed")
-	if len(got) != 3 || got[2].Event != "failed" || !got[2].HasError {
+	if len(got) != 3 || got[0].Event != "failed" || !got[0].HasError {
 		t.Fatalf("failed lifecycle: %+v", got)
 	}
 	got = taskStages(nil, now, created, "", "", "pending")
@@ -240,7 +244,7 @@ func TestTaskStages(t *testing.T) {
 		t.Fatalf("fallback enqueued: %+v", got)
 	}
 	got = taskStages(nil, now, "", "", "", "done")
-	if len(got) != 2 || got[0].Event != "enqueued" || got[1].Event != "done" {
+	if len(got) != 2 || got[0].Event != "done" || got[1].Event != "enqueued" {
 		t.Fatalf("done without timestamps: %+v", got)
 	}
 }

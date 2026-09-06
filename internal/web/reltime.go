@@ -80,8 +80,8 @@ func formatAgo(then, now time.Time) string {
 	return b.String()
 }
 
-// formatAgoShort returns a compact relative past time (at most two units).
-// Examples: "just now", "3 min ago", "1 h 3 min ago", "1 d 2 h ago", "7 d ago", "1 y 4 mo ago".
+// formatAgoShort returns a compact relative past time using only the largest unit.
+// Examples: "just now", "3 min ago", "1 h ago", "1 d ago", "7 d ago", "1 y ago".
 func formatAgoShort(then, now time.Time) string {
 	then = then.UTC()
 	now = now.UTC()
@@ -135,18 +135,7 @@ func formatAgoShort(then, now time.Time) string {
 	if len(parts) == 0 {
 		return "just now"
 	}
-	if len(parts) > 2 {
-		parts = parts[:2]
-	}
-	var b strings.Builder
-	for i, p := range parts {
-		if i > 0 {
-			b.WriteByte(' ')
-		}
-		fmt.Fprintf(&b, "%d %s", p.n, p.u)
-	}
-	b.WriteString(" ago")
-	return b.String()
+	return fmt.Sprintf("%d %s ago", parts[0].n, parts[0].u)
 }
 
 // formatInShort returns a compact relative future span (at most two units).
