@@ -1,0 +1,6 @@
+{{define "edit_series_settings_fields"}}
+{{/* Edit series Title/Root/… fields; OOB-refreshed from series task-indicators when FolderRenameBusy flips. */}}
+<div id="edit-series-settings-fields" data-folder-rename-busy="{{if .TitleDisabled}}1{{else}}0{{end}}"{{if .OOB}} hx-swap-oob="true"{{end}}>
+{{template "series_settings_fields" .}}
+</div>
+{{end}}

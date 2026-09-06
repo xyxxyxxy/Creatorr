@@ -316,21 +316,7 @@
     {{end}}
         <form method="post" action="/actions/update-series" class="space-y-2">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      {{template "series_settings_fields" (dict
-        "DeliveryMode" .Series.DeliveryMode
-        "Title" .Series.Title
-        "TitleInfo" "Changing the title updates Creatorr and renames the on-disk series folder immediately. Episode filenames that include the series name are not rewritten until you run 'Apply episode format' under 'Settings → Library'."
-        "TitleDisabled" .FolderRenameBusy
-        "TitleDisabledTitle" "'Title' and 'Root folder' are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
-        "Monitored" .Series.Monitored
-        "Roots" .Roots
-        "RootID" .Series.RootID
-        "RootInfo" "Where downloads and series NFO/art are written. Changing root moves the series folder on disk."
-        "RootDisabled" .FolderRenameBusy
-        "RootDisabledTitle" "'Title' and 'Root folder' are locked while download or pack tasks are pending or running. Wait or cancel those tasks first."
-        "Profiles" .Profiles
-        "ProfileID" .Series.QualityProfileID
-      )}}
+      {{template "edit_series_settings_fields" .EditSettings}}
       <div class="modal-action">
         <label for="modal-edit-series" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary" {{if or (not .Roots) (not .Profiles)}}disabled{{end}}>Save</button>

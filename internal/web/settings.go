@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -115,6 +116,73 @@ func redirectSettings(w http.ResponseWriter, r *http.Request, defaultPath, query
 		sep = "&"
 	}
 	http.Redirect(w, r, base+sep+query, http.StatusSeeOther)
+}
+
+func wantsJSON(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Accept"), "application/json") ||
+		r.FormValue("response") == "json" ||
+		r.URL.Query().Get("response") == "json"
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func operatorErrMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	msg = strings.TrimPrefix(msg, "invalid: ")
+	msg = strings.TrimPrefix(msg, "conflict: ")
+	return msg
+}
+
+// rootFormFieldFromErr maps CreateRoot/UpdateRoot errors to a form control name.
+func rootFormFieldFromErr(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "path"):
+		return "path"
+	case strings.Contains(msg, "episode"):
+		return "episode_format"
+	case strings.Contains(msg, "retention"):
+		return "retention_ttl_days"
+	default:
+		return ""
+	}
+}
+
+func redirectOrJSONRootErr(w http.ResponseWriter, r *http.Request, err error) {
+	msg := operatorErrMessage(err)
+	if wantsJSON(r) {
+		out := map[string]string{"error": msg}
+		if f := rootFormFieldFromErr(err); f != "" {
+			out["field"] = f
+		}
+		writeJSON(w, http.StatusBadRequest, out)
+		return
+	}
+	redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+}
+
+func redirectOrJSONRootOK(w http.ResponseWriter, r *http.Request, okQuery string) {
+	base := settingsFormRedirect(r, "/settings/library")
+	sep := "?"
+	if strings.Contains(base, "?") {
+		sep = "&"
+	}
+	loc := base + sep + okQuery
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "1", "redirect": loc})
+		return
+	}
+	http.Redirect(w, r, loc, http.StatusSeeOther)
 }
 
 func (h *Handler) settingsGeneral(w http.ResponseWriter, r *http.Request) {
@@ -950,16 +1018,16 @@ func (h *Handler) actionAddRoot(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	ttl, err := parseRetentionTTLDays(r.FormValue("retention_ttl_days"))
 	if err != nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+		redirectOrJSONRootErr(w, r, err)
 		return
 	}
 	epFmt := strings.TrimSpace(r.FormValue("episode_format"))
 	_, err = h.Library.CreateRoot(strings.TrimSpace(r.FormValue("name")), strings.TrimSpace(r.FormValue("path")), epFmt, ttl)
 	if err != nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+		redirectOrJSONRootErr(w, r, err)
 		return
 	}
-	redirectSettings(w, r, "/settings/library", "ok=root")
+	redirectOrJSONRootOK(w, r, "ok=root")
 }
 
 func (h *Handler) actionUpdateRoot(w http.ResponseWriter, r *http.Request) {
@@ -974,7 +1042,7 @@ func (h *Handler) actionUpdateRoot(w http.ResponseWriter, r *http.Request) {
 	if !clearRetention {
 		ttl, err := parseRetentionTTLDays(ttlRaw)
 		if err != nil {
-			redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+			redirectOrJSONRootErr(w, r, err)
 			return
 		}
 		if ttl == nil {
@@ -985,7 +1053,12 @@ func (h *Handler) actionUpdateRoot(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, ok := r.Form["episode_format"]; ok {
 		if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain); busy {
-			redirectSettings(w, r, "/settings/library", "err="+urlQuery("Cancel or wait for 'Apply episode format' before changing formats"))
+			msg := "Cancel or wait for 'Apply episode format' before changing formats"
+			if wantsJSON(r) {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg, "field": "episode_format"})
+				return
+			}
+			redirectSettings(w, r, "/settings/library", "err="+urlQuery(msg))
 			return
 		}
 	}
@@ -995,10 +1068,10 @@ func (h *Handler) actionUpdateRoot(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := h.Library.UpdateRoot(id, &name, &path, epPtr, retention, clearRetention)
 	if err != nil {
-		redirectSettings(w, r, "/settings/library", "err="+urlQuery(err.Error()))
+		redirectOrJSONRootErr(w, r, err)
 		return
 	}
-	redirectSettings(w, r, "/settings/library", "ok=root-updated")
+	redirectOrJSONRootOK(w, r, "ok=root-updated")
 }
 
 func (h *Handler) actionDeleteRoot(w http.ResponseWriter, r *http.Request) {

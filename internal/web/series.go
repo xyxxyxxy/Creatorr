@@ -31,6 +31,28 @@ func videoTaskRunning(tasks []queue.Task) bool {
 	return false
 }
 
+// seriesFolderLockTip is the DisabledTitle for Edit series Title and Root folder.
+const seriesFolderLockTip = "'Title' and 'Root folder' are locked while download, SponsorBlock cut, or media verify tasks for this series are pending or running. Wait or cancel those tasks first."
+
+func editSeriesSettingsFields(ser *library.Series, roots []library.RootFolder, profiles []library.QualityProfile, busy, oob bool) map[string]any {
+	return map[string]any{
+		"DeliveryMode":       ser.DeliveryMode,
+		"Title":              ser.Title,
+		"TitleInfo":          "Changing the title updates Creatorr and renames the on-disk series folder immediately. Episode filenames that include the series name are not rewritten until you run 'Apply episode format' under 'Settings → Library'.",
+		"TitleDisabled":      busy,
+		"TitleDisabledTitle": seriesFolderLockTip,
+		"Monitored":          ser.Monitored,
+		"Roots":              roots,
+		"RootID":             ser.RootID,
+		"RootInfo":           "Where downloads and series NFO/art are written. Changing root moves the series folder on disk.",
+		"RootDisabled":       busy,
+		"RootDisabledTitle":  seriesFolderLockTip,
+		"Profiles":           profiles,
+		"ProfileID":          ser.QualityProfileID,
+		"OOB":                oob,
+	}
+}
+
 // videoDeliveryQueued is true when a download, sponsorblock_cut, or media_verify task is pending or running.
 func videoDeliveryQueued(tasks []queue.Task) bool {
 	for _, t := range tasks {
@@ -272,6 +294,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 	metaForm = h.withMetaSuggestions(metaForm)
 	metaFiles := seriesMetaFileViews(h.Library, ser)
 	videoTotal, _ := h.Library.CountVideos(id)
+	editSettings := editSeriesSettingsFields(ser, roots, profiles, folderRenameBusy, false)
 	render(w, "series_detail", struct {
 		pageBase
 		Series                     *library.Series
@@ -290,6 +313,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		Roots                      []library.RootFolder
 		Profiles                   []library.QualityProfile
 		FolderRenameBusy           bool
+		EditSettings               map[string]any
 		MetaForm                   seriesMetadataView
 		Deleting                   bool
 	}{
@@ -310,6 +334,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		Roots:                      roots,
 		Profiles:                   profiles,
 		FolderRenameBusy:           folderRenameBusy,
+		EditSettings:               editSettings,
 		MetaForm:                   metaForm,
 		Deleting:                   seriesDeleting,
 	})
@@ -400,10 +425,19 @@ func (h *Handler) seriesTaskIndicators(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	roots, _ := h.Library.ListRoots()
+	profiles, _ := h.Library.ListProfiles()
+	folderBusy, _ := h.Library.SeriesHasBusyMediaTasks(id)
+
 	render(w, "task_indicators_oob", struct {
-		Indicators []taskIndicatorView
-		Sources    []sourceLive
-	}{Indicators: inds, Sources: srcLive})
+		Indicators   []taskIndicatorView
+		Sources      []sourceLive
+		EditSettings map[string]any
+	}{
+		Indicators:   inds,
+		Sources:      srcLive,
+		EditSettings: editSeriesSettingsFields(ser, roots, profiles, folderBusy, true),
+	})
 }
 
 func (h *Handler) videoTaskIndicator(w http.ResponseWriter, r *http.Request) {
