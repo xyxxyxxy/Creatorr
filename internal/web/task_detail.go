@@ -364,7 +364,7 @@ type taskStageView struct {
 	Message    string
 	CreatedAt  string
 	CreatedAgo string
-	Duration   string // chrono gap onto this stage (omit ≤1s); kept after reverse for display
+	Duration   string // how long this stage lasted until the next (omit ≤1s); kept after reverse for display
 	HasError   bool
 	IsFirst    bool
 	IsLast     bool
@@ -452,7 +452,7 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 		appendStage(term, "", at, termErr)
 	}
 
-	// Durations are chrono gaps (older → newer) before reversing for display.
+	// Durations are how long each stage lasted (older → next) before reversing for display.
 	for i := 1; i < len(out); i++ {
 		start, end := rawTimes[i-1], rawTimes[i]
 		if start.IsZero() || end.IsZero() {
@@ -462,7 +462,7 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 		if d < 0 {
 			continue
 		}
-		out[i].Duration = stageDurationLabel(d)
+		out[i-1].Duration = stageDurationLabel(d)
 	}
 
 	// Latest at top, oldest at bottom.
