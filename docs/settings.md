@@ -53,6 +53,7 @@ Sidecars are always converted to SRT via yt-dlp `--convert-subs srt` (no format 
 | `verify_failed` | alert | Post-pack media verify failed (file kept; status `verify_failed`) |
 | `file_sync_issues` | alert | End-of-pass digest from `sync_files`: newly missing media/sidecars and/or size mismatches (media → status `verify_failed`; sidecars keep video status; no auto re-download) |
 | `pot_provider` | warning | PO token plugin/sidecar problem while yt-dlp continued (task not failed for this alone) |
+| `path_collision` | warning | Pack installed under `_N` because ideal path was occupied, or Apply finished with leftover `_N` stems in scope |
 | `download_digest` | info | Global digest after all download tasks drain and no eligible wanted remain. Body lists finished titles; detail **Related to** links each video (`[#id]` in stored body, or series/title match for older digests). |
 | `live_skipped` | info | Archive download soft-skipped because yt-dlp `is_live`; video stays `wanted`; notification `task_id` links to the finished task (video history `live_skipped`) |
 

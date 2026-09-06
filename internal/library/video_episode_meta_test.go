@@ -1,6 +1,7 @@
 package library_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
@@ -483,11 +485,14 @@ func TestSaveVideoMetadataUploadDateReindexesAndRenames(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = s.SaveVideoMetadata(res.VideoID, library.SaveVideoMetadataParams{
+	out, err := s.SaveVideoMetadata(res.VideoID, library.SaveVideoMetadataParams{
 		Title: "Ep", UploadDate: "2024-03-15",
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !out.RenameQueued || out.RenameTaskID <= 0 {
+		t.Fatalf("expected rename queued, out=%+v", out)
 	}
 	v, err := s.GetVideo(res.VideoID)
 	if err != nil {
@@ -501,6 +506,24 @@ func TestSaveVideoMetadataUploadDateReindexesAndRenames(t *testing.T) {
 	}
 	if !v.Episode.Valid || int(v.Episode.Int64) != 31500 {
 		t.Fatalf("episode=%v want 31500", v.Episode)
+	}
+	var pathBefore string
+	_ = s.DB.SQL.QueryRow(`SELECT path FROM files WHERE video_id = ? AND kind = 'video'`, res.VideoID).Scan(&pathBefore)
+	if pathBefore != oldMedia {
+		t.Fatalf("path should still be old until Apply runs: %q", pathBefore)
+	}
+	task, err := s.Queue.GetTask(out.RenameTaskID)
+	if err != nil || task == nil {
+		t.Fatal(err)
+	}
+	_, _ = s.DB.SQL.Exec(`UPDATE tasks SET status = 'running' WHERE id = ?`, task.ID)
+	task.Status = queue.StatusRunning
+	renamed, _, failed, err := s.ApplyEpisodeNamingPass(context.Background(), task, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed != 1 || failed != 0 {
+		t.Fatalf("renamed=%d failed=%d", renamed, failed)
 	}
 	var newPath string
 	_ = s.DB.SQL.QueryRow(`SELECT path FROM files WHERE video_id = ? AND kind = 'video'`, res.VideoID).Scan(&newPath)
@@ -554,11 +577,14 @@ func TestSaveVideoMetadataClearsUploadDate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = s.SaveVideoMetadata(res.VideoID, library.SaveVideoMetadataParams{
+	out, err := s.SaveVideoMetadata(res.VideoID, library.SaveVideoMetadataParams{
 		Title: "Ep", UploadDate: "",
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !out.RenameQueued {
+		t.Fatal("expected rename queued")
 	}
 	v, err := s.GetVideo(res.VideoID)
 	if err != nil {
@@ -569,6 +595,15 @@ func TestSaveVideoMetadataClearsUploadDate(t *testing.T) {
 	}
 	if v.Season.Valid || v.Episode.Valid {
 		t.Fatalf("season/episode should clear, season=%v episode=%v", v.Season, v.Episode)
+	}
+	task, err := s.Queue.GetTask(out.RenameTaskID)
+	if err != nil || task == nil {
+		t.Fatal(err)
+	}
+	_, _ = s.DB.SQL.Exec(`UPDATE tasks SET status = 'running' WHERE id = ?`, task.ID)
+	task.Status = queue.StatusRunning
+	if _, _, _, err := s.ApplyEpisodeNamingPass(context.Background(), task, nil); err != nil {
+		t.Fatal(err)
 	}
 	var newPath string
 	_ = s.DB.SQL.QueryRow(`SELECT path FROM files WHERE video_id = ? AND kind = 'video'`, res.VideoID).Scan(&newPath)

@@ -1,7 +1,6 @@
 package library
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,33 +102,40 @@ func FindDownloadSidecars(mediaPath string) (infoPath, thumbPath string, subPath
 // (title, showtitle, S/E, plot, aired, uniqueid) via WriteEpisodeNFO.
 // Copies optional info.json, thumbnail, and subtitle sidecars when sources exist (soft-ok if absent).
 // Subtitle dest names keep the yt-dlp language suffix (e.g. .en.srt or .en.auto.srt).
-func PackMedia(mediaSrc, root string, meta EpisodeNFO, cfg NamingConfig, infoSrc, thumbSrc string, subSrcs []string) (mediaPath, nfoPath, infoPath, thumbPath string, subPaths []string, err error) {
+// When the ideal media path is occupied, installs under PrimaryBase_N and returns pathSuffix N > 0.
+func PackMedia(mediaSrc, root string, meta EpisodeNFO, cfg NamingConfig, infoSrc, thumbSrc string, subSrcs []string) (mediaPath, nfoPath, infoPath, thumbPath string, subPaths []string, pathSuffix int, err error) {
 	paths, err := BuildEpisodePaths(root, meta, cfg)
 	if err != nil {
-		return "", "", "", "", nil, err
+		return "", "", "", "", nil, 0, err
 	}
 	if err := os.MkdirAll(paths.EpisodeDir, 0o755); err != nil {
-		return "", "", "", "", nil, err
+		return "", "", "", "", nil, 0, err
 	}
 	ext := strings.ToLower(filepath.Ext(mediaSrc))
 	if ext == "" {
 		ext = ".mkv"
 	}
-	mediaPath = paths.PrimaryBase + ext
-	if DestinationOccupied(mediaPath, nil) {
-		return "", "", "", "", nil, fmt.Errorf("destination exists: %s", mediaPath)
+	idealBase := paths.PrimaryBase
+	newBase, pathSuffix, err := DisambiguateEpisodeBase(idealBase, ext, nil)
+	if err != nil {
+		return "", "", "", "", nil, 0, err
 	}
+	paths.PrimaryBase = newBase
+	if pathSuffix > 0 {
+		paths.Stem = filepath.Base(newBase)
+	}
+	mediaPath = paths.PrimaryBase + ext
 	if err := moveFile(mediaSrc, mediaPath); err != nil {
-		return "", "", "", "", nil, err
+		return "", "", "", "", nil, 0, err
 	}
 	nfoPath = paths.PrimaryBase + ".nfo"
 	if err := WriteEpisodeNFO(nfoPath, meta); err != nil {
-		return mediaPath, "", "", "", nil, err
+		return mediaPath, "", "", "", nil, pathSuffix, err
 	}
 	if infoSrc != "" && fileExists(infoSrc) {
 		infoPath = paths.PrimaryBase + ".info.json"
 		if err := copyFile(infoSrc, infoPath); err != nil {
-			return mediaPath, nfoPath, "", "", nil, err
+			return mediaPath, nfoPath, "", "", nil, pathSuffix, err
 		}
 	}
 	if thumbSrc != "" && fileExists(thumbSrc) {
@@ -158,7 +164,7 @@ func PackMedia(mediaSrc, root string, meta EpisodeNFO, cfg NamingConfig, infoSrc
 		}
 		subPaths = append(subPaths, dest)
 	}
-	return mediaPath, nfoPath, infoPath, thumbPath, subPaths, nil
+	return mediaPath, nfoPath, infoPath, thumbPath, subPaths, pathSuffix, nil
 }
 
 func sanitizeName(s string, max int) string {

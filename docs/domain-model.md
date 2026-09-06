@@ -83,7 +83,7 @@ When introducing a new domain term, add it here (or the topic doc above if it be
 
 ## Upload time
 
-`videos.upload_date` is always **RFC3339 UTC** in the database (full timestamp for same-day ordering). yt-dlp / plugins must send RFC3339 UTC; Creatorr does not normalize Unix / date-only on ingest. **`season`** is the UTC **calendar year** (year-season, e.g. 2026). **`episode`** is `MMDD` + 0-based same-day index (`MM*10000+DD*100+i`, e.g. 31500 for 15 Mar first that day). Same UTC day: sort by `upload_date` then `id` (arrival). An earlier same-day timestamp reindexes that day and repacks shifted packed files. Undated videos leave season/episode unset in the DB; pack uses year-season **0**, so `{year}` in `episode_format` renders as **`0000`** (e.g. `S0000`), not TV default `S1`.
+`videos.upload_date` is always **RFC3339 UTC** in the database (full timestamp for same-day ordering). yt-dlp / plugins must send RFC3339 UTC; Creatorr does not normalize Unix / date-only on ingest. **`season`** is the UTC **calendar year** (year-season, e.g. 2026). **`episode`** is `MMDD` + 0-based same-day index (`MM*10000+DD*100+i`, e.g. 31500 for 15 Mar first that day). Same UTC day: sort by `upload_date` then `id` (arrival). An earlier same-day timestamp reindexes that day and enqueues scoped Apply for shifted packed files. Undated videos leave season/episode unset in the DB; pack uses year-season **0**, so `{year}` in `episode_format` renders as **`0000`** (e.g. `S0000`), not TV default `S1`.
 
 When media disappears or is purged:
 
@@ -124,7 +124,7 @@ Lifecycle entries per video (DB: `video_history`, required `task_id`), e.g.:
 - sidecar deleted individually (`sidecar_deleted`; registered `sub` / `thumb` / `other` only; sync unlink + drop `files` row; bookkeeping task `delete_sidecar`)
 - file deleted (manual `delete_files` task or retention via `retention_delete`)
 - episode NFO regenerated (`nfo_regenerated`; task kind `regenerate_nfo`; only when on-disk bytes changed). Older rows may still use event `nfo_regenerate`.
-- episode renamed (Apply episode format / reindex - detail previous/new name)
+- episode renamed (Apply episode format / scoped rename after Metadata or Edit series - detail previous/new name)
 
 **Not** written on list passes: `discovered` / `updated` / per-video `rescan_metadata`. Those appear on video detail History as **projections** from `source_history` where the video id is in `created_ids` or `updated_ids` (display event from `mode`). Older source_history modes may still use `metadata_rescan`.
 

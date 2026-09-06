@@ -219,7 +219,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest, live_skipped, archive_fallback]
+            enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, path_collision, download_digest, live_skipped, archive_fallback]
         - name: level
           in: query
           required: false
@@ -1849,7 +1849,7 @@ components:
           format: date-time
         event:
           type: string
-          enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, download_digest, live_skipped, archive_fallback]
+          enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, path_collision, download_digest, live_skipped, archive_fallback]
         level:
           type: string
           enum: [info, warning, alert]

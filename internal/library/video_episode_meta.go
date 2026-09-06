@@ -43,14 +43,15 @@ type SaveVideoMetadataParams struct {
 
 // SaveVideoMetadataOutcome reports side effects of SaveVideoMetadata.
 type SaveVideoMetadataOutcome struct {
-	// RenameSkippedBusy is true when upload_date day change needed a rename but this video
-	// had a pending/running download/pack task (peers may still have renamed).
-	RenameSkippedBusy bool
+	// RenameQueued is true when a scoped rename_episodes task was enqueued
+	// because title and/or upload_date changed the packed path.
+	RenameQueued bool
+	RenameTaskID int64
 }
 
 // SaveVideoMetadata writes DB fields, applies optional thumb ops, and rewrites episode NFO.
-// Upload date changes reindex season/episode and rename packed file sets when the path changes.
-// Title-only saves do not rename. Does not change remote_id / source_url.
+// Upload date changes reindex season/episode; title or upload_date path changes enqueue
+// scoped Apply episode format. Does not change remote_id / source_url.
 // Sidecar refresh (yt-dlp re-fetch) remains a separate task (EnqueueRefreshSidecarsVideo).
 func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (SaveVideoMetadataOutcome, error) {
 	var out SaveVideoMetadataOutcome
@@ -58,6 +59,7 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (Sav
 	if err != nil {
 		return out, err
 	}
+	prevTitle := v.Title
 	title := strings.TrimSpace(p.Title)
 	if title == "" {
 		title = v.Title
@@ -119,31 +121,39 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (Sav
 			timeChangedSameDay = true
 		}
 	}
+	var renameIDs []int64
 	if dayChanged || timeChangedSameDay {
-		var changed []int64
 		if newDay == "" {
 			if _, err := s.DB.SQL.Exec(`UPDATE videos SET season = NULL, episode = NULL WHERE id = ?`, videoID); err != nil {
 				return out, err
 			}
-			changed = append(changed, videoID)
+			renameIDs = append(renameIDs, videoID)
 		} else {
 			c, rerr := s.ReindexSeriesUTCDay(v.SeriesID, newDay)
 			if rerr != nil {
 				return out, rerr
 			}
-			changed = append(changed, c...)
+			renameIDs = append(renameIDs, c...)
 		}
 		if dayChanged && oldDay != "" && oldDay != newDay {
 			c, rerr := s.ReindexSeriesUTCDay(v.SeriesID, oldDay)
 			if rerr != nil {
 				return out, rerr
 			}
-			changed = append(changed, c...)
+			renameIDs = append(renameIDs, c...)
 		}
-		if busy, berr := s.videoBusyForRename(videoID, 0); berr == nil && busy {
-			out.RenameSkippedBusy = true
+	}
+	if title != prevTitle {
+		renameIDs = append(renameIDs, videoID)
+	}
+	renameIDs = uniqInt64(renameIDs)
+	if len(renameIDs) > 0 {
+		tid, qerr := s.EnqueueRenameEpisodesVideos(renameIDs)
+		if qerr != nil {
+			return out, qerr
 		}
-		_ = s.repackEpisodeNumberChanges(uniqInt64(changed), 0)
+		out.RenameQueued = true
+		out.RenameTaskID = tid
 	}
 
 	if err := s.applyVideoThumbEdit(videoID, p.ThumbSrc, p.ThumbClear); err != nil {

@@ -248,8 +248,8 @@ func (h *Handler) actionSaveVideoMetadata(w http.ResponseWriter, r *http.Request
 		return
 	}
 	ok := "video-metadata"
-	if outcome.RenameSkippedBusy {
-		ok = "video-metadata-busy"
+	if outcome.RenameQueued {
+		ok = "video-metadata-rename"
 	}
 	http.Redirect(w, r, redir+"?ok="+ok, http.StatusSeeOther)
 }
