@@ -125,6 +125,7 @@ func videoHistoryGroupsToTimeline(groups []videoHistoryGroup) []taskStageView {
 		}
 		out = append(out, item)
 	}
+	blankDuplicateStageAgos(out)
 	out[0].IsFirst = true
 	out[len(out)-1].IsLast = true
 	return out

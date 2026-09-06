@@ -88,3 +88,30 @@ func TestVideoHistoryGroupsToTimeline(t *testing.T) {
 		t.Fatalf("group1: %+v", got[1])
 	}
 }
+
+func TestVideoHistoryGroupsToTimelineBlankDuplicateAgo(t *testing.T) {
+	// Same largest-unit label on consecutive nodes → keep first, blank later (match task Stages).
+	groups := groupVideoHistoryByTask([]videoHistoryView{
+		{Event: "verified", Message: "OK", TaskID: 20, HasTask: true, HistoryID: 20, CreatedAgo: "1 day ago", CreatedAt: "a"},
+		{Event: "packed", Message: "Packed", TaskID: 19, TaskKind: "download", HasTask: true, HistoryID: 19, CreatedAgo: "1 day ago", CreatedAt: "b"},
+		{Event: "downloaded", Message: "Done", TaskID: 19, TaskKind: "download", HasTask: true, HistoryID: 19, CreatedAgo: "1 day ago", CreatedAt: "c"},
+		{Event: "discovered", Message: "Indexed", HasTask: false, CreatedAgo: "1 day ago", CreatedAt: "d"},
+		{Event: "older", Message: "Old", HasTask: false, CreatedAgo: "2 days ago", CreatedAt: "e"},
+	})
+	got := videoHistoryGroupsToTimeline(groups)
+	if len(got) != 4 {
+		t.Fatalf("len=%d want 4", len(got))
+	}
+	if got[0].CreatedAgo != "1 day ago" || got[0].CreatedAt != "a" {
+		t.Fatalf("first keeps label: %+v", got[0])
+	}
+	if got[1].CreatedAgo != "" || got[1].CreatedAt != "" {
+		t.Fatalf("grouped download blanked: %+v", got[1])
+	}
+	if got[2].CreatedAgo != "" || got[2].CreatedAt != "" {
+		t.Fatalf("discovered blanked: %+v", got[2])
+	}
+	if got[3].CreatedAgo != "2 days ago" || got[3].CreatedAt != "e" {
+		t.Fatalf("changed label kept: %+v", got[3])
+	}
+}
