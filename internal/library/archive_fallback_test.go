@@ -1,6 +1,7 @@
 package library_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
@@ -75,6 +76,27 @@ func TestQueueArchiveFallbackAfterUnavailable(t *testing.T) {
 	}
 	if src != "https://www.youtube.com/watch?v=abc123XYZ01" {
 		t.Fatalf("source_url rewritten: %q", src)
+	}
+	hist, err := s.ListVideoHistory(res.VideoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, e := range hist {
+		if e.Event != "archive_fallback_queued" {
+			continue
+		}
+		found = true
+		want := "Live source unavailable; Web Archive retry queued"
+		if e.Message != want {
+			t.Fatalf("history message=%q want short %q (yt-dlp detail must not replace message)", e.Message, want)
+		}
+		if !strings.Contains(e.Detail, "Video unavailable") {
+			t.Fatalf("history detail missing trigger text: %q", e.Detail)
+		}
+	}
+	if !found {
+		t.Fatal("expected archive_fallback_queued history")
 	}
 }
 

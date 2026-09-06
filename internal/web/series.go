@@ -537,7 +537,18 @@ func createdAgoPair(createdAt string, now time.Time) (absolute, ago string) {
 	return absolute, ago
 }
 
-// sourceStatusSummary is the non-error Status cell: "2 h 3 m ago (1 new)" or "never".
+// createdAgoPairShort is like createdAgoPair but uses compact units ("1 h 3 min ago").
+func createdAgoPairShort(createdAt string, now time.Time) (absolute, ago string) {
+	absolute = createdAt
+	ago = createdAt
+	if t, ok := parseActivityTime(createdAt); ok {
+		absolute = formatAbsoluteTip(t)
+		ago = formatAgoShort(t, now)
+	}
+	return absolute, ago
+}
+
+// sourceStatusSummary is the non-error Status cell: "2 h 3 min ago (1 new)" or "never".
 func sourceStatusFields(lib *library.Store, sourceID int64, now time.Time) (summary, lastScannedAt, errMsg, errCode string, taskID int64, hasScanned, hasError bool) {
 	st, err := lib.LatestSourceScanStatus(sourceID)
 	if err != nil || st.LastScannedAt == "" {

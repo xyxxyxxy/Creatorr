@@ -52,15 +52,13 @@ func IsArchiveDownloadTask(domain, payload string) bool {
 }
 
 // MarkWantedArchive sets status wanted_archive (live unavailable; archive retry pending).
+// History message stays short; optional detail (e.g. yt-dlp stderr) is stored in event detail only.
 func (s *Store) MarkWantedArchive(videoID, taskID int64, detail string) error {
 	_, err := s.DB.SQL.Exec(`UPDATE videos SET status = ? WHERE id = ?`, StatusWantedArchive, videoID)
 	if err != nil {
 		return err
 	}
-	msg := "Live source unavailable; Web Archive retry queued"
-	if strings.TrimSpace(detail) != "" {
-		msg = detail
-	}
+	const msg = "Live source unavailable; Web Archive retry queued"
 	return s.AddVideoHistory(videoID, "archive_fallback_queued", msg, map[string]any{
 		"detail": strings.TrimSpace(detail),
 	}, taskID)

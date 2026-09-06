@@ -115,6 +115,16 @@
 }
 
 /*
+  Bulk-selected list rows: app.js adds rounded-none with bg-base-200, but daisyUI
+  `.list .list-row { border-radius: var(--radius-box) }` beats the utility. Square
+  the row so the selection fill covers the whole element (no rounded inset).
+  https://daisyui.com/components/list/
+*/
+.list .list-row.rounded-none {
+  border-radius: 0;
+}
+
+/*
   App column floor: Tailwind md (48rem). Below that, main p-4 vs md:p-6 (and
   other md: rules) jump the content width; keep the floor at md so the column
   never sits in that band. Cap stays max-w-5xl in markup; narrower viewports

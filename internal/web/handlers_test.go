@@ -748,8 +748,11 @@ func TestTaskDetailPage(t *testing.T) {
 		t.Fatalf("running status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Live task status") {
-		t.Fatalf("missing live help: %s", truncate(body, 400))
+	if !strings.Contains(body, "Stages") {
+		t.Fatalf("missing Stages: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, "enqueued") {
+		t.Fatalf("missing enqueued stage: %s", truncate(body, 400))
 	}
 	if !strings.Contains(body, "Listing example.com") {
 		t.Fatalf("missing log lines on detail: %s", truncate(body, 400))
@@ -811,8 +814,11 @@ func TestTaskDetailPage(t *testing.T) {
 	if !strings.Contains(body, "#1") {
 		t.Fatalf("expected annotated video id: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, "Finished task outcome") {
-		t.Fatalf("missing finished help: %s", truncate(body, 400))
+	if !strings.Contains(body, "enqueued") {
+		t.Fatalf("missing enqueued stage: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, "done") && !strings.Contains(body, "failed") {
+		t.Fatalf("missing terminal stage: %s", truncate(body, 400))
 	}
 	if strings.Contains(body, "id=\"task-logs\"") {
 		t.Fatalf("logs section should be hidden when finished: %s", truncate(body, 400))

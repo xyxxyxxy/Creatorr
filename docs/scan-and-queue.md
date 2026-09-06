@@ -93,7 +93,7 @@ Global defaults live on `domains` row **`default`** (non-NULL limit columns). Pe
 | Latest list-pass error | error | truncated error (links to task) |
 | Full scan incomplete, has schedule, no task | calendar-x-2 (warning) | `incomplete` (or `pending` if domain inactive); tip: `Full scan incomplete` + next-scan line |
 | Full scan incomplete, no schedule | calendar-off (error/red) | `incomplete` / `pending`; tip: `Full scan incomplete` + `No scan scheduled`; escalates to series status |
-| Full scan done | calendar-clock / calendar-check-2 (single) | last-scan summary (`9 h 54 m ago (1 new)`) for feeds; singles `complete` |
+| Full scan done | calendar-clock / calendar-check-2 (single) | last-scan summary (`9 h 54 min ago (1 new)`) for feeds; singles `complete` |
 | Else | calendar-off | `no schedule` / `scanning` |
 
 Tooltip for indexed feeds: optional **Full scan limited to N entries** (when `full_scan_limit` set), then **Regexp filters apply** when title include/exclude is set, then **Next scan in …** (`tooltip-content` + newlines). Missed schedule slots use the next cron after now (not “due now”). Last-scan detail only when schedule is off. Full-scan wording appears only while full scan is incomplete. Live OOB swaps the Status cell.
