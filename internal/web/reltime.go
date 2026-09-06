@@ -80,8 +80,8 @@ func formatAgo(then, now time.Time) string {
 	return b.String()
 }
 
-// formatAgoShort returns a compact relative past time using only the largest unit.
-// Examples: "just now", "3 min ago", "1 h ago", "1 d ago", "7 d ago", "1 y ago".
+// formatAgoShort returns a relative past time using only the largest unit, spelled out.
+// Examples: "just now", "3 minutes ago", "1 hour ago", "1 day ago", "7 days ago", "1 year ago".
 func formatAgoShort(then, now time.Time) string {
 	then = then.UTC()
 	now = now.UTC()
@@ -117,25 +117,31 @@ func formatAgoShort(then, now time.Time) string {
 	minutes := int(d / time.Minute)
 
 	type part struct {
-		n int
-		u string
+		n    int
+		one  string
+		many string
 	}
 	var parts []part
-	add := func(n int, u string) {
+	add := func(n int, one, many string) {
 		if n > 0 {
-			parts = append(parts, part{n, u})
+			parts = append(parts, part{n, one, many})
 		}
 	}
-	add(years, "y")
-	add(months, "mo")
-	add(days, "d")
-	add(hours, "h")
-	add(minutes, "min")
+	add(years, "year", "years")
+	add(months, "month", "months")
+	add(days, "day", "days")
+	add(hours, "hour", "hours")
+	add(minutes, "minute", "minutes")
 
 	if len(parts) == 0 {
 		return "just now"
 	}
-	return fmt.Sprintf("%d %s ago", parts[0].n, parts[0].u)
+	p := parts[0]
+	label := p.many
+	if p.n == 1 {
+		label = p.one
+	}
+	return fmt.Sprintf("%d %s ago", p.n, label)
 }
 
 // formatInShort returns a compact relative future span (at most two units).
