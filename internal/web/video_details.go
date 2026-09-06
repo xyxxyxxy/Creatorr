@@ -29,14 +29,14 @@ func videoDetailRows(store *library.Store, v *library.Video) []videoDetailRow {
 		out = append(out, videoDetailRow{Label: label, Value: value, IsURL: isURL, IsPath: isPath})
 	}
 
-	if v.FPS.Valid && v.FPS.Float64 > 0 {
-		add("FPS", fmt.Sprintf("%g", v.FPS.Float64), false, false)
-	}
 	if v.DownloadFormatSelector.Valid {
 		add("Download format", v.DownloadFormatSelector.String, false, false)
 	}
 	if v.DownloadRemuxContainer.Valid {
 		add("Remux", v.DownloadRemuxContainer.String, false, false)
+	}
+	if v.FPS.Valid && v.FPS.Float64 > 0 {
+		add("FPS", fmt.Sprintf("%g", v.FPS.Float64), false, false)
 	}
 	if v.ImportSrc.Valid && strings.TrimSpace(v.ImportSrc.String) != "" {
 		add("Import path", v.ImportSrc.String, false, true)
