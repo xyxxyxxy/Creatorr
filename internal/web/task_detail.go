@@ -364,7 +364,7 @@ type taskStageView struct {
 	Message    string
 	CreatedAt  string
 	CreatedAgo string
-	Duration   string // chrono gap onto this stage (omit ≤1s); kept after reverse for display
+	Duration   string // how long this stage lasted until the next (omit ≤1s); kept after reverse for display
 	HasError   bool
 	IsFirst    bool
 	IsLast     bool
@@ -452,7 +452,7 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 		appendStage(term, "", at, termErr)
 	}
 
-	// Durations are chrono gaps (older → newer) before reversing for display.
+	// Durations are how long each stage lasted (older → next) before reversing for display.
 	for i := 1; i < len(out); i++ {
 		start, end := rawTimes[i-1], rawTimes[i]
 		if start.IsZero() || end.IsZero() {
@@ -462,13 +462,22 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 		if d < 0 {
 			continue
 		}
-		out[i].Duration = stageDurationLabel(d)
+		out[i-1].Duration = stageDurationLabel(d)
 	}
 
 	// Latest at top, oldest at bottom.
 	for a, b := 0, len(out)-1; a < b; a, b = a+1, b-1 {
 		out[a], out[b] = out[b], out[a]
 	}
+	blankDuplicateStageAgos(out)
+	out[0].IsFirst = true
+	out[len(out)-1].IsLast = true
+	return out
+}
+
+// blankDuplicateStageAgos clears CreatedAt/CreatedAgo when the relative label
+// matches the previous non-empty stage (newest-first timelines: Stages + video History).
+func blankDuplicateStageAgos(out []taskStageView) {
 	var prevAgo string
 	for i := range out {
 		ago := out[i].CreatedAgo
@@ -479,9 +488,6 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 			prevAgo = ago
 		}
 	}
-	out[0].IsFirst = true
-	out[len(out)-1].IsLast = true
-	return out
 }
 
 // taskTerminalStage maps finished task status to a Stages event label.
