@@ -17,7 +17,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/web"
 )
 
-func TestTasksLanePagesAtTwenty(t *testing.T) {
+func TestTasksLanePagesAtTen(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -52,8 +52,8 @@ func TestTasksLanePagesAtTwenty(t *testing.T) {
 	if got := strings.Count(body, `data-task-row-status=`); got != web.TaskPageSize {
 		t.Fatalf("page 1 rows=%d want %d", got, web.TaskPageSize)
 	}
-	if !strings.Contains(body, "1 / 2") {
-		t.Fatalf("missing pager 1 / 2")
+	if !strings.Contains(body, "1 / 3") {
+		t.Fatalf("missing pager 1 / 3")
 	}
 	if !strings.Contains(body, "p_example_com=2") {
 		t.Fatalf("missing per-lane next href")
@@ -69,8 +69,8 @@ func TestTasksLanePagesAtTwenty(t *testing.T) {
 		t.Fatalf("page2 status %d: %s", rec2.Code, rec2.Body.String())
 	}
 	body2 := rec2.Body.String()
-	if got := strings.Count(body2, `data-task-row-status=`); got != n-web.TaskPageSize {
-		t.Fatalf("page 2 rows=%d want %d", got, n-web.TaskPageSize)
+	if got := strings.Count(body2, `data-task-row-status=`); got != web.TaskPageSize {
+		t.Fatalf("page 2 rows=%d want %d", got, web.TaskPageSize)
 	}
 	if !strings.Contains(body2, `data-scheduled-task`) {
 		t.Fatalf("system scheduled rows missing on host page 2")

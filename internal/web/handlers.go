@@ -152,7 +152,8 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/delete-profile", h.actionDeleteProfile)
 	r.Post("/actions/regenerate-nfos", h.actionRegenerateNFOs)
 	r.Post("/actions/verify-all-media", h.actionVerifyAllMedia)
+	r.Post("/actions/refresh-sidecars-scoped", h.actionRefreshSidecarsScoped)
 	r.Post("/actions/apply-episode-naming", h.actionApplyEpisodeNaming)
-	r.Post("/actions/sync-files", h.actionSyncFiles)
+	r.Post("/actions/maintenance-run", h.actionMaintenanceRun)
 	r.Post("/actions/ytdlp-update", h.actionYtDlpUpdate)
 }

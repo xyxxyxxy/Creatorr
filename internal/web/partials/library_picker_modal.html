@@ -1,0 +1,36 @@
+{{define "library_picker_modal"}}
+{{/* Shared series/video picker. Modes: single (Import) / multi (Maintenance).
+     Ids: modal-library-picker, library-picker-*. Import Create rows and allow-existing are single-only. */}}
+<input type="checkbox" id="modal-library-picker" class="modal-toggle" />
+<div class="modal">
+  <div id="library-picker-box" class="modal-box max-w-4xl w-11/12 h-[90vh] max-h-[90vh] flex flex-col gap-3">
+    <div class="shrink-0">
+      <h3 class="font-bold text-lg mb-1" id="library-picker-title">Select series/video</h3>
+      <p class="text-sm opacity-70 truncate" id="library-picker-subtitle"></p>
+    </div>
+    <input type="search" id="library-picker-q" class="input input-bordered w-full shrink-0" placeholder="Filter series and videos" aria-label="Filter series and videos" autocomplete="off" />
+    <div id="library-picker-allow-existing-wrap" class="hidden flex flex-col gap-1 shrink-0 items-start">
+      <label class="label cursor-pointer gap-2 justify-start py-0 w-fit">
+        <input type="checkbox" class="checkbox checkbox-sm" id="library-picker-allow-existing" />
+        <span class="label-text text-sm">Allow matching existing media</span>
+      </label>
+      <p class="label whitespace-normal">When on, the video list includes videos that already have library media. A video can still only be matched to one media import item. Confirming 'Import' deletes existing library media then installs the new file.</p>
+    </div>
+    <div id="library-picker-grid" class="grid gap-3 md:grid-cols-2 min-h-0 flex-1 overflow-hidden">
+      <div class="flex flex-col min-h-0 gap-2">
+        <h4 class="text-sm font-medium opacity-70 shrink-0">Series</h4>
+        <ul id="library-picker-series" class="list bg-base-100 rounded-box border border-base-300 overflow-y-auto flex-1 min-h-0" aria-label="Series"></ul>
+      </div>
+      <div id="library-picker-videos-col" class="flex flex-col min-h-0 gap-2">
+        <h4 class="text-sm font-medium opacity-70 shrink-0">Videos</h4>
+        <ul id="library-picker-videos" class="list bg-base-100 rounded-box border border-base-300 overflow-y-auto flex-1 min-h-0" aria-label="Videos"></ul>
+      </div>
+    </div>
+    <div class="modal-action shrink-0">
+      <button type="button" class="btn" id="library-picker-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary hidden" id="library-picker-confirm">Confirm</button>
+    </div>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}

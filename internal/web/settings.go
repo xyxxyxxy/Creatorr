@@ -554,20 +554,17 @@ type maintenancePageData struct {
 	OOB                bool
 	ApplyNamingBusy    bool
 	NFORegenBusy       bool
-	SyncFilesBusy      bool
 	VerifyAllMediaBusy bool
 }
 
 func (h *Handler) maintenancePageData(r *http.Request) maintenancePageData {
 	applyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain)
 	nfoBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateNFO, queue.SystemDomain)
-	syncBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain)
 	verifyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindVerifyAllMedia, queue.SystemDomain)
 	return maintenancePageData{
 		pageBase:           newSettingsPage("Settings · Maintenance", "maintenance", flashFromQuery(r)),
 		ApplyNamingBusy:    applyBusy,
 		NFORegenBusy:       nfoBusy,
-		SyncFilesBusy:      syncBusy,
 		VerifyAllMediaBusy: verifyBusy,
 	}
 }
@@ -1136,15 +1133,20 @@ func (h *Handler) actionRegenerateNFOs(w http.ResponseWriter, r *http.Request) {
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
 		return
 	}
+	seriesIDs, videoIDs, err := parseMaintenanceScope(r)
+	if err != nil {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
+		return
+	}
 	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateNFO, queue.SystemDomain); busy {
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("NFO regenerate already queued"))
 		return
 	}
-	if _, err := h.Library.EnqueueRegenerateNFO(); err != nil {
+	if _, err := h.Library.EnqueueRegenerateNFOScoped(seriesIDs, videoIDs); err != nil {
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
 		return
 	}
-	redirectSettings(w, r, "/settings/maintenance", "ok=nfo-regen-queued")
+	redirectSettings(w, r, "/settings/maintenance", "ok=nfo-regen-queued"+maintenanceScopeOKSuffix(seriesIDs, videoIDs))
 }
 
 func (h *Handler) actionVerifyAllMedia(w http.ResponseWriter, r *http.Request) {
@@ -1153,15 +1155,41 @@ func (h *Handler) actionVerifyAllMedia(w http.ResponseWriter, r *http.Request) {
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
 		return
 	}
+	seriesIDs, videoIDs, err := parseMaintenanceScope(r)
+	if err != nil {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
+		return
+	}
 	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindVerifyAllMedia, queue.SystemDomain); busy {
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("'Verify all downloaded videos' already queued"))
 		return
 	}
-	if _, err := h.Library.EnqueueVerifyAllMedia(); err != nil {
+	if _, err := h.Library.EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs); err != nil {
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
 		return
 	}
-	redirectSettings(w, r, "/settings/maintenance", "ok=verify-all-queued")
+	redirectSettings(w, r, "/settings/maintenance", "ok=verify-all-queued"+maintenanceScopeOKSuffix(seriesIDs, videoIDs))
+}
+
+func (h *Handler) actionRefreshSidecarsScoped(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	if h.Library == nil {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
+		return
+	}
+	seriesIDs, videoIDs, err := parseMaintenanceScope(r)
+	if err != nil {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
+		return
+	}
+	queued, skipped, err := h.Library.EnqueueRefreshSidecarsScoped(seriesIDs, videoIDs)
+	if err != nil {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
+		return
+	}
+	q := "ok=refresh-sidecars-queued" + maintenanceScopeOKSuffix(seriesIDs, videoIDs) +
+		"&queued=" + strconv.Itoa(queued) + "&skipped=" + strconv.Itoa(skipped)
+	redirectSettings(w, r, "/settings/maintenance", q)
 }
 
 func (h *Handler) actionApplyEpisodeNaming(w http.ResponseWriter, r *http.Request) {
@@ -1170,34 +1198,185 @@ func (h *Handler) actionApplyEpisodeNaming(w http.ResponseWriter, r *http.Reques
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
 		return
 	}
-	_, err := h.Library.EnqueueRenameEpisodes()
+	seriesIDs, videoIDs, err := parseMaintenanceScope(r)
 	if err != nil {
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
 		return
 	}
-	redirectSettings(w, r, "/settings/maintenance", "ok=apply-naming")
+	var qerr error
+	switch {
+	case len(videoIDs) > 0:
+		_, qerr = h.Library.EnqueueRenameEpisodesVideos(videoIDs)
+	case len(seriesIDs) > 0:
+		_, qerr = h.Library.EnqueueRenameEpisodesSeriesIDs(seriesIDs)
+	default:
+		_, qerr = h.Library.EnqueueRenameEpisodes()
+	}
+	if qerr != nil {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(qerr.Error()))
+		return
+	}
+	redirectSettings(w, r, "/settings/maintenance", "ok=apply-naming"+maintenanceScopeOKSuffix(seriesIDs, videoIDs))
 }
 
-func (h *Handler) actionSyncFiles(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) actionMaintenanceRun(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if h.Library == nil {
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("library unavailable"))
 		return
 	}
-	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain); busy {
-		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("File sync already queued"))
-		return
-	}
-	id, err := h.Library.EnqueueSyncFiles(queue.PrioritySyncFilesDue)
+	seriesIDs, videoIDs, err := parseMaintenanceScope(r)
 	if err != nil {
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
 		return
 	}
-	if id == 0 {
-		redirectSettings(w, r, "/settings/maintenance", "ok=sync-files-empty")
+	wanted := map[string]bool{}
+	for _, a := range r.Form["actions"] {
+		a = strings.TrimSpace(a)
+		if a != "" {
+			wanted[a] = true
+		}
+	}
+	order := []string{"apply_episode_naming", "regenerate_nfos", "verify_all_media", "refresh_sidecars"}
+	var queued []string
+	var skipMsgs []string
+	var firstErr string
+	refreshQueued, refreshSkipped := 0, 0
+
+	for _, key := range order {
+		if !wanted[key] {
+			continue
+		}
+		switch key {
+		case "apply_episode_naming":
+			var qerr error
+			switch {
+			case len(videoIDs) > 0:
+				_, qerr = h.Library.EnqueueRenameEpisodesVideos(videoIDs)
+			case len(seriesIDs) > 0:
+				_, qerr = h.Library.EnqueueRenameEpisodesSeriesIDs(seriesIDs)
+			default:
+				_, qerr = h.Library.EnqueueRenameEpisodes()
+			}
+			if qerr != nil {
+				if firstErr == "" {
+					firstErr = qerr.Error()
+				}
+				continue
+			}
+			queued = append(queued, "apply")
+		case "regenerate_nfos":
+			if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateNFO, queue.SystemDomain); busy {
+				skipMsgs = append(skipMsgs, "'Regenerate all NFO files' already queued")
+				continue
+			}
+			if _, err := h.Library.EnqueueRegenerateNFOScoped(seriesIDs, videoIDs); err != nil {
+				if firstErr == "" {
+					firstErr = err.Error()
+				}
+				continue
+			}
+			queued = append(queued, "nfo")
+		case "verify_all_media":
+			if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindVerifyAllMedia, queue.SystemDomain); busy {
+				skipMsgs = append(skipMsgs, "'Verify all downloaded videos' already queued")
+				continue
+			}
+			if _, err := h.Library.EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs); err != nil {
+				if firstErr == "" {
+					firstErr = err.Error()
+				}
+				continue
+			}
+			queued = append(queued, "verify")
+		case "refresh_sidecars":
+			n, skipped, err := h.Library.EnqueueRefreshSidecarsScoped(seriesIDs, videoIDs)
+			if err != nil {
+				if firstErr == "" {
+					firstErr = err.Error()
+				}
+				continue
+			}
+			refreshQueued, refreshSkipped = n, skipped
+			queued = append(queued, "sidecars")
+		}
+	}
+
+	if len(queued) == 0 {
+		msg := firstErr
+		if msg == "" && len(skipMsgs) > 0 {
+			msg = strings.Join(skipMsgs, "; ")
+		}
+		if msg == "" {
+			msg = "Select at least one action"
+		}
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(msg))
 		return
 	}
-	redirectSettings(w, r, "/settings/maintenance", "ok=sync-files-queued")
+
+	q := "ok=maintenance-run" + maintenanceScopeOKSuffix(seriesIDs, videoIDs) +
+		"&actions=" + urlQuery(strings.Join(queued, ","))
+	if refreshQueued > 0 || (wanted["refresh_sidecars"] && maintenanceQueuedHas(queued, "sidecars")) {
+		q += "&queued=" + strconv.Itoa(refreshQueued) + "&skipped=" + strconv.Itoa(refreshSkipped)
+	}
+	if len(skipMsgs) > 0 || firstErr != "" {
+		detail := append([]string{}, skipMsgs...)
+		if firstErr != "" {
+			detail = append(detail, firstErr)
+		}
+		q += "&partial=" + urlQuery(strings.Join(detail, "; "))
+	}
+	redirectSettings(w, r, "/settings/maintenance", q)
+}
+
+func maintenanceQueuedHas(ss []string, want string) bool {
+	for _, s := range ss {
+		if s == want {
+			return true
+		}
+	}
+	return false
+}
+
+// parseMaintenanceScope reads repeated series_ids / video_ids form fields (mutually exclusive).
+func parseMaintenanceScope(r *http.Request) (seriesIDs, videoIDs []int64, err error) {
+	for _, s := range r.Form["series_ids"] {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		id, perr := strconv.ParseInt(s, 10, 64)
+		if perr != nil || id <= 0 {
+			return nil, nil, fmt.Errorf("invalid series_ids")
+		}
+		seriesIDs = append(seriesIDs, id)
+	}
+	for _, s := range r.Form["video_ids"] {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		id, perr := strconv.ParseInt(s, 10, 64)
+		if perr != nil || id <= 0 {
+			return nil, nil, fmt.Errorf("invalid video_ids")
+		}
+		videoIDs = append(videoIDs, id)
+	}
+	if len(seriesIDs) > 0 && len(videoIDs) > 0 {
+		return nil, nil, fmt.Errorf("series_ids and video_ids are mutually exclusive")
+	}
+	return seriesIDs, videoIDs, nil
+}
+
+func maintenanceScopeOKSuffix(seriesIDs, videoIDs []int64) string {
+	switch {
+	case len(videoIDs) > 0:
+		return "&scope=videos"
+	case len(seriesIDs) > 0:
+		return "&scope=series"
+	default:
+		return ""
+	}
 }
 
 func (h *Handler) actionYtDlpUpdate(w http.ResponseWriter, r *http.Request) {

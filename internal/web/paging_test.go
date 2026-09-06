@@ -56,7 +56,7 @@ func TestSlicePageSizeTasks(t *testing.T) {
 	}
 	r := httptest.NewRequest(http.MethodGet, "/tasks?p_example_com=2", nil)
 	page, info := SlicePageSize(r, "p_example_com", items, TaskPageSize)
-	if len(page) != 20 || page[0] != 21 || info.PageSize != 20 || info.TotalPages != 3 {
+	if len(page) != 10 || page[0] != 11 || info.PageSize != 10 || info.TotalPages != 5 {
 		t.Fatalf("page=%v info=%+v", page, info)
 	}
 }

@@ -429,6 +429,53 @@ func TestActionRunScheduledQueuesSyncFiles(t *testing.T) {
 	}
 }
 
+func TestActionMaintenanceRunQueuesMultiple(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "maint-run.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	form := strings.NewReader("actions=apply_episode_naming&actions=regenerate_nfos&actions=verify_all_media")
+	req := httptest.NewRequest(http.MethodPost, "/actions/maintenance-run", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
+	}
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "ok=maintenance-run") || !strings.Contains(loc, "actions=") {
+		t.Fatalf("location=%q", loc)
+	}
+	for _, kind := range []string{queue.KindRenameEpisodes, queue.KindRegenerateNFO, queue.KindVerifyAllMedia} {
+		busy, err := q.HasPendingOrRunningKind(kind, queue.SystemDomain)
+		if err != nil || !busy {
+			t.Fatalf("expected %s queued, busy=%v err=%v", kind, busy, err)
+		}
+	}
+
+	formEmpty := strings.NewReader("")
+	req2 := httptest.NewRequest(http.MethodPost, "/actions/maintenance-run", formEmpty)
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec2 := httptest.NewRecorder()
+	r.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusSeeOther {
+		t.Fatalf("empty status %d", rec2.Code)
+	}
+	if !strings.Contains(rec2.Header().Get("Location"), "err=") {
+		t.Fatalf("empty actions want err, loc=%q", rec2.Header().Get("Location"))
+	}
+}
+
 func TestTasksShowsSoftPausedHostWithoutDomainsRow(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
@@ -681,17 +728,38 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		}
 		if path == "/settings/maintenance" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "Scan root folders") {
-				t.Fatalf("%s missing maintenance actions", path)
+			if strings.Contains(body, "Scan root folders") {
+				t.Fatalf("%s still has Scan root folders", path)
 			}
 			if !strings.Contains(body, "Apply episode format") {
 				t.Fatalf("%s missing apply episode format", path)
 			}
+			if !strings.Contains(body, "1. Select actions") || !strings.Contains(body, "2. Select scope") {
+				t.Fatalf("%s missing numbered maintenance sections", path)
+			}
+			if strings.Contains(body, "maintenance-steps") || strings.Contains(body, "steps-vertical") {
+				t.Fatalf("%s still has steps UI", path)
+			}
+			if !strings.Contains(body, `action="/actions/maintenance-run"`) {
+				t.Fatalf("%s missing maintenance-run form", path)
+			}
+			if !strings.Contains(body, `name="actions"`) || !strings.Contains(body, `value="apply_episode_naming"`) {
+				t.Fatalf("%s missing action checkboxes", path)
+			}
 			if !strings.Contains(body, "Verify all downloaded videos") {
 				t.Fatalf("%s missing verify all media", path)
 			}
+			if !strings.Contains(body, "Refresh sidecars") {
+				t.Fatalf("%s missing refresh sidecars", path)
+			}
 			if !strings.Contains(body, "list-panel") {
 				t.Fatalf("%s missing list-panel", path)
+			}
+			if !strings.Contains(body, "maintenance-scope-choose") || !strings.Contains(body, "modal-library-picker") {
+				t.Fatalf("%s missing scope picker chrome", path)
+			}
+			if !strings.Contains(body, "modal-maintenance-confirm") {
+				t.Fatalf("%s missing maintenance confirm modal", path)
 			}
 			continue
 		}

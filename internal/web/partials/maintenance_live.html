@@ -1,53 +1,92 @@
 {{define "maintenance_live"}}
-{{/* Busy flags for Scan / Apply / NFO regenerate / verify-all buttons. */}}
+{{/* Busy flags for Apply / NFO regenerate / verify-all. Shared scope for batch Run. */}}
 <div id="maintenance-live"{{if .OOB}} hx-swap-oob="true"{{end}}>
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Library maintenance" "help" "Library-wide one-shot actions. Large libraries may take a while.")}}
-  <div class="flex flex-col items-stretch gap-3 w-full max-w-md">
-    <div class="flex flex-col gap-1 w-full">
-      {{if .SyncFilesBusy}}
-      <button type="button" class="btn btn-warning w-full" disabled>Scan root folders (queued)</button>
-      {{else}}
-      <form method="post" action="/actions/sync-files" class="w-full">
-        <button type="submit" class="btn btn-warning w-full">Scan root folders</button>
-      </form>
-      {{end}}
-      <p class="label">Find missing or restored media. Same pass as 'File sync schedule'.</p>
+{{template "list_header" (dict "level" "section" "title" "Library maintenance" "help" "One-shot library actions. Large libraries may take a while.")}}
+  <form id="maintenance-run-form" method="post" action="/actions/maintenance-run" class="js-maintenance-run-form flex flex-col gap-4 w-full max-w-lg min-w-0">
+    <div class="fieldset bg-base-200 border border-base-300 rounded-box p-4 gap-3 w-full min-w-0">
+      <div class="fieldset-legend">1. Select actions</div>
+      <p class="label whitespace-normal -mt-1">Pick one or more. Same scope applies to every selected action.</p>
+
+      <fieldset class="fieldset">
+        {{if .ApplyNamingBusy}}
+        <span class="tooltip tooltip-top inline-flex w-fit max-w-full" data-tip="Already queued">
+          <label class="label justify-start gap-2 cursor-not-allowed">
+            <input type="checkbox" name="actions" value="apply_episode_naming" class="checkbox js-maintenance-action" disabled />
+            <span class="label-text text-base-content opacity-60">Apply episode format (queued)</span>
+          </label>
+        </span>
+        {{else}}
+        <label class="label justify-start gap-2 cursor-pointer">
+          <input type="checkbox" name="actions" value="apply_episode_naming" class="checkbox js-maintenance-action" />
+          <span class="label-text text-base-content">Apply episode format</span>
+        </label>
+        <p class="label whitespace-normal">Rename packed episodes to the current 'Episode format'. Busy videos are skipped.</p>
+        {{end}}
+      </fieldset>
+
+      <fieldset class="fieldset">
+        {{if .NFORegenBusy}}
+        <span class="tooltip tooltip-top inline-flex w-fit max-w-full" data-tip="Already queued">
+          <label class="label justify-start gap-2 cursor-not-allowed">
+            <input type="checkbox" name="actions" value="regenerate_nfos" class="checkbox js-maintenance-action" disabled />
+            <span class="label-text text-base-content opacity-60">Regenerate all NFO files (queued)</span>
+          </label>
+        </span>
+        {{else}}
+        <label class="label justify-start gap-2 cursor-pointer">
+          <input type="checkbox" name="actions" value="regenerate_nfos" class="checkbox js-maintenance-action" />
+          <span class="label-text text-base-content">Regenerate all NFO files</span>
+        </label>
+        <p class="label whitespace-normal">Rewrite episode and series NFO from the library. Skips unchanged files.</p>
+        {{end}}
+      </fieldset>
+
+      <fieldset class="fieldset">
+        {{if .VerifyAllMediaBusy}}
+        <span class="tooltip tooltip-top inline-flex w-fit max-w-full" data-tip="Already queued">
+          <label class="label justify-start gap-2 cursor-not-allowed">
+            <input type="checkbox" name="actions" value="verify_all_media" class="checkbox js-maintenance-action" disabled />
+            <span class="label-text text-base-content opacity-60">Verify all downloaded videos (queued)</span>
+          </label>
+        </span>
+        {{else}}
+        <label class="label justify-start gap-2 cursor-pointer">
+          <input type="checkbox" name="actions" value="verify_all_media" class="checkbox js-maintenance-action" />
+          <span class="label-text text-base-content">Verify all downloaded videos</span>
+        </label>
+        <p class="label whitespace-normal">Packed downloaded / 'verify_failed' videos are null-decoded. Failures keep files and set 'verify_failed'. Busy videos are skipped.</p>
+        {{end}}
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <label class="label justify-start gap-2 cursor-pointer">
+          <input type="checkbox" name="actions" value="refresh_sidecars" class="checkbox js-maintenance-action" />
+          <span class="label-text text-base-content">Refresh sidecars</span>
+        </label>
+        <p class="label whitespace-normal">Re-fetch NFO / thumb / subs from the source for packed videos in scope. Already queued videos are skipped.</p>
+      </fieldset>
     </div>
 
-    <div class="flex flex-col gap-1 w-full">
-      {{if .ApplyNamingBusy}}
-      <button type="button" class="btn btn-warning w-full" disabled>Apply episode format (queued)</button>
-      {{else}}
-      <form method="post" action="/actions/apply-episode-naming" class="w-full">
-        <button type="submit" class="btn btn-warning w-full">Apply episode format</button>
-      </form>
-      {{end}}
-      <p class="label">Rename packed episodes to the current 'Episode format'. Busy videos are skipped.</p>
+    <div class="fieldset bg-base-200 border border-base-300 rounded-box p-4 gap-3 w-full min-w-0" data-maintenance-scope>
+      <div class="fieldset-legend">2. Select scope</div>
+      <p class="label whitespace-normal -mt-1">Optional. Empty means the whole library. Scope clears after Run.</p>
+      <div class="flex flex-col gap-2 w-full min-w-0">
+        <div class="flex w-full min-w-0 items-stretch gap-2">
+          <div class="join w-full min-w-0 grow">
+            <div class="input input-bordered join-item flex items-center grow min-w-0">
+              <span id="maintenance-scope-label" class="truncate text-base">All series</span>
+            </div>
+            <button type="button" class="btn join-item shrink-0" id="maintenance-scope-choose">Choose…</button>
+          </div>
+          <button type="button" class="btn btn-ghost shrink-0 hidden" id="maintenance-scope-clear" aria-label="Clear scope">Clear</button>
+        </div>
+        <div id="maintenance-scope-fields" class="hidden" aria-hidden="true"></div>
+      </div>
     </div>
 
-    <div class="flex flex-col gap-1 w-full">
-      {{if .NFORegenBusy}}
-      <button type="button" class="btn btn-warning w-full" disabled>Regenerate all NFO files (queued)</button>
-      {{else}}
-      <form method="post" action="/actions/regenerate-nfos" class="w-full">
-        <button type="submit" class="btn btn-warning w-full">Regenerate all NFO files</button>
-      </form>
-      {{end}}
-      <p class="label">Rewrite episode and series NFO from the library. Skips unchanged files.</p>
-    </div>
-
-    <div class="flex flex-col gap-1 w-full">
-      {{if .VerifyAllMediaBusy}}
-      <button type="button" class="btn btn-warning w-full" disabled>Verify all downloaded videos (queued)</button>
-      {{else}}
-      <form method="post" action="/actions/verify-all-media" class="w-full">
-        <button type="submit" class="btn btn-warning w-full">Verify all downloaded videos</button>
-      </form>
-      {{end}}
-      <p class="label">All downloaded videos are verified. Failures keep files and set 'verify_failed'. Busy videos are skipped.</p>
-    </div>
-  </div>
+    <button type="submit" class="btn btn-warning w-full" id="maintenance-run-submit" disabled>Run selected</button>
+  </form>
 {{template "list_panel_end"}}
 </div>
 {{end}}

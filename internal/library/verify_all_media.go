@@ -10,27 +10,49 @@ import (
 
 // EnqueueVerifyAllMedia queues a resumable library-wide media verify pass.
 func (s *Store) EnqueueVerifyAllMedia() (int64, error) {
+	return s.EnqueueVerifyAllMediaScoped(nil, nil)
+}
+
+// EnqueueVerifyAllMediaScoped queues verify for the whole library (empty scope),
+// selected series, or selected videos. seriesIDs and videoIDs must not both be set.
+func (s *Store) EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs []int64) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue unavailable", ErrInvalid)
 	}
+	seriesIDs = uniqInt64(seriesIDs)
+	videoIDs = uniqInt64(videoIDs)
+	if len(seriesIDs) > 0 && len(videoIDs) > 0 {
+		return 0, fmt.Errorf("%w: series_ids and video_ids are mutually exclusive", ErrInvalid)
+	}
+	payload := map[string]any{
+		"cursor":   0,
+		"verified": 0,
+		"skipped":  0,
+		"failed":   0,
+	}
+	msg := "Verify all downloaded media"
+	if len(seriesIDs) > 0 {
+		payload["series_ids"] = seriesIDs
+		msg = "Verify series media"
+	} else if len(videoIDs) > 0 {
+		payload["video_ids"] = videoIDs
+		msg = "Verify selected media"
+	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
-		Kind:   queue.KindVerifyAllMedia,
-		Domain: queue.SystemDomain,
-		Payload: map[string]any{
-			"cursor":   0,
-			"verified": 0,
-			"skipped":  0,
-			"failed":   0,
-		},
-		Message: "Verify all downloaded media",
+		Kind:    queue.KindVerifyAllMedia,
+		Domain:  queue.SystemDomain,
+		Payload: payload,
+		Message: msg,
 	})
 }
 
 type verifyAllMediaPayload struct {
-	Cursor   int64 `json:"cursor"`
-	Verified int   `json:"verified"`
-	Skipped  int   `json:"skipped"`
-	Failed   int   `json:"failed"`
+	Cursor    int64   `json:"cursor"`
+	Verified  int     `json:"verified"`
+	Skipped   int     `json:"skipped"`
+	Failed    int     `json:"failed"`
+	SeriesIDs []int64 `json:"series_ids"`
+	VideoIDs  []int64 `json:"video_ids"`
 }
 
 // VerifyAllMediaFail is one failed video from VerifyAllMediaPass (for notify).
@@ -49,15 +71,22 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 	verified, skipped, failed = p.Verified, p.Skipped, p.Failed
 
 	persist := func() error {
-		return s.Queue.UpdatePayload(task.ID, map[string]any{
+		m := map[string]any{
 			"cursor":   p.Cursor,
 			"verified": verified,
 			"skipped":  skipped,
 			"failed":   failed,
-		})
+		}
+		if len(p.SeriesIDs) > 0 {
+			m["series_ids"] = p.SeriesIDs
+		}
+		if len(p.VideoIDs) > 0 {
+			m["video_ids"] = p.VideoIDs
+		}
+		return s.Queue.UpdatePayload(task.ID, m)
 	}
 
-	rows, qerr := s.DB.SQL.Query(`
+	q := `
 		SELECT v.id
 		FROM videos v
 		WHERE v.status IN ('downloaded', 'verify_failed')
@@ -65,9 +94,23 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 		  AND EXISTS (
 		    SELECT 1 FROM files f
 		    WHERE f.video_id = v.id AND f.kind = 'video'
-		  )
-		ORDER BY v.id ASC
-	`, p.Cursor)
+		  )`
+	args := []any{p.Cursor}
+	if len(p.SeriesIDs) > 0 {
+		q += ` AND v.series_id IN (` + sqlIntPlaceholders(len(p.SeriesIDs)) + `)`
+		for _, id := range p.SeriesIDs {
+			args = append(args, id)
+		}
+	}
+	if len(p.VideoIDs) > 0 {
+		q += ` AND v.id IN (` + sqlIntPlaceholders(len(p.VideoIDs)) + `)`
+		for _, id := range p.VideoIDs {
+			args = append(args, id)
+		}
+	}
+	q += ` ORDER BY v.id ASC`
+
+	rows, qerr := s.DB.SQL.Query(q, args...)
 	if qerr != nil {
 		return verified, skipped, failed, qerr
 	}

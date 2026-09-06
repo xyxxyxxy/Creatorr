@@ -1218,11 +1218,255 @@
   }
 
   const maintenanceTaskKinds = new Set([
-    "sync_files",
     "rename_episodes",
     "regenerate_nfo",
     "verify_all_media",
   ]);
+
+  /** Persistent across HTMX refresh of #maintenance-live. */
+  let maintenanceScope = {
+    seriesIds: [],
+    videoIds: [],
+    seriesTitle: "",
+    seriesTitles: [],
+    videoTitles: [],
+  };
+  /** Selected action values; restored after HTMX busy refresh. Cleared on Run. */
+  let maintenanceSelectedActions = new Set();
+
+  const maintenanceActionLabels = {
+    apply_episode_naming: "Apply episode format",
+    regenerate_nfos: "Regenerate all NFO files",
+    verify_all_media: "Verify all downloaded videos",
+    refresh_sidecars: "Refresh sidecars",
+  };
+
+  function escapeMaintenanceHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function maintenanceScopeLabel() {
+    const nS = maintenanceScope.seriesIds.length;
+    const nV = maintenanceScope.videoIds.length;
+    if (nV > 0) {
+      const title = maintenanceScope.seriesTitle || "Series";
+      return nV === 1 ? "1 video (" + title + ")" : nV + " videos (" + title + ")";
+    }
+    if (nS > 0) return nS === 1 ? "1 series" : nS + " series";
+    return "All series";
+  }
+
+  function clearMaintenanceScope() {
+    maintenanceScope = {
+      seriesIds: [],
+      videoIds: [],
+      seriesTitle: "",
+      seriesTitles: [],
+      videoTitles: [],
+    };
+  }
+
+  function syncMaintenanceScopeFields() {
+    const host = document.getElementById("maintenance-scope-fields");
+    if (!host) return;
+    host.innerHTML = "";
+    maintenanceScope.seriesIds.forEach((id) => {
+      const inp = document.createElement("input");
+      inp.type = "hidden";
+      inp.name = "series_ids";
+      inp.value = String(id);
+      host.appendChild(inp);
+    });
+    maintenanceScope.videoIds.forEach((id) => {
+      const inp = document.createElement("input");
+      inp.type = "hidden";
+      inp.name = "video_ids";
+      inp.value = String(id);
+      host.appendChild(inp);
+    });
+    const label = document.getElementById("maintenance-scope-label");
+    if (label) label.textContent = maintenanceScopeLabel();
+    const clearBtn = document.getElementById("maintenance-scope-clear");
+    if (clearBtn) {
+      const has =
+        maintenanceScope.seriesIds.length > 0 || maintenanceScope.videoIds.length > 0;
+      clearBtn.classList.toggle("hidden", !has);
+    }
+  }
+
+  function readMaintenanceActionChecks() {
+    maintenanceSelectedActions = new Set();
+    document.querySelectorAll(".js-maintenance-action:checked:not(:disabled)").forEach((el) => {
+      if (el.value) maintenanceSelectedActions.add(el.value);
+    });
+  }
+
+  function applyMaintenanceActionChecks() {
+    document.querySelectorAll(".js-maintenance-action").forEach((el) => {
+      if (el.disabled) {
+        el.checked = false;
+        return;
+      }
+      el.checked = maintenanceSelectedActions.has(el.value);
+    });
+    updateMaintenanceRunButton();
+  }
+
+  function updateMaintenanceRunButton() {
+    const btn = document.getElementById("maintenance-run-submit");
+    const n = document.querySelectorAll(".js-maintenance-action:checked:not(:disabled)").length;
+    if (btn) btn.disabled = n === 0;
+  }
+
+  function refreshMaintenanceScopeUI() {
+    syncMaintenanceScopeFields();
+    applyMaintenanceActionChecks();
+  }
+
+  function wireMaintenanceScope() {
+    if (!onMaintenancePage()) return;
+    refreshMaintenanceScopeUI();
+  }
+
+  function selectedMaintenanceActionLabels() {
+    readMaintenanceActionChecks();
+    const order = [
+      "apply_episode_naming",
+      "regenerate_nfos",
+      "verify_all_media",
+      "refresh_sidecars",
+    ];
+    return order
+      .filter((k) => maintenanceSelectedActions.has(k))
+      .map((k) => maintenanceActionLabels[k] || k);
+  }
+
+  function openMaintenanceConfirm() {
+    const toggle = document.getElementById("modal-maintenance-confirm");
+    const titleEl = document.getElementById("maintenance-confirm-title");
+    const leadEl = document.getElementById("maintenance-confirm-lead");
+    const listEl = document.getElementById("maintenance-confirm-list");
+    const actionsEl = document.getElementById("maintenance-confirm-actions");
+    const form = document.getElementById("maintenance-run-form");
+    const actionNames = selectedMaintenanceActionLabels();
+    if (!toggle || !titleEl || !leadEl || !listEl || !actionsEl || !form || actionNames.length === 0) {
+      return false;
+    }
+    titleEl.textContent = "Confirm run";
+    actionsEl.innerHTML = actionNames
+      .map(
+        (name) =>
+          '<li class="list-row py-2 px-3"><span class="list-col-grow min-w-0 truncate">' +
+          escapeMaintenanceHtml(name) +
+          "</span></li>"
+      )
+      .join("");
+    const nS = maintenanceScope.seriesIds.length;
+    const nV = maintenanceScope.videoIds.length;
+    let lead = "";
+    let items = [];
+    if (nV > 0) {
+      const seriesName = maintenanceScope.seriesTitle || "Series";
+      lead =
+        nV === 1
+          ? "1 video in " + seriesName + ":"
+          : nV + " videos in " + seriesName + ":";
+      items = (maintenanceScope.videoTitles || []).slice();
+      while (items.length < nV) items.push("Video #" + maintenanceScope.videoIds[items.length]);
+    } else if (nS > 0) {
+      lead = nS === 1 ? "1 series:" : nS + " series:";
+      items = (maintenanceScope.seriesTitles || []).slice();
+      while (items.length < nS) items.push("Series #" + maintenanceScope.seriesIds[items.length]);
+    } else {
+      lead = "Whole library:";
+      items = ["All series"];
+    }
+    leadEl.textContent = lead;
+    listEl.innerHTML = items
+      .map(
+        (name) =>
+          '<li class="list-row py-2 px-3"><span class="list-col-grow min-w-0 truncate">' +
+          escapeMaintenanceHtml(name) +
+          "</span></li>"
+      )
+      .join("");
+    toggle.checked = true;
+    return true;
+  }
+
+  function closeMaintenanceConfirm() {
+    const toggle = document.getElementById("modal-maintenance-confirm");
+    if (toggle) toggle.checked = false;
+  }
+
+  if (!document.documentElement.dataset.maintenanceScopeDelegated) {
+    document.documentElement.dataset.maintenanceScopeDelegated = "1";
+    document.addEventListener("click", (ev) => {
+      if (!onMaintenancePage()) return;
+      if (ev.target.closest("#maintenance-scope-choose")) {
+        if (typeof window.openLibraryPicker !== "function") return;
+        window.openLibraryPicker({
+          mode: "multi",
+          packedOnly: true,
+          initialSeriesIds: maintenanceScope.seriesIds.slice(),
+          initialVideoIds: maintenanceScope.videoIds.slice(),
+          subtitle: "Scope for selected maintenance actions",
+          onConfirm: (result) => {
+            maintenanceScope = {
+              seriesIds: (result.seriesIds || []).map(Number).filter((n) => n > 0),
+              videoIds: (result.videoIds || []).map(Number).filter((n) => n > 0),
+              seriesTitle: result.seriesTitle || "",
+              seriesTitles: Array.isArray(result.seriesTitles) ? result.seriesTitles.slice() : [],
+              videoTitles: Array.isArray(result.videoTitles) ? result.videoTitles.slice() : [],
+            };
+            refreshMaintenanceScopeUI();
+          },
+        });
+        return;
+      }
+      if (ev.target.closest("#maintenance-scope-clear")) {
+        clearMaintenanceScope();
+        refreshMaintenanceScopeUI();
+        return;
+      }
+      if (ev.target.closest("#maintenance-confirm-submit")) {
+        const form = document.getElementById("maintenance-run-form");
+        closeMaintenanceConfirm();
+        if (!form) return;
+        syncMaintenanceScopeFields();
+        clearMaintenanceScope();
+        maintenanceSelectedActions = new Set();
+        form.dataset.maintenanceConfirmed = "1";
+        if (typeof form.requestSubmit === "function") form.requestSubmit();
+        else form.submit();
+      }
+    });
+    document.addEventListener("change", (ev) => {
+      if (!onMaintenancePage()) return;
+      if (!ev.target || !ev.target.classList || !ev.target.classList.contains("js-maintenance-action")) {
+        return;
+      }
+      readMaintenanceActionChecks();
+      updateMaintenanceRunButton();
+    });
+    document.addEventListener("submit", (ev) => {
+      if (!onMaintenancePage()) return;
+      const form = ev.target && ev.target.closest ? ev.target.closest("form.js-maintenance-run-form") : null;
+      if (!form) return;
+      if (form.dataset.maintenanceConfirmed === "1") {
+        delete form.dataset.maintenanceConfirmed;
+        return;
+      }
+      ev.preventDefault();
+      readMaintenanceActionChecks();
+      if (maintenanceSelectedActions.size === 0) return;
+      openMaintenanceConfirm();
+    });
+  }
 
   function refreshMaintenanceLive() {
     if (!onMaintenancePage() || !document.getElementById("maintenance-live") || !window.htmx) return;
@@ -1650,7 +1894,7 @@
   window.showFlashToast = function (message, opts) {
     opts = opts || {};
     const toast = document.createElement("div");
-    toast.className = "toast toast-top toast-end z-[60]";
+    toast.className = "toast toast-top toast-end z-[1100]";
     toast.setAttribute("data-flash-toast", "");
     const alert = document.createElement("div");
     alert.setAttribute("role", "status");
@@ -1883,6 +2127,7 @@
     document.querySelectorAll("form.js-add-series-form").forEach(syncAddSeriesForm);
     openAddSeriesModal();
     openSeriesMetadataModal();
+    wireMaintenanceScope();
     // Slow fallback if SSE unavailable.
     setInterval(() => {
       refreshBadge();
@@ -1905,6 +2150,9 @@
     createLucideIcons(root);
     formatLocalTimes(root);
     scrollTaskLogsToBottom(root);
+    if (root && (root.id === "maintenance-live" || root.querySelector?.("#maintenance-live"))) {
+      wireMaintenanceScope();
+    }
     const y = document.body.dataset.listLiveScrollY;
     if (y != null && root && (root.id === "series-videos-live" || root.id === "series-list-live")) {
       delete document.body.dataset.listLiveScrollY;

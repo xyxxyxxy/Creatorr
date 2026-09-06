@@ -36,23 +36,21 @@
       <option value="{{.ID}}">{{if .Name}}{{.Name}}: {{.Path}}{{else}}{{.Path}}{{end}}</option>
       {{end}}
     </select>
-    <button type="button" class="btn join-item shrink-0" id="btn-import-rescan" title="Scan again for new files without changing current matches"{{if .ImportBusy}} disabled{{end}}>Rescan</button>
+    <button type="button" class="btn join-item shrink-0" id="btn-import-rescan" title="Scan again for new files without changing current matches"{{if .ImportBusy}} disabled{{end}}><i data-lucide="refresh-cw" class="size-4"></i>Rescan</button>
   </div>
 </label>
-<div class="list-actions flex flex-col gap-3{{if .ImportBusy}} hidden{{end}}" id="import-bulk">
-  <div id="btn-import-wrap" class="w-full block p-0.5 rounded-[calc(0.125rem+var(--radius-field))]">
-    <button type="button" class="btn btn-primary w-full tooltip tooltip-top" id="btn-import" disabled data-tip="Review ready items, then schedule import">Import</button>
-  </div>
+<div class="list-actions{{if .ImportBusy}} hidden{{end}}" id="import-bulk">
   <div class="flex flex-wrap items-center gap-3 min-w-0 w-full">
-    <div class="join">
-      <button type="button" class="join-item btn btn-ghost" id="btn-import-auto-match" disabled title="Re-apply scan auto-matches">Auto-match</button>
-      <button type="button" class="join-item btn btn-ghost" id="btn-import-reset-matches" disabled>Reset matches</button>
-      <button type="button" class="join-item btn" id="btn-import-bulk-series">Pick series for all unmatched</button>
+    <div class="flex items-center gap-1">
+      <button type="button" class="btn btn-ghost btn-sm border-transparent bg-transparent shadow-none font-normal tooltip tooltip-top" id="btn-import-auto-match" disabled data-tip="Re-apply scan auto-matches" aria-label="Auto-match">Auto-match</button>
+      <button type="button" class="btn btn-ghost btn-sm border-transparent bg-transparent shadow-none font-normal" id="btn-import-reset-matches" disabled aria-label="Reset matches">Reset matches</button>
     </div>
+    <button type="button" class="btn" id="btn-import-bulk-series">Match all to series</button>
     <label class="label cursor-pointer gap-2 justify-start py-0">
       <input type="checkbox" class="checkbox checkbox-sm" id="import-filter-unmatched" />
       <span class="label-text text-sm">Show only unmatched</span>
     </label>
+    <button type="button" class="btn btn-primary ml-auto tooltip tooltip-top" id="btn-import" disabled data-tip="Review ready items, then schedule import"><i data-lucide="folder-input" class="size-4"></i>Import</button>
   </div>
 </div>
 <div id="status" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm opacity-60 mt-2{{if .ImportBusy}} hidden{{end}}">
@@ -102,34 +100,7 @@
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
 
-<input type="checkbox" id="modal-import-match" class="modal-toggle" />
-<div class="modal">
-  <div id="import-match-box" class="modal-box max-w-4xl w-11/12 h-[90vh] max-h-[90vh] flex flex-col gap-3">
-    <div class="shrink-0">
-      <h3 class="font-bold text-lg mb-1" id="import-match-title-heading">Match to library</h3>
-      <p class="text-sm opacity-70 truncate" id="import-match-file"></p>
-    </div>
-    <input type="search" id="import-match-q" class="input input-bordered w-full shrink-0" placeholder="Filter series and videos" aria-label="Filter series and videos" autocomplete="off" />
-    <label id="import-allow-existing-wrap" class="label cursor-pointer gap-2 justify-start py-0 w-fit tooltip tooltip-top shrink-0" data-tip="When on, the video list includes videos that already have library media. A video can still only be matched to one media import item. Confirming 'Import' deletes existing library media then installs the new file.">
-      <input type="checkbox" class="checkbox checkbox-sm" id="import-allow-existing" />
-      <span class="label-text text-sm">Allow matching existing media</span>
-    </label>
-    <div id="import-match-grid" class="grid gap-3 md:grid-cols-2 min-h-0 flex-1 overflow-hidden">
-      <div class="flex flex-col min-h-0 gap-2">
-        <h4 class="text-sm font-medium opacity-70 shrink-0">Series</h4>
-        <ul id="import-match-series" class="list bg-base-100 rounded-box border border-base-300 overflow-y-auto flex-1 min-h-0" aria-label="Series"></ul>
-      </div>
-      <div id="import-match-videos-col" class="flex flex-col min-h-0 gap-2">
-        <h4 class="text-sm font-medium opacity-70 shrink-0">Videos</h4>
-        <ul id="import-match-videos" class="list bg-base-100 rounded-box border border-base-300 overflow-y-auto flex-1 min-h-0" aria-label="Videos"></ul>
-      </div>
-    </div>
-    <div class="modal-action shrink-0">
-      <button type="button" class="btn" id="btn-import-match-cancel">Cancel</button>
-    </div>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
+{{template "library_picker_modal"}}
 
 <script>
 let SERIES = [];
@@ -198,6 +169,9 @@ async function loadImportPicker() {
       SERIES = Array.isArray(data.series) ? data.series : [];
       VIDEOS = Array.isArray(data.videos) ? data.videos : [];
       importPickerReady = true;
+      if (typeof window.setLibraryPickerCatalog === 'function') {
+        window.setLibraryPickerCatalog(SERIES, VIDEOS);
+      }
       // Scrub picks that need has_media now that the catalog is known.
       importBundles.forEach((b) => {
         if (b.kind !== 'media') return;
@@ -266,7 +240,7 @@ document.body.addEventListener('creatorr:series-created', (ev) => {
 });
 
 function allowExistingMedia() {
-  return document.getElementById('import-allow-existing')?.checked === true;
+  return document.getElementById('library-picker-allow-existing')?.checked === true;
 }
 
 function videoHasMedia(id) {
@@ -549,8 +523,9 @@ function matchActionsHTML(st, kind) {
   return `
     <div class="flex items-center gap-3 shrink-0 self-center">
       ${status}
-      <button type="button" class="btn btn-primary btn-square js-open-match tooltip tooltip-top" data-tip="Match" aria-label="Match">
+      <button type="button" class="btn btn-secondary js-open-match" aria-label="Match to video">
         <i data-lucide="link" class="size-5" aria-hidden="true"></i>
+        Match to video
       </button>
     </div>`;
 }
@@ -570,7 +545,7 @@ function otherActionsHTML() {
 }
 
 function closeMatchModal() {
-  document.getElementById('modal-import-match').checked = false;
+  document.getElementById('modal-library-picker').checked = false;
   matchCtx = null;
 }
 
@@ -651,7 +626,22 @@ function lockedVideoRowHTML(v) {
   </li>`;
 }
 
-function createListRowHTML(selected) {
+function createListRowHTML(selected, enabled) {
+  if (!enabled) {
+    // Tip wraps the label only (not the list-row flex host) so daisyUI bubbles work.
+    return `<li class="list-row opacity-60" role="option" aria-disabled="true" aria-selected="false">
+    <div class="relative shrink-0 w-20 aspect-video">
+      <div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true">
+        <i data-lucide="plus" class="size-5 opacity-40"></i>
+      </div>
+    </div>
+    <div class="list-col-grow min-w-0 self-center">
+      <span class="tooltip tooltip-left cursor-not-allowed" data-tip="Pick a series first">
+        <span class="font-medium">Create new video</span>
+      </span>
+    </div>
+  </li>`;
+  }
   return `<li class="list-row cursor-pointer ${selected ? 'bg-base-200' : ''}" data-video-id="${CREATE}" role="option" aria-selected="${selected ? 'true' : 'false'}">
     <div class="relative shrink-0 w-20 aspect-video">
       <div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true">
@@ -665,14 +655,14 @@ function createListRowHTML(selected) {
 function renderMatchModalLists() {
   if (!matchCtx) return;
   const bulkSeries = matchCtx.kind === 'bulk-series';
-  const qEl = document.getElementById('import-match-q');
+  const qEl = document.getElementById('library-picker-q');
   const q = qEl?.value || '';
   const draft = matchCtx.draft;
-  const seriesList = document.getElementById('import-match-series');
-  const videoList = document.getElementById('import-match-videos');
-  const videosCol = document.getElementById('import-match-videos-col');
-  const grid = document.getElementById('import-match-grid');
-  const box = document.getElementById('import-match-box');
+  const seriesList = document.getElementById('library-picker-series');
+  const videoList = document.getElementById('library-picker-videos');
+  const videosCol = document.getElementById('library-picker-videos-col');
+  const grid = document.getElementById('library-picker-grid');
+  const box = document.getElementById('library-picker-box');
   const seriesLocked = !!draft.seriesId;
   // CREATE is a draft intent, not a locked library pick - keep the video list open.
   const videoLocked = !!draft.videoId && String(draft.videoId) !== CREATE;
@@ -708,7 +698,7 @@ function renderMatchModalLists() {
     seriesList.innerHTML = html;
   }
   const forMedia = matchCtx.kind === 'media';
-  const allowWrap = document.getElementById('import-allow-existing-wrap');
+  const allowWrap = document.getElementById('library-picker-allow-existing-wrap');
   if (allowWrap) allowWrap.classList.toggle('hidden', !forMedia);
   if (bulkSeries) {
     lucideRefresh(seriesList);
@@ -728,7 +718,7 @@ function renderMatchModalLists() {
     let html = '';
     // Create only for media Match (sidecar Attach needs an existing packed video).
     if (forMedia) {
-      html += createListRowHTML(String(draft.videoId) === CREATE);
+      html += createListRowHTML(String(draft.videoId) === CREATE, !!draft.seriesId);
     }
     if (videos.length) {
       html += videos.map((v) => videoListRowHTML(v, '', exceptKey)).join('');
@@ -752,7 +742,7 @@ function lockSeriesAndResetSearch(seriesId) {
       !videoBelongsToSeries(matchCtx.draft.videoId, matchCtx.draft.seriesId)) {
     matchCtx.draft.videoId = '';
   }
-  const qEl = document.getElementById('import-match-q');
+  const qEl = document.getElementById('library-picker-q');
   if (qEl) qEl.value = '';
   if (matchCtx.kind === 'bulk-series' && matchCtx.draft.seriesId) {
     applyBulkSeriesToMissing(matchCtx.draft.seriesId);
@@ -771,6 +761,9 @@ function addSeriesToImportPicker(ser) {
   if (idx >= 0) SERIES[idx] = { ...SERIES[idx], ...row };
   else SERIES.push(row);
   SERIES.sort((a, b) => String(a.title).localeCompare(String(b.title)));
+  if (typeof window.setLibraryPickerCatalog === 'function') {
+    window.setLibraryPickerCatalog(SERIES, VIDEOS);
+  }
 }
 
 function openAddSeriesForImportMatch() {
@@ -1021,7 +1014,7 @@ function unlockSeries() {
   if (!matchCtx) return;
   matchCtx.draft.seriesId = '';
   matchCtx.draft.videoId = '';
-  const qEl = document.getElementById('import-match-q');
+  const qEl = document.getElementById('library-picker-q');
   if (qEl) {
     qEl.value = '';
     qEl.disabled = false;
@@ -1032,7 +1025,7 @@ function unlockSeries() {
 function unlockVideo() {
   if (!matchCtx) return;
   matchCtx.draft.videoId = '';
-  const qEl = document.getElementById('import-match-q');
+  const qEl = document.getElementById('library-picker-q');
   if (qEl) {
     qEl.value = '';
     qEl.disabled = false;
@@ -1071,14 +1064,14 @@ function openMatchModal(key, kind, hints) {
       handler: st.handler || hints.suggested_handler_id || 'yt-dlp',
     },
   };
-  const heading = document.getElementById('import-match-title-heading');
-  if (heading) heading.textContent = 'Match to library';
-  document.getElementById('import-match-file').textContent = hints.filename || '';
-  const qEl = document.getElementById('import-match-q');
+  const heading = document.getElementById('library-picker-title');
+  if (heading) heading.textContent = 'Select series/video';
+  document.getElementById('library-picker-subtitle').textContent = hints.filename || '';
+  const qEl = document.getElementById('library-picker-q');
   qEl.value = '';
   qEl.disabled = false;
   renderMatchModalLists();
-  document.getElementById('modal-import-match').checked = true;
+  document.getElementById('modal-library-picker').checked = true;
   if (!qEl.disabled) {
     // Defer so focus sticks after modal becomes visible.
     requestAnimationFrame(() => {
@@ -1099,18 +1092,18 @@ function openBulkSeriesMatchModal() {
     hints: {},
     draft: { seriesId: '', videoId: '', title: '', remote: '', upload: '', handler: '' },
   };
-  const heading = document.getElementById('import-match-title-heading');
-  if (heading) heading.textContent = 'Pick series';
+  const heading = document.getElementById('library-picker-title');
+  if (heading) heading.textContent = 'Select series/video';
   const n = countBundlesMissingSeries();
-  document.getElementById('import-match-file').textContent =
+  document.getElementById('library-picker-subtitle').textContent =
     n === 1
       ? 'Apply to 1 import item with no series'
       : 'Apply to ' + n + ' import items with no series';
-  const qEl = document.getElementById('import-match-q');
+  const qEl = document.getElementById('library-picker-q');
   qEl.value = '';
   qEl.disabled = false;
   renderMatchModalLists();
-  document.getElementById('modal-import-match').checked = true;
+  document.getElementById('modal-library-picker').checked = true;
   requestAnimationFrame(() => {
     qEl.focus();
     qEl.select();
@@ -1432,34 +1425,21 @@ function collectReadyJobs() {
 function updateImportBtn() {
   const n = collectReadyJobs().length;
   const btn = document.getElementById('btn-import');
-  const wrap = document.getElementById('btn-import-wrap');
   if (!btn) return;
   btn.disabled = n === 0;
-  btn.textContent = n === 0 ? 'Import' : 'Import (' + n + ')';
-  if (wrap) {
-    // daisyUI aura-rainbow when every importable item is matched (ignore listed-only).
-    // https://daisyui.com/components/aura/#aura-rainbow
-    // Wrap keeps p-0.5 always (= aura-md --aura-padding) so toggling does not jump layout.
-    const allReady = allImportableMatched();
-    wrap.classList.toggle('aura', allReady);
-    wrap.classList.toggle('aura-rainbow', allReady);
-  }
+  const label = n === 0 ? 'Import' : 'Import (' + n + ')';
+  btn.replaceChildren();
+  const icon = document.createElement('i');
+  icon.setAttribute('data-lucide', 'folder-input');
+  icon.className = 'size-4';
+  icon.setAttribute('aria-hidden', 'true');
+  btn.appendChild(icon);
+  btn.appendChild(document.createTextNode(label));
+  lucideRefresh(btn);
   updateMatchStatus();
   updateBulkSeriesBtn();
   updateResetMatchesBtn();
   updateAutoMatchBtn();
-}
-
-/** True when every media/sidecar Attach row is matched; skips non-importable rows. */
-function allImportableMatched() {
-  let n = 0;
-  for (const b of importBundles) {
-    if (b.kind === 'other') continue;
-    n++;
-    const kind = b.kind === 'sidecars' ? 'sidecar' : 'media';
-    if (!itemReady(kind, defaultStateForBundle(b))) return false;
-  }
-  return n > 0;
 }
 
 function syncVisibleItemState() {
@@ -2069,7 +2049,7 @@ document.getElementById('import-filter-unmatched').addEventListener('change', ()
   importPage = 1;
   renderImportPage();
 });
-document.getElementById('import-allow-existing').addEventListener('change', () => {
+document.getElementById('library-picker-allow-existing').addEventListener('change', () => {
   importBundles.forEach((b) => {
     if (b.kind !== 'media') return;
     const key = bundleStateKey(b);
@@ -2081,10 +2061,10 @@ document.getElementById('import-allow-existing').addEventListener('change', () =
   }
   renderImportPage();
 });
-document.getElementById('import-match-q').addEventListener('input', () => {
+document.getElementById('library-picker-q').addEventListener('input', () => {
   renderMatchModalLists();
 });
-document.getElementById('import-match-series').addEventListener('click', (ev) => {
+document.getElementById('library-picker-series').addEventListener('click', (ev) => {
   if (!matchCtx) return;
   const unlock = ev.target.closest('[data-unlock-series]');
   if (unlock) {
@@ -2101,7 +2081,7 @@ document.getElementById('import-match-series').addEventListener('click', (ev) =>
   if (!row) return;
   lockSeriesAndResetSearch(row.dataset.seriesId);
 });
-document.getElementById('import-match-videos').addEventListener('click', (ev) => {
+document.getElementById('library-picker-videos').addEventListener('click', (ev) => {
   if (!matchCtx) return;
   const unlock = ev.target.closest('[data-unlock-video]');
   if (unlock) {
@@ -2192,7 +2172,7 @@ document.body.addEventListener('submit', (ev) => {
   ev.preventDefault();
   submitAddVideoForImportMatch(form);
 });
-document.getElementById('btn-import-match-cancel').addEventListener('click', () => closeMatchModal());
+document.getElementById('library-picker-cancel').addEventListener('click', () => closeMatchModal());
 
 async function refreshImportFullScanNote(ev) {
   const el = document.getElementById('import-full-scan-note');

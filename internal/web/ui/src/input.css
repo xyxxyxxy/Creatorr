@@ -13,6 +13,7 @@
 @source "../../templates/**/*.html";
 @source "../../partials/**/*.html";
 @source "../../static/app.js";
+@source "../../static/library_picker.js";
 
 /*
   Exception (approved): daisyUI .modal-box uses overflow-y:auto, which clips tooltip
@@ -25,6 +26,14 @@
 .modal-box {
   overflow: visible;
   max-height: none;
+}
+
+/*
+  Notifications + flash toasts above daisyUI .modal (z-index 999) so the Select series/video
+  library picker does not trap the bell menu or toasts under the backdrop.
+*/
+.app-shell > header.navbar {
+  z-index: 1100;
 }
 
 /*
