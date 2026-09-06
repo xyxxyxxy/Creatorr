@@ -44,6 +44,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo7(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 8:
+			if err := d.migrateTo8(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -224,6 +228,59 @@ func (d *DB) migrateTo7() error {
 	}
 	if _, err := d.SQL.Exec(`ALTER TABLE videos DROP COLUMN tool`); err != nil {
 		return fmt.Errorf("drop videos.tool: %w", err)
+	}
+	return nil
+}
+
+// migrateTo8 makes videos.acquired_via nullable and clears it when never acquired.
+// v4 backfilled source for every row; only pack/import should set the column.
+func (d *DB) migrateTo8() error {
+	has, err := d.tableHasColumn("videos", "acquired_via")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err := d.SQL.Exec(`ALTER TABLE videos ADD COLUMN acquired_via TEXT`); err != nil {
+			return fmt.Errorf("add acquired_via: %w", err)
+		}
+		return nil
+	}
+	hasNew, err := d.tableHasColumn("videos", "acquired_via_new")
+	if err != nil {
+		return err
+	}
+	if !hasNew {
+		if _, err := d.SQL.Exec(`ALTER TABLE videos ADD COLUMN acquired_via_new TEXT`); err != nil {
+			return fmt.Errorf("add acquired_via_new: %w", err)
+		}
+	}
+	hasAcquiredAt, err := d.tableHasColumn("videos", "acquired_at")
+	if err != nil {
+		return err
+	}
+	if hasAcquiredAt {
+		if _, err := d.SQL.Exec(`
+			UPDATE videos SET acquired_via_new = acquired_via
+			WHERE acquired_at IS NOT NULL AND TRIM(acquired_at) != ''
+			  AND acquired_via IS NOT NULL AND TRIM(acquired_via) != ''
+		`); err != nil {
+			return fmt.Errorf("copy acquired_via for acquired rows: %w", err)
+		}
+		// Defensive: acquired_at set but via empty → live source.
+		if _, err := d.SQL.Exec(`
+			UPDATE videos SET acquired_via_new = 'source'
+			WHERE acquired_at IS NOT NULL AND TRIM(acquired_at) != ''
+			  AND (acquired_via_new IS NULL OR TRIM(acquired_via_new) = '')
+		`); err != nil {
+			return fmt.Errorf("backfill acquired_via source for acquired rows: %w", err)
+		}
+	}
+	// No acquired_at in this DB shape: leave acquired_via_new NULL (unacquired).
+	if _, err := d.SQL.Exec(`ALTER TABLE videos DROP COLUMN acquired_via`); err != nil {
+		return fmt.Errorf("drop acquired_via: %w", err)
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE videos RENAME COLUMN acquired_via_new TO acquired_via`); err != nil {
+		return fmt.Errorf("rename acquired_via_new: %w", err)
 	}
 	return nil
 }

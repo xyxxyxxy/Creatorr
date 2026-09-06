@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS videos (
   download_format_selector TEXT,
   download_remux_container TEXT,
   import_src TEXT,
-  acquired_via TEXT NOT NULL DEFAULT 'source',
+  acquired_via TEXT,
   acquired_at TEXT,
   sidecars_acquired_at TEXT,
   -- Episode metadata for episodedetails NFO (description = plot).
