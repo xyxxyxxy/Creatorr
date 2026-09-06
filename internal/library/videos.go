@@ -21,7 +21,7 @@ const videoSelectCols = `id, series_id, source_id, remote_id, title, upload_date
 		       status, season, episode, COALESCE(description,''), thumbnail_url,
 		       COALESCE(media_type,''), duration_seconds, width, height, fps,
 		       download_format_selector, download_remux_container, import_src,
-		       COALESCE(acquired_via,'source'), acquired_at, sidecars_acquired_at,
+		       acquired_via, acquired_at, sidecars_acquired_at,
 		       COALESCE(sorttitle,''), COALESCE(originaltitle,''), COALESCE(studio,''),
 		       COALESCE(genres,'[]'), COALESCE(tags,'[]'),
 		       COALESCE(uniqueid_type,''), COALESCE(uniqueid_value,''), COALESCE(actors,'[]'),
@@ -49,7 +49,7 @@ type Video struct {
 	DownloadFormatSelector        sql.NullString
 	DownloadRemuxContainer        sql.NullString
 	ImportSrc                     sql.NullString
-	AcquiredVia                   string
+	AcquiredVia                   sql.NullString
 	AcquiredAt                    sql.NullString
 	SidecarsAcquiredAt            sql.NullString
 	SortTitle                     string

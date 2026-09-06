@@ -172,10 +172,10 @@ func (s *Store) insertListedVideo(seriesID int64, src any, li ListedVideo, uploa
 	return s.DB.SQL.Exec(`
 		INSERT INTO videos (
 		  series_id, source_id, remote_id, title, upload_date,
-		  source_url, status, season, episode, description, thumbnail_url, media_type, acquired_via
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		  source_url, status, season, episode, description, thumbnail_url, media_type
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, seriesID, src, li.RemoteID, li.Title, uploadVal, nullEmpty(li.WebpageURL),
-		status, season, episode, li.Description, thumb, mt, AcquiredViaSource)
+		status, season, episode, li.Description, thumb, mt)
 }
 
 func nullEmpty(s string) any {
@@ -440,8 +440,11 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		importSrcVal = strings.TrimSpace(meta.ImportSrc)
 	}
 	acquiredVia := NormalizeAcquiredVia(meta.AcquiredVia)
-	if strings.TrimSpace(meta.ImportSrc) != "" && acquiredVia == AcquiredViaSource {
+	if strings.TrimSpace(meta.ImportSrc) != "" && (acquiredVia == "" || acquiredVia == AcquiredViaSource) {
 		acquiredVia = AcquiredViaImport
+	}
+	if acquiredVia == "" {
+		acquiredVia = AcquiredViaSource
 	}
 	var durVal, widthVal, heightVal, fpsVal any
 	if dur > 0 {

@@ -2228,7 +2228,8 @@ components:
           description: wanted, wanted_archive, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored
         acquired_via:
           type: string
-          description: How packed media was obtained - source (live download), archive (Web Archive), or import
+          nullable: true
+          description: How packed media was obtained - source (live download), archive (Web Archive), or import. Null/omitted until the video is acquired.
           enum: [source, archive, import]
         season:
           type: integer

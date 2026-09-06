@@ -15,13 +15,13 @@ const StatusWantedArchive = "wanted_archive"
 // ArchiveOrgDomain is the queue lane hostname for ytarchive: fallback downloads.
 const ArchiveOrgDomain = "archive.org"
 
-// NormalizeAcquiredVia returns a closed-set value; empty → source.
+// NormalizeAcquiredVia returns a closed-set value; empty/unknown → "".
 func NormalizeAcquiredVia(raw string) string {
-	switch raw {
+	switch strings.TrimSpace(raw) {
 	case AcquiredViaArchive, AcquiredViaImport, AcquiredViaSource:
-		return raw
+		return strings.TrimSpace(raw)
 	default:
-		return AcquiredViaSource
+		return ""
 	}
 }
 

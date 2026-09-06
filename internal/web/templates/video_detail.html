@@ -163,11 +163,13 @@
       </div>
     </td>
   </tr>
-  <tr>
+	<tr>
     <th class="w-40">Acquired</th>
     <td>
       {{if .Video.AcquiredAt.Valid}}{{template "local_time" .Video.AcquiredAt.String}}{{else}}<span class="opacity-60">none</span>{{end}}
-      via {{if eq .Video.AcquiredVia "archive"}}Web Archive{{else if eq .Video.AcquiredVia "import"}}Import{{else}}Source{{end}}
+      {{if .Video.AcquiredVia.Valid}}
+      via {{if eq .Video.AcquiredVia.String "archive"}}Web Archive{{else if eq .Video.AcquiredVia.String "import"}}Import{{else}}Source{{end}}
+      {{end}}
     </td>
   </tr>
   {{if .Video.MediaType}}

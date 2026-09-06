@@ -13,7 +13,7 @@ import (
 
 // MediaCompleteMeta is Creatorr-owned state written on download/import complete.
 type MediaCompleteMeta struct {
-	AcquiredVia            string // source | archive | import
+	AcquiredVia            string // source | archive | import; empty until pack writes it
 	DownloadFormatSelector string // archive download only
 	DownloadRemuxContainer string // "mkv" only when remux ran; empty when skipped
 	ImportSrc              string // original path at import
