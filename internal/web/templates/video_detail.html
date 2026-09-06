@@ -120,9 +120,9 @@
   {{end}}
 {{else if .ThumbURL}}
 <img class="w-full aspect-video object-cover rounded-box border border-base-300 bg-base-200" src="{{.ThumbURL}}" alt="" />
-<p class="text-sm opacity-60">No packed media on disk yet.</p>
+<p class="text-sm opacity-60">No video</p>
 {{else}}
-{{template "list_empty" "No packed media on disk yet."}}
+{{template "list_empty" "No video"}}
 {{end}}
 {{if or .MediaResolution .MediaDuration}}
 <div class="flex items-baseline justify-between gap-3 text-sm tabular-nums">
@@ -192,9 +192,9 @@
 </div>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Video and sidecar files beside the packed media.")}}
+{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files")}}
 {{if not .Files}}
-{{template "list_empty" "No files yet."}}
+{{template "list_empty" "No files"}}
 {{else}}
 {{template "list_table"}}
 <thead><tr><th>Type</th><th>File</th><th>Size</th><th class="w-14"></th></tr></thead>
