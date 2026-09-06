@@ -153,17 +153,17 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 	}
 
 	st, _ := r.Queue.TaskStatus(task.ID)
-	cancelled := st == queue.StatusCancelled || errors.Is(runErr, context.Canceled)
-	if cancelled {
+	if st == queue.StatusCancelled {
+		// Operator cancel (CancelWithMessage already set status + message).
 		msg := "Cancelled"
-		if t, err := r.Queue.GetTask(task.ID); err == nil && t != nil && strings.TrimSpace(t.Message) != "" {
-			msg = t.Message
+		if t, err := r.Queue.GetTask(task.ID); err == nil && t != nil {
 			task = t
-		}
-		if st != queue.StatusCancelled {
-			_ = r.Queue.Finish(task.ID, queue.StatusCancelled, msg, "Cancelled", "")
+			if strings.TrimSpace(t.Message) != "" {
+				msg = t.Message
+			}
 		}
 		if r.Library != nil {
+			task.Message = msg
 			if err := r.Library.RecordTaskCancelled(task); err != nil {
 				log.Warn("record cancelled history", "task", task.ID, "err", err)
 			}
@@ -175,6 +175,15 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 			r.maybeScheduleDigest(ctx, log)
 		}
 		log.Info("task cancelled", "id", task.ID, "kind", task.Kind)
+		return
+	}
+	if errors.Is(runErr, context.Canceled) {
+		// Process shutdown / parent ctx cancel: leave status=running so boot
+		// RequeueStaleRunning can resume. Do not Finish or write cancelled history.
+		if r.Queue.Live != nil {
+			r.Queue.Live.Clear(task.ID)
+		}
+		log.Info("task interrupted (left running for requeue)", "id", task.ID, "kind", task.Kind)
 		return
 	}
 

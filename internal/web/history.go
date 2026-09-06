@@ -112,12 +112,13 @@ func isHistoryStatus(status string) bool {
 }
 
 // historyEventError reports timeline events that should render in text-error
-// (video download holds, source scan failures).
+// (video download holds, source scan failures, cancelled tasks).
 func historyEventError(event string) bool {
 	switch event {
 	case "download_failed", "verify_failed", "file_externally_changed",
 		"sidecar_externally_changed",
-		library.SourceHistScanError:
+		library.SourceHistScanError,
+		library.VideoHistCancelled: // same string as SourceHistCancelled
 		return true
 	default:
 		return false

@@ -63,7 +63,7 @@ func singleHistoryGroup(r videoHistoryView) videoHistoryGroup {
 		HistoryID:  r.HistoryID,
 		Grouped:    false,
 		Stages:     []videoHistoryView{r},
-		HasError:   historyEventError(r.Event),
+		HasError:   r.HasError,
 	}
 }
 
@@ -74,7 +74,7 @@ func multiHistoryGroup(newestFirst []videoHistoryView) videoHistoryGroup {
 	copy(stages, newestFirst)
 	hasErr := false
 	for _, s := range stages {
-		if historyEventError(s.Event) {
+		if s.HasError {
 			hasErr = true
 		}
 	}
@@ -117,7 +117,7 @@ func videoHistoryGroupsToTimeline(groups []videoHistoryGroup) []taskStageView {
 				subs = append(subs, taskStageSubview{
 					Event:    s.Event,
 					Message:  s.Message,
-					HasError: historyEventError(s.Event),
+					HasError: s.HasError,
 				})
 			}
 			item.Substages = subs

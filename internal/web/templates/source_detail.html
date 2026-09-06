@@ -108,8 +108,8 @@
   {{range .History}}
   <tr{{if .HistoryID}} class="hover cursor-pointer" onclick="location.href='/task/{{.HistoryID}}'"{{end}}>
     <td class="text-xs whitespace-nowrap">{{template "rel_time" .}}</td>
-    <td>{{template "history_event" .Event}}</td>
-    <td class="text-sm{{if historyEventError .Event}} text-error{{end}}">{{.Message}}</td>
+    <td>{{if .HasError}}<span class="text-error">{{.Event}}</span>{{else}}{{.Event}}{{end}}</td>
+    <td class="text-sm{{if .HasError}} text-error{{end}}">{{.Message}}</td>
   </tr>
   {{end}}
 </tbody>

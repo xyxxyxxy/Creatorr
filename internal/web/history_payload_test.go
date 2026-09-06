@@ -15,8 +15,8 @@ func TestHistoryEventError(t *testing.T) {
 	}{
 		{"download_failed", true},
 		{library.SourceHistScanError, true},
-		{library.SourceHistCancelled, false},
-		{"cancelled", false},
+		{library.SourceHistCancelled, true},
+		{"cancelled", true},
 		{"download", false}, // legacy pack event
 		{"downloaded", false},
 		{"packed", false},
