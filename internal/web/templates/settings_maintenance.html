@@ -4,6 +4,24 @@
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 
 {{template "maintenance_live" .}}
+{{template "library_picker_modal"}}
+
+<input type="checkbox" id="modal-maintenance-confirm" class="modal-toggle" />
+<div class="modal" role="dialog" aria-labelledby="maintenance-confirm-title">
+  <div class="modal-box max-w-lg">
+    <h3 class="font-bold text-lg mb-2" id="maintenance-confirm-title">Confirm run</h3>
+    <p class="text-sm mb-2 font-medium">Actions</p>
+    <ul id="maintenance-confirm-actions" class="list bg-base-200 rounded-box max-h-40 overflow-y-auto mb-3"></ul>
+    <p class="text-sm mb-2 font-medium">Scope</p>
+    <p class="text-sm mb-2" id="maintenance-confirm-lead"></p>
+    <ul id="maintenance-confirm-list" class="list bg-base-200 rounded-box max-h-60 overflow-y-auto mb-2"></ul>
+    <div class="modal-action">
+      <label for="modal-maintenance-confirm" class="btn modal-cancel">Cancel</label>
+      <button type="button" class="btn btn-warning" id="maintenance-confirm-submit">Run</button>
+    </div>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
 
 {{template "foot" .}}
 {{end}}

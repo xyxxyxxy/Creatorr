@@ -107,6 +107,35 @@ func (s *Store) EnqueueRenameEpisodesSeries(seriesID int64, oldTitle string, old
 	})
 }
 
+// EnqueueRenameEpisodesSeriesIDs queues a scoped Apply for one or more series (Maintenance).
+// A single id uses EnqueueRenameEpisodesSeries. Multiple ids share one task with series_ids.
+func (s *Store) EnqueueRenameEpisodesSeriesIDs(seriesIDs []int64) (int64, error) {
+	ids := uniqInt64(seriesIDs)
+	if len(ids) == 0 {
+		return 0, fmt.Errorf("%w: series_ids required", ErrInvalid)
+	}
+	if len(ids) == 1 {
+		return s.EnqueueRenameEpisodesSeries(ids[0], "", 0)
+	}
+	if s.Queue == nil {
+		return 0, fmt.Errorf("%w: queue unavailable", ErrInvalid)
+	}
+	formats, err := s.snapshotFormatsByRoot()
+	if err != nil {
+		return 0, err
+	}
+	return s.Queue.Enqueue(queue.EnqueueParams{
+		Kind:   queue.KindRenameEpisodes,
+		Domain: queue.SystemDomain,
+		Payload: map[string]any{
+			"formats_by_root": formats,
+			"cursor":          0,
+			"series_ids":      ids,
+		},
+		Message: "Rename episodes (series)",
+	})
+}
+
 func (s *Store) snapshotFormatsByRoot() (map[string]string, error) {
 	roots, err := s.ListRoots()
 	if err != nil {
@@ -260,6 +289,7 @@ type applyNamingPayload struct {
 	FormatsByRoot map[string]string `json:"formats_by_root"`
 	Cursor        int64             `json:"cursor"`
 	SeriesID      int64             `json:"series_id"`
+	SeriesIDs     []int64           `json:"series_ids"`
 	VideoIDs      []int64           `json:"video_ids"`
 	OldTitle      string            `json:"old_title"`
 	OldRootID     int64             `json:"old_root_id"`
@@ -267,7 +297,7 @@ type applyNamingPayload struct {
 }
 
 func (p applyNamingPayload) isFullLibrary() bool {
-	return p.SeriesID <= 0 && len(p.VideoIDs) == 0
+	return p.SeriesID <= 0 && len(p.SeriesIDs) == 0 && len(p.VideoIDs) == 0
 }
 
 func (p applyNamingPayload) namingConfigForRoot(rootID int64) NamingConfig {
@@ -298,6 +328,9 @@ func (p applyNamingPayload) payloadMap() map[string]any {
 	}
 	if p.SeriesID > 0 {
 		out["series_id"] = p.SeriesID
+	}
+	if len(p.SeriesIDs) > 0 {
+		out["series_ids"] = p.SeriesIDs
 	}
 	if len(p.VideoIDs) > 0 {
 		out["video_ids"] = p.VideoIDs
@@ -419,14 +452,17 @@ func buildApplyNamingQuery(p applyNamingPayload) (string, []any) {
 	if p.SeriesID > 0 {
 		base += ` AND v.series_id = ?`
 		args = append(args, p.SeriesID)
-	}
-	if len(p.VideoIDs) > 0 {
-		placeholders := make([]string, len(p.VideoIDs))
-		for i, id := range p.VideoIDs {
-			placeholders[i] = "?"
+	} else if len(p.SeriesIDs) > 0 {
+		base += ` AND v.series_id IN (` + sqlIntPlaceholders(len(p.SeriesIDs)) + `)`
+		for _, id := range p.SeriesIDs {
 			args = append(args, id)
 		}
-		base += ` AND v.id IN (` + strings.Join(placeholders, ",") + `)`
+	}
+	if len(p.VideoIDs) > 0 {
+		base += ` AND v.id IN (` + sqlIntPlaceholders(len(p.VideoIDs)) + `)`
+		for _, id := range p.VideoIDs {
+			args = append(args, id)
+		}
 	}
 	base += ` ORDER BY v.id ASC`
 	return base, args
@@ -483,11 +519,19 @@ func (s *Store) warnRemainingPathCollisions(ctx context.Context, taskID int64, p
 		return nil
 	}
 	ids := uniqInt64(videoIDs)
-	if len(ids) == 0 && p.SeriesID > 0 {
-		rows, err := s.DB.SQL.Query(`
-			SELECT id FROM videos
-			WHERE series_id = ? AND status IN ('downloaded', 'verify_failed')
-		`, p.SeriesID)
+	if len(ids) == 0 && (p.SeriesID > 0 || len(p.SeriesIDs) > 0) {
+		q := `SELECT id FROM videos WHERE status IN ('downloaded', 'verify_failed')`
+		var args []any
+		if p.SeriesID > 0 {
+			q += ` AND series_id = ?`
+			args = append(args, p.SeriesID)
+		} else {
+			q += ` AND series_id IN (` + sqlIntPlaceholders(len(p.SeriesIDs)) + `)`
+			for _, id := range p.SeriesIDs {
+				args = append(args, id)
+			}
+		}
+		rows, err := s.DB.SQL.Query(q, args...)
 		if err != nil {
 			return err
 		}

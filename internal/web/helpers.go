@@ -210,9 +210,37 @@ func flashFromQuery(r *http.Request) *flash {
 	case "profile-deleted":
 		return flashOK("Quality profile deleted.")
 	case "nfo-regen-queued":
+		if r.URL.Query().Get("scope") == "series" {
+			return flashOK("'Regenerate all NFO files' queued for selected series.")
+		}
+		if r.URL.Query().Get("scope") == "videos" {
+			return flashOK("'Regenerate all NFO files' queued for selected videos.")
+		}
 		return flashOK("NFO regenerate queued.")
 	case "verify-all-queued":
+		if r.URL.Query().Get("scope") == "series" {
+			return flashOK("'Verify all downloaded videos' queued for selected series.")
+		}
+		if r.URL.Query().Get("scope") == "videos" {
+			return flashOK("'Verify all downloaded videos' queued for selected videos.")
+		}
 		return flashOK("'Verify all downloaded videos' queued.")
+	case "refresh-sidecars-queued":
+		queued := r.URL.Query().Get("queued")
+		skipped := r.URL.Query().Get("skipped")
+		msg := "'Refresh sidecars' queued"
+		switch r.URL.Query().Get("scope") {
+		case "series":
+			msg += " for selected series"
+		case "videos":
+			msg += " for selected videos"
+		}
+		msg += " (" + queued + ")."
+		if skipped != "" && skipped != "0" {
+			msg = strings.TrimSuffix(msg, ".") + "; " + skipped + " skipped."
+			return flashWarn(msg)
+		}
+		return flashOK(msg)
 	case "sync-files-queued":
 		return flashOK("File sync queued.")
 	case "sync-files-empty":
@@ -237,7 +265,54 @@ func flashFromQuery(r *http.Request) *flash {
 		}
 		return flashOK(msg)
 	case "apply-naming":
+		if r.URL.Query().Get("scope") == "series" {
+			return flashOK("'Apply episode format' queued for selected series.")
+		}
+		if r.URL.Query().Get("scope") == "videos" {
+			return flashOK("'Apply episode format' queued for selected videos.")
+		}
 		return flashOK("'Apply episode format' queued.")
+	case "maintenance-run":
+		labels := map[string]string{
+			"apply":    "'Apply episode format'",
+			"nfo":      "'Regenerate all NFO files'",
+			"verify":   "'Verify all downloaded videos'",
+			"sidecars": "'Refresh sidecars'",
+		}
+		parts := strings.Split(r.URL.Query().Get("actions"), ",")
+		var names []string
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if lab, ok := labels[p]; ok {
+				names = append(names, lab)
+			}
+		}
+		msg := "Queued " + strings.Join(names, ", ")
+		switch r.URL.Query().Get("scope") {
+		case "series":
+			msg += " for selected series"
+		case "videos":
+			msg += " for selected videos"
+		}
+		if strings.Contains(r.URL.Query().Get("actions"), "sidecars") {
+			queued := r.URL.Query().Get("queued")
+			skipped := r.URL.Query().Get("skipped")
+			if queued != "" {
+				msg += " ('Refresh sidecars': " + queued
+				if skipped != "" && skipped != "0" {
+					msg += ", " + skipped + " skipped"
+				}
+				msg += ")"
+			}
+		}
+		msg += "."
+		if partial := r.URL.Query().Get("partial"); partial != "" {
+			return flashWarn(msg + " Some actions skipped: " + partial)
+		}
+		return flashOK(msg)
 	case "delete-queued":
 		return flashOK("Delete queued - files remove in the background.")
 	case "domain-queue":

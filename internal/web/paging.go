@@ -19,7 +19,7 @@ const SeriesPageSize = 20
 const HistoryPageSize = 20
 
 // TaskPageSize is the page length for open tasks in each /tasks domain lane.
-const TaskPageSize = 20
+const TaskPageSize = 10
 
 // PageInfo drives the pagination partial under a list table.
 type PageInfo struct {

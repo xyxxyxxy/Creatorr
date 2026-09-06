@@ -279,6 +279,62 @@ func (s *Store) EnqueueRefreshSidecarsVideo(videoID int64) (int64, error) {
 	return id, err
 }
 
+// EnqueueRefreshSidecarsScoped queues operator refresh_sidecars for packed videos
+// in scope (empty = whole library). seriesIDs and videoIDs must not both be set.
+// Returns queued/skipped counts from EnqueueRefreshSidecarsVideosBulk.
+func (s *Store) EnqueueRefreshSidecarsScoped(seriesIDs, videoIDs []int64) (queued, skipped int, err error) {
+	seriesIDs = uniqInt64(seriesIDs)
+	videoIDs = uniqInt64(videoIDs)
+	if len(seriesIDs) > 0 && len(videoIDs) > 0 {
+		return 0, 0, fmt.Errorf("%w: series_ids and video_ids are mutually exclusive", ErrInvalid)
+	}
+	ids := videoIDs
+	if len(videoIDs) == 0 {
+		ids, err = s.listPackedVideoIDs(seriesIDs)
+		if err != nil {
+			return 0, 0, err
+		}
+	}
+	if len(ids) == 0 {
+		return 0, 0, fmt.Errorf("%w: no packed videos in scope", ErrInvalid)
+	}
+	return s.EnqueueRefreshSidecarsVideosBulk(ids)
+}
+
+// listPackedVideoIDs returns video ids with a kind=video files row.
+// Empty seriesIDs = whole library; otherwise filter by series.
+func (s *Store) listPackedVideoIDs(seriesIDs []int64) ([]int64, error) {
+	q := `
+		SELECT v.id
+		FROM videos v
+		WHERE EXISTS (
+		  SELECT 1 FROM files f
+		  WHERE f.video_id = v.id AND f.kind = 'video'
+		)`
+	args := []any{}
+	if len(seriesIDs) > 0 {
+		q += ` AND v.series_id IN (` + sqlIntPlaceholders(len(seriesIDs)) + `)`
+		for _, id := range seriesIDs {
+			args = append(args, id)
+		}
+	}
+	q += ` ORDER BY v.id ASC`
+	rows, err := s.DB.SQL.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // MaybeEnqueueImportSidecarGapFill soft-enqueues a gap-fill metadata rescan when the video
 // has a source_url after import. Fills empty episode metadata (plot/NFO fields) and missing
 // thumb/subs; never clobbers present files except rewriting episode NFO from the filled DB row.

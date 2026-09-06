@@ -165,6 +165,63 @@ func TestEnqueueRefreshSidecarsVideo(t *testing.T) {
 	}
 }
 
+func TestEnqueueRefreshSidecarsScoped(t *testing.T) {
+	s := openLib(t)
+	if _, _, err := s.EnqueueRefreshSidecarsScoped([]int64{1}, []int64{2}); err == nil {
+		t.Fatal("want mutual exclusive error")
+	}
+	rootID, profileID := seedRootProfile(t, s)
+	root, err := s.GetRoot(rootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title:            "SideScope",
+		SourceURL:        "https://www.example.com/@sidescope",
+		RootID:           rootID,
+		QualityProfileID: profileID,
+		Monitored:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "ss1", Title: "T", WebpageURL: "https://www.example.com/watch?v=ss1",
+		SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.EnqueueRefreshSidecarsScoped([]int64{ser.ID}, nil); err == nil {
+		t.Fatal("want error with no packed videos")
+	}
+	dir := filepath.Join(root.Path, "SideScope")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	media := filepath.Join(dir, "ep.mkv")
+	if err := os.WriteFile(media, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`INSERT INTO files (video_id, path, kind, acquired_at) VALUES (?, ?, 'video', datetime('now'))`, res.VideoID, media); err != nil {
+		t.Fatal(err)
+	}
+	queued, skipped, err := s.EnqueueRefreshSidecarsScoped([]int64{ser.ID}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued != 1 || skipped != 0 {
+		t.Fatalf("queued=%d skipped=%d", queued, skipped)
+	}
+	queued, skipped, err = s.EnqueueRefreshSidecarsScoped(nil, []int64{res.VideoID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued != 0 || skipped != 1 {
+		t.Fatalf("second enqueue want skip, got queued=%d skipped=%d", queued, skipped)
+	}
+}
+
 func TestMaybeEnqueueImportSidecarGapFill(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
