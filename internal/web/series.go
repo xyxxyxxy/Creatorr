@@ -586,7 +586,7 @@ type videoHistoryView struct {
 }
 
 func videoHistoryToView(e library.VideoHistoryEvent, now time.Time) videoHistoryView {
-	abs, ago := createdAgoPair(e.CreatedAt, now)
+	abs, ago := createdAgoPairShort(e.CreatedAt, now)
 	v := videoHistoryView{
 		CreatedAt:  abs,
 		CreatedAgo: ago,
