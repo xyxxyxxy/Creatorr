@@ -11,7 +11,14 @@ COPY api ./api
 COPY cmd ./cmd
 COPY internal ./internal
 
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/creatorr ./cmd/creatorr
+ARG VERSION=dev
+ARG REVISION=unknown
+RUN CGO_ENABLED=0 go build -trimpath \
+  -ldflags="-s -w \
+    -X github.com/xyxxyxxy/Creatorr/internal/buildinfo.Version=${VERSION} \
+    -X github.com/xyxxyxxy/Creatorr/internal/buildinfo.Revision=${REVISION} \
+    -X github.com/xyxxyxxy/Creatorr/internal/buildinfo.Deployment=docker" \
+  -o /out/creatorr ./cmd/creatorr
 
 # Fetch arch-specific sidecars; unzip/curl stay out of the final image.
 # BGUTIL_POT_VERSION must match the creatorr-po-token Compose image tag (e.g. 1.3.1-deno).

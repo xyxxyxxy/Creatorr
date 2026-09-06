@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xyxxyxxy/Creatorr/internal/buildinfo"
 	"github.com/xyxxyxxy/Creatorr/internal/exectrace"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
@@ -45,6 +46,11 @@ func WebDir() string {
 
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
+		"buildVersion":       func() string { return buildinfo.Version },
+		"buildDeployment":    func() string { return buildinfo.Deployment },
+		"buildShortRevision": buildinfo.ShortRevision,
+		"buildCommitURL":     buildinfo.CommitURL,
+		"buildGitHubURL":     func() string { return buildinfo.GitHubURL },
 		"today": func() string {
 			return time.Now().UTC().Format("2006-01-02")
 		},

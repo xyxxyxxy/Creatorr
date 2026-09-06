@@ -12,6 +12,10 @@ GOLANGCI_LINT_VERSION ?= v2.12.2
 GOLANGCI_LINT_IMAGE ?= golangci/golangci-lint:$(GOLANGCI_LINT_VERSION)
 # Keep in sync with .github/workflows/ci.yml go-version (bookworm matches CI).
 GO_TEST_IMAGE ?= golang:1.25-bookworm
+LDFLAGS ?= -s -w \
+	-X github.com/xyxxyxxy/Creatorr/internal/buildinfo.Version=$(VERSION) \
+	-X github.com/xyxxyxxy/Creatorr/internal/buildinfo.Revision=$(REVISION) \
+	-X github.com/xyxxyxxy/Creatorr/internal/buildinfo.Deployment=binary
 
 generate:
 	$(OAPI_CODEGEN) -config api/oapi-codegen.yaml api/openapi.yaml
@@ -50,7 +54,7 @@ css:
 	npm --prefix internal/web/ui run build
 
 build:
-	$(GO) build -o bin/creatorr ./cmd/creatorr
+	$(GO) build -trimpath -ldflags="$(LDFLAGS)" -o bin/creatorr ./cmd/creatorr
 
 # Install bgutil POT provider plugin for local Go (matches Docker bake; GPL-3.0).
 # Compose sidecar: creatorr-po-token. Optional when not using POT.
