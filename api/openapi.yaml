@@ -219,7 +219,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, path_collision, download_digest, live_skipped, archive_fallback]
+            enum: [cookie_invalid, rate_limited, ytdlp_failed, integrity_check_failed, file_sync_issues, pot_provider, path_collision, download_digest, live_skipped, archive_fallback]
         - name: level
           in: query
           required: false
@@ -1127,7 +1127,7 @@ paths:
     post:
       tags: [library]
       operationId: bulkIgnoreVideos
-      summary: Ignore many videos (skips downloaded / verify_failed)
+      summary: Ignore many videos (skips downloaded / integrity_check_failed)
       requestBody:
         required: true
         content:
@@ -1628,8 +1628,10 @@ components:
         verify:
           type: boolean
           description: >
-            When true, after successful import bind/pack enqueue system media_verify
-            (null-decode). Explicit opt-in; ignores profile mature-only gate. Default false.
+            When true, after successful import bind/pack enqueue system integrity_check_initial
+            when the series quality profile has File integrity on (null-decode + checksums/NFO).
+            Explicit opt-in; ignores the mature-only timing gate. No-op when File integrity is off.
+            Default false.
         replace:
           type: boolean
           description: >
@@ -1849,7 +1851,7 @@ components:
           format: date-time
         event:
           type: string
-          enum: [cookie_invalid, rate_limited, ytdlp_failed, verify_failed, file_sync_issues, pot_provider, path_collision, download_digest, live_skipped, archive_fallback]
+          enum: [cookie_invalid, rate_limited, ytdlp_failed, integrity_check_failed, file_sync_issues, pot_provider, path_collision, download_digest, live_skipped, archive_fallback]
         level:
           type: string
           enum: [info, warning, alert]
@@ -2023,7 +2025,7 @@ components:
         verify_media:
           type: boolean
           description: >
-            When true, after archive pack enqueue a low-priority system media_verify (null-decode).
+            When true, after archive pack enqueue system integrity_check_initial (null-decode + checksums when File integrity on).
             With maturity_redownload_hours > 0, young first packs skip verify until the maturity re-download
             (or when maturity will never run). Default false.
 
@@ -2225,7 +2227,7 @@ components:
           description: Video page URL (watch/clip); never the feed channel/playlist URL
         status:
           type: string
-          description: wanted, wanted_archive, wanted_download_error, downloaded, verify_failed, missing, deleted, ignored
+          description: wanted, wanted_archive, wanted_download_error, downloaded, integrity_check_failed, missing, deleted, ignored
         acquired_via:
           type: string
           nullable: true
@@ -2314,11 +2316,11 @@ components:
         downloaded_count:
           type: integer
           format: int64
-          description: Videos with status downloaded (successful only; excludes verify_failed).
+          description: Videos with status downloaded (successful only; excludes integrity_check_failed).
         wanted_count:
           type: integer
           format: int64
-          description: Videos with status wanted or wanted_archive (excludes wanted_download_error and verify_failed).
+          description: Videos with status wanted or wanted_archive (excludes wanted_download_error and integrity_check_failed).
         source_count:
           type: integer
           format: int64

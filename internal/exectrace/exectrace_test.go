@@ -2,8 +2,24 @@ package exectrace
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
+
+func TestFingerprint(t *testing.T) {
+	a := Fingerprint(`ffmpeg -i "/library/Series/S2019/a.mkv" -f null -`)
+	b := Fingerprint(`ffmpeg -i "/library/Series/S2019/b.mkv" -f null -`)
+	if a != b {
+		t.Fatalf("%q != %q", a, b)
+	}
+	if !strings.Contains(a, "$PATH") {
+		t.Fatalf("%q", a)
+	}
+	c := Fingerprint(`yt-dlp -J https://example.com/v`)
+	if strings.Contains(c, "$PATH") {
+		t.Fatalf("url should not become path: %q", c)
+	}
+}
 
 func TestFormat(t *testing.T) {
 	got := Format("yt-dlp", "-f", "bv*+ba/b", "https://example.com/v")
@@ -33,14 +49,14 @@ func TestRecordNoopWithoutRecorder(t *testing.T) {
 
 func TestRecordWithRecorder(t *testing.T) {
 	var got []string
-	ctx := With(context.Background(), func(line string) {
-		got = append(got, line)
+	ctx := With(context.Background(), func(bin, line string) {
+		got = append(got, bin+"|"+line)
 	})
 	Record(ctx, "ffprobe", "-v", "quiet", "x.mkv")
 	if len(got) != 1 {
 		t.Fatalf("got %d lines", len(got))
 	}
-	if got[0] != "ffprobe -v quiet x.mkv" {
+	if got[0] != "ffprobe|ffprobe -v quiet x.mkv" {
 		t.Fatalf("line = %q", got[0])
 	}
 }

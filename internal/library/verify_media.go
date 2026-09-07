@@ -3,9 +3,12 @@ package library
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -17,12 +20,14 @@ import (
 )
 
 const (
-	VideoHistVerified     = "verified"
-	VideoHistVerifyFailed = "verify_failed"
+	VideoHistIntegrityChecked = "integrity_checked"
+	VideoHistVerifyFailed     = "integrity_check_failed"
+	// VideoHistVerified is the legacy history event; dual-display with integrity_checked.
+	VideoHistVerified = "verified"
 )
 
-// ShouldVerifyMedia decides automatic post-pack enqueue for media_verify.
-// Import confirm verify ignores this gate (always enqueue when checked).
+// ShouldVerifyMedia decides automatic post-pack enqueue for integrity_check_initial.
+// Import confirm verify still requires File integrity on, but ignores the mature-only timing gate.
 // Mature-only: when maturity_redownload_hours > 0, skip young first packs;
 // run on maturity re-download and when maturity will never run (already past due at acquire).
 func ShouldVerifyMedia(p QualityProfile, maturityPack bool, uploadDate string, acquiredAt time.Time) bool {
@@ -49,12 +54,195 @@ func ShouldVerifyMedia(p QualityProfile, maturityPack bool, uploadDate string, a
 	return true
 }
 
+// seriesProfileVerifyMedia returns whether the video's series profile has File integrity on.
+func (s *Store) seriesProfileVerifyMedia(videoID int64) (on bool, err error) {
+	v, err := s.GetVideo(videoID)
+	if err != nil {
+		return false, err
+	}
+	ser, err := s.GetSeries(v.SeriesID, false)
+	if err != nil {
+		return false, err
+	}
+	prof, err := s.GetProfile(ser.QualityProfileID)
+	if err != nil {
+		return false, err
+	}
+	return prof.VerifyMedia, nil
+}
+
+// SeriesProfileVerifyMedia is the exported form of seriesProfileVerifyMedia (UI).
+func (s *Store) SeriesProfileVerifyMedia(videoID int64) (on bool, err error) {
+	return s.seriesProfileVerifyMedia(videoID)
+}
+
+// NFODiskMatchesVideo is the exported form of nfoDiskMatchesVideo (UI).
+func (s *Store) NFODiskMatchesVideo(videoID int64) (match bool, path string, err error) {
+	return s.nfoDiskMatchesVideo(videoID)
+}
+
+// LastFileIntegrityIssue returns the newest size/hash/NFO mismatch message for fileID
+// and optional task id. Does not compute hashes. kind filters video-level events
+// (no file_id in detail) to media rows only.
+func (s *Store) LastFileIntegrityIssue(videoID, fileID int64, kind string) (message string, taskID int64) {
+	if videoID <= 0 || fileID <= 0 {
+		return "", 0
+	}
+	rows, err := s.DB.SQL.Query(`
+		SELECT message, detail, task_id FROM video_history
+		WHERE video_id = ?
+		  AND event IN ('file_externally_changed', 'sidecar_externally_changed', 'integrity_check_failed', 'verify_failed')
+		ORDER BY id DESC
+		LIMIT 40
+	`, videoID)
+	if err != nil {
+		return "", 0
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var msg, detail string
+		var tid sql.NullInt64
+		if err := rows.Scan(&msg, &detail, &tid); err != nil {
+			return "", 0
+		}
+		if !fileIssueDetailMatches(detail, fileID, kind) {
+			continue
+		}
+		if tid.Valid {
+			taskID = tid.Int64
+		}
+		return strings.TrimSpace(msg), taskID
+	}
+	return "", 0
+}
+
+func fileIssueDetailMatches(detail string, fileID int64, kind string) bool {
+	detail = strings.TrimSpace(detail)
+	if detail == "" || isEmptyJSONObject(detail) {
+		return kind == "video"
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(detail), &raw); err != nil {
+		return false
+	}
+	v, ok := raw["file_id"]
+	if !ok || v == nil {
+		return kind == "video"
+	}
+	switch n := v.(type) {
+	case float64:
+		return int64(n) == fileID
+	case int64:
+		return n == fileID
+	default:
+		return false
+	}
+}
+
+func isEmptyJSONObject(s string) bool {
+	s = strings.TrimSpace(s)
+	return s == "{}" || s == "null"
+}
+
+// IntegrityCheckOpts controls RunIntegrityCheckVideo.
+type IntegrityCheckOpts struct {
+	TaskID int64
+}
+
+// RunIntegrityCheckVideo null-decodes media and fills/compares hashes for video + non-NFO
+// sidecars and structural/value-compares episode NFO when File integrity is on.
+// No-op (nil) when File integrity is off.
+func (s *Store) RunIntegrityCheckVideo(ctx context.Context, videoID int64, progress func(msg string, pct *float64), opts IntegrityCheckOpts) error {
+	path, ok, err := s.HasVideoFile(videoID)
+	if err != nil {
+		return err
+	}
+	if !ok || path == "" {
+		return context.Canceled // superseded
+	}
+	profileOn, err := s.seriesProfileVerifyMedia(videoID)
+	if err != nil {
+		return err
+	}
+	if !profileOn {
+		return nil
+	}
+	if err := VerifyDownloadedMedia(ctx, path, progress); err != nil {
+		return err
+	}
+	if progress != nil {
+		progress("Checking file integrity…", nil)
+	}
+	mediaFiles, err := s.ListVideoMediaFiles(videoID)
+	if err != nil {
+		return err
+	}
+	for _, f := range mediaFiles {
+		if mismatch, herr := s.ensureOrCompareFileHash(f.ID, f.Path); herr != nil {
+			return herr
+		} else if mismatch != "" {
+			return apperrors.WithDetail(
+				apperrors.New(apperrors.CodeIntegrityCheckFailed, "integrity check failed"),
+				mismatch,
+			)
+		}
+	}
+	sidecars, err := s.listRegisteredSidecars(videoID)
+	if err != nil {
+		return err
+	}
+	for _, f := range sidecars {
+		if f.Kind == "nfo" {
+			continue
+		}
+		if _, serr := os.Stat(f.Path); serr != nil {
+			continue
+		}
+		if mismatch, herr := s.ensureOrCompareFileHash(f.ID, f.Path); herr != nil {
+			return herr
+		} else if mismatch != "" {
+			stored, _, _ := s.FileContentHash(f.ID)
+			disk, _ := sha256File(f.Path)
+			_ = s.AddVideoHistory(videoID, "sidecar_externally_changed", "Sidecar integrity check failed", map[string]any{
+				"reason":   "integrity_check",
+				"kind":     f.Kind,
+				"path":     f.Path,
+				"file_id":  f.ID,
+				"detail":   mismatch,
+				"old_hash": stored,
+				"new_hash": disk,
+			}, opts.TaskID)
+			continue
+		}
+	}
+	match, nfoPath, nerr := s.nfoDiskMatchesVideo(videoID)
+	if nerr != nil {
+		return nerr
+	}
+	if nfoPath != "" && !match {
+		var fileID int64
+		for _, f := range sidecars {
+			if f.Kind == "nfo" {
+				fileID = f.ID
+				break
+			}
+		}
+		_ = s.AddVideoHistory(videoID, "sidecar_externally_changed", "NFO does not match expected metadata", map[string]any{
+			"reason":  "integrity_check",
+			"kind":    "nfo",
+			"path":    nfoPath,
+			"file_id": fileID,
+		}, opts.TaskID)
+	}
+	return nil
+}
+
 // VerifyDownloadedMedia null-decodes path with ffmpeg -xerror. Reports progress
 // "Verifying…" with fraction from -progress when duration is known.
 func VerifyDownloadedMedia(ctx context.Context, path string, progress func(msg string, pct *float64)) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return apperrors.New(apperrors.CodeMediaVerifyFailed, "media path empty")
+		return apperrors.New(apperrors.CodeIntegrityCheckFailed, "media path empty")
 	}
 	if progress == nil {
 		progress = func(string, *float64) {}
@@ -73,12 +261,12 @@ func VerifyDownloadedMedia(ctx context.Context, path string, progress func(msg s
 	exectrace.Record(ctx, "ffmpeg", args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return apperrors.WithDetail(apperrors.New(apperrors.CodeMediaVerifyFailed, "media verify failed"), err.Error())
+		return apperrors.WithDetail(apperrors.New(apperrors.CodeIntegrityCheckFailed, "integrity check failed"), err.Error())
 	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
-		return apperrors.WithDetail(apperrors.New(apperrors.CodeMediaVerifyFailed, "media verify failed"), err.Error())
+		return apperrors.WithDetail(apperrors.New(apperrors.CodeIntegrityCheckFailed, "integrity check failed"), err.Error())
 	}
 	if dur > 0 {
 		_ = sponsorblock.ScanFFmpegProgressPipe(stdout, dur, func(frac float64) {
@@ -95,14 +283,37 @@ func VerifyDownloadedMedia(ctx context.Context, path string, progress func(msg s
 		} else if len(detail) > 400 {
 			detail = detail[:400]
 		}
-		return apperrors.WithDetail(apperrors.New(apperrors.CodeMediaVerifyFailed, "media verify failed"), detail)
+		return apperrors.WithDetail(apperrors.New(apperrors.CodeIntegrityCheckFailed, "integrity check failed"), detail)
 	}
 	done := 1.0
 	progress("Verified", &done)
 	return nil
 }
 
-// CancelMediaVerifyForVideo cancels pending/running media_verify for one video.
+// listRegisteredSidecars returns files rows for non-video kinds.
+func (s *Store) listRegisteredSidecars(videoID int64) ([]VideoFile, error) {
+	rows, err := s.DB.SQL.Query(`
+		SELECT id, path, kind, acquired_at, size_bytes, content_hash
+		FROM files
+		WHERE video_id = ? AND kind != 'video'
+		ORDER BY kind, path
+	`, videoID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []VideoFile
+	for rows.Next() {
+		var f VideoFile
+		if err := rows.Scan(&f.ID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes, &f.ContentHash); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// CancelMediaVerifyForVideo cancels pending/running integrity_check_initial for one video.
 func (s *Store) CancelMediaVerifyForVideo(videoID int64, message string) error {
 	if s.Queue == nil || videoID <= 0 {
 		return nil
@@ -113,7 +324,7 @@ func (s *Store) CancelMediaVerifyForVideo(videoID int64, message string) error {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id FROM tasks
 		WHERE kind = ? AND video_id = ? AND status IN (?, ?)
-	`, queue.KindMediaVerify, videoID, queue.StatusPending, queue.StatusRunning)
+	`, queue.KindIntegrityCheckInitial, videoID, queue.StatusPending, queue.StatusRunning)
 	if err != nil {
 		return err
 	}
@@ -137,7 +348,7 @@ func (s *Store) CancelMediaVerifyForVideo(videoID int64, message string) error {
 	return nil
 }
 
-// EnqueueMediaVerify queues system-lane null-decode verify for packed library media.
+// EnqueueMediaVerify queues system-lane initial integrity check for packed library media.
 func (s *Store) EnqueueMediaVerify(videoID int64) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
@@ -157,14 +368,35 @@ func (s *Store) EnqueueMediaVerify(videoID int64) (int64, error) {
 		return 0, fmt.Errorf("%w: video has no media file to verify", ErrInvalid)
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
-		Kind:     queue.KindMediaVerify,
+		Kind:     queue.KindIntegrityCheckInitial,
 		Domain:   queue.SystemDomain,
 		SeriesID: v.SeriesID,
 		VideoID:  videoID,
-		Priority: queue.PriorityMediaVerify,
-		Message:  "Verify media",
+		Message:  "Initial integrity check",
 		Payload:  map[string]any{"video_id": videoID, "media_path": path},
 	})
+}
+
+// MaybeEnqueueMediaVerifyForImport cancels prior verify tasks, then enqueues when the
+// series quality profile has File integrity on. Ignores the mature-only timing gate
+// (import verify is an explicit operator opt-in). Returns 0 when File integrity is off.
+func (s *Store) MaybeEnqueueMediaVerifyForImport(videoID int64) (int64, error) {
+	_ = s.CancelMediaVerifyForVideo(videoID, "Superseded by import")
+	on, err := s.seriesProfileVerifyMedia(videoID)
+	if err != nil {
+		return 0, err
+	}
+	if !on {
+		return 0, nil
+	}
+	id, err := s.EnqueueMediaVerify(videoID)
+	if err != nil {
+		if errors.Is(err, queue.ErrDuplicate) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return id, nil
 }
 
 // MaybeEnqueueMediaVerifyAfterPack cancels prior verify tasks, then enqueues when the profile gate says so.
@@ -207,31 +439,31 @@ func (s *Store) MaybeEnqueueMediaVerifyAfterPack(videoID int64, maturityPack boo
 	return id, nil
 }
 
-// MarkVerifyFailed sets status verify_failed and history.
+// MarkVerifyFailed sets status integrity_check_failed and history.
 func (s *Store) MarkVerifyFailed(videoID, taskID int64, message string) error {
 	if _, err := s.GetVideo(videoID); err != nil {
 		return err
 	}
-	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'verify_failed' WHERE id = ?`, videoID); err != nil {
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'integrity_check_failed' WHERE id = ?`, videoID); err != nil {
 		return err
 	}
 	msg := strings.TrimSpace(message)
 	if msg == "" {
-		msg = "Media verify failed"
+		msg = "Integrity check failed"
 	}
 	return s.AddVideoHistory(videoID, VideoHistVerifyFailed, msg, map[string]any{
-		"code": apperrors.CodeMediaVerifyFailed,
+		"code": apperrors.CodeIntegrityCheckFailed,
 	}, taskID)
 }
 
-// MarkVerified appends verified history and restores status to downloaded
-// (including videos previously marked verify_failed).
+// MarkVerified appends integrity_checked history and restores status to downloaded
+// (including videos previously marked integrity_check_failed).
 func (s *Store) MarkVerified(videoID, taskID int64) error {
 	if _, err := s.DB.SQL.Exec(`
 		UPDATE videos SET status = 'downloaded'
-		WHERE id = ? AND status IN ('downloaded', 'verify_failed')
+		WHERE id = ? AND status IN ('downloaded', 'integrity_check_failed')
 	`, videoID); err != nil {
 		return err
 	}
-	return s.AddVideoHistory(videoID, VideoHistVerified, "Media verified", nil, taskID)
+	return s.AddVideoHistory(videoID, VideoHistIntegrityChecked, "Integrity check ok", nil, taskID)
 }

@@ -337,7 +337,7 @@ func TestDomainFromURL(t *testing.T) {
 
 func TestAppendCommand(t *testing.T) {
 	s := openStore(t)
-	id, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "sync"})
+	id, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com", Message: "dl"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,10 +345,10 @@ func TestAppendCommand(t *testing.T) {
 	if err != nil || task == nil {
 		t.Fatalf("claim: %v %#v", err, task)
 	}
-	if err := s.AppendCommand(id, "yt-dlp -J https://example.com/v"); err != nil {
+	if err := s.AppendCommand(id, "yt-dlp", "yt-dlp -J https://example.com/v"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.AppendCommand(id, `ffmpeg -i "a b.mkv" out.mkv`); err != nil {
+	if err := s.AppendCommand(id, "ffmpeg", `ffmpeg -i "a b.mkv" out.mkv`); err != nil {
 		t.Fatal(err)
 	}
 	// Live overlay while running (not yet in SQLite).
@@ -382,11 +382,34 @@ func TestAppendCommand(t *testing.T) {
 	if got.Commands[1] != `ffmpeg -i "a b.mkv" out.mkv` {
 		t.Fatalf("cmd1=%q", got.Commands[1])
 	}
-	if err := s.AppendCommand(id, ""); err != nil {
+	if err := s.AppendCommand(id, "ffmpeg", ""); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = s.GetTask(id)
 	if len(got.Commands) != 2 {
 		t.Fatalf("empty append changed len: %v", got.Commands)
+	}
+}
+
+func TestAppendCommandNoisyKindSkipsPersistOnSuccess(t *testing.T) {
+	s := openStore(t)
+	id, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindRenameEpisodes, Domain: queue.SystemDomain, Message: "rename"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ClaimNext(); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.AppendCommand(id, "ffprobe", `ffprobe -i "/library/a.mkv"`)
+	_ = s.AppendCommand(id, "ffprobe", `ffprobe -i "/library/b.mkv"`)
+	if err := s.Finish(id, queue.StatusDone, "ok", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetTask(id)
+	if err != nil || got == nil {
+		t.Fatal(err)
+	}
+	if len(got.Commands) != 0 {
+		t.Fatalf("rename success should drop commands, got %v", got.Commands)
 	}
 }

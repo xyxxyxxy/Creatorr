@@ -146,13 +146,13 @@ func TestMergeVideoHistoryDetailFields(t *testing.T) {
 	if got[1].Key != "downloaded" || len(got[1].Videos) != 1 {
 		t.Fatalf("downloaded: %+v", got[1])
 	}
-	if got[2].Key != "media_verify" || len(got[2].Videos) != 1 || got[2].Videos[0].ID != 13 {
-		t.Fatalf("cancelled→media_verify: %+v", got[2])
+	if got[2].Key != "integrity_check_initial" || len(got[2].Videos) != 1 || got[2].Videos[0].ID != 13 {
+		t.Fatalf("cancelled→integrity_check_initial: %+v", got[2])
 	}
 	// Existing JSON key wins; do not duplicate as history event list.
 	existing := []detailField{{Key: "sidecar_refreshed", Text: "already"}}
 	got = mergeVideoHistoryDetailFields(existing, rows)
-	if len(got) != 3 || got[0].Text != "already" || got[1].Key != "downloaded" || got[2].Key != "media_verify" {
+	if len(got) != 3 || got[0].Text != "already" || got[1].Key != "downloaded" || got[2].Key != "integrity_check_initial" {
 		t.Fatalf("skip existing key: %+v", got)
 	}
 }
@@ -235,6 +235,27 @@ func TestTaskStages(t *testing.T) {
 	if len(got) != 3 || got[0].Event != "failed" || !got[0].HasError {
 		t.Fatalf("failed lifecycle: %+v", got)
 	}
+	got = taskStages(nil, now, created, started, finished, "cancelled")
+	if len(got) != 3 || got[0].Event != "cancelled" || got[0].HasError || !got[0].Neutral {
+		t.Fatalf("cancelled lifecycle: %+v", got)
+	}
+	cancelHist := []library.VideoHistoryEvent{
+		{VideoID: 7, Event: "cancelled", Message: "Cancelled", Detail: `{"kind":"integrity_check"}`, CreatedAt: "2026-09-06T11:58:00Z"},
+	}
+	got = taskStages(cancelHist, now, created, started, finished, "cancelled")
+	// Latest top: cancelled terminal, remapped integrity_check (neutral), enqueued
+	if len(got) < 2 || got[0].Event != "cancelled" || got[0].HasError || !got[0].Neutral {
+		t.Fatalf("cancelled terminal: %+v", got)
+	}
+	foundNeutralHist := false
+	for _, s := range got {
+		if s.Event == "integrity_check" && s.Neutral && !s.HasError {
+			foundNeutralHist = true
+		}
+	}
+	if !foundNeutralHist {
+		t.Fatalf("cancelled integrity hist not neutral: %+v", got)
+	}
 	got = taskStages(nil, now, created, "", "", "pending")
 	if len(got) != 1 || got[0].Event != "enqueued" || !got[0].IsFirst || !got[0].IsLast {
 		t.Fatalf("pending: %+v", got)
@@ -254,15 +275,85 @@ func TestHistoryEventLabel(t *testing.T) {
 		event, detail, want string
 	}{
 		{"sidecar_refreshed", "", "sidecar_refreshed"},
-		{"cancelled", `{"kind":"media_verify"}`, "media_verify"},
+		{"cancelled", `{"kind":"media_verify"}`, "integrity_check_initial"},
+		{"cancelled", `{"kind":"integrity_check_initial"}`, "integrity_check_initial"},
 		{"cancelled", `{"kind":"sponsorblock_cut"}`, "sponsorblock_cut"},
 		{"cancelled", `{}`, "cancelled"},
 		{"cancelled", "", "cancelled"},
 		{library.SourceHistCancelled, `{"mode":"scan"}`, "scan"},
+		{"verified", "", "Integrity check ok"},
+		{"integrity_checked", "", "Integrity check ok"},
+		{"integrity_check_failed", "", "Integrity check failed"},
+		{"verify_failed", "", "Integrity check failed"},
 	}
 	for _, tc := range cases {
 		if got := historyEventLabel(tc.event, tc.detail); got != tc.want {
 			t.Fatalf("historyEventLabel(%q,%q)=%q want %q", tc.event, tc.detail, got, tc.want)
 		}
+	}
+}
+
+func TestEnrichVideoHistoryRenameMessages(t *testing.T) {
+	views := []videoHistoryView{
+		{Event: "renamed", Message: "Episode files renamed", VideoID: 2, HasTask: true, TaskID: 9, Detail: `{}`},
+		{Event: "renamed", Message: "Episode files renamed (peer move after 'X')", VideoID: 3, HasTask: true, TaskID: 9},
+		{Event: "packed", Message: "Packed", VideoID: 1},
+	}
+	// No queue/lib: only detail.trigger_video_id path works without GetTask.
+	views[0].Detail = `{"trigger_video_id":1}`
+	enrichVideoHistoryRenameMessages(nil, nil, views)
+	if !strings.Contains(views[0].Message, "peer move after another video") {
+		t.Fatalf("want peer message without title, got %q", views[0].Message)
+	}
+	if views[1].Message != "Episode files renamed (peer move after 'X')" {
+		t.Fatalf("already enriched must stay: %q", views[1].Message)
+	}
+	if views[2].Message != "Packed" {
+		t.Fatalf("non-renamed changed: %q", views[2].Message)
+	}
+}
+
+func TestHistoryMessageWithDetail(t *testing.T) {
+	got := historyMessageWithDetail("Media file size changed on disk", `{"old_size":100,"new_size":200}`)
+	if !strings.Contains(got, "100") || !strings.Contains(got, "200") {
+		t.Fatalf("size delta missing: %q", got)
+	}
+	got = historyMessageWithDetail("Sidecar integrity check failed", `{"old_hash":"aaaaaaaaaaaaaaaa","new_hash":"bbbbbbbbbbbbbbbb"}`)
+	if !strings.Contains(got, "aaaaaaaaaaaa") || !strings.Contains(got, "bbbbbbbbbbbb") {
+		t.Fatalf("hash delta missing: %q", got)
+	}
+}
+
+func TestRenamePathsFromDetail(t *testing.T) {
+	from, to := renamePathsFromDetail(`{"previous_path":"/lib/A/ep","new_path":"/lib/B/ep","previous":"ep","new":"ep2"}`)
+	if from != "/lib/A/ep" || to != "/lib/B/ep" {
+		t.Fatalf("got %q → %q", from, to)
+	}
+	from, to = renamePathsFromDetail(`{"previous":"oldstem","new":"newstem"}`)
+	if from != "oldstem" || to != "newstem" {
+		t.Fatalf("basename fallback: %q → %q", from, to)
+	}
+	from, to = renamePathsFromDetail(`not-json`)
+	if from != "" || to != "" {
+		t.Fatalf("bad json: %q → %q", from, to)
+	}
+}
+
+func TestRenameScopeFromPayload(t *testing.T) {
+	s, v := renameScopeFromPayload(`{"video_ids":[1,2],"series_id":9}`)
+	if len(s) != 0 || len(v) != 2 || v[0] != 1 {
+		t.Fatalf("video_ids win: series=%v videos=%v", s, v)
+	}
+	s, v = renameScopeFromPayload(`{"series_id":5}`)
+	if len(s) != 1 || s[0] != 5 || len(v) != 0 {
+		t.Fatalf("series_id: series=%v videos=%v", s, v)
+	}
+	s, v = renameScopeFromPayload(`{"series_ids":[7,8]}`)
+	if len(s) != 2 || s[0] != 7 || len(v) != 0 {
+		t.Fatalf("series_ids: series=%v videos=%v", s, v)
+	}
+	s, v = renameScopeFromPayload(`{}`)
+	if len(s) != 0 || len(v) != 0 {
+		t.Fatalf("empty: series=%v videos=%v", s, v)
 	}
 }

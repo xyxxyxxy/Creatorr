@@ -113,8 +113,8 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 	}
 
 	taskCtx, cancel := context.WithCancel(ctx)
-	taskCtx = exectrace.With(taskCtx, func(line string) {
-		if err := r.Queue.AppendCommand(task.ID, line); err != nil {
+	taskCtx = exectrace.With(taskCtx, func(bin, line string) {
+		if err := r.Queue.AppendCommand(task.ID, bin, line); err != nil {
 			log.Warn("append command", "task", task.ID, "err", err)
 		}
 		r.Queue.Logs.Append(task.ID, "$ "+line)
@@ -274,7 +274,7 @@ func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task 
 	}
 	switch code {
 	case apperrors.CodeCookieInvalid, apperrors.CodeRateLimited,
-		apperrors.CodeRemuxFailed, apperrors.CodePackFailed, apperrors.CodeMediaVerifyFailed,
+		apperrors.CodeRemuxFailed, apperrors.CodePackFailed, apperrors.CodeIntegrityCheckFailed,
 		apperrors.CodeLiveBroadcastSkipped, apperrors.CodeAgeRestricted:
 		// keep classified code (do not re-detect remux/pack/verify/age into pause)
 	default:
@@ -347,10 +347,10 @@ func StubHandlers() map[string]TaskHandler {
 		queue.KindRetentionDelete:    stub(queue.KindRetentionDelete),
 		queue.KindRenameEpisodes:     stub(queue.KindRenameEpisodes),
 		queue.KindRegenerateNFO:      stub(queue.KindRegenerateNFO),
-		queue.KindVerifyAllMedia:     stub(queue.KindVerifyAllMedia),
+		queue.KindIntegrityCheck:     stub(queue.KindIntegrityCheck),
 		queue.KindDeleteFiles:        stub(queue.KindDeleteFiles),
 		queue.KindSponsorblockCut:    stub(queue.KindSponsorblockCut),
-		queue.KindMediaVerify:        stub(queue.KindMediaVerify),
+		queue.KindIntegrityCheckInitial:        stub(queue.KindIntegrityCheckInitial),
 		queue.KindYtDlpUpdate:        stub(queue.KindYtDlpUpdate),
 		queue.KindBulkEditSeries:     stub(queue.KindBulkEditSeries),
 		queue.KindBulkEditVideos:     stub(queue.KindBulkEditVideos),

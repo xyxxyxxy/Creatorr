@@ -194,8 +194,8 @@ func VerifyFailed(ctx context.Context, database *db.DB, taskID int64, series, ti
 	if vt == "" {
 		vt = "video"
 	}
-	nTitle := fmt.Sprintf("Verify failed (%s)", label)
-	body := fmt.Sprintf("%s: %s failed media verify. File kept; status verify_failed. Re-download to retry.\n\n%s", label, vt, detail)
+	nTitle := fmt.Sprintf("Integrity check failed (%s)", label)
+	body := fmt.Sprintf("%s: %s failed Integrity check. File kept; status integrity_check_failed. Re-download to retry.\n\n%s", label, vt, detail)
 	return SendEvent(ctx, database, EventVerifyFailed, nTitle, body, taskID)
 }
 
@@ -392,7 +392,7 @@ func FormatFileSyncIssuesBody(missing, changed []FileSyncIssueItem) string {
 	writeSection("Size changed", changed)
 	body := strings.TrimSpace(b.String())
 	if body != "" {
-		body += "\n\nFiles kept where present. Media size mismatches set status verify_failed; sidecar issues keep video status. Re-download or regenerate manually to replace. No automatic re-download."
+		body += "\n\nFiles kept where present. Media size mismatches set status integrity_check_failed; sidecar issues keep video status. Re-download or regenerate manually to replace. No automatic re-download."
 	}
 	return body
 }

@@ -219,12 +219,12 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("NFO regenerate queued.")
 	case "verify-all-queued":
 		if r.URL.Query().Get("scope") == "series" {
-			return flashOK("'Verify all downloaded videos' queued for selected series.")
+			return flashOK("'Integrity check' queued for selected series.")
 		}
 		if r.URL.Query().Get("scope") == "videos" {
-			return flashOK("'Verify all downloaded videos' queued for selected videos.")
+			return flashOK("'Integrity check' queued for selected videos.")
 		}
-		return flashOK("'Verify all downloaded videos' queued.")
+		return flashOK("'Integrity check' queued.")
 	case "refresh-sidecars-queued":
 		queued := r.URL.Query().Get("queued")
 		skipped := r.URL.Query().Get("skipped")
@@ -276,7 +276,8 @@ func flashFromQuery(r *http.Request) *flash {
 		labels := map[string]string{
 			"apply":    "'Apply episode format'",
 			"nfo":      "'Regenerate all NFO files'",
-			"verify":   "'Verify all downloaded videos'",
+			"verify":   "'Integrity check'",
+			"sync":     "'File sync'",
 			"sidecars": "'Refresh sidecars'",
 		}
 		parts := strings.Split(r.URL.Query().Get("actions"), ",")

@@ -1,7 +1,8 @@
 {{define "timeline_vertical"}}
 {{/* Shared daisyUI vertical timeline (task Stages + video detail History).
-   Item fields: Event, Message, CreatedAt, CreatedAgo, Duration?, HasError, IsFirst, IsLast,
-   optional HistoryID (task link), optional Substages (nested event/message lines). */}}
+   Item fields: Event, Message, CreatedAt, CreatedAgo, Duration?, HasError, Neutral, IsFirst, IsLast,
+   optional HistoryID (task link), optional Substages (nested event/message lines).
+   Neutral = cancelled / operator abort: muted ban icon (not success green, not error red). */}}
 <ul class="timeline timeline-vertical">
   {{range .}}
   <li>
@@ -12,23 +13,29 @@
     </div>
     {{end}}
     <div class="timeline-middle">
-      <i data-lucide="{{if .HasError}}circle-x{{else}}circle-check{{end}}" class="size-5{{if .HasError}} text-error{{else}} text-success{{end}}"></i>
+      {{if .HasError}}
+      <i data-lucide="circle-x" class="size-5 text-error"></i>
+      {{else if .Neutral}}
+      <i data-lucide="ban" class="size-5 text-base-content/50"></i>
+      {{else}}
+      <i data-lucide="circle-check" class="size-5 text-success"></i>
+      {{end}}
     </div>
-    <div class="timeline-end timeline-box{{if .HasError}} border-error{{end}}">
-      <div class="font-mono text-xs{{if .HasError}} text-error{{end}}">
+    <div class="timeline-end timeline-box{{if .HasError}} border-error{{else if .Neutral}} border-base-300 opacity-80{{end}}">
+      <div class="font-mono text-xs{{if .HasError}} text-error{{else if .Neutral}} text-base-content/60{{end}}">
         {{if .HistoryID}}<a class="link link-hover" href="/task/{{.HistoryID}}">{{.Event}}</a>{{else}}{{.Event}}{{end}}
       </div>
       {{if .Substages}}
       <ul class="list-none space-y-1 m-0 p-0 mt-1">
         {{range .Substages}}
         <li class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-          <span class="font-medium shrink-0{{if .HasError}} text-error{{end}}">{{.Event}}</span>
-          {{if .Message}}<span class="opacity-80{{if .HasError}} text-error{{end}}">{{.Message}}</span>{{end}}
+          <span class="font-medium shrink-0{{if .HasError}} text-error{{else if .Neutral}} text-base-content/60{{end}}">{{.Event}}</span>
+          {{if .Message}}<span class="opacity-80{{if .HasError}} text-error{{else if .Neutral}} text-base-content/60{{end}}">{{.Message}}</span>{{end}}
         </li>
         {{end}}
       </ul>
       {{else if .Message}}
-      <div class="text-sm mt-0.5{{if .HasError}} text-error{{end}}">{{.Message}}</div>
+      <div class="text-sm mt-0.5{{if .HasError}} text-error{{else if .Neutral}} text-base-content/60{{end}}">{{.Message}}</div>
       {{end}}
       {{if .Duration}}<div class="text-xs opacity-60 mt-0.5 tabular-nums">{{.Duration}}</div>{{end}}
     </div>

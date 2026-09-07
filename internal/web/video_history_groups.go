@@ -18,6 +18,7 @@ type videoHistoryGroup struct {
 	Grouped    bool  // true when Stages has 2+ entries
 	Stages     []videoHistoryView
 	HasError   bool
+	Neutral    bool // cancelled: muted, not success/fail (cleared if any stage HasError)
 }
 
 // groupVideoHistoryByTask collapses consecutive timeline rows that share the same
@@ -64,6 +65,7 @@ func singleHistoryGroup(r videoHistoryView) videoHistoryGroup {
 		Grouped:    false,
 		Stages:     []videoHistoryView{r},
 		HasError:   r.HasError,
+		Neutral:    r.Neutral && !r.HasError,
 	}
 }
 
@@ -73,10 +75,17 @@ func multiHistoryGroup(newestFirst []videoHistoryView) videoHistoryGroup {
 	stages := make([]videoHistoryView, len(newestFirst))
 	copy(stages, newestFirst)
 	hasErr := false
+	neutral := false
 	for _, s := range stages {
 		if s.HasError {
 			hasErr = true
 		}
+		if s.Neutral {
+			neutral = true
+		}
+	}
+	if hasErr {
+		neutral = false
 	}
 	event := strings.TrimSpace(head.TaskKind)
 	if event == "" {
@@ -93,6 +102,7 @@ func multiHistoryGroup(newestFirst []videoHistoryView) videoHistoryGroup {
 		Grouped:    true,
 		Stages:     stages,
 		HasError:   hasErr,
+		Neutral:    neutral,
 	}
 }
 
@@ -109,6 +119,7 @@ func videoHistoryGroupsToTimeline(groups []videoHistoryGroup) []taskStageView {
 			CreatedAt:  g.CreatedAt,
 			CreatedAgo: g.CreatedAgo,
 			HasError:   g.HasError,
+			Neutral:    g.Neutral,
 			HistoryID:  g.HistoryID,
 		}
 		if g.Grouped {
@@ -118,6 +129,7 @@ func videoHistoryGroupsToTimeline(groups []videoHistoryGroup) []taskStageView {
 					Event:    s.Event,
 					Message:  s.Message,
 					HasError: s.HasError,
+					Neutral:  s.Neutral && !s.HasError,
 				})
 			}
 			item.Substages = subs

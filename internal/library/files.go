@@ -157,11 +157,12 @@ func (s *Store) VideoJSONPathMap(videoIDs []int64) (map[int64]string, error) {
 
 // VideoFile is one row from the files table for a video.
 type VideoFile struct {
-	ID         int64
-	Path       string
-	Kind       string
-	AcquiredAt string
-	SizeBytes  sql.NullInt64
+	ID          int64
+	Path        string
+	Kind        string
+	AcquiredAt  string
+	SizeBytes   sql.NullInt64
+	ContentHash sql.NullString
 }
 
 // SidecarKinds are known non-media companion roles (not packed video media).
@@ -172,7 +173,7 @@ var SidecarKinds = map[string]bool{
 // ListVideoMediaFiles returns kind=video rows for a video.
 func (s *Store) ListVideoMediaFiles(videoID int64) ([]VideoFile, error) {
 	rows, err := s.DB.SQL.Query(`
-		SELECT id, path, kind, acquired_at, size_bytes
+		SELECT id, path, kind, acquired_at, size_bytes, content_hash
 		FROM files
 		WHERE video_id = ? AND kind = 'video'
 		ORDER BY path
@@ -184,7 +185,7 @@ func (s *Store) ListVideoMediaFiles(videoID int64) ([]VideoFile, error) {
 	var out []VideoFile
 	for rows.Next() {
 		var f VideoFile
-		if err := rows.Scan(&f.ID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes); err != nil {
+		if err := rows.Scan(&f.ID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes, &f.ContentHash); err != nil {
 			return nil, err
 		}
 		out = append(out, f)
@@ -343,7 +344,7 @@ func (s *Store) videoMediaStemContext(videoID int64) (mediaPath string, mediaBas
 
 func (s *Store) listVideoFilesByPath(videoID int64) (map[string]VideoFile, error) {
 	rows, err := s.DB.SQL.Query(`
-		SELECT id, path, kind, acquired_at, size_bytes
+		SELECT id, path, kind, acquired_at, size_bytes, content_hash
 		FROM files WHERE video_id = ?
 	`, videoID)
 	if err != nil {
@@ -353,7 +354,7 @@ func (s *Store) listVideoFilesByPath(videoID int64) (map[string]VideoFile, error
 	out := map[string]VideoFile{}
 	for rows.Next() {
 		var f VideoFile
-		if err := rows.Scan(&f.ID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes); err != nil {
+		if err := rows.Scan(&f.ID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes, &f.ContentHash); err != nil {
 			return nil, err
 		}
 		f.Path = strings.TrimSpace(f.Path)
@@ -368,12 +369,12 @@ func (s *Store) listVideoFilesByPath(videoID int64) (map[string]VideoFile, error
 // GetVideoFile loads one files row for a video (any kind).
 func (s *Store) GetVideoFile(videoID, fileID int64) (*VideoFile, error) {
 	row := s.DB.SQL.QueryRow(`
-		SELECT id, path, kind, acquired_at, size_bytes
+		SELECT id, path, kind, acquired_at, size_bytes, content_hash
 		FROM files
 		WHERE id = ? AND video_id = ?
 	`, fileID, videoID)
 	var f VideoFile
-	err := row.Scan(&f.ID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes)
+	err := row.Scan(&f.ID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes, &f.ContentHash)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}

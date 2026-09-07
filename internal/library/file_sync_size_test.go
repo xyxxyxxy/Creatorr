@@ -57,8 +57,8 @@ func TestFileSyncSizeMismatchMarksVerifyFailed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Status != "verify_failed" {
-		t.Fatalf("status=%s want verify_failed", v.Status)
+	if v.Status != "integrity_check_failed" {
+		t.Fatalf("status=%s want integrity_check_failed", v.Status)
 	}
 	n, ok, err := s.VideoSizeBytes(videoID)
 	if err != nil || !ok || n != 4 {

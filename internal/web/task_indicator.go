@@ -74,7 +74,7 @@ func videoStatusLabel(status string) string {
 		return "wanted (download error)"
 	case "wanted_archive":
 		return "wanted (Web Archive)"
-	case "verify_failed":
+	case "integrity_check_failed":
 		return "verify failed"
 	case "downloaded":
 		return "downloaded"
@@ -277,7 +277,7 @@ func videoIndicatorID(videoID int64) string {
 
 // seriesStatusView drives partials/series_status_indicator.html (poster health badge).
 type seriesStatusView struct {
-	Kind  string // wanted_download_error | verify_failed | scan_error | incomplete
+	Kind  string // wanted_download_error | integrity_check_failed | scan_error | incomplete
 	Title string
 	Count int // video error count for health badge; 0 = icon only
 }
@@ -300,8 +300,8 @@ func buildSeriesHealthStatus(errs library.SeriesVideoErrorFlags, warn library.Se
 	}
 	if errs.HasVerifyFailed {
 		return seriesStatusView{
-			Kind:  "verify_failed",
-			Title: seriesHealthTitle("Verify failed", errs.VerifyFailedCount),
+			Kind:  "integrity_check_failed",
+			Title: seriesHealthTitle("Integrity check failed", errs.VerifyFailedCount),
 			Count: errs.VerifyFailedCount,
 		}, true
 	}

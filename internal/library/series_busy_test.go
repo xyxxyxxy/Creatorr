@@ -99,7 +99,7 @@ func TestSeriesHasBusyMediaTasks(t *testing.T) {
 	}
 
 	_, err = s.Queue.Enqueue(queue.EnqueueParams{
-		Kind: queue.KindMediaVerify, Domain: queue.SystemDomain,
+		Kind: queue.KindIntegrityCheckInitial, Domain: queue.SystemDomain,
 		SeriesID: serA.ID, VideoID: resA.VideoID,
 	})
 	if err != nil {
@@ -107,7 +107,7 @@ func TestSeriesHasBusyMediaTasks(t *testing.T) {
 	}
 	assertBusy(serA.ID, true)
 	if _, err := s.DB.SQL.Exec(`UPDATE tasks SET status = 'cancelled' WHERE kind = ? AND video_id = ?`,
-		queue.KindMediaVerify, resA.VideoID); err != nil {
+		queue.KindIntegrityCheckInitial, resA.VideoID); err != nil {
 		t.Fatal(err)
 	}
 	assertBusy(serA.ID, false)

@@ -30,9 +30,9 @@ func TestBuildScheduledTasks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// No root retention TTL → retention_delete hidden (3 of 4 schedules).
-	if len(got) != 3 {
-		t.Fatalf("len=%d want 3 without retention roots", len(got))
+	// No root retention TTL → retention_delete hidden (4 of 5 schedules).
+	if len(got) != 4 {
+		t.Fatalf("len=%d want 4 without retention roots", len(got))
 	}
 	for _, row := range got {
 		if row.Kind == queue.KindRetentionDelete {
@@ -48,8 +48,8 @@ func TestBuildScheduledTasks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 4 {
-		t.Fatalf("len=%d want 4 with retention root", len(got))
+	if len(got) != 5 {
+		t.Fatalf("len=%d want 5 with retention root", len(got))
 	}
 	for i := 1; i < len(got); i++ {
 		prev, err := time.Parse(time.RFC3339Nano, got[i-1].EndsAt)
@@ -71,7 +71,7 @@ func TestBuildScheduledTasks(t *testing.T) {
 			t.Fatalf("row=%+v", row)
 		}
 	}
-	for _, want := range []string{"download_wanted", queue.KindSyncFiles, queue.KindRetentionDelete, queue.KindYtDlpUpdate} {
+	for _, want := range []string{"download_wanted", queue.KindSyncFiles, queue.KindIntegrityCheck, queue.KindRetentionDelete, queue.KindYtDlpUpdate} {
 		if !kinds[want] {
 			t.Fatalf("missing kind %q in %+v", want, got)
 		}
@@ -84,8 +84,8 @@ func TestBuildScheduledTasks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 3 {
-		t.Fatalf("len=%d want 3 after disabling yt-dlp schedule", len(got))
+	if len(got) != 4 {
+		t.Fatalf("len=%d want 4 after disabling yt-dlp schedule", len(got))
 	}
 }
 

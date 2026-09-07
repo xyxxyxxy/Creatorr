@@ -42,12 +42,12 @@ const (
 	KindRetentionDelete    = "retention_delete"
 	KindRenameEpisodes     = "rename_episodes"
 	KindRegenerateNFO      = "regenerate_nfo"
-	KindVerifyAllMedia     = "verify_all_media"
-	KindDeleteFiles        = "delete_files"
-	KindDeleteSidecar      = "delete_sidecar"
-	KindSponsorblockCut    = "sponsorblock_cut"
-	KindMediaVerify        = "media_verify"
-	KindYtDlpUpdate        = "ytdlp_update"
+	KindIntegrityCheck        = "integrity_check"
+	KindDeleteFiles           = "delete_files"
+	KindDeleteSidecar         = "delete_sidecar"
+	KindSponsorblockCut       = "sponsorblock_cut"
+	KindIntegrityCheckInitial = "integrity_check_initial"
+	KindYtDlpUpdate           = "ytdlp_update"
 	KindBulkEditSeries     = "bulk_edit_series"
 	KindBulkEditVideos     = "bulk_edit_videos"
 
@@ -80,9 +80,6 @@ const PriorityDownloadNow = 100
 
 // PrioritySponsorblockCut keeps SponsorBlock cut/encode behind other system work.
 const PrioritySponsorblockCut = -10
-
-// PriorityMediaVerify is lowest on the system lane (below SponsorBlock cut/reencode).
-const PriorityMediaVerify = -20
 
 // PriorityYtDlpUpdateBoot enqueues boot yt-dlp update ahead of default system work.
 const PriorityYtDlpUpdateBoot = 40
@@ -136,7 +133,7 @@ type Store struct {
 	Logs *TaskLogs
 	// Live holds latest message + progress fraction for running tasks (not persisted).
 	Live *LiveState
-	// Commands holds yt-dlp/ffmpeg argv lines while running; flushed to SQLite on Finish/Cancel.
+	// Commands holds yt-dlp/ffmpeg argv lines while running (deduped); flushed to SQLite on Finish/Cancel when policy allows.
 	Commands *TaskCommands
 
 	// OnCancelled is invoked after a task is marked cancelled (pending or running).
@@ -296,7 +293,7 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 	// System lane: at most one pending/running task per kind (except import keeps per-video).
 	if p.Domain == SystemDomain {
 		switch p.Kind {
-		case KindSyncFiles, KindRetentionDelete, KindRegenerateNFO, KindVerifyAllMedia, KindYtDlpUpdate, KindBulkEditSeries, KindBulkEditVideos:
+		case KindSyncFiles, KindRetentionDelete, KindRegenerateNFO, KindIntegrityCheck, KindYtDlpUpdate, KindBulkEditSeries, KindBulkEditVideos:
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE domain = ? AND kind = ? AND status IN (?, ?) LIMIT 1
 			`, SystemDomain, p.Kind, StatusPending, StatusRunning)
@@ -363,11 +360,11 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 				SELECT 1 FROM tasks WHERE kind = ? AND video_id = ? AND status IN (?, ?) LIMIT 1
 			`, KindSponsorblockCut, p.VideoID, StatusPending, StatusRunning)
 		}
-	case KindMediaVerify:
+	case KindIntegrityCheckInitial:
 		if p.VideoID > 0 {
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE kind = ? AND video_id = ? AND status IN (?, ?) LIMIT 1
-			`, KindMediaVerify, p.VideoID, StatusPending, StatusRunning)
+			`, KindIntegrityCheckInitial, p.VideoID, StatusPending, StatusRunning)
 		}
 	case KindPrefetchSeriesMeta:
 		if p.SeriesID > 0 {
@@ -646,13 +643,13 @@ func (s *Store) HasPendingOrRunningKind(kind, domain string) (bool, error) {
 }
 
 // CountMediaActive returns pending+running count for download, sponsorblock_cut,
-// and media_verify across all domains.
+// and integrity_check_initial across all domains.
 func (s *Store) CountMediaActive() (int, error) {
 	var n int
 	err := s.DB.SQL.QueryRow(`
 		SELECT COUNT(*) FROM tasks
 		WHERE kind IN (?, ?, ?) AND status IN (?, ?)
-	`, KindDownload, KindSponsorblockCut, KindMediaVerify, StatusPending, StatusRunning).Scan(&n)
+	`, KindDownload, KindSponsorblockCut, KindIntegrityCheckInitial, StatusPending, StatusRunning).Scan(&n)
 	return n, err
 }
 
@@ -663,7 +660,7 @@ func (s *Store) Finish(id int64, status, message, errCode, errMsg string) error 
 		return fmt.Errorf("invalid finish status %q", status)
 	}
 
-	if err := s.persistCommands(id); err != nil {
+	if err := s.persistCommands(id, status, s.taskKind(id)); err != nil {
 		return err
 	}
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
@@ -749,22 +746,29 @@ func (s *Store) MergeDetailJSON(id int64, patch map[string]any) error {
 }
 
 // AppendCommand appends a shell-formatted external command line in memory.
-// No-op when at cap (taskCommandsCap). Flushed to tasks.commands on Finish/Cancel for History.
-func (s *Store) AppendCommand(id int64, line string) error {
+// bin selects policy (yt-dlp / ffmpeg / ffprobe). Flushed to tasks.commands on Finish/Cancel when allowed.
+func (s *Store) AppendCommand(id int64, bin, line string) error {
 	if s == nil || id <= 0 {
 		return nil
 	}
-	s.Commands.Append(id, line)
+	s.Commands.Append(id, bin, line)
 	return nil
 }
 
-// persistCommands writes buffered command lines to SQLite once (History).
-func (s *Store) persistCommands(id int64) error {
+// persistCommands writes buffered command lines to SQLite once (History), or clears them
+// when PersistCommandsOnStatus says not to keep this kind/status.
+func (s *Store) persistCommands(id int64, status, kind string) error {
 	if s == nil || id <= 0 {
 		return nil
 	}
+	if !PersistCommandsOnStatus(kind, status) {
+		s.Commands.Clear(id)
+		_, err := s.DB.SQL.Exec(`UPDATE tasks SET commands = '[]' WHERE id = ?`, id)
+		return err
+	}
 	lines := s.Commands.Snapshot(id)
 	if len(lines) == 0 {
+		s.Commands.Clear(id)
 		return nil
 	}
 	b, err := json.Marshal(lines)
@@ -777,6 +781,12 @@ func (s *Store) persistCommands(id int64) error {
 	}
 	s.Commands.Clear(id)
 	return nil
+}
+
+func (s *Store) taskKind(id int64) string {
+	var kind string
+	_ = s.DB.SQL.QueryRow(`SELECT kind FROM tasks WHERE id = ?`, id).Scan(&kind)
+	return kind
 }
 
 // Cancel marks pending/running task cancelled and aborts a running worker if registered.
@@ -814,7 +824,7 @@ func (s *Store) CancelWithMessage(id int64, message string) (prevStatus string, 
 	if n == 0 {
 		return prevStatus, fmt.Errorf("task %d not cancellable", id)
 	}
-	_ = s.persistCommands(id)
+	_ = s.persistCommands(id, StatusCancelled, s.taskKind(id))
 	s.clearLive(id)
 	s.abortRunning(id)
 	if t, err := s.GetTask(id); err == nil && t != nil {
@@ -824,7 +834,7 @@ func (s *Store) CancelWithMessage(id int64, message string) (prevStatus string, 
 }
 
 // CancelDownloadsForVideo cancels pending and running download, sponsorblock_cut,
-// and media_verify tasks for one video.
+// and integrity_check_initial tasks for one video.
 // Returns snapshots with pre-cancel Status (pending|running) and the cancel Message applied.
 func (s *Store) CancelDownloadsForVideo(videoID int64, message string) ([]Task, error) {
 	if videoID <= 0 {
@@ -839,19 +849,17 @@ func (s *Store) CancelDownloadsForVideo(videoID int64, message string) ([]Task, 
 		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at
 		FROM tasks
 		WHERE kind IN (?, ?, ?) AND video_id = ? AND status IN (?, ?)
-	`, KindDownload, KindSponsorblockCut, KindMediaVerify, videoID, StatusPending, StatusRunning)
+	`, KindDownload, KindSponsorblockCut, KindIntegrityCheckInitial, videoID, StatusPending, StatusRunning)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var ids []int64
 	var out []Task
 	for rows.Next() {
 		t, err := s.scanTask(rows)
 		if err != nil {
 			return nil, err
 		}
-		ids = append(ids, t.ID)
 		t.Message = message
 		out = append(out, *t)
 	}
@@ -861,21 +869,21 @@ func (s *Store) CancelDownloadsForVideo(videoID int64, message string) ([]Task, 
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
-	if len(ids) == 0 {
+	if len(out) == 0 {
 		return nil, nil
 	}
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, id := range ids {
+	for _, t := range out {
 		_, err := s.DB.SQL.Exec(`
 			UPDATE tasks SET status = ?, finished_at = ?, message = ?
 			WHERE id = ? AND status IN (?, ?)
-		`, StatusCancelled, finished, message, id, StatusPending, StatusRunning)
+		`, StatusCancelled, finished, message, t.ID, StatusPending, StatusRunning)
 		if err != nil {
 			return out, err
 		}
-		_ = s.persistCommands(id)
-		s.clearLive(id)
-		s.abortRunning(id)
+		_ = s.persistCommands(t.ID, StatusCancelled, t.Kind)
+		s.clearLive(t.ID)
+		s.abortRunning(t.ID)
 	}
 	s.notifyCancelled(out...)
 	return out, nil
@@ -995,14 +1003,12 @@ func (s *Store) cancelDomain(domain, message string, statuses ...string) ([]Task
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var ids []int64
 	var out []Task
 	for rows.Next() {
 		t, err := s.scanTask(rows)
 		if err != nil {
 			return nil, err
 		}
-		ids = append(ids, t.ID)
 		t.Message = message
 		out = append(out, *t)
 	}
@@ -1012,21 +1018,21 @@ func (s *Store) cancelDomain(domain, message string, statuses ...string) ([]Task
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
-	if len(ids) == 0 {
+	if len(out) == 0 {
 		return nil, nil
 	}
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, id := range ids {
+	for _, t := range out {
 		_, err := s.DB.SQL.Exec(`
 			UPDATE tasks SET status = ?, finished_at = ?, message = ?
 			WHERE id = ? AND status IN (?, ?)
-		`, StatusCancelled, finished, message, id, StatusPending, StatusRunning)
+		`, StatusCancelled, finished, message, t.ID, StatusPending, StatusRunning)
 		if err != nil {
 			return out, err
 		}
-		_ = s.persistCommands(id)
-		s.clearLive(id)
-		s.abortRunning(id)
+		_ = s.persistCommands(t.ID, StatusCancelled, t.Kind)
+		s.clearLive(t.ID)
+		s.abortRunning(t.ID)
 	}
 	s.notifyCancelled(out...)
 	return out, nil

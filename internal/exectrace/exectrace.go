@@ -10,8 +10,8 @@ import (
 
 type ctxKey struct{}
 
-// Recorder receives a shell-formatted command line (bin + args).
-type Recorder func(line string)
+// Recorder receives the binary name and a shell-formatted command line.
+type Recorder func(bin, line string)
 
 // With attaches a Recorder to ctx. Record is a no-op when absent.
 func With(ctx context.Context, r Recorder) context.Context {
@@ -34,7 +34,7 @@ func Record(ctx context.Context, bin string, args ...string) {
 	if line == "" {
 		return
 	}
-	r(line)
+	r(strings.TrimSpace(bin), line)
 }
 
 // Format returns a shell-copyable command line. Empty bin yields "".
@@ -49,6 +49,86 @@ func Format(bin string, args ...string) string {
 		parts = append(parts, quoteArg(a))
 	}
 	return strings.Join(parts, " ")
+}
+
+// Fingerprint returns a dedupe key for a shell-formatted command line by replacing
+// absolute filesystem path tokens with $PATH (quote-aware tokenization).
+func Fingerprint(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ""
+	}
+	tokens := splitShellTokens(line)
+	for i, tok := range tokens {
+		raw := unquoteToken(tok)
+		if looksLikeAbsPath(raw) {
+			tokens[i] = "$PATH"
+		}
+	}
+	return strings.Join(tokens, " ")
+}
+
+func looksLikeAbsPath(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	if strings.HasPrefix(s, "/") && strings.Contains(s[1:], "/") {
+		return true
+	}
+	// Windows drive path.
+	if len(s) >= 3 && s[1] == ':' && (s[2] == '\\' || s[2] == '/') {
+		return true
+	}
+	return false
+}
+
+func unquoteToken(tok string) string {
+	if len(tok) >= 2 {
+		if (tok[0] == '"' && tok[len(tok)-1] == '"') || (tok[0] == '\'' && tok[len(tok)-1] == '\'') {
+			inner := tok[1 : len(tok)-1]
+			if tok[0] == '"' {
+				if u, err := strconv.Unquote(tok); err == nil {
+					return u
+				}
+			}
+			return inner
+		}
+	}
+	return tok
+}
+
+func splitShellTokens(line string) []string {
+	var out []string
+	var b strings.Builder
+	inDouble, inSingle := false, false
+	flush := func() {
+		if b.Len() == 0 {
+			return
+		}
+		out = append(out, b.String())
+		b.Reset()
+	}
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		if c == '"' && !inSingle {
+			inDouble = !inDouble
+			b.WriteByte(c)
+			continue
+		}
+		if c == '\'' && !inDouble {
+			inSingle = !inSingle
+			b.WriteByte(c)
+			continue
+		}
+		if !inDouble && !inSingle && c == ' ' {
+			flush()
+			continue
+		}
+		b.WriteByte(c)
+	}
+	flush()
+	return out
 }
 
 // FormatPretty is Format with a newline and two-space indent before each - / -- flag.

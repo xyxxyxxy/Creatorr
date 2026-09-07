@@ -9,9 +9,20 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+// Expand rewrites Creatorr cron aliases robfig does not know (e.g. @quarterly).
+func Expand(expr string) string {
+	expr = strings.TrimSpace(expr)
+	switch strings.ToLower(expr) {
+	case "@quarterly":
+		return ScanCronQuarterly
+	default:
+		return expr
+	}
+}
+
 // Validate returns nil if expr is empty (schedule off) or a valid standard cron string.
 func Validate(expr string) error {
-	expr = strings.TrimSpace(expr)
+	expr = Expand(expr)
 	if expr == "" {
 		return nil
 	}
@@ -27,7 +38,7 @@ func Validate(expr string) error {
 // Schedulers that must not catch up missed fires after downtime should set last
 // to process start before the first tick (see internal/scheduler).
 func Due(expr string, last, now time.Time) (bool, error) {
-	expr = strings.TrimSpace(expr)
+	expr = Expand(expr)
 	if expr == "" {
 		return false, nil
 	}
@@ -46,7 +57,7 @@ func Due(expr string, last, now time.Time) (bool, error) {
 // Empty/invalid expr or zero after → zero time (caller treats as unknown / due).
 // Fire times are evaluated in UTC (stored cron fields are UTC wall clock).
 func Next(expr string, after time.Time) (time.Time, error) {
-	expr = strings.TrimSpace(expr)
+	expr = Expand(expr)
 	if expr == "" || after.IsZero() {
 		return time.Time{}, nil
 	}
@@ -65,6 +76,7 @@ func Descriptors() []string {
 		"@midnight",
 		"@weekly",
 		"@monthly",
+		"@quarterly",
 	}
 }
 
@@ -137,6 +149,8 @@ func DescribeIn(expr string, loc *time.Location) string {
 		return labelWeeklyParen(0, 0, 0, loc)
 	case "@monthly":
 		return labelMonthlyParen(0, 0, loc)
+	case "@quarterly":
+		return labelQuarterlyParen(3, 0, loc)
 	case "@yearly", "@annually":
 		return labelYearlyParen(0, 0, loc)
 	case ScanCronHourly:

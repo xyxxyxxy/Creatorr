@@ -324,8 +324,8 @@ func TestFormatFileSyncIssuesBody(t *testing.T) {
 	if !strings.Contains(body, "- S2 / Changed (thumb: ep-thumb.jpg)") {
 		t.Fatalf("changed sidecar detail: %q", body)
 	}
-	if !strings.Contains(body, "verify_failed") || !strings.Contains(body, "sidecar") {
-		t.Fatalf("want verify_failed + sidecar hint: %q", body)
+	if !strings.Contains(body, "integrity_check_failed") || !strings.Contains(body, "sidecar") {
+		t.Fatalf("want integrity_check_failed + sidecar hint: %q", body)
 	}
 }
 

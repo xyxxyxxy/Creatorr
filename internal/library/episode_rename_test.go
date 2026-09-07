@@ -8,7 +8,23 @@ import (
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
+
+func TestRenamedHistoryMessage(t *testing.T) {
+	if got := library.RenamedHistoryMessage(2, 0, ""); got != "Episode files renamed" {
+		t.Fatalf("%q", got)
+	}
+	if got := library.RenamedHistoryMessage(2, 2, "Self"); got != "Episode files renamed" {
+		t.Fatalf("self trigger: %q", got)
+	}
+	if got := library.RenamedHistoryMessage(2, 1, "Early"); got != "Episode files renamed (peer move after 'Early')" {
+		t.Fatalf("%q", got)
+	}
+	if got := library.RenamedHistoryMessage(2, 1, ""); got != "Episode files renamed (peer move after another video)" {
+		t.Fatalf("%q", got)
+	}
+}
 
 func TestAlignSeriesYearEpisodesRenamesPeers(t *testing.T) {
 	s := openLib(t)
@@ -70,7 +86,13 @@ func TestAlignSeriesYearEpisodesRenamesPeers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tid := seedTaskID(t, s)
+	tid, err := s.Queue.Enqueue(queue.EnqueueParams{
+		Kind: queue.KindDownload, Domain: "example.com",
+		SeriesID: ser.ID, VideoID: early.VideoID, Message: "dl",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	leftovers, err := s.AlignSeriesYearEpisodes(ser.ID, 2024, tid)
 	if err != nil {
 		t.Fatal(err)
@@ -89,6 +111,27 @@ func TestAlignSeriesYearEpisodesRenamesPeers(t *testing.T) {
 	}
 	if !fileExistsTest(latePath) || !fileExistsTest(earlyPath) {
 		t.Fatalf("media missing after align late=%q early=%q", latePath, earlyPath)
+	}
+	hist, err := s.ListVideoHistory(late.VideoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, h := range hist {
+		if h.Event != "renamed" {
+			continue
+		}
+		found = true
+		want := library.RenamedHistoryMessage(late.VideoID, early.VideoID, "Early")
+		if h.Message != want {
+			t.Fatalf("renamed message=%q want %q", h.Message, want)
+		}
+		if !strings.Contains(h.Detail, `"reason":"peer_move"`) || !strings.Contains(h.Detail, strconv.FormatInt(early.VideoID, 10)) {
+			t.Fatalf("detail missing peer trigger: %s", h.Detail)
+		}
+	}
+	if !found {
+		t.Fatal("expected renamed history on late peer")
 	}
 }
 

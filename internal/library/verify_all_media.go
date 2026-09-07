@@ -8,12 +8,12 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
-// EnqueueVerifyAllMedia queues a resumable library-wide media verify pass.
+// EnqueueVerifyAllMedia queues a resumable library integrity check pass.
 func (s *Store) EnqueueVerifyAllMedia() (int64, error) {
 	return s.EnqueueVerifyAllMediaScoped(nil, nil)
 }
 
-// EnqueueVerifyAllMediaScoped queues verify for the whole library (empty scope),
+// EnqueueVerifyAllMediaScoped queues integrity check for the whole library (empty scope),
 // selected series, or selected videos. seriesIDs and videoIDs must not both be set.
 func (s *Store) EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs []int64) (int64, error) {
 	if s.Queue == nil {
@@ -25,21 +25,21 @@ func (s *Store) EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs []int64) (int64,
 		return 0, fmt.Errorf("%w: series_ids and video_ids are mutually exclusive", ErrInvalid)
 	}
 	payload := map[string]any{
-		"cursor":   0,
-		"verified": 0,
-		"skipped":  0,
-		"failed":   0,
+		"cursor":            0,
+		"integrity_checked": 0,
+		"skipped":           0,
+		"failed":            0,
 	}
-	msg := "Verify all downloaded media"
+	msg := "Integrity check"
 	if len(seriesIDs) > 0 {
 		payload["series_ids"] = seriesIDs
-		msg = "Verify series media"
+		msg = "Integrity check (series)"
 	} else if len(videoIDs) > 0 {
 		payload["video_ids"] = videoIDs
-		msg = "Verify selected media"
+		msg = "Integrity check (selected)"
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
-		Kind:    queue.KindVerifyAllMedia,
+		Kind:    queue.KindIntegrityCheck,
 		Domain:  queue.SystemDomain,
 		Payload: payload,
 		Message: msg,
@@ -47,12 +47,13 @@ func (s *Store) EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs []int64) (int64,
 }
 
 type verifyAllMediaPayload struct {
-	Cursor    int64   `json:"cursor"`
-	Verified  int     `json:"verified"`
-	Skipped   int     `json:"skipped"`
-	Failed    int     `json:"failed"`
-	SeriesIDs []int64 `json:"series_ids"`
-	VideoIDs  []int64 `json:"video_ids"`
+	Cursor            int64   `json:"cursor"`
+	IntegrityChecked  int     `json:"integrity_checked"`
+	Verified          int     `json:"verified"` // legacy dual-read
+	Skipped           int     `json:"skipped"`
+	Failed            int     `json:"failed"`
+	SeriesIDs         []int64 `json:"series_ids"`
+	VideoIDs          []int64 `json:"video_ids"`
 }
 
 // VerifyAllMediaFail is one failed video from VerifyAllMediaPass (for notify).
@@ -63,19 +64,24 @@ type VerifyAllMediaFail struct {
 	Detail      string
 }
 
-// VerifyAllMediaPass null-decodes packed downloaded/verify_failed media with a cursor for resume.
+// VerifyAllMediaPass runs integrity check on packed downloaded/integrity_check_failed media
+// with a cursor for resume. Skips videos whose quality profile has File integrity off.
 // onFail is optional; called after MarkVerifyFailed for each failure.
 func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64), onFail func(VerifyAllMediaFail)) (verified, skipped, failed int, err error) {
 	var p verifyAllMediaPayload
 	_ = json.Unmarshal([]byte(task.Payload), &p)
-	verified, skipped, failed = p.Verified, p.Skipped, p.Failed
+	verified = p.IntegrityChecked
+	if verified == 0 && p.Verified > 0 {
+		verified = p.Verified
+	}
+	skipped, failed = p.Skipped, p.Failed
 
 	persist := func() error {
 		m := map[string]any{
-			"cursor":   p.Cursor,
-			"verified": verified,
-			"skipped":  skipped,
-			"failed":   failed,
+			"cursor":            p.Cursor,
+			"integrity_checked": verified,
+			"skipped":           skipped,
+			"failed":            failed,
 		}
 		if len(p.SeriesIDs) > 0 {
 			m["series_ids"] = p.SeriesIDs
@@ -89,7 +95,7 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 	q := `
 		SELECT v.id
 		FROM videos v
-		WHERE v.status IN ('downloaded', 'verify_failed')
+		WHERE v.status IN ('downloaded', 'integrity_check_failed')
 		  AND v.id > ?
 		  AND EXISTS (
 		    SELECT 1 FROM files f
@@ -140,7 +146,7 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 		_ = persist()
 		if progress != nil && total > 0 {
 			pct := float64(i) / float64(total)
-			progress(fmt.Sprintf("Verifying %d/%d…", i+1, total), &pct)
+			progress(fmt.Sprintf("Integrity check %d/%d…", i+1, total), &pct)
 		}
 
 		busy, berr := s.videoBusyForRename(id, task.ID)
@@ -150,6 +156,18 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 			continue
 		}
 		if busy {
+			skipped++
+			_ = persist()
+			continue
+		}
+
+		profileOn, perr := s.seriesProfileVerifyMedia(id)
+		if perr != nil {
+			failed++
+			_ = persist()
+			continue
+		}
+		if !profileOn {
 			skipped++
 			_ = persist()
 			continue
@@ -183,13 +201,15 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 				progress(msg, &base)
 			}
 		}
-		if verr := VerifyDownloadedMedia(ctx, path, perProgress); verr != nil {
+		if verr := s.RunIntegrityCheckVideo(ctx, id, perProgress, IntegrityCheckOpts{
+			TaskID: task.ID,
+		}); verr != nil {
 			if ctx.Err() != nil {
 				_ = persist()
 				return verified, skipped, failed, ctx.Err()
 			}
 			failed++
-			_ = s.MarkVerifyFailed(id, task.ID, "Media verify failed")
+			_ = s.MarkVerifyFailed(id, task.ID, "Integrity check failed")
 			if onFail != nil {
 				seriesTitle := ""
 				videoTitle := ""
@@ -217,11 +237,7 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 	return verified, skipped, failed, nil
 }
 
-// VerifyAllMediaMessage formats the finish message.
-func VerifyAllMediaMessage(verified, skipped, failed int) string {
-	msg := fmt.Sprintf("Verify all media: verified %d, skipped %d", verified, skipped)
-	if failed > 0 {
-		msg += fmt.Sprintf(", %d failed", failed)
-	}
-	return msg
+// VerifyAllMediaMessage formats the finish message for an integrity check batch.
+func VerifyAllMediaMessage(checked, skipped, failed int) string {
+	return fmt.Sprintf("Integrity checked %d, skipped %d, failed %d", checked, skipped, failed)
 }

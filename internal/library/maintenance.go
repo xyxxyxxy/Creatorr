@@ -445,11 +445,11 @@ func (s *Store) RestoreDownloaded(videoID, taskID int64) error {
 	}, taskID)
 }
 
-// MarkExternallyChanged sets status verify_failed when packed media size no longer
+// MarkExternallyChanged sets status integrity_check_failed when packed media size no longer
 // matches files.size_bytes. Updates size_bytes to the on-disk size (idempotent for
 // later syncs). Does not enqueue download or media_verify.
 func (s *Store) MarkExternallyChanged(videoID, taskID, oldSize, newSize int64) error {
-	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'verify_failed' WHERE id = ?`, videoID); err != nil {
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'integrity_check_failed' WHERE id = ?`, videoID); err != nil {
 		return err
 	}
 	if _, err := s.DB.SQL.Exec(`
@@ -511,8 +511,26 @@ func (s *Store) RestoreSidecar(videoID, fileID, taskID, diskSize int64, kind, pa
 	}, taskID)
 }
 
+// RestoreSidecarNFO restores a missing NFO without storing size (NFO never size-checked).
+func (s *Store) RestoreSidecarNFO(videoID, fileID, taskID int64, path string) error {
+	if _, err := s.DB.SQL.Exec(`UPDATE files SET size_bytes = NULL WHERE id = ?`, fileID); err != nil {
+		return err
+	}
+	return s.AddVideoHistory(videoID, "sidecar_restored", "Sidecar file found again", map[string]any{
+		"reason":  "sync_files",
+		"kind":    "nfo",
+		"path":    path,
+		"file_id": fileID,
+	}, taskID)
+}
+
+func (s *Store) clearSidecarSizeBytes(fileID int64) error {
+	_, err := s.DB.SQL.Exec(`UPDATE files SET size_bytes = NULL WHERE id = ?`, fileID)
+	return err
+}
+
 // MarkSidecarExternallyChanged updates size_bytes when a present sidecar's size drifts.
-// Does not change video status (media verify_failed is media-only).
+// Does not change video status (media integrity_check_failed is media-only).
 func (s *Store) MarkSidecarExternallyChanged(videoID, fileID, taskID, oldSize, newSize int64, kind, path string) error {
 	if _, err := s.DB.SQL.Exec(`UPDATE files SET size_bytes = ? WHERE id = ?`, newSize, fileID); err != nil {
 		return err
@@ -685,7 +703,7 @@ func (s *Store) fileSyncMissingAndRestore(taskID int64, progress ProgressFn) (mi
 		JOIN files f ON f.video_id = v.id AND f.kind = 'video'
 		JOIN series s ON s.id = v.series_id
 		JOIN root_folders r ON r.id = s.root_id
-		WHERE v.status IN ('downloaded', 'verify_failed', 'missing')
+		WHERE v.status IN ('downloaded', 'integrity_check_failed', 'missing')
 	`)
 	if err != nil {
 		return nil, nil, nil, err
@@ -733,7 +751,7 @@ func (s *Store) fileSyncMissingAndRestore(taskID int64, progress ProgressFn) (mi
 		st, statErr := os.Stat(h.path)
 		exists := statErr == nil && !st.IsDir()
 		switch h.status {
-		case "downloaded", "verify_failed":
+		case "downloaded", "integrity_check_failed":
 			if !exists {
 				if err := s.MarkMissing(h.id, taskID); err != nil {
 					return missingIDs, restoredIDs, changedIDs, err
@@ -777,7 +795,7 @@ func (s *Store) fileSyncSidecars(taskID int64, progress ProgressFn) (missing, re
 		JOIN series s ON s.id = v.series_id
 		JOIN root_folders r ON r.id = s.root_id
 		WHERE f.kind != 'video'
-		  AND v.status IN ('downloaded', 'verify_failed', 'missing')
+		  AND v.status IN ('downloaded', 'integrity_check_failed', 'missing')
 	`)
 	if err != nil {
 		return nil, nil, nil, err
@@ -841,11 +859,21 @@ func (s *Store) fileSyncSidecars(taskID int64, progress ProgressFn) (missing, re
 			}
 			missing = append(missing, issue)
 		case exists && knownMissing:
-			diskSize := st.Size()
-			if err := s.RestoreSidecar(h.videoID, h.fileID, taskID, diskSize, h.kind, h.path); err != nil {
+			if h.kind == "nfo" {
+				if err := s.RestoreSidecarNFO(h.videoID, h.fileID, taskID, h.path); err != nil {
+					return missing, restored, changed, err
+				}
+			} else if err := s.RestoreSidecar(h.videoID, h.fileID, taskID, st.Size(), h.kind, h.path); err != nil {
 				return missing, restored, changed, err
 			}
 			restored = append(restored, issue)
+		case exists && h.kind == "nfo":
+			// Never size-check NFO (integrity check owns content). Keep size NULL when present.
+			if h.sizeBytes.Valid && h.sizeBytes.Int64 != sidecarMissingSizeSentinel {
+				if err := s.clearSidecarSizeBytes(h.fileID); err != nil {
+					return missing, restored, changed, err
+				}
+			}
 		case exists && !h.sizeBytes.Valid:
 			if err := s.backfillSidecarSizeBytes(h.fileID, st.Size()); err != nil {
 				return missing, restored, changed, err
@@ -868,7 +896,7 @@ func (s *Store) retentionPurge(now time.Time, taskID int64, progress ProgressFn)
 		JOIN files f ON f.video_id = v.id AND f.kind = 'video'
 		JOIN series s ON s.id = v.series_id
 		JOIN root_folders r ON r.id = s.root_id
-		WHERE v.status IN ('downloaded', 'verify_failed')
+		WHERE v.status IN ('downloaded', 'integrity_check_failed')
 		  AND r.retention_ttl_seconds IS NOT NULL
 		  AND r.retention_ttl_seconds > 0
 	`)

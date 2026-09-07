@@ -700,7 +700,7 @@ func (s *Store) SeriesHasBusyMediaTasks(seriesID int64) (bool, error) {
 		SELECT COUNT(*) FROM tasks t
 		LEFT JOIN videos v ON v.id = t.video_id
 		WHERE t.status IN ('pending', 'running')
-		  AND t.kind IN ('download', 'sponsorblock_cut', 'media_verify')
+		  AND t.kind IN ('download', 'sponsorblock_cut', 'integrity_check_initial')
 		  AND (t.series_id = ? OR v.series_id = ?)
 	`, seriesID, seriesID).Scan(&n)
 	return n > 0, err

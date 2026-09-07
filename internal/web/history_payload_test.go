@@ -15,8 +15,8 @@ func TestHistoryEventError(t *testing.T) {
 	}{
 		{"download_failed", true},
 		{library.SourceHistScanError, true},
-		{library.SourceHistCancelled, true},
-		{"cancelled", true},
+		{library.SourceHistCancelled, false},
+		{"cancelled", false},
 		{"download", false}, // legacy pack event
 		{"downloaded", false},
 		{"packed", false},
@@ -38,6 +38,15 @@ func TestHistoryEventError(t *testing.T) {
 		if got := historyEventError(tc.event); got != tc.want {
 			t.Fatalf("historyEventError(%q)=%v want %v", tc.event, got, tc.want)
 		}
+	}
+}
+
+func TestHistoryEventNeutral(t *testing.T) {
+	if !historyEventNeutral("cancelled") || !historyEventNeutral(library.VideoHistCancelled) {
+		t.Fatal("cancelled should be neutral")
+	}
+	if historyEventNeutral("download_failed") || historyEventNeutral("downloaded") {
+		t.Fatal("non-cancel not neutral")
 	}
 }
 

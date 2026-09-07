@@ -30,7 +30,7 @@ func TestRemuxIfNeededRecordsCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	var lines []string
-	ctx := exectrace.With(context.Background(), func(line string) {
+	ctx := exectrace.With(context.Background(), func(bin, line string) {
 		lines = append(lines, line)
 	})
 	_, _, _ = library.RemuxIfNeeded(ctx, path)

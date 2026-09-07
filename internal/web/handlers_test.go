@@ -444,7 +444,7 @@ func TestActionMaintenanceRunQueuesMultiple(t *testing.T) {
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	form := strings.NewReader("actions=apply_episode_naming&actions=regenerate_nfos&actions=verify_all_media")
+	form := strings.NewReader("actions=apply_episode_naming&actions=regenerate_nfos&actions=integrity_check")
 	req := httptest.NewRequest(http.MethodPost, "/actions/maintenance-run", form)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -456,7 +456,7 @@ func TestActionMaintenanceRunQueuesMultiple(t *testing.T) {
 	if !strings.Contains(loc, "ok=maintenance-run") || !strings.Contains(loc, "actions=") {
 		t.Fatalf("location=%q", loc)
 	}
-	for _, kind := range []string{queue.KindRenameEpisodes, queue.KindRegenerateNFO, queue.KindVerifyAllMedia} {
+	for _, kind := range []string{queue.KindRenameEpisodes, queue.KindRegenerateNFO, queue.KindIntegrityCheck} {
 		busy, err := q.HasPendingOrRunningKind(kind, queue.SystemDomain)
 		if err != nil || !busy {
 			t.Fatalf("expected %s queued, busy=%v err=%v", kind, busy, err)
@@ -839,11 +839,14 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, `name="actions"`) || !strings.Contains(body, `value="apply_episode_naming"`) {
 				t.Fatalf("%s missing action checkboxes", path)
 			}
-			if !strings.Contains(body, "Verify all downloaded videos") {
+			if !strings.Contains(body, "Integrity check") {
 				t.Fatalf("%s missing verify all media", path)
 			}
 			if !strings.Contains(body, "Refresh sidecars") {
 				t.Fatalf("%s missing refresh sidecars", path)
+			}
+			if !strings.Contains(body, "File sync") || !strings.Contains(body, `value="sync_files"`) {
+				t.Fatalf("%s missing file sync", path)
 			}
 			if !strings.Contains(body, "list-panel") {
 				t.Fatalf("%s missing list-panel", path)
@@ -986,6 +989,82 @@ func TestTaskDetailPage(t *testing.T) {
 	}
 	if strings.Contains(body, "id=\"task-logs\"") {
 		t.Fatalf("logs section should be hidden when finished: %s", truncate(body, 400))
+	}
+}
+
+func TestTaskDetailRenameEpisodesList(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	rootPath := t.TempDir()
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: rootPath})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	root, err := lib.CreateRoot("r", t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, err := lib.CreateProfile("p", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "RenameTD", SourceURL: "https://www.example.com/@renametd", RootID: root.ID,
+		QualityProfileID: prof.ID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := lib.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "rtd1", Title: "Ep One", SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tid, err := q.Enqueue(queue.EnqueueParams{
+		Kind: queue.KindRenameEpisodes, Domain: queue.SystemDomain, Message: "Rename",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := q.Finish(tid, queue.StatusDone, "Renamed 1, skipped busy 0, failed 0", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.AddVideoHistory(res.VideoID, "renamed", "Episode files renamed", map[string]any{
+		"previous":      "oldstem",
+		"new":           "newstem",
+		"previous_path": filepath.Join(rootPath, "old", "oldstem"),
+		"new_path":      filepath.Join(rootPath, "new", "newstem"),
+	}, tid); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+	req := httptest.NewRequest(http.MethodGet, "/task/"+strconv.FormatInt(tid, 10), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Renames") {
+		t.Fatalf("missing Renames section: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, "1 renamed") {
+		t.Fatalf("missing rename count: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, "Ep One") || !strings.Contains(body, "RenameTD") {
+		t.Fatalf("missing titles: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, "oldstem") || !strings.Contains(body, "newstem") {
+		t.Fatalf("missing paths: %s", truncate(body, 600))
 	}
 }
 

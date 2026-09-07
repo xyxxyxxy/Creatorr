@@ -27,6 +27,7 @@ type settingsRowView struct {
 	Value         string
 	Help          string
 	Cron          bool
+	CronDefault   string
 	Checkbox      bool
 	Checked       bool
 	Select        bool // closed-set dropdown
@@ -489,7 +490,7 @@ func (h *Handler) settingsScheduler(w http.ResponseWriter, r *http.Request) {
 	for _, e := range entries {
 		row := settingsRowView{
 			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
-			Cron: settings.CronKeys[e.Key],
+			Cron: settings.CronKeys[e.Key], CronDefault: settings.CronSeedDefault(e.Key),
 		}
 		rows = append(rows, row)
 	}
@@ -631,17 +632,20 @@ type maintenancePageData struct {
 	ApplyNamingBusy    bool
 	NFORegenBusy       bool
 	VerifyAllMediaBusy bool
+	SyncFilesBusy      bool
 }
 
 func (h *Handler) maintenancePageData(r *http.Request) maintenancePageData {
 	applyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRenameEpisodes, queue.SystemDomain)
 	nfoBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateNFO, queue.SystemDomain)
-	verifyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindVerifyAllMedia, queue.SystemDomain)
+	verifyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindIntegrityCheck, queue.SystemDomain)
+	syncBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain)
 	return maintenancePageData{
 		pageBase:           newSettingsPage("Settings · Maintenance", "maintenance", flashFromQuery(r)),
 		ApplyNamingBusy:    applyBusy,
 		NFORegenBusy:       nfoBusy,
 		VerifyAllMediaBusy: verifyBusy,
+		SyncFilesBusy:      syncBusy,
 	}
 }
 
@@ -678,6 +682,7 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 		settings.KeyPotFetch,
 		settings.KeyDownloadWantedCron,
 		settings.KeySyncFilesCron,
+		settings.KeyIntegrityCheckCron,
 		settings.KeyRetentionDeleteCron,
 		settings.KeyYtDlpUpdateCron,
 		settings.KeyYtDlpUpdateChannel,
@@ -1244,8 +1249,8 @@ func (h *Handler) actionVerifyAllMedia(w http.ResponseWriter, r *http.Request) {
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
 		return
 	}
-	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindVerifyAllMedia, queue.SystemDomain); busy {
-		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("'Verify all downloaded videos' already queued"))
+	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindIntegrityCheck, queue.SystemDomain); busy {
+		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("'Integrity check' already queued"))
 		return
 	}
 	if _, err := h.Library.EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs); err != nil {
@@ -1340,7 +1345,7 @@ func (h *Handler) actionMaintenanceRun(w http.ResponseWriter, r *http.Request) {
 			wanted[a] = true
 		}
 	}
-	order := []string{"apply_episode_naming", "regenerate_nfos", "verify_all_media", "refresh_sidecars"}
+	order := []string{"apply_episode_naming", "regenerate_nfos", "sync_files", "integrity_check", "refresh_sidecars"}
 	var queued []string
 	var skipMsgs []string
 	var firstErr string
@@ -1380,9 +1385,9 @@ func (h *Handler) actionMaintenanceRun(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			queued = append(queued, "nfo")
-		case "verify_all_media":
-			if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindVerifyAllMedia, queue.SystemDomain); busy {
-				skipMsgs = append(skipMsgs, "'Verify all downloaded videos' already queued")
+		case "integrity_check":
+			if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindIntegrityCheck, queue.SystemDomain); busy {
+				skipMsgs = append(skipMsgs, "'Integrity check' already queued")
 				continue
 			}
 			if _, err := h.Library.EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs); err != nil {
@@ -1392,6 +1397,23 @@ func (h *Handler) actionMaintenanceRun(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			queued = append(queued, "verify")
+		case "sync_files":
+			if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain); busy {
+				skipMsgs = append(skipMsgs, "'File sync' already queued")
+				continue
+			}
+			id, err := h.Library.EnqueueSyncFiles(queue.PrioritySyncFilesDue)
+			if err != nil {
+				if firstErr == "" {
+					firstErr = err.Error()
+				}
+				continue
+			}
+			if id == 0 {
+				skipMsgs = append(skipMsgs, "No videos to sync")
+				continue
+			}
+			queued = append(queued, "sync")
 		case "refresh_sidecars":
 			n, skipped, err := h.Library.EnqueueRefreshSidecarsScoped(seriesIDs, videoIDs)
 			if err != nil {

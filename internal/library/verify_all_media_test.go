@@ -24,7 +24,7 @@ func TestEnqueueVerifyAllMediaDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.Kind != queue.KindVerifyAllMedia || task.Domain != queue.SystemDomain {
+	if task.Kind != queue.KindIntegrityCheck || task.Domain != queue.SystemDomain {
 		t.Fatalf("%#v", task)
 	}
 }

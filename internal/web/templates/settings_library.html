@@ -295,9 +295,9 @@
       {{template "profile_format_selector_field" (dict "Value" "bv*+ba/b")}}
       {{template "checkbox_field" (dict
         "Name" "verify_media"
-        "Label" "Verify downloaded videos"
+        "Label" "File integrity"
         "Checked" false
-        "Hint" "After pack, queue a low-priority null-decode of the video file. Fail keeps the file and sets status verify_failed. When media maturity hours are set, only mature packs are verified automatically."
+        "Hint" "When enabled: Integrity check runs null-decode + SHA-256 for media and non-NFO sidecars, and structural/value XML compare for episode NFO. Scheduled/Maintenance Integrity check only covers series on profiles with this option. Post-pack and Import 'Integrity check' also require this option (post-pack still uses the maturity gate). File sync (sync_files) is independent of this option: it still runs presence checks and size checks for video and non-NFO sidecars on its own schedule."
       )}}
       {{template "profile_maturity_fields" (dict
         "MediaPreset" 0
@@ -327,9 +327,9 @@
       {{template "profile_format_selector_field" (dict "Value" .FormatSelector)}}
       {{template "checkbox_field" (dict
         "Name" "verify_media"
-        "Label" "Verify downloaded videos"
+        "Label" "File integrity"
         "Checked" .VerifyMedia
-        "Hint" "After pack, queue a low-priority null-decode of the video file. Fail keeps the file and sets status verify_failed. When media maturity hours are set, only mature packs are verified automatically."
+        "Hint" "When enabled: Integrity check runs null-decode + SHA-256 for media and non-NFO sidecars, and structural/value XML compare for episode NFO. Scheduled/Maintenance Integrity check only covers series on profiles with this option. Post-pack and Import 'Integrity check' also require this option (post-pack still uses the maturity gate). File sync (sync_files) is independent of this option: it still runs presence checks and size checks for video and non-NFO sidecars on its own schedule."
       )}}
       {{template "profile_maturity_fields" (dict
         "MediaPreset" .MaturityMediaPreset

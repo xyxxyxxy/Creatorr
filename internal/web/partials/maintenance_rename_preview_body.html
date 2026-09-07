@@ -13,20 +13,6 @@
   {{if gt .Preview.SkippedBusy 0}} {{.Preview.SkippedBusy}} busy (skipped).{{end}}
   {{if gt .Preview.Unchanged 0}} {{.Preview.Unchanged}} already match.{{end}}
 </p>
-{{if gt (len .Preview.Items) 0}}
-<ul class="list bg-base-100 rounded-box border border-base-300 max-h-[60vh] overflow-y-auto">
-  {{range .Preview.Items}}
-  <li class="list-row py-3 px-3">
-    <div class="list-col-grow min-w-0 flex flex-col gap-1">
-      <div class="text-sm font-medium truncate" title="{{.SeriesTitle}} / {{.Title}}">{{.SeriesTitle}} / {{.Title}}</div>
-      <div class="overflow-x-auto">
-        <div class="font-mono text-xs whitespace-nowrap opacity-60" title="{{.From}}">{{.From}}</div>
-        <div class="font-mono text-xs whitespace-nowrap" title="{{.To}}">{{.To}}</div>
-      </div>
-    </div>
-  </li>
-  {{end}}
-</ul>
-{{end}}
+{{template "rename_path_list" .Preview}}
 {{end}}
 {{end}}

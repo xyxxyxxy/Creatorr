@@ -568,7 +568,7 @@ func TestSeriesProgressCountsErrorsAsPending(t *testing.T) {
 			(?, ?, 'd5', 'Done5', 'downloaded'),
 			(?, ?, 'd6', 'Done6', 'downloaded'),
 			(?, ?, 'e1', 'Err', 'wanted_download_error'),
-			(?, ?, 'v1', 'Verify', 'verify_failed'),
+			(?, ?, 'v1', 'Verify', 'integrity_check_failed'),
 			(?, ?, 'ig1', 'Skip', 'ignored')
 	`, ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID,
 		ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID); err != nil {

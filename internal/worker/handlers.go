@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,10 +51,10 @@ func DefaultHandlers(d Deps) map[string]TaskHandler {
 	out[queue.KindRetentionDelete] = RetentionDeleteHandler(d)
 	out[queue.KindRenameEpisodes] = RenameEpisodesHandler(d)
 	out[queue.KindRegenerateNFO] = RegenerateNFOHandler(d)
-	out[queue.KindVerifyAllMedia] = VerifyAllMediaHandler(d)
+	out[queue.KindIntegrityCheck] = VerifyAllMediaHandler(d)
 	out[queue.KindDeleteFiles] = DeleteFilesHandler(d)
 	out[queue.KindSponsorblockCut] = SponsorblockCutHandler(d)
-	out[queue.KindMediaVerify] = MediaVerifyHandler(d)
+	out[queue.KindIntegrityCheckInitial] = MediaVerifyHandler(d)
 	out[queue.KindYtDlpUpdate] = YtDlpUpdateHandler(d)
 	out[queue.KindBulkEditSeries] = BulkEditSeriesHandler(d)
 	out[queue.KindBulkEditVideos] = BulkEditVideosHandler(d)
@@ -112,11 +113,11 @@ func RegenerateNFOHandler(d Deps) TaskHandler {
 	}
 }
 
-// VerifyAllMediaHandler null-decodes all packed downloaded/verify_failed media (resumable).
+// VerifyAllMediaHandler null-decodes all packed downloaded/integrity_check_failed media (resumable).
 func VerifyAllMediaHandler(d Deps) TaskHandler {
 	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
 		if d.Library == nil {
-			return apperrors.New(apperrors.CodeInternal, "verify all media deps missing")
+			return apperrors.New(apperrors.CodeInternal, "integrity check deps missing")
 		}
 		verified, skipped, failed, err := d.Library.VerifyAllMediaPass(ctx, t, progress, func(f library.VerifyAllMediaFail) {
 			_ = notify.VerifyFailed(ctx, d.Library.DB, t.ID, f.SeriesTitle, f.VideoTitle, f.Detail)
@@ -127,7 +128,7 @@ func VerifyAllMediaHandler(d Deps) TaskHandler {
 		msg := library.VerifyAllMediaMessage(verified, skipped, failed)
 		progress(msg, ptrFloat(1))
 		detail, _ := json.Marshal(map[string]any{
-			"verified": verified, "skipped": skipped, "failed": failed,
+			"integrity_checked": verified, "skipped": skipped, "failed": failed,
 		})
 		_ = d.Library.Queue.SetDetail(t.ID, string(detail))
 		return nil
@@ -386,9 +387,10 @@ func ImportHandler(d Deps) TaskHandler {
 				}
 			}
 			if payload.Verify {
-				_ = d.Library.CancelMediaVerifyForVideo(t.VideoID.Int64, "Superseded by import")
-				if _, err := d.Library.EnqueueMediaVerify(t.VideoID.Int64); err != nil {
+				if id, err := d.Library.MaybeEnqueueMediaVerifyForImport(t.VideoID.Int64); err != nil {
 					progress("Verify enqueue failed: "+err.Error(), nil)
+				} else if id == 0 {
+					progress("Integrity check skipped (File integrity off)", nil)
 				}
 			}
 			softEnqueueImportSidecarGapFill(d, t.VideoID.Int64, progress)
@@ -520,9 +522,10 @@ func ImportHandler(d Deps) TaskHandler {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "write nfo failed"), err.Error())
 		}
 		if payload.Verify {
-			_ = d.Library.CancelMediaVerifyForVideo(t.VideoID.Int64, "Superseded by import")
-			if _, err := d.Library.EnqueueMediaVerify(t.VideoID.Int64); err != nil {
+			if id, err := d.Library.MaybeEnqueueMediaVerifyForImport(t.VideoID.Int64); err != nil {
 				progress("Verify enqueue failed: "+err.Error(), nil)
+			} else if id == 0 {
+				progress("Integrity check skipped (File integrity off)", nil)
 			}
 		}
 		softEnqueueImportSidecarGapFill(d, t.VideoID.Int64, progress)
@@ -1305,14 +1308,15 @@ func SponsorblockCutHandler(d Deps) TaskHandler {
 	}
 }
 
-// MediaVerifyHandler null-decodes packed library media. Fail keeps files and sets verify_failed.
+// MediaVerifyHandler runs initial integrity check for packed library media.
+// Fail keeps files and sets integrity_check_failed.
 func MediaVerifyHandler(d Deps) TaskHandler {
 	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
 		if d.Library == nil {
-			return apperrors.New(apperrors.CodeInternal, "media verify deps missing")
+			return apperrors.New(apperrors.CodeInternal, "integrity check deps missing")
 		}
 		if !t.VideoID.Valid {
-			return apperrors.New(apperrors.CodeMediaVerifyFailed, "media_verify missing video_id")
+			return apperrors.New(apperrors.CodeIntegrityCheckFailed, "integrity_check_initial missing video_id")
 		}
 		videoID := t.VideoID.Int64
 		var payload struct {
@@ -1326,7 +1330,6 @@ func MediaVerifyHandler(d Deps) TaskHandler {
 			return err
 		}
 		if !ok || path == "" {
-			// File replaced/removed while pending: treat as superseded (cancelled), not verify_failed.
 			progress("Superseded (no media)", nil)
 			return context.Canceled
 		}
@@ -1335,12 +1338,23 @@ func MediaVerifyHandler(d Deps) TaskHandler {
 			return context.Canceled
 		}
 
-		if err := library.VerifyDownloadedMedia(ctx, path, progress); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
+		on, err := d.Library.SeriesProfileVerifyMedia(videoID)
+		if err != nil {
+			return err
+		}
+		if !on {
+			progress("Skipped (File integrity off)", nil)
+			return nil
+		}
+
+		if err := d.Library.RunIntegrityCheckVideo(ctx, videoID, progress, library.IntegrityCheckOpts{
+			TaskID: t.ID,
+		}); err != nil {
+			if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+				return context.Canceled
 			}
 			msg := err.Error()
-			_ = d.Library.MarkVerifyFailed(videoID, t.ID, "Media verify failed")
+			_ = d.Library.MarkVerifyFailed(videoID, t.ID, "Integrity check failed")
 			v, _ := d.Library.GetVideo(videoID)
 			seriesTitle := ""
 			videoTitle := ""

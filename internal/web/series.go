@@ -24,7 +24,7 @@ import (
 
 func videoTaskRunning(tasks []queue.Task) bool {
 	for _, t := range tasks {
-		if (t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify) && t.Status == queue.StatusRunning {
+		if (t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindIntegrityCheckInitial) && t.Status == queue.StatusRunning {
 			return true
 		}
 	}
@@ -56,7 +56,7 @@ func editSeriesSettingsFields(ser *library.Series, roots []library.RootFolder, p
 // videoDeliveryQueued is true when a download, sponsorblock_cut, or media_verify task is pending or running.
 func videoDeliveryQueued(tasks []queue.Task) bool {
 	for _, t := range tasks {
-		if t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify {
+		if t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindIntegrityCheckInitial {
 			return true
 		}
 	}
@@ -64,7 +64,7 @@ func videoDeliveryQueued(tasks []queue.Task) bool {
 }
 
 func deliveryTaskActive(t *queue.Task) bool {
-	return t != nil && (t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindMediaVerify)
+	return t != nil && (t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindIntegrityCheckInitial)
 }
 
 func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
@@ -493,8 +493,9 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 		abs, ago := createdAgoPair(e.CreatedAt, now)
 		v := videoHistoryView{
 			CreatedAt: abs, CreatedAgo: ago,
-			Event: historyEventLabel(e.Event, e.Detail), Message: e.Message, Detail: e.Detail,
+			Event: historyEventLabel(e.Event, e.Detail), Message: historyMessageWithDetail(e.Message, e.Detail), Detail: e.Detail,
 			HasError: historyEventError(e.Event),
+			Neutral:  historyEventNeutral(e.Event),
 		}
 		if e.TaskID > 0 {
 			v.HasTask = true
@@ -613,6 +614,7 @@ type videoHistoryView struct {
 	TaskKind   string // tasks.kind when TaskID set (grouped Event label)
 	HasTask    bool
 	HasError   bool // from raw event before historyEventLabel remap
+	Neutral    bool // cancelled: muted chrome, not success/fail
 	HistoryID  int64
 	VideoID    int64
 	VideoTitle string
@@ -625,9 +627,10 @@ func videoHistoryToView(e library.VideoHistoryEvent, now time.Time) videoHistory
 		CreatedAt:  abs,
 		CreatedAgo: ago,
 		Event:      historyEventLabel(e.Event, e.Detail),
-		Message:    e.Message,
+		Message:    historyMessageWithDetail(e.Message, e.Detail),
 		Detail:     e.Detail,
 		HasError:   historyEventError(e.Event),
+		Neutral:    historyEventNeutral(e.Event),
 		VideoID:    e.VideoID,
 	}
 	if e.TaskID.Valid {
@@ -662,6 +665,53 @@ func fillVideoHistoryTaskKinds(q *queue.Store, views []videoHistoryView) {
 	}
 }
 
+// enrichVideoHistoryRenameMessages clarifies peer-move renames triggered by another video's
+// pack/download (task.video_id or detail.trigger_video_id differs from this row's video).
+func enrichVideoHistoryRenameMessages(lib *library.Store, q *queue.Store, views []videoHistoryView) {
+	if len(views) == 0 {
+		return
+	}
+	for i := range views {
+		if views[i].Event != "renamed" {
+			continue
+		}
+		if strings.Contains(views[i].Message, "peer move") {
+			continue
+		}
+		triggerID := int64(0)
+		if id, ok := historyDetailInt64FromJSON(views[i].Detail, "trigger_video_id"); ok {
+			triggerID = id
+		}
+		if triggerID <= 0 && views[i].HasTask && q != nil && views[i].TaskID > 0 {
+			if t, err := q.GetTask(views[i].TaskID); err == nil && t != nil && t.VideoID.Valid {
+				triggerID = t.VideoID.Int64
+			}
+		}
+		if triggerID <= 0 || triggerID == views[i].VideoID {
+			continue
+		}
+		title := ""
+		if lib != nil {
+			if v, err := lib.GetVideo(triggerID); err == nil && v != nil {
+				title = v.Title
+			}
+		}
+		views[i].Message = library.RenamedHistoryMessage(views[i].VideoID, triggerID, title)
+	}
+}
+
+func historyDetailInt64FromJSON(detail, key string) (int64, bool) {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return 0, false
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(detail), &raw); err != nil {
+		return 0, false
+	}
+	return historyDetailInt64(raw, key)
+}
+
 func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 	sid, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	vid, _ := strconv.ParseInt(chi.URLParam(r, "vid"), 10, 64)
@@ -690,6 +740,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	fillVideoHistoryTaskKinds(h.Queue, histViews)
+	enrichVideoHistoryRenameMessages(h.Library, h.Queue, histViews)
 	histTimeline := videoHistoryGroupsToTimeline(groupVideoHistoryByTask(histViews))
 	t, _ := h.Queue.ActiveTaskForVideo(vid)
 	dlRunning := deliveryTaskActive(t) && t.Status == queue.StatusRunning

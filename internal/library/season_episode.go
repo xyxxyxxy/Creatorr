@@ -145,14 +145,14 @@ func (s *Store) ReindexSeriesUTCYear(seriesID int64, year int) (changed []int64,
 	return changed, nil
 }
 
-// packedVideoIDs filters video IDs to those with packed media (downloaded / verify_failed).
+// packedVideoIDs filters video IDs to those with packed media (downloaded / integrity_check_failed).
 func (s *Store) packedVideoIDs(videoIDs []int64) ([]int64, error) {
 	ids := uniqInt64(videoIDs)
 	if len(ids) == 0 {
 		return nil, nil
 	}
 	q := `SELECT id FROM videos WHERE id IN (` + sqlIntPlaceholders(len(ids)) + `)
-		AND status IN ('downloaded', 'verify_failed')`
+		AND status IN ('downloaded', 'integrity_check_failed')`
 	args := make([]any, len(ids))
 	for i, id := range ids {
 		args[i] = id

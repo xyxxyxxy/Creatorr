@@ -108,7 +108,7 @@ func DetectPauseCode(message string) string {
 // Keeps CookieInvalid / RateLimited / CookieMissing unchanged.
 func UpgradeCode(code, message string) string {
 	switch code {
-	case CodeCookieInvalid, CodeRateLimited, CodeCookieMissing, CodeRemuxFailed, CodePackFailed, CodeMediaVerifyFailed,
+	case CodeCookieInvalid, CodeRateLimited, CodeCookieMissing, CodeRemuxFailed, CodePackFailed, CodeIntegrityCheckFailed,
 		CodeLiveBroadcastSkipped, CodeAgeRestricted, CodeArchiveFallbackQueued:
 		return code
 	}

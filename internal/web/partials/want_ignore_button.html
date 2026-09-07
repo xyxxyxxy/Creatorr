@@ -5,7 +5,7 @@
 {{if .FormClass}}{{$formClass = .FormClass}}{{end}}
 {{$icon := "size-4"}}{{if .Icons}}{{$icon = "size-5"}}{{end}}
 {{$live := .LiveSwap}}
-{{if or (eq .Status "ignored") (eq .Status "deleted") (eq .Status "missing") (eq .Status "verify_failed")}}
+{{if or (eq .Status "ignored") (eq .Status "deleted") (eq .Status "missing") (eq .Status "integrity_check_failed")}}
 <form method="post" action="/actions/want-video"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/want-video" hx-target="#series-videos-live" hx-swap="outerHTML"{{end}}>
   <input type="hidden" name="video_id" value="{{.VideoID}}" />
   <input type="hidden" name="series_id" value="{{.SeriesID}}" />
@@ -20,7 +20,7 @@
   <i data-lucide="trash-2" class="{{$icon}}"></i>
 </label>
 {{if not .DeferModal}}{{template "delete_video_modal" .}}{{end}}
-{{else if and (ne .Status "downloaded") (ne .Status "ignored") (ne .Status "missing") (ne .Status "deleted") (ne .Status "verify_failed")}}
+{{else if and (ne .Status "downloaded") (ne .Status "ignored") (ne .Status "missing") (ne .Status "deleted") (ne .Status "integrity_check_failed")}}
 {{if .DownloadRunning}}
 <label for="modal-ignore-video-{{.VideoID}}" class="{{.Class}}{{if .Icons}} tooltip tooltip-top{{end}}" aria-label="Ignore" data-modal-for="modal-ignore-video-{{.VideoID}}" {{if not .DomainActive}}aria-disabled="true"{{end}}{{if .Icons}} data-tip="{{if not .DomainActive}}{{.DomainDisabledTitle}}{{else}}Ignore{{end}}"{{end}}>
   {{if .Icons}}<i data-lucide="eye-off" class="{{$icon}}"></i>{{else}}<i data-lucide="eye-off" class="size-4"></i> Ignore{{end}}
