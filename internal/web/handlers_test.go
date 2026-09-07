@@ -212,6 +212,15 @@ func TestImportPageWithoutSeries(t *testing.T) {
 	if !strings.Contains(body, "modal-add-video") || !strings.Contains(body, "js-add-video-form") {
 		t.Fatalf("expected add-video modal with no series: %s", truncate(body, 400))
 	}
+	if !strings.Contains(body, `class="space-y-3 js-add-video-form" data-add-video-series-id="" novalidate`) {
+		t.Fatalf("expected add-video form novalidate: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, `type="text" name="fetch_url" id="add-video-url"`) {
+		t.Fatalf("expected add-video URL type=text: %s", truncate(body, 400))
+	}
+	if strings.Contains(body, `id="add-video-remote-id"`) || strings.Contains(body, "add-video-remote-display") {
+		t.Fatalf("add-video modal must not show Remote ID controls: %s", truncate(body, 400))
+	}
 	if strings.Contains(body, `id="btn-scan"`) {
 		t.Fatalf("scan button should be removed: %s", truncate(body, 400))
 	}

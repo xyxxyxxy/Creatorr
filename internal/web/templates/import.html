@@ -142,6 +142,8 @@ function importPageAlive() {
 function isImportFetchCanceled(err) {
   if (!err) return false;
   if (err.name === 'AbortError' || err.name === 'NetworkError') return true;
+  const msg = String(err.message || err || '');
+  if (/networkerror|failed to fetch|load failed/i.test(msg)) return true;
   if (!importPageAlive()) return true;
   return false;
 }
@@ -185,7 +187,7 @@ async function loadImportPicker() {
       if (importCandidates.length) renderImportPage();
       else updateBulkSeriesBtn();
     } catch (err) {
-      if (isImportFetchCanceled(err)) return;
+      if (ac.signal.aborted || isImportFetchCanceled(err)) return;
       showImportMsg('Library index', 'Failed to load Match catalog: ' + (err && err.message ? err.message : String(err)), { error: true });
     } finally {
       if (importPickerAbort === ac) importPickerAbort = null;
@@ -201,6 +203,7 @@ window.addEventListener('pagehide', () => {
 });
 
 function showImportMsg(title, body, opts) {
+  if (!importPageAlive()) return;
   // Close Add series / Add video so the toast is not trapped under them.
   const addToggle = document.getElementById('modal-add-series');
   if (addToggle) addToggle.checked = false;
@@ -801,20 +804,14 @@ function setAddVideoAlert(form, msg) {
 function setAddVideoFetchErr(form, msg) {
   if (!form) return;
   if (typeof window.clearFormControlValidity === 'function') window.clearFormControlValidity(form);
-  const text = String(msg || '').trim();
+  const text = String(msg || '').replace(/^conflict:\s*/i, '').trim();
   if (!text) {
     setAddVideoAlert(form, '');
     return;
   }
   const lower = text.toLowerCase();
   let field = null;
-  if (/\burl\b/.test(lower) && /required|valid|fetch/.test(lower)) {
-    field = form.querySelector('#add-video-url');
-  } else if (/\btitle\b/.test(lower) && /required/.test(lower)) {
-    field = form.querySelector('#add-video-title');
-  } else if (/upload date/.test(lower) && /required/.test(lower)) {
-    field = form.querySelector('#add-video-upload');
-  } else if (/title and upload date are required/.test(lower)) {
+  if (/title and upload date are required/.test(lower)) {
     const titleEl = form.querySelector('#add-video-title');
     const uploadEl = form.querySelector('#add-video-upload');
     if (titleEl && !String(titleEl.value || '').trim() && typeof window.setControlValidity === 'function') {
@@ -826,9 +823,15 @@ function setAddVideoFetchErr(form, msg) {
     setAddVideoAlert(form, '');
     (titleEl || uploadEl)?.focus();
     return;
-  } else if (/remote_id|already exists/.test(lower)) {
-    field = form.querySelector('#add-video-url') || form.querySelector('#add-video-title');
   }
+  if (/\btitle\b/.test(lower) && /required/.test(lower)) {
+    field = form.querySelector('#add-video-title');
+  } else if (/upload date/.test(lower) && /required/.test(lower)) {
+    field = form.querySelector('#add-video-upload');
+  } else if (/url is required|valid http|with a host/.test(lower)) {
+    field = form.querySelector('#add-video-url');
+  }
+  // remote_id / already exists → top alert (no Remote ID control in the form)
   if (field && typeof window.setControlValidity === 'function') {
     window.setControlValidity(field, text);
     setAddVideoAlert(form, '');
@@ -838,34 +841,60 @@ function setAddVideoFetchErr(form, msg) {
   setAddVideoAlert(form, text);
 }
 
+function addVideoNetworkErr(err, fallback) {
+  const m = err && err.message ? String(err.message) : '';
+  if (/failed to fetch|networkerror|load failed/i.test(m)) {
+    return 'Network error - could not reach the server. Try again.';
+  }
+  return m || fallback;
+}
+
+function addVideoURLInvalid(form) {
+  const urlEl = form?.querySelector('#add-video-url');
+  const raw = String((urlEl && urlEl.value) || '').trim();
+  if (!raw) return false;
+  if (typeof window.isValidSourceURLClient === 'function') {
+    return !window.isValidSourceURLClient(raw);
+  }
+  try {
+    const u = new URL(raw);
+    const scheme = String(u.protocol || '').toLowerCase();
+    return scheme !== 'http:' && scheme !== 'https:' || !u.hostname;
+  } catch (_) {
+    return true;
+  }
+}
+
+function syncAddVideoFetchNav(form) {
+  if (!form) return;
+  const fetchBtn = form.querySelector('.js-add-video-fetch');
+  const urlEl = form.querySelector('#add-video-url');
+  if (!fetchBtn || !urlEl) return;
+  const raw = String(urlEl.value || '').trim();
+  const invalid = addVideoURLInvalid(form);
+  fetchBtn.disabled = !raw || invalid || fetchBtn.dataset.busy === '1';
+  if (invalid && typeof window.setControlValidity === 'function') {
+    window.setControlValidity(urlEl, 'Enter a valid http(s) URL with a host.');
+  } else if (typeof window.clearControlValidity === 'function') {
+    window.clearControlValidity(urlEl);
+  }
+}
+
 function setAddVideoBusy(form, busy) {
   const fetchBtn = form?.querySelector('.js-add-video-fetch');
   const submit = form?.querySelector('.js-add-video-submit');
   const fetching = form?.querySelector('.js-add-video-fetching');
   const fields = form?.querySelector('.js-add-video-fields');
   const urlEl = form?.querySelector('#add-video-url');
-  if (fetchBtn) fetchBtn.disabled = !!busy;
+  if (fetchBtn) {
+    fetchBtn.dataset.busy = busy ? '1' : '0';
+    if (busy) fetchBtn.disabled = true;
+    else syncAddVideoFetchNav(form);
+  }
   if (submit) submit.disabled = !!busy;
   if (urlEl) urlEl.disabled = !!busy;
   if (fetching) fetching.classList.toggle('hidden', !busy);
   if (fields) fields.classList.toggle('opacity-50', !!busy);
-}
-
-function setAddVideoRemoteDisplay(form, remoteId, note) {
-  const hidden = form.querySelector('#add-video-remote-id');
-  const display = form.querySelector('#add-video-remote-display');
-  const noteEl = form.querySelector('#add-video-remote-note');
-  const id = String(remoteId || '').trim();
-  if (hidden) hidden.value = id;
-  if (display) {
-    if (id) {
-      display.textContent = id;
-      display.classList.remove('opacity-60');
-    } else {
-      display.innerHTML = '<span class="opacity-60">-</span>';
-    }
-  }
-  if (noteEl) noteEl.textContent = note || '';
 }
 
 async function pollAddVideoPrefetch(tid) {
@@ -899,6 +928,12 @@ function openAddVideoForImportMatch() {
   setAddVideoFetchErr(form, '');
   setAddVideoBusy(form, false);
   const hints = matchCtx.hints || {};
+  // Site/file id only (info.json / brackets). Synthetic suggestions are never sent.
+  let siteRemote = '';
+  if (!hints.suggested_remote_id_generated) {
+    siteRemote = String(matchCtx.draft.remote || hints.suggested_remote_id || '').trim();
+  }
+  form.dataset.addVideoSiteRemote = siteRemote;
   const urlEl = form.querySelector('#add-video-url');
   if (urlEl) urlEl.value = hints.suggested_webpage_url || '';
   const titleEl = form.querySelector('#add-video-title');
@@ -911,12 +946,10 @@ function openAddVideoForImportMatch() {
   if (uploadNote) {
     uploadNote.textContent = hints.suggested_upload_date_from_mtime ? '(file date)' : (hints.suggested_upload_date ? '(from file)' : '');
   }
-  const remote = matchCtx.draft.remote || hints.suggested_remote_id || '';
-  setAddVideoRemoteDisplay(form, remote, hints.suggested_remote_id_generated ? '(generated)' : (remote ? '(from file)' : '(generated on add)'));
+  syncAddVideoFetchNav(form);
   toggle.checked = true;
   requestAnimationFrame(() => {
-    if (urlEl && urlEl.value) urlEl.focus();
-    else titleEl?.focus();
+    titleEl?.focus();
   });
 }
 
@@ -970,7 +1003,7 @@ async function submitAddVideoForImportMatch(form) {
     const draftToken = String(form.querySelector('#add-video-draft-token')?.value || '').trim();
     const title = String(form.querySelector('#add-video-title')?.value || '').trim();
     const upload = String(form.querySelector('#add-video-upload')?.value || '').trim();
-    const remote = String(form.querySelector('#add-video-remote-id')?.value || '').trim();
+    const siteRemote = String(form.dataset.addVideoSiteRemote || '').trim();
     const payload = {};
     if (draftToken) {
       payload.draft_token = draftToken;
@@ -983,9 +1016,9 @@ async function submitAddVideoForImportMatch(form) {
       }
       payload.title = title;
       payload.upload_date = uploadDateToRFC(upload) || upload;
-      if (remote) payload.remote_id = remote;
+      if (siteRemote) payload.remote_id = siteRemote;
     }
-    const res = await fetch('/api/series/' + encodeURIComponent(seriesId) + '/videos', {
+    let res = await fetch('/api/series/' + encodeURIComponent(seriesId) + '/videos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload),
@@ -993,6 +1026,17 @@ async function submitAddVideoForImportMatch(form) {
     });
     let data = null;
     try { data = await res.json(); } catch (_) { data = null; }
+    if (!res.ok && payload.remote_id && res.status === 409) {
+      delete payload.remote_id;
+      delete form.dataset.addVideoSiteRemote;
+      res = await fetch('/api/series/' + encodeURIComponent(seriesId) + '/videos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+        credentials: 'same-origin',
+      });
+      try { data = await res.json(); } catch (_) { data = null; }
+    }
     if (!res.ok) {
       const msg = (data && (data.message || data.error)) || ('Create video failed (' + res.status + ')');
       setAddVideoFetchErr(form, msg);
@@ -1004,7 +1048,7 @@ async function submitAddVideoForImportMatch(form) {
     }
     finishImportMatchVideoCreate(data, form);
   } catch (err) {
-    setAddVideoFetchErr(form, err && err.message ? err.message : String(err));
+    setAddVideoFetchErr(form, addVideoNetworkErr(err, 'Create video failed'));
   } finally {
     if (submitBtn) submitBtn.disabled = false;
   }
@@ -2021,7 +2065,7 @@ async function runImportScan(opts) {
     renderImportPage();
     if (notifyAutoMatch) notifyAutoMatchCount(countSuggestedAutoMatches());
   } catch (err) {
-    if (isImportFetchCanceled(err)) return;
+    if (ac.signal.aborted || isImportFetchCanceled(err)) return;
     setStatusScan('Scan failed: ' + (err && err.message ? err.message : String(err)));
   } finally {
     if (importScanAbort === ac) {
@@ -2126,6 +2170,10 @@ document.body.addEventListener('click', async (ev) => {
     setAddVideoFetchErr(form, 'URL is required');
     return;
   }
+  if (addVideoURLInvalid(form)) {
+    syncAddVideoFetchNav(form);
+    return;
+  }
   setAddVideoFetchErr(form, '');
   setAddVideoBusy(form, true);
   try {
@@ -2158,13 +2206,21 @@ document.body.addEventListener('click', async (ev) => {
     }
     const uploadNote = form.querySelector('#add-video-upload-note');
     if (uploadNote) uploadNote.textContent = '(from URL)';
-    setAddVideoRemoteDisplay(form, result.remote_id || '', '(from URL)');
+    // Remote comes from draft_token on create; not shown in the form.
     if (urlEl && result.source_url) urlEl.value = result.source_url;
+    syncAddVideoFetchNav(form);
   } catch (e) {
-    setAddVideoFetchErr(form, e && e.message ? e.message : 'Fetch failed');
+    setAddVideoFetchErr(form, addVideoNetworkErr(e, 'Fetch failed'));
   } finally {
     setAddVideoBusy(form, false);
   }
+});
+document.body.addEventListener('input', (ev) => {
+  const urlEl = ev.target.closest('#add-video-url');
+  if (!urlEl) return;
+  const form = urlEl.closest('form.js-add-video-form');
+  if (!form) return;
+  syncAddVideoFetchNav(form);
 });
 document.body.addEventListener('submit', (ev) => {
   const form = ev.target.closest('form.js-add-video-form');

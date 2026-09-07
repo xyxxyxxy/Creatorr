@@ -3472,6 +3472,7 @@
       return false;
     }
   }
+  window.isValidSourceURLClient = isValidSourceURLClient;
 
   function existingSourceURLs() {
     const el = document.getElementById("series-source-urls");

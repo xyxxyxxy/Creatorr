@@ -2,7 +2,7 @@ package library_test
 
 import (
 	"errors"
-	"strings"
+	"strconv"
 	"testing"
 	"time"
 
@@ -54,7 +54,7 @@ func TestCreateIndexedVideoIgnoredAndConflict(t *testing.T) {
 	}
 }
 
-func TestCreateIndexedVideoGeneratesRemoteID(t *testing.T) {
+func TestCreateIndexedVideoAssignsRemoteIDFromPK(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
@@ -71,8 +71,9 @@ func TestCreateIndexedVideoGeneratesRemoteID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(v.RemoteID, "video-") {
-		t.Fatalf("remote_id=%q", v.RemoteID)
+	want := strconv.FormatInt(v.ID, 10)
+	if v.RemoteID != want {
+		t.Fatalf("remote_id=%q want %q", v.RemoteID, want)
 	}
 }
 

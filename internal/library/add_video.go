@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,7 +21,7 @@ import (
 type CreateIndexedVideoParams struct {
 	SeriesID    int64
 	Title       string
-	RemoteID    string // empty → generate
+	RemoteID    string // empty → assign decimal videos.id after insert
 	UploadDate  string // required RFC3339 UTC (date-only adapted)
 	SourceURL   string // optional webpage / fetch URL
 	Description string
@@ -43,9 +44,10 @@ func (s *Store) CreateIndexedVideo(p CreateIndexedVideoParams) (*Video, error) {
 		return nil, fmt.Errorf("%w: upload_date required", ErrInvalid)
 	}
 	remoteID := strings.TrimSpace(p.RemoteID)
-	if remoteID == "" {
+	assignFromID := remoteID == ""
+	if assignFromID {
 		var err error
-		remoteID, err = generateIndexedRemoteID()
+		remoteID, err = tempVideoRemoteID()
 		if err != nil {
 			return nil, err
 		}
@@ -75,6 +77,12 @@ func (s *Store) CreateIndexedVideo(p CreateIndexedVideoParams) (*Video, error) {
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
+	if assignFromID {
+		if err := s.setVideoRemoteIDToPK(id); err != nil {
+			_, _ = s.DB.SQL.Exec(`DELETE FROM videos WHERE id = ?`, id)
+			return nil, err
+		}
+	}
 	if _, err := s.ReindexSeriesUTCYear(p.SeriesID, SeasonYearFromUpload(upload)); err != nil {
 		_, _ = s.DB.SQL.Exec(`DELETE FROM videos WHERE id = ?`, id)
 		return nil, err
@@ -110,12 +118,22 @@ func (s *Store) CreateIndexedVideoFromAddDraft(seriesID int64, token, title, upl
 	})
 }
 
-func generateIndexedRemoteID() (string, error) {
-	b := make([]byte, 6)
+// tempVideoRemoteID is a short-lived unique placeholder until setVideoRemoteIDToPK runs.
+func tempVideoRemoteID() (string, error) {
+	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
-	return "video-" + hex.EncodeToString(b), nil
+	return "tmp-" + hex.EncodeToString(b), nil
+}
+
+// setVideoRemoteIDToPK sets remote_id to the decimal videos.id (episode {id} token).
+func (s *Store) setVideoRemoteIDToPK(id int64) error {
+	if id <= 0 {
+		return fmt.Errorf("%w: video id", ErrInvalid)
+	}
+	_, err := s.DB.SQL.Exec(`UPDATE videos SET remote_id = ? WHERE id = ?`, strconv.FormatInt(id, 10), id)
+	return err
 }
 
 // AddVideoDraft is ephemeral metadata for Add video (before the video row exists).

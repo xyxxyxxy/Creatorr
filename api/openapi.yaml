@@ -915,7 +915,7 @@ paths:
       description: >
         Creates a video row with status ignored (no media, no source).
         Prefer draft_token from Add video URL prefetch (remote ID and source URL from the draft).
-        Manual path requires title and upload_date; optional remote_id (empty generates one).
+        Manual path requires title and upload_date; optional remote_id (empty assigns decimal videos.id).
       parameters:
         - $ref: "#/components/parameters/SeriesId"
       requestBody:
@@ -1631,7 +1631,7 @@ components:
           description: Title for new video; defaults from filename / info.json / NFO
         remote_id:
           type: string
-          description: Remote id for new video; defaults from sidecars or import- hash
+          description: Remote id for new video; defaults from sidecars/filename, else decimal videos.id after create
         handler_id:
           type: string
           description: Optional site hint (e.g. yt-dlp); not a registry id
@@ -1736,10 +1736,10 @@ components:
           description: Prefill title for unmatched create
         suggested_remote_id:
           type: string
-          description: Prefill remote id for unmatched create (from filename/sidecars, or derived)
+          description: Prefill remote id for unmatched create (from filename/sidecars only; empty when none)
         suggested_remote_id_generated:
           type: boolean
-          description: True when suggested_remote_id was derived (no id found in filename or sidecars)
+          description: Reserved (always false); synthetic remotes are no longer suggested
         suggested_upload_date:
           type: string
           description: Prefill upload/release date for unmatched create (RFC3339 UTC from sidecar or file mtime)
@@ -2604,4 +2604,4 @@ components:
             Required on manual path (RFC3339 UTC or YYYY-MM-DD). Optional override when using draft_token.
         remote_id:
           type: string
-          description: Manual path only; empty generates a unique id. Ignored when draft_token is set.
+          description: Manual path only; empty assigns decimal videos.id after insert. Ignored when draft_token is set.
