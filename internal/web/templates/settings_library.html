@@ -9,9 +9,6 @@
 
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Root folders" "help" "Named disk paths where series store files. Each root has its own episode format." "add_modal" "modal-add-root" "add_label" "Add root")}}
-{{if .NamingLocked}}
-<div class="alert alert-info text-sm mb-2"><span>'Episode format' is locked while 'Apply episode format' is pending or running. Cancel that task on 'Tasks' or wait until it finishes.</span></div>
-{{end}}
 {{if not .Roots}}
 {{template "list_empty" "No roots yet."}}
 {{else}}

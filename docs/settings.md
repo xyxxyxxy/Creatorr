@@ -50,7 +50,7 @@ Sidecars are always converted to SRT via yt-dlp `--convert-subs srt` (no format 
 |---|---|---|
 | `cookie_invalid` | alert | Cookie/auth failure on a non-system domain task |
 | `rate_limited` | alert | Rate limit / IP block |
-| `ytdlp_failed` | alert | Any other failed non-system domain task (scan, prefetch, download, remux/pack on download, …) |
+| `ytdlp_failed` | alert | Any other failed non-system domain task (scan, prefetch, download, remux/pack on download, …). UI label **yt-dlp failure** (not a domain soft-pause; cookie/rate use separate events). |
 | `integrity_check_failed` | alert | Post-pack media verify failed (file kept; status `integrity_check_failed`) |
 | `file_sync_issues` | alert | End-of-pass digest from `sync_files`: newly missing media/sidecars and/or size mismatches (media → status `integrity_check_failed`; sidecars keep video status; no auto re-download) |
 | `pot_provider` | warning | PO token plugin/sidecar problem while yt-dlp continued (task not failed for this alone) |

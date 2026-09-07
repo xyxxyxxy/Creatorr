@@ -126,6 +126,38 @@ func TestTaskDetailFieldsCreatedAllWanted(t *testing.T) {
 	}
 }
 
+func TestTaskFailErrorText(t *testing.T) {
+	if got := taskFailErrorText("ERROR: boom", `{"error":"other"}`); got != "ERROR: boom" {
+		t.Fatalf("prefer error_message: %q", got)
+	}
+	if got := taskFailErrorText("", `{"error":"from json","created":1}`); got != "from json" {
+		t.Fatalf("json error: %q", got)
+	}
+	if got := taskFailErrorText("", "plain legacy stderr"); got != "plain legacy stderr" {
+		t.Fatalf("plain: %q", got)
+	}
+	if got := taskFailErrorText("", `{"created":1}`); got != "" {
+		t.Fatalf("no error key: %q", got)
+	}
+}
+
+func TestTaskDetailFieldsHideErrorKey(t *testing.T) {
+	h := &Handler{}
+	fields := h.taskDetailFieldsOpts(`{"error":"ERROR: boom","created":1}`, true)
+	for _, f := range fields {
+		if f.Key == "error" || f.Key == "" {
+			t.Fatalf("error should be hidden: %+v", f)
+		}
+	}
+	if len(fields) == 0 {
+		t.Fatal("expected other fields")
+	}
+	plain := h.taskDetailFieldsOpts("legacy raw detail", true)
+	if len(plain) != 0 {
+		t.Fatalf("plain detail hidden when Error row shown: %+v", plain)
+	}
+}
+
 func TestMergeVideoHistoryDetailFields(t *testing.T) {
 	rows := []taskDetailHistRow{
 		{Event: "sidecar_refreshed", VideoID: 10, VideoTitle: "Alpha", SeriesID: 1},

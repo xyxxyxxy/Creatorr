@@ -58,7 +58,7 @@ var EventLabels = map[string]string{
 	EventAll:                 "All",
 	EventCookieInvalid:       "Cookie / auth failure",
 	EventRateLimited:         "Rate limit / IP block",
-	EventYtDlpFailed:         "yt-dlp / site failure",
+	EventYtDlpFailed:         "yt-dlp failure",
 	EventVerifyFailed:        "Integrity check failed",
 	EventFileSyncIssues:      "File sync issues",
 	EventPOTProvider:         "PO token provider failure",

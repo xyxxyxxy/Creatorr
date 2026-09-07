@@ -998,6 +998,66 @@ func TestTaskDetailPage(t *testing.T) {
 	}
 }
 
+func TestTaskDetailFailedShowsError(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "fail-ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+
+	tid, err := q.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
+		Kind:   queue.KindDownload, Domain: "example.com", Message: "download",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := q.MergeDetailJSON(tid, map[string]any{"keep": "yes"}); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := q.ClaimNext()
+	if err != nil || claimed == nil || claimed.ID != tid {
+		t.Fatalf("claim: err=%v task=%v", err, claimed)
+	}
+	if err := q.Finish(tid, queue.StatusFailed, "yt-dlp download failed", "DownloadFailed", "ERROR: unable to download"); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.MergeDetailJSON(tid, map[string]any{"error": "ERROR: unable to download"}); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+	req := httptest.NewRequest(http.MethodGet, "/task/"+strconv.FormatInt(tid, 10), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Error code") || !strings.Contains(body, "DownloadFailed") {
+		t.Fatalf("missing error code: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, ">Error<") && !strings.Contains(body, ">Error</th>") {
+		t.Fatalf("missing Error label: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, "ERROR: unable to download") {
+		t.Fatalf("missing error text: %s", truncate(body, 600))
+	}
+	if strings.Contains(body, ">raw</th>") {
+		t.Fatalf("should not show unlabeled raw: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, "keep") {
+		t.Fatalf("other detail keys should remain: %s", truncate(body, 600))
+	}
+}
+
 func TestTaskDetailRenameEpisodesList(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {

@@ -262,6 +262,10 @@ func detailJSONInt(v any) int {
 }
 
 func (h *Handler) taskDetailFields(detail string) []detailField {
+	return h.taskDetailFieldsOpts(detail, false)
+}
+
+func (h *Handler) taskDetailFieldsOpts(detail string, hideErrorKey bool) []detailField {
 	detail = strings.TrimSpace(detail)
 	if detail == "" {
 		return nil
@@ -270,6 +274,10 @@ func (h *Handler) taskDetailFields(detail string) []detailField {
 	dec := json.NewDecoder(strings.NewReader(detail))
 	dec.UseNumber()
 	if err := dec.Decode(&raw); err != nil || len(raw) == 0 {
+		if hideErrorKey {
+			// Plain legacy detail shown as dedicated Error row.
+			return nil
+		}
 		return []detailField{{Key: "", Text: detail}}
 	}
 	keys := make([]string, 0, len(raw))
@@ -290,6 +298,10 @@ func (h *Handler) taskDetailFields(detail string) []detailField {
 		case domains.DetailKeyDomainAccess:
 			// Shown as dedicated Details row (Domain access chips).
 			continue
+		case "error":
+			if hideErrorKey {
+				continue
+			}
 		case "created", "updated":
 			// Scan counts: show one "Videos indexed" = created+updated (new + touched).
 			if indexedShown {
@@ -348,6 +360,26 @@ func (h *Handler) taskDetailFields(detail string) []detailField {
 		out = append(out, detailField{Key: k, Text: formatDetailScalar(v)})
 	}
 	return out
+}
+
+// taskFailErrorText returns operator-facing failure detail for the Details Error row.
+// Prefer tasks.error_message, then JSON detail.error, then plain non-JSON detail.
+func taskFailErrorText(errorMessage, detail string) string {
+	if s := strings.TrimSpace(errorMessage); s != "" {
+		return s
+	}
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return ""
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(detail), &raw); err == nil && len(raw) > 0 {
+		if v, ok := raw["error"]; ok {
+			return strings.TrimSpace(formatDetailScalar(v))
+		}
+		return ""
+	}
+	return detail
 }
 
 // taskDetailHistRow is one video_history row used to build Detail video lists.
@@ -872,7 +904,8 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		ParentKind:   parentKind,
 		Children:     children,
 	})
-	detailFields := h.taskDetailFields(t.Detail)
+	failError := taskFailErrorText(t.ErrorMessage, t.Detail)
+	detailFields := h.taskDetailFieldsOpts(t.Detail, failError != "")
 	integrityChecks := h.buildIntegrityChecks(t, events)
 	if integrityChecks != nil {
 		detailFields = filterSuppressedDetailFields(detailFields, integrityDetailSuppressKeys)
@@ -919,6 +952,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 	render(w, "task_detail", struct {
 		pageBase
 		Item            historyView
+		FailError       string
 		Payload         string
 		PayloadMuted    bool
 		DetailFields    []detailField
@@ -940,6 +974,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 	}{
 		pageBase:        newPage(fmt.Sprintf("Task #%d", id), nav, nil),
 		Item:            view,
+		FailError:       failError,
 		Payload:         payload,
 		PayloadMuted:    payloadMuted,
 		DetailFields:    detailFields,

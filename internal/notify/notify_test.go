@@ -465,6 +465,12 @@ func TestYtDlpFailedKeepsDetailTail(t *testing.T) {
 		t.Fatalf("items=%v err=%v", items, err)
 	}
 	body := items[0].Body
+	if !strings.HasPrefix(body, "Domain example.com: task failed.\n\n") {
+		t.Fatalf("want clearer lead, got %q", body)
+	}
+	if items[0].Title != "yt-dlp failure (example.com)" {
+		t.Fatalf("title=%q", items[0].Title)
+	}
 	if !strings.Contains(body, suffix) {
 		t.Fatalf("want ERROR tail in body, got %q", body)
 	}
