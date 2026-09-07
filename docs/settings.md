@@ -25,8 +25,8 @@ Editable settings (examples):
 | `metadata_domain_tag` | `1` = prepend source domain to video tags on download and Metadata Save when `source_url` is known (default on). Locked in the video Metadata Tags editor. Settings → Library → Metadata. Not retroactive until next pack or Save. |
 | `metadata_genres_from_categories` | `1` = add yt-dlp categories as video genres on download and Metadata Save when categories are known (default on). Locked rows in the video Metadata Genres editor. Settings → Library → Metadata. Not retroactive until next pack or Save. |
 | `archive_fallback` | `1` = when a cataloged video is gone at the live source (narrow unavailable), queue a Web Archive download via yt-dlp (`ytarchive:{id}` on the `archive.org` lane). Original `source_url` kept. Default on. Settings → Library → Metadata. Operator notified (`archive_fallback`) when archive media packs. |
-| `ytdlp_update_cron` | yt-dlp GitHub update schedule. Settings → Scheduler. Seed `@weekly`. **Empty = updates off** (custom binary mode: replace managed path while stopped). When set, boot + cron + Update now are enabled |
-| `ytdlp_update_channel` | `stable` (default) or `nightly` GitHub release channel when updates are enabled. Settings → Connect → yt-dlp. Disabled in UI when cron empty |
+| `ytdlp_update_cron` | yt-dlp GitHub update schedule. Settings → Scheduler. Seed `@weekly`. **Empty = automatic updates off** (no boot/cron enqueue). Channel + **Update now** on Connect still work. Custom binary: replace managed path while stopped. |
+| `ytdlp_update_channel` | `stable` (default) or `nightly` GitHub release channel for Update now and automatic updates. Settings → Connect → yt-dlp |
 | `ytdlp_installed_version` / `ytdlp_installed_at` | Internal; written on successful `ytdlp_update` only (shown read-only on Connect) |
 
 Sidecars are always converted to SRT via yt-dlp `--convert-subs srt` (no format setting).

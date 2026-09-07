@@ -36,8 +36,8 @@ var Help = map[string]string{
 	KeyMetadataDomainTag:            "On download and metadata rescan, prepend the source domain to video tags when source_url is known.",
 	KeyMetadataGenresFromCategories: "On download and metadata rescan, add yt-dlp categories as video genres when categories are known.",
 	KeyArchiveFallback:              "When a cataloged video is gone at the live source, queue a Web Archive download (yt-dlp). Original source URL is kept. Operator is notified when archive media packs.",
-	KeyYtDlpUpdateChannel:           "GitHub release channel when automatic updates are enabled (set yt-dlp update schedule under Scheduler).",
-	KeyYtDlpUpdateCron:              "When set, Creatorr checks GitHub on boot and on this schedule. Configure update channel under 'Settings → Connect'. Empty disables all GitHub updates so you can pin a custom binary at the managed path while Creatorr is stopped.",
+	KeyYtDlpUpdateChannel:           "GitHub release channel for Update now and for automatic updates when a schedule is set.",
+	KeyYtDlpUpdateCron:              "When set, Creatorr checks GitHub on boot and on this schedule. Configure update channel under 'Settings → Connect'. Empty disables boot and cron only; Update now on Connect still works.",
 	KeyYtDlpInstalledVersion:        "", // internal; written by ytdlp_update task
 	KeyYtDlpInstalledAt:             "", // internal; written by ytdlp_update task
 	KeyAuthUsername:                 "Single operator account username for Forms login.",

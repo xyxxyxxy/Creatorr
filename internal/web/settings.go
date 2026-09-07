@@ -224,9 +224,8 @@ func (h *Handler) ytdlpConnectControlsView() ytdlpConnectControlsView {
 		YtDlpLastCheckedAt: lastCheckedAt,
 		YtDlpUpdatesOn:     updatesEnabled,
 		YtDlpUpdateBusy:    updateBusy,
-		YtDlpUpdateOffTip:  "Automatic updates disabled. Set yt-dlp update schedule under Settings → Scheduler.",
 		YtDlpUpdateBusyTip: "yt-dlp update already queued or running",
-		YtDlpChannel:       h.ytdlpUpdateChannelRow(updatesEnabled),
+		YtDlpChannel:       h.ytdlpUpdateChannelRow(),
 	}
 }
 
@@ -234,7 +233,6 @@ type ytdlpConnectControlsView struct {
 	YtDlpLastCheckedAt string
 	YtDlpUpdatesOn     bool
 	YtDlpUpdateBusy    bool
-	YtDlpUpdateOffTip  string
 	YtDlpUpdateBusyTip string
 	YtDlpChannel       settingsRowView
 }
@@ -290,7 +288,7 @@ func (h *Handler) settingsConnectYtDlpLastChecked(w http.ResponseWriter, r *http
 	render(w, "ytdlp_connect_last_checked", h.ytdlpConnectControlsView())
 }
 
-func (h *Handler) ytdlpUpdateChannelRow(updatesEnabled bool) settingsRowView {
+func (h *Handler) ytdlpUpdateChannelRow() settingsRowView {
 	val, _ := settings.Get(h.Queue.DB, settings.KeyYtDlpUpdateChannel)
 	row := settingsRowView{
 		Key:   settings.KeyYtDlpUpdateChannel,
@@ -301,10 +299,6 @@ func (h *Handler) ytdlpUpdateChannelRow(updatesEnabled bool) settingsRowView {
 	}
 	for _, o := range settings.YtDlpUpdateChannelOptions() {
 		row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
-	}
-	if !updatesEnabled {
-		row.Disabled = true
-		row.DisabledTitle = "Set yt-dlp update schedule under Settings → Scheduler first."
 	}
 	return row
 }
@@ -1525,15 +1519,6 @@ func (h *Handler) actionYtDlpUpdate(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if h.Library == nil {
 		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("library unavailable"))
-		return
-	}
-	enabled, err := settings.YtDlpUpdatesEnabled(h.Queue.DB)
-	if err != nil {
-		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(err.Error()))
-		return
-	}
-	if !enabled {
-		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("Automatic yt-dlp updates disabled"))
 		return
 	}
 	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindYtDlpUpdate, queue.SystemDomain); busy {

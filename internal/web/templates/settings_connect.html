@@ -9,9 +9,9 @@
       <legend class="fieldset-legend text-lg font-semibold">yt-dlp</legend>
       <p class="text-sm opacity-60">
         {{if .YtDlpUpdatesOn}}
-        Creatorr checks GitHub for new releases on boot and on the schedule under Settings → Scheduler.
+        Creatorr checks GitHub for new releases on boot and on the schedule under Settings → Scheduler. Update now always uses the channel below.
         {{else}}
-        Automatic GitHub updates are off (empty update schedule under Settings → Scheduler). Replace the binary at the managed path while Creatorr is stopped to run a custom build; set a schedule again to re-enable managed updates.
+        Automatic GitHub updates are off (empty update schedule under Settings → Scheduler). Channel and Update now still work for a one-shot managed install; or replace the binary at the managed path while Creatorr is stopped for a custom build.
         {{end}}
       </p>
       <form method="post" action="/actions/save-settings" class="flex flex-col gap-3 js-settings-autosave">
