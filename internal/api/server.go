@@ -99,7 +99,16 @@ func (s *Server) CancelAllTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) CancelTask(w http.ResponseWriter, r *http.Request, id gen.TaskId) {
-	_, err := s.Queue.CancelWithMessage(int64(id), "Cancelled")
+	var body gen.CancelTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, apperrors.CodeInternal, "invalid JSON", err.Error())
+		return
+	}
+	if body.Reason != gen.CancelTaskRequestReasonManual {
+		writeErr(w, http.StatusBadRequest, apperrors.CodeInternal, "cancel reason required", "reason must be manual")
+		return
+	}
+	_, err := s.Queue.CancelWithReason(int64(id), queue.CancelReasonManual)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, apperrors.CodeNotFound, "task not cancellable", err.Error())
 		return
@@ -119,7 +128,7 @@ func (s *Server) SetDomainActive(w http.ResponseWriter, r *http.Request, domain 
 		return
 	}
 	if !body.Active {
-		_, _ = s.Queue.CancelDomain(host, "Domain deactivated")
+		_, _ = s.Queue.CancelDomain(host, queue.CancelReasonDomainDeactivated)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

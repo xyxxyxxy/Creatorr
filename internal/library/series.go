@@ -591,7 +591,7 @@ func (s *Store) DeleteSeries(id int64, deleteFiles bool) error {
 
 	for _, vid := range videoIDs {
 		if s.Queue != nil {
-			_, _ = s.Queue.CancelDownloadsForVideo(vid, "Cancelled (series deleted)")
+			_, _ = s.Queue.CancelDownloadsForVideo(vid, queue.CancelReasonSeriesDeleted)
 		}
 	}
 
@@ -884,7 +884,7 @@ func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*S
 	}
 	becameNever := !cur.IsSingle() && p.ScanCron != nil && scanCron == "" && !cur.ScanCronNever()
 	if becameNever && s.Queue != nil {
-		_, _ = s.Queue.CancelPendingScansForSource(sourceID)
+		_, _ = s.Queue.CancelPendingScansForSource(sourceID, queue.CancelReasonSourceUnmonitored)
 	}
 	return s.GetSource(seriesID, sourceID)
 }
@@ -922,7 +922,7 @@ func (s *Store) DeleteSource(seriesID, sourceID int64) error {
 		return err
 	}
 	if s.Queue != nil {
-		_, _ = s.Queue.CancelPendingScansForSource(sourceID)
+		_, _ = s.Queue.CancelPendingScansForSource(sourceID, queue.CancelReasonSourceDeleted)
 	}
 
 	rows, err := s.DB.SQL.Query(`SELECT id FROM videos WHERE source_id = ?`, sourceID)
@@ -947,7 +947,7 @@ func (s *Store) DeleteSource(seriesID, sourceID int64) error {
 	var mediaPaths []string
 	for _, vid := range videoIDs {
 		if s.Queue != nil {
-			_, _ = s.Queue.CancelDownloadsForVideo(vid, "Cancelled (source deleted)")
+			_, _ = s.Queue.CancelDownloadsForVideo(vid, queue.CancelReasonSourceDeleted)
 		}
 		if path, ok, err := s.HasVideoFile(vid); err != nil {
 			return err

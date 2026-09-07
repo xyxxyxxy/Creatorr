@@ -313,7 +313,7 @@ func TestCancelDomainPendingAndRunning(t *testing.T) {
 	if claimed.ID != id1 && claimed.ID != id2 {
 		t.Fatalf("unexpected claim id %d", claimed.ID)
 	}
-	out, err := s.CancelDomain("cancel.example", "Domain deactivated")
+	out, err := s.CancelDomain("cancel.example", queue.CancelReasonDomainDeactivated)
 	if err != nil {
 		t.Fatal(err)
 	}

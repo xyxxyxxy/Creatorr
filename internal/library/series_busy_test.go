@@ -76,12 +76,12 @@ func TestSeriesHasBusyMediaTasks(t *testing.T) {
 	assertBusy(serB.ID, true)
 
 	// Clear A downloads; B still busy.
-	if _, err := s.Queue.CancelDownloadsForVideo(resA.VideoID, "test"); err != nil {
+	if _, err := s.Queue.CancelDownloadsForVideo(resA.VideoID, queue.CancelReasonManual); err != nil {
 		t.Fatal(err)
 	}
 	assertBusy(serA.ID, false)
 	assertBusy(serB.ID, true)
-	if _, err := s.Queue.CancelDownloadsForVideo(resB.VideoID, "test"); err != nil {
+	if _, err := s.Queue.CancelDownloadsForVideo(resB.VideoID, queue.CancelReasonManual); err != nil {
 		t.Fatal(err)
 	}
 	assertBusy(serB.ID, false)

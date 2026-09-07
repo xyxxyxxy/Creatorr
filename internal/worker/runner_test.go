@@ -237,15 +237,15 @@ func TestRunnerCancelHistoryUsesCancelledNotLiveProgress(t *testing.T) {
 		}
 		for _, e := range hist {
 			if e.Event == library.VideoHistCancelled && e.TaskID.Valid && e.TaskID.Int64 == id {
-				if e.Message != "Cancelled" {
-					t.Fatalf("history message=%q want Cancelled", e.Message)
+				if e.Message != "Cancelled (manual)" {
+					t.Fatalf("history message=%q want Cancelled (manual)", e.Message)
 				}
 				var dbMsg string
 				if err := d.SQL.QueryRow(`SELECT message FROM tasks WHERE id = ?`, id).Scan(&dbMsg); err != nil {
 					t.Fatal(err)
 				}
-				if dbMsg != "Cancelled" {
-					t.Fatalf("task message=%q want Cancelled", dbMsg)
+				if dbMsg != "Cancelled (manual)" {
+					t.Fatalf("task message=%q want Cancelled (manual)", dbMsg)
 				}
 				return
 			}
@@ -360,6 +360,88 @@ func TestRunnerShutdownLeavesRunningForRequeue(t *testing.T) {
 	}
 	if status != queue.StatusPending || message != "Requeued after restart" {
 		t.Fatalf("after requeue status=%q message=%q", status, message)
+	}
+}
+
+func TestRunnerShutdownCancelsPrefetch(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "shutdown-prefetch.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+
+	store := queue.NewStore(d)
+	lib := library.NewStore(d, store)
+	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, err := lib.CreateProfile("default", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "P", SourceURL: "https://example.com/p", RootID: root.ID, QualityProfileID: prof.ID, Monitored: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = store.CancelAll()
+
+	id, err := store.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
+		Kind: queue.KindPrefetchSeriesMeta, Domain: "example.com", SeriesID: ser.ID,
+		Payload: map[string]any{"url": "https://example.com/channel"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	started := make(chan struct{})
+	done := make(chan struct{})
+	handlers := worker.StubHandlers()
+	handlers[queue.KindPrefetchSeriesMeta] = func(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) error {
+		progress("Prefetching…", nil)
+		close(started)
+		<-ctx.Done()
+		close(done)
+		return ctx.Err()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go (&worker.Runner{
+		Queue:    store,
+		Library:  lib,
+		Handlers: handlers,
+		Interval: 20 * time.Millisecond,
+	}).Run(ctx)
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not start")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not finish after shutdown")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	var status, message string
+	for time.Now().Before(deadline) {
+		if err := d.SQL.QueryRow(`SELECT status, message FROM tasks WHERE id = ?`, id).Scan(&status, &message); err != nil {
+			t.Fatal(err)
+		}
+		if status == queue.StatusCancelled {
+			break
+		}
+		time.Sleep(30 * time.Millisecond)
+	}
+	if status != queue.StatusCancelled || message != "Cancelled (shutdown)" {
+		t.Fatalf("status=%q message=%q want cancelled / Cancelled (shutdown)", status, message)
 	}
 }
 

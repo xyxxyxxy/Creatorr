@@ -154,8 +154,8 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 
 	st, _ := r.Queue.TaskStatus(task.ID)
 	if st == queue.StatusCancelled {
-		// Operator cancel (CancelWithMessage already set status + message).
-		msg := "Cancelled"
+		// Operator (or other) cancel already set status + message.
+		msg := "Cancelled (manual)"
 		if t, err := r.Queue.GetTask(task.ID); err == nil && t != nil {
 			task = t
 			if strings.TrimSpace(t.Message) != "" {
@@ -178,12 +178,38 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 		return
 	}
 	if errors.Is(runErr, context.Canceled) {
-		// Process shutdown / parent ctx cancel: leave status=running so boot
-		// RequeueStaleRunning can resume. Do not Finish or write cancelled history.
-		if r.Queue.Live != nil {
-			r.Queue.Live.Clear(task.ID)
+		if queue.KindResumableOnShutdown(task.Kind) {
+			// Process shutdown: leave status=running so boot RequeueStaleRunning can resume.
+			if r.Queue.Live != nil {
+				r.Queue.Live.Clear(task.ID)
+			}
+			log.Info("task interrupted (left running for requeue)", "id", task.ID, "kind", task.Kind)
+			return
 		}
-		log.Info("task interrupted (left running for requeue)", "id", task.ID, "kind", task.Kind)
+		// Interactive prefetch is not resumable: cancel with shutdown reason.
+		if _, err := r.Queue.CancelWithReason(task.ID, queue.CancelReasonShutdown); err != nil {
+			log.Warn("shutdown cancel", "task", task.ID, "err", err)
+		}
+		msg := "Cancelled (shutdown)"
+		if t, err := r.Queue.GetTask(task.ID); err == nil && t != nil {
+			task = t
+			if strings.TrimSpace(t.Message) != "" {
+				msg = t.Message
+			}
+		}
+		if r.Library != nil {
+			task.Message = msg
+			if err := r.Library.RecordTaskCancelled(task); err != nil {
+				log.Warn("record cancelled history", "task", task.ID, "err", err)
+			}
+		}
+		if r.Events != nil {
+			r.Events.TaskFailed(task.ID, task.Kind, task.Domain, msg, "Cancelled", sid, vid)
+		}
+		if mediaKind(task.Kind) {
+			r.maybeScheduleDigest(ctx, log)
+		}
+		log.Info("task cancelled (shutdown)", "id", task.ID, "kind", task.Kind)
 		return
 	}
 

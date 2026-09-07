@@ -377,7 +377,7 @@ func (h *Handler) discardVideoMetaPrefetch(videoID, taskID int64) {
 			if task.VideoID.Valid && task.VideoID.Int64 == videoID {
 				switch task.Status {
 				case queue.StatusPending, queue.StatusRunning:
-					_, _ = h.Queue.CancelWithMessage(taskID, "Metadata fetch discarded")
+					_, _ = h.Queue.CancelWithReason(taskID, queue.CancelReasonMetadataDiscarded)
 				}
 			}
 		}

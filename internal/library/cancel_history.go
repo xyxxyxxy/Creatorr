@@ -19,7 +19,7 @@ func (s *Store) RecordTaskCancelled(t *queue.Task) error {
 	}
 	msg := strings.TrimSpace(t.Message)
 	if msg == "" {
-		msg = "Cancelled"
+		msg = "Cancelled (manual)"
 	}
 
 	switch t.Kind {

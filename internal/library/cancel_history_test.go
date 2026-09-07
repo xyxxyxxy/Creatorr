@@ -34,7 +34,7 @@ func TestCancelScanWritesSourceHistory(t *testing.T) {
 	if tid == 0 {
 		t.Fatal("expected pending scan from CreateSeries")
 	}
-	if _, err := s.Queue.CancelWithMessage(tid, "Cancelled"); err != nil {
+	if _, err := s.Queue.CancelWithReason(tid, queue.CancelReasonManual); err != nil {
 		t.Fatal(err)
 	}
 

@@ -231,7 +231,7 @@ func (h *Handler) discardSeriesMetaPrefetch(seriesID, taskID int64) {
 			if task.SeriesID.Valid && task.SeriesID.Int64 == seriesID {
 				switch task.Status {
 				case queue.StatusPending, queue.StatusRunning:
-					_, _ = h.Queue.CancelWithMessage(taskID, "Metadata fetch discarded")
+					_, _ = h.Queue.CancelWithReason(taskID, queue.CancelReasonMetadataDiscarded)
 				}
 			}
 		}

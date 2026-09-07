@@ -595,7 +595,7 @@ func (s *Store) IgnoreVideo(videoID int64) ([]queue.Task, error) {
 	if s.Queue == nil {
 		return nil, nil
 	}
-	cancelled, err := s.Queue.CancelDownloadsForVideo(videoID, "Cancelled (video ignored)")
+	cancelled, err := s.Queue.CancelDownloadsForVideo(videoID, queue.CancelReasonVideoIgnored)
 	if err != nil {
 		return cancelled, err
 	}
@@ -654,7 +654,7 @@ func (s *Store) DeleteVideo(videoID int64) ([]queue.Task, error) {
 	}
 	var cancelled []queue.Task
 	if s.Queue != nil {
-		cancelled, err = s.Queue.CancelDownloadsForVideo(videoID, "Cancelled (video deleted)")
+		cancelled, err = s.Queue.CancelDownloadsForVideo(videoID, queue.CancelReasonVideoDeleted)
 		if err != nil {
 			return cancelled, err
 		}

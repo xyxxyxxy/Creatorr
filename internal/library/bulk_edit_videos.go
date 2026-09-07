@@ -325,7 +325,7 @@ func (s *Store) EnqueueBulkDeleteVideos(ids []int64) (taskID int64, queued, skip
 				continue
 			}
 			if s.Queue != nil {
-				_, _ = s.Queue.CancelDownloadsForVideo(id, "Cancelled (video deleted)")
+				_, _ = s.Queue.CancelDownloadsForVideo(id, queue.CancelReasonVideoDeleted)
 			}
 			eligible = append(eligible, id)
 		default:
