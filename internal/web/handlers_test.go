@@ -818,8 +818,8 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "Apply episode format") {
 				t.Fatalf("%s missing apply episode format", path)
 			}
-			if !strings.Contains(body, "1. Select actions") || !strings.Contains(body, "2. Select scope") {
-				t.Fatalf("%s missing numbered maintenance sections", path)
+			if !strings.Contains(body, "Select actions") || !strings.Contains(body, "Select scope") {
+				t.Fatalf("%s missing maintenance sections", path)
 			}
 			if strings.Contains(body, "maintenance-steps") || strings.Contains(body, "steps-vertical") {
 				t.Fatalf("%s still has steps UI", path)

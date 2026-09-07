@@ -2,10 +2,11 @@
 {{/* Busy flags for Apply / NFO regenerate / verify-all. Shared scope for batch Run. */}}
 <div id="maintenance-live"{{if .OOB}} hx-swap-oob="true"{{end}}>
 {{template "list_panel"}}
+<div class="w-full max-w-lg mx-auto flex flex-col gap-4 min-w-0">
 {{template "list_header" (dict "level" "section" "title" "Library maintenance" "help" "One-shot library actions. Large libraries may take a while.")}}
-  <form id="maintenance-run-form" method="post" action="/actions/maintenance-run" class="js-maintenance-run-form flex flex-col gap-4 w-full max-w-lg min-w-0">
+  <form id="maintenance-run-form" method="post" action="/actions/maintenance-run" class="js-maintenance-run-form flex flex-col gap-4 w-full min-w-0">
     <div class="fieldset bg-base-200 border border-base-300 rounded-box p-4 gap-3 w-full min-w-0">
-      <div class="fieldset-legend">1. Select actions</div>
+      <div class="fieldset-legend">Select actions</div>
       <p class="label whitespace-normal -mt-1">Pick one or more. Same scope applies to every selected action.</p>
 
       <fieldset class="fieldset">
@@ -69,7 +70,7 @@
     </div>
 
     <div class="fieldset bg-base-200 border border-base-300 rounded-box p-4 gap-3 w-full min-w-0" data-maintenance-scope>
-      <div class="fieldset-legend">2. Select scope</div>
+      <div class="fieldset-legend">Select scope</div>
       <p class="label whitespace-normal -mt-1">Optional. Empty means the whole library. Scope clears after Run.</p>
       <div class="flex flex-col gap-2 w-full min-w-0">
         <div class="flex w-full min-w-0 items-stretch gap-2">
@@ -91,6 +92,7 @@
       <button type="submit" class="btn btn-warning join-item grow" id="maintenance-run-submit" disabled>Run selected</button>
     </div>
   </form>
+</div>
 {{template "list_panel_end"}}
 </div>
 {{end}}
