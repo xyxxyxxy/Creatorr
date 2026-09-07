@@ -121,6 +121,36 @@ func TestHistoryFilterDomainKindStatus(t *testing.T) {
 	if len(kinds) != 3 {
 		t.Fatalf("kinds=%v", kinds)
 	}
+
+	_, err = s.DB.SQL.Exec(`
+		INSERT INTO tasks (kind, status, domain, message, origin, created_at, finished_at)
+		VALUES (?, ?, ?, 'ok', ?, datetime('now'), datetime('now'))
+	`, queue.KindSyncFiles, queue.StatusDone, queue.SystemDomain, queue.OriginScheduled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err = s.CountHistory(queue.HistoryFilter{Origin: queue.OriginScheduled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("scheduled origin count=%d want 1", n)
+	}
+	n, err = s.CountHistory(queue.HistoryFilter{Origin: queue.OriginManual})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 4 {
+		t.Fatalf("manual origin count=%d want 4", n)
+	}
+	// Invalid origin ignored (no extra WHERE).
+	n, err = s.CountHistory(queue.HistoryFilter{Origin: "unknown"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 5 {
+		t.Fatalf("invalid origin ignored count=%d want 5", n)
+	}
 }
 
 func TestHistoryFilterRange(t *testing.T) {

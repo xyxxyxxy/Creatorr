@@ -276,9 +276,14 @@ func isEmptyJSONPayload(s string) bool {
 
 func parseHistoryFilter(r *http.Request) queue.HistoryFilter {
 	_, _, fromBound, toBound := parseHistoryTimeRange(r)
+	origin := strings.TrimSpace(r.URL.Query().Get("origin"))
+	if !queue.ValidOrigin(origin) {
+		origin = ""
+	}
 	f := queue.HistoryFilter{
 		Domain: strings.TrimSpace(r.URL.Query().Get("domain")),
 		Kind:   strings.TrimSpace(r.URL.Query().Get("kind")),
+		Origin: origin,
 		From:   fromBound,
 		To:     toBound,
 	}
@@ -359,7 +364,7 @@ func parseHistoryDateTimeLocalUTC(s string) (time.Time, bool) {
 }
 
 func historyFilterActive(f queue.HistoryFilter) bool {
-	return len(f.Statuses) > 0 || f.Domain != "" || f.Kind != "" || f.From != "" || f.To != ""
+	return len(f.Statuses) > 0 || f.Domain != "" || f.Kind != "" || f.Origin != "" || f.From != "" || f.To != ""
 }
 
 func notifyFilterActive(f notify.ListFilter) bool {
@@ -434,9 +439,17 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 		kindOpts = append(kindOpts, listFilterOpt{Value: k, Label: k, Selected: filter.Kind == k})
 	}
 
+	originOpts := []listFilterOpt{
+		{Value: queue.OriginManual, Label: queue.OriginManual, Selected: filter.Origin == queue.OriginManual},
+		{Value: queue.OriginScheduled, Label: queue.OriginScheduled, Selected: filter.Origin == queue.OriginScheduled},
+		{Value: queue.OriginBoot, Label: queue.OriginBoot, Selected: filter.Origin == queue.OriginBoot},
+		{Value: queue.OriginTask, Label: queue.OriginTask, Selected: filter.Origin == queue.OriginTask},
+	}
+
 	selects := []listFilterSelect{
 		{Name: "domain", AriaLabel: "Domain", EmptyLabel: "All domains", Options: domainOpts},
 		{Name: "kind", AriaLabel: "Kind", EmptyLabel: "All kinds", Options: kindOpts},
+		{Name: "origin", AriaLabel: "Origin", EmptyLabel: "All origins", Options: originOpts},
 		{Name: "status", AriaLabel: "Status", EmptyLabel: "All statuses", Options: statusOpts},
 	}
 
@@ -467,6 +480,9 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 	if filter.Kind != "" {
 		notifyHidden = append(notifyHidden, hiddenFilter{Name: "kind", Value: filter.Kind})
 	}
+	if filter.Origin != "" {
+		notifyHidden = append(notifyHidden, hiddenFilter{Name: "origin", Value: filter.Origin})
+	}
 	if pageInfo.Page > 1 {
 		notifyHidden = append(notifyHidden, hiddenFilter{Name: "page", Value: strconv.Itoa(pageInfo.Page)})
 	}
@@ -488,6 +504,9 @@ func (h *Handler) historyPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if filter.Kind != "" {
 		rangeHiddenForTop = append(rangeHiddenForTop, hiddenFilter{Name: "kind", Value: filter.Kind})
+	}
+	if filter.Origin != "" {
+		rangeHiddenForTop = append(rangeHiddenForTop, hiddenFilter{Name: "origin", Value: filter.Origin})
 	}
 	if nFilter.Level != "" {
 		rangeHiddenForTop = append(rangeHiddenForTop, hiddenFilter{Name: "nlevel", Value: nFilter.Level})

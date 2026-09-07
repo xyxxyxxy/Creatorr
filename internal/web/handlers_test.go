@@ -707,6 +707,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, `id="notifications"`) || !strings.Contains(body, "Finished tasks") {
 				t.Fatalf("/history missing notification/task sections")
 			}
+			if !strings.Contains(body, `name="origin"`) || !strings.Contains(body, "All origins") {
+				t.Fatalf("/history missing origin filter select")
+			}
 			if strings.Contains(body, `class="tooltip tooltip-top join-item"`) {
 				t.Fatalf("/history range clear must not wrap join-item around the button")
 			}
