@@ -19,30 +19,26 @@
   Exception (approved): daisyUI .modal-box uses overflow-y:auto, which clips tooltip
   speech-bubble tails. Scroll the .modal overlay instead so stock tooltips paint outside the box.
   https://daisyui.com/components/tooltip/
+  DaisyUI .modal defaults to z-index 999; sticky .app-shell > header.navbar is 1100, so
+  raise every modal above the shell nav. Tall preview dialogs without tips also use
+  .modal-box-scroll (viewport-capped scroll inside the box).
 */
 .modal {
   overflow-y: auto;
+  z-index: 1200;
 }
 .modal-box {
   overflow: visible;
   max-height: none;
 }
 
-/*
-  Tall preview dialogs (no daisyUI tips inside): keep the box in the viewport and
-  scroll inside so sticky .app-shell > header.navbar (z-index 1100) does not cover
-  the dialog. DaisyUI .modal is z-index 999.
-*/
-.modal.modal-over-nav {
-  z-index: 1200;
-}
 .modal-box.modal-box-scroll {
   overflow-y: auto;
   max-height: min(90vh, 56rem);
 }
 
 /*
-  Notifications + flash toasts above daisyUI .modal (z-index 999) so the Select series/video
+  Notifications + flash toasts above .modal (z-index 1200) so the Select series/video
   library picker does not trap the bell menu or toasts under the backdrop.
 */
 .app-shell > header.navbar {

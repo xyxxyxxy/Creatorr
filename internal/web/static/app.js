@@ -2043,7 +2043,7 @@
   window.showFlashToast = function (message, opts) {
     opts = opts || {};
     const toast = document.createElement("div");
-    toast.className = "toast toast-top toast-end z-[1100]";
+    toast.className = "toast toast-top toast-end z-[1300]";
     toast.setAttribute("data-flash-toast", "");
     const alert = document.createElement("div");
     alert.setAttribute("role", "status");
