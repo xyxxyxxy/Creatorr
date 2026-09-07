@@ -942,6 +942,9 @@ func TestTaskDetailPage(t *testing.T) {
 	if !strings.Contains(body, `hx-trigger="load"`) {
 		t.Fatalf("expected one-shot logs refresh on open: %s", truncate(body, 400))
 	}
+	if !strings.Contains(body, `for="modal-cancel-task"`) || !strings.Contains(body, "data-task-progress") {
+		t.Fatalf("running task should show Cancel + progress: %s", truncate(body, 400))
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/task/"+strconv.FormatInt(tid, 10)+"/logs", nil)
 	rec = httptest.NewRecorder()
@@ -1005,6 +1008,9 @@ func TestTaskDetailPage(t *testing.T) {
 	if strings.Contains(body, "id=\"task-logs\"") {
 		t.Fatalf("logs section should be hidden when finished: %s", truncate(body, 400))
 	}
+	if strings.Contains(body, `for="modal-cancel-task"`) || strings.Contains(body, "data-task-progress") {
+		t.Fatalf("finished task must not show Cancel + progress: %s", truncate(body, 400))
+	}
 }
 
 func TestTaskDetailFailedShowsError(t *testing.T) {
@@ -1064,6 +1070,9 @@ func TestTaskDetailFailedShowsError(t *testing.T) {
 	}
 	if !strings.Contains(body, "keep") {
 		t.Fatalf("other detail keys should remain: %s", truncate(body, 600))
+	}
+	if strings.Contains(body, `for="modal-cancel-task"`) || strings.Contains(body, "data-task-progress") {
+		t.Fatalf("failed task must not show Cancel + progress: %s", truncate(body, 600))
 	}
 }
 

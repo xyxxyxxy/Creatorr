@@ -248,8 +248,9 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 			failMsg := "Live unavailable; Web Archive retry queued"
 			detail := failDetail(runErr)
 			r.mergeFailDetail(task.ID, detail)
-			r.Events.TaskFailed(task.ID, task.Kind, task.Domain, failMsg, code, sid, vid)
+			// Finish before SSE so task-detail reload sees history status (no Cancel/progress).
 			_ = r.Queue.Finish(task.ID, queue.StatusFailed, failMsg, code, detail)
+			r.Events.TaskFailed(task.ID, task.Kind, task.Domain, failMsg, code, sid, vid)
 			if _, err := r.Library.QueueArchiveFallbackAfterUnavailable(task.VideoID.Int64, task.ID, detail); err != nil {
 				log.Warn("queue archive fallback", "video", task.VideoID.Int64, "err", err)
 			}
@@ -261,13 +262,14 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 		}
 		detail := failDetail(runErr)
 		r.mergeFailDetail(task.ID, detail)
-		r.Events.TaskFailed(task.ID, task.Kind, task.Domain, msg, code, sid, vid)
 		if task.Kind == queue.KindDownload && task.VideoID.Valid && r.Library != nil {
 			if err := r.Library.MarkDownloadFailed(task.VideoID.Int64, task.ID, code, msg); err != nil {
 				log.Warn("mark wanted_download_error", "video", task.VideoID.Int64, "err", err)
 			}
 		}
+		// Finish before SSE so task-detail reload sees history status (no Cancel/progress).
 		_ = r.Queue.Finish(task.ID, queue.StatusFailed, msg, code, detail)
+		r.Events.TaskFailed(task.ID, task.Kind, task.Domain, msg, code, sid, vid)
 		r.maybeNotifyFailure(ctx, log, task, code, runErr, detail)
 		if mediaKind(task.Kind) {
 			r.maybeScheduleDigest(ctx, log)
