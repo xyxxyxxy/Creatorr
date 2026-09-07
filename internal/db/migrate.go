@@ -382,7 +382,7 @@ func (d *DB) migrateTo11() error {
 	}
 	if _, err := d.SQL.Exec(`
 		UPDATE tasks SET payload = json_remove(payload, '$.trigger')
-		WHERE json_type(payload, '$.trigger') IS NOT NULL
+		WHERE json_valid(payload) AND json_type(payload, '$.trigger') IS NOT NULL
 	`); err != nil {
 		if !strings.Contains(err.Error(), "no such table") {
 			return fmt.Errorf("strip payload.trigger: %w", err)
@@ -390,7 +390,8 @@ func (d *DB) migrateTo11() error {
 	}
 	if _, err := d.SQL.Exec(`
 		UPDATE tasks SET detail = json_remove(detail, '$.trigger')
-		WHERE detail IS NOT NULL AND TRIM(detail) != '' AND json_type(detail, '$.trigger') IS NOT NULL
+		WHERE detail IS NOT NULL AND TRIM(detail) != ''
+		  AND json_valid(detail) AND json_type(detail, '$.trigger') IS NOT NULL
 	`); err != nil {
 		if !strings.Contains(err.Error(), "no such table") {
 			return fmt.Errorf("strip detail.trigger: %w", err)

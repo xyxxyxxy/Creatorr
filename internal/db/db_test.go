@@ -870,3 +870,73 @@ func TestMigrateV11OriginAndStripTrigger(t *testing.T) {
 		t.Fatalf("task2 origin=%q want manual", o2)
 	}
 }
+
+func TestMigrateV11SkipsMalformedDetailJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "origin-badjson.db")
+	sqlDB, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = sqlDB.Exec(`
+		CREATE TABLE schema_version (version INTEGER NOT NULL);
+		INSERT INTO schema_version (version) VALUES (10);
+		CREATE TABLE tasks (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			kind TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			series_id INTEGER,
+			video_id INTEGER,
+			payload TEXT NOT NULL DEFAULT '{}',
+			error_code TEXT,
+			error_message TEXT,
+			message TEXT,
+			detail TEXT,
+			commands TEXT NOT NULL DEFAULT '[]',
+			progress REAL,
+			domain TEXT NOT NULL DEFAULT 'unknown',
+			priority INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL,
+			started_at TEXT,
+			finished_at TEXT
+		);
+		INSERT INTO tasks (id, kind, status, payload, detail, domain, created_at)
+			VALUES (1, 'scan', 'done', '{"trigger":"cron"}', 'not-json {', 'example.com', '2026-01-01T00:00:00Z');
+		INSERT INTO tasks (id, kind, status, payload, detail, domain, created_at)
+			VALUES (2, 'ytdlp_update', 'done', '{}', '{"trigger":"boot","ok":true}', 'system', '2026-01-02T00:00:00Z');
+	`)
+	if err != nil {
+		_ = sqlDB.Close()
+		t.Fatal(err)
+	}
+	_ = sqlDB.Close()
+
+	d, err := db.Open(path)
+	if err != nil {
+		t.Fatalf("open migrate: %v", err)
+	}
+	defer func() { _ = d.Close() }()
+
+	var ver int
+	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
+		t.Fatal(err)
+	}
+	if ver != 11 {
+		t.Fatalf("schema_version=%d want 11", ver)
+	}
+	var detail1, detail2, payload1 string
+	if err := d.SQL.QueryRow(`SELECT detail, payload FROM tasks WHERE id = 1`).Scan(&detail1, &payload1); err != nil {
+		t.Fatal(err)
+	}
+	if detail1 != "not-json {" {
+		t.Fatalf("malformed detail changed: %q", detail1)
+	}
+	if strings.Contains(payload1, "trigger") {
+		t.Fatalf("payload trigger not stripped: %s", payload1)
+	}
+	if err := d.SQL.QueryRow(`SELECT detail FROM tasks WHERE id = 2`).Scan(&detail2); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(detail2, `"trigger"`) {
+		t.Fatalf("valid detail trigger not stripped: %s", detail2)
+	}
+}
