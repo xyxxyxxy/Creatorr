@@ -85,7 +85,11 @@
       </div>
     </div>
 
-    <button type="submit" class="btn btn-warning w-full" id="maintenance-run-submit" disabled>Run selected</button>
+    <div class="join w-full">
+      <button type="button" class="btn join-item grow tooltip tooltip-top cursor-not-allowed" id="maintenance-preview-rename"
+        data-tip="Select 'Apply episode format' to preview renames" aria-disabled="true">Preview renames</button>
+      <button type="submit" class="btn btn-warning join-item grow" id="maintenance-run-submit" disabled>Run selected</button>
+    </div>
   </form>
 {{template "list_panel_end"}}
 </div>

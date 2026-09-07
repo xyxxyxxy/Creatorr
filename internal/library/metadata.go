@@ -337,6 +337,41 @@ func (s *Store) listPackedVideoIDs(seriesIDs []int64) ([]int64, error) {
 	return ids, rows.Err()
 }
 
+// CountPackedVideos returns how many packed videos match the maintenance scope.
+// seriesIDs and videoIDs are mutually exclusive; both empty = whole library.
+func (s *Store) CountPackedVideos(seriesIDs, videoIDs []int64) (int, error) {
+	seriesIDs = uniqInt64(seriesIDs)
+	videoIDs = uniqInt64(videoIDs)
+	if len(seriesIDs) > 0 && len(videoIDs) > 0 {
+		return 0, fmt.Errorf("%w: series_ids and video_ids are mutually exclusive", ErrInvalid)
+	}
+	q := `
+		SELECT COUNT(*)
+		FROM videos v
+		WHERE EXISTS (
+		  SELECT 1 FROM files f
+		  WHERE f.video_id = v.id AND f.kind = 'video'
+		)`
+	args := []any{}
+	switch {
+	case len(videoIDs) > 0:
+		q += ` AND v.id IN (` + sqlIntPlaceholders(len(videoIDs)) + `)`
+		for _, id := range videoIDs {
+			args = append(args, id)
+		}
+	case len(seriesIDs) > 0:
+		q += ` AND v.series_id IN (` + sqlIntPlaceholders(len(seriesIDs)) + `)`
+		for _, id := range seriesIDs {
+			args = append(args, id)
+		}
+	}
+	var n int
+	if err := s.DB.SQL.QueryRow(q, args...).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 // MaybeEnqueueImportSidecarGapFill soft-enqueues a gap-fill metadata rescan when the video
 // has a source_url after import. Fills empty episode metadata (plot/NFO fields) and missing
 // thumb/subs; never clobbers present files except rewriting episode NFO from the filled DB row.
