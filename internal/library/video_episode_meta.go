@@ -129,18 +129,22 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (Sav
 			}
 			renameIDs = append(renameIDs, videoID)
 		} else {
-			c, rerr := s.ReindexSeriesUTCDay(v.SeriesID, newDay)
-			if rerr != nil {
-				return out, rerr
+			years := map[int]bool{}
+			if y := SeasonYearFromCalendarDay(newDay); y > 0 {
+				years[y] = true
 			}
-			renameIDs = append(renameIDs, c...)
-		}
-		if dayChanged && oldDay != "" && oldDay != newDay {
-			c, rerr := s.ReindexSeriesUTCDay(v.SeriesID, oldDay)
-			if rerr != nil {
-				return out, rerr
+			if dayChanged && oldDay != "" {
+				if y := SeasonYearFromCalendarDay(oldDay); y > 0 {
+					years[y] = true
+				}
 			}
-			renameIDs = append(renameIDs, c...)
+			for y := range years {
+				c, rerr := s.ReindexSeriesUTCYear(v.SeriesID, y)
+				if rerr != nil {
+					return out, rerr
+				}
+				renameIDs = append(renameIDs, c...)
+			}
 		}
 	}
 	if title != prevTitle {

@@ -184,7 +184,7 @@
         "JoinSuffix" ".ext"
         "Validator" true
         "ValidatorHint" "Episode format is required"
-        "Hint" "Relative path under the series folder for packed episodes (no extension). Apply to existing files with 'Apply episode format' under 'Settings → Maintenance'."
+        "Hint" "Relative path under the series folder for packed episodes (no extension). Apply to existing files with 'Apply episode format' under 'Settings → Maintenance'. Including '[{id}]' is highly recommended so Import can match the site id from the filename later."
       )}}
       {{template "episode_format_tokens"}}
       {{template "field_input" (dict
@@ -242,7 +242,7 @@
         "DisabledTitle" "'Episode format' is locked while 'Apply episode format' is pending or running."
         "Validator" true
         "ValidatorHint" "Episode format is required"
-        "Hint" "Relative path under the series folder for packed episodes (no extension). Apply to existing files with 'Apply episode format' under 'Settings → Maintenance'."
+        "Hint" "Relative path under the series folder for packed episodes (no extension). Apply to existing files with 'Apply episode format' under 'Settings → Maintenance'. Including '[{id}]' is highly recommended so Import can match the site id from the filename later."
       )}}
       {{template "episode_format_tokens"}}
       {{template "field_input" (dict

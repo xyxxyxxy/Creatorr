@@ -17,26 +17,17 @@ func TestSeasonYearFromUpload(t *testing.T) {
 	}
 }
 
-func TestEpisodeMMDDIndex(t *testing.T) {
-	if got := library.EpisodeMMDDIndex(3, 15, 0); got != 31500 {
-		t.Fatalf("got %d", got)
-	}
-	if got := library.EpisodeMMDDIndex(1, 5, 1); got != 10501 {
-		t.Fatalf("got %d", got)
-	}
-}
-
-func TestAssignSeasonEpisodeMMDD(t *testing.T) {
+func TestAssignSeasonEpisodeYearSequential(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
-		Title: "MMDD", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+		Title: "YearSeq", RootID: rootID, QualityProfileID: profileID, Monitored: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	src, err := s.AddSource(ser.ID, library.AddSourceParams{
-		URL: "https://www.example.com/@mmdd",
+		URL: "https://www.example.com/@year",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -62,15 +53,15 @@ func TestAssignSeasonEpisodeMMDD(t *testing.T) {
 	if !v1.Season.Valid || int(v1.Season.Int64) != 2024 {
 		t.Fatalf("v1 season %v", v1.Season)
 	}
-	if !v1.Episode.Valid || int(v1.Episode.Int64) != 31500 {
-		t.Fatalf("v1 episode %v want 31500", v1.Episode)
+	if !v1.Episode.Valid || int(v1.Episode.Int64) != 1 {
+		t.Fatalf("v1 episode %v want 1", v1.Episode)
 	}
-	if !v2.Episode.Valid || int(v2.Episode.Int64) != 31501 {
-		t.Fatalf("v2 episode %v want 31501", v2.Episode)
+	if !v2.Episode.Valid || int(v2.Episode.Int64) != 2 {
+		t.Fatalf("v2 episode %v want 2", v2.Episode)
 	}
 }
 
-func TestSameDayDateOnlyArrivalOrder(t *testing.T) {
+func TestSameDayArrivalOrderYearSequential(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
@@ -105,12 +96,12 @@ func TestSameDayDateOnlyArrivalOrder(t *testing.T) {
 	v1, _ := s.GetVideo(r1.VideoID)
 	v2, _ := s.GetVideo(r2.VideoID)
 	v3, _ := s.GetVideo(r3.VideoID)
-	if int(v1.Episode.Int64) != 60100 || int(v2.Episode.Int64) != 60101 || int(v3.Episode.Int64) != 60102 {
+	if int(v1.Episode.Int64) != 1 || int(v2.Episode.Int64) != 2 || int(v3.Episode.Int64) != 3 {
 		t.Fatalf("episodes %v %v %v", v1.Episode, v2.Episode, v3.Episode)
 	}
 }
 
-func TestEarlierSameDayBumpsAndRepacks(t *testing.T) {
+func TestEarlierUploadBumpsAndRepacks(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	root, err := s.GetRoot(rootID)
@@ -140,13 +131,14 @@ func TestEarlierSameDayBumpsAndRepacks(t *testing.T) {
 	if err := os.WriteFile(oldMedia, []byte("m"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, _ = s.DB.SQL.Exec(`UPDATE videos SET status = 'downloaded' WHERE id = ?`, later.VideoID)
+	_, _ = s.DB.SQL.Exec(`UPDATE videos SET status = 'downloaded', season = 2024, episode = 1 WHERE id = ?`, later.VideoID)
 	_, err = s.DB.SQL.Exec(`INSERT INTO files (video_id, kind, path, acquired_at) VALUES (?, 'video', ?, ?)`,
 		later.VideoID, oldMedia, "2024-01-01T00:00:00Z")
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	// Index earlier video: DB reindexes; disk rename is via Apply enqueue (scan does not move files).
 	_, err = s.UpsertListed(ser.ID, library.ListedVideo{
 		RemoteID: "early", Title: "Early", SourceID: src.ID,
 		UploadDate: "2024-03-15T08:00:00Z",
@@ -155,16 +147,19 @@ func TestEarlierSameDayBumpsAndRepacks(t *testing.T) {
 		t.Fatal(err)
 	}
 	vLate, _ := s.GetVideo(later.VideoID)
-	if !vLate.Episode.Valid || int(vLate.Episode.Int64) != 31501 {
-		t.Fatalf("late episode after bump %v want 31501", vLate.Episode)
+	if !vLate.Episode.Valid || int(vLate.Episode.Int64) != 2 {
+		t.Fatalf("late episode after bump %v want 2", vLate.Episode)
 	}
-	var newPath string
-	_ = s.DB.SQL.QueryRow(`SELECT path FROM files WHERE video_id = ? AND kind = 'video'`, later.VideoID).Scan(&newPath)
-	if newPath == oldMedia {
-		t.Fatalf("expected repack rename, still %q", newPath)
+	// Path unchanged until Apply / peer-move (scan is DB-only).
+	var path string
+	_ = s.DB.SQL.QueryRow(`SELECT path FROM files WHERE video_id = ? AND kind = 'video'`, later.VideoID).Scan(&path)
+	if path != oldMedia {
+		t.Fatalf("scan must not rename disk, got %q", path)
 	}
-	if !fileExistsTest(newPath) {
-		t.Fatalf("missing renamed media %q", newPath)
+	var nApply int
+	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = 'rename_episodes' AND status IN ('pending', 'running')`).Scan(&nApply)
+	if nApply != 1 {
+		t.Fatalf("want scoped Apply queued after packed peer shift, got %d", nApply)
 	}
 }
 
@@ -198,7 +193,7 @@ func TestUndatedLeavesSeasonEpisodeUnset(t *testing.T) {
 	}
 }
 
-func TestDifferentDaysNoCrossBump(t *testing.T) {
+func TestDifferentDaysContinueYearCount(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
@@ -219,10 +214,39 @@ func TestDifferentDaysNoCrossBump(t *testing.T) {
 	}, 0)
 	v1, _ := s.GetVideo(r1.VideoID)
 	v2, _ := s.GetVideo(r2.VideoID)
-	if int(v1.Episode.Int64) != 31500 {
+	if int(v1.Episode.Int64) != 1 {
 		t.Fatalf("day15 %v", v1.Episode)
 	}
-	if int(v2.Episode.Int64) != 31600 {
+	if int(v2.Episode.Int64) != 2 {
 		t.Fatalf("day16 %v", v2.Episode)
+	}
+}
+
+func TestDifferentYearsIndependent(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Years", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := s.AddSource(ser.ID, library.AddSourceParams{URL: "https://www.example.com/@yrs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r1, _ := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "a", Title: "A", SourceID: src.ID, UploadDate: "2024-12-31T12:00:00Z",
+	}, 0)
+	r2, _ := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "b", Title: "B", SourceID: src.ID, UploadDate: "2025-01-01T08:00:00Z",
+	}, 0)
+	v1, _ := s.GetVideo(r1.VideoID)
+	v2, _ := s.GetVideo(r2.VideoID)
+	if int(v1.Season.Int64) != 2024 || int(v1.Episode.Int64) != 1 {
+		t.Fatalf("2024 %v/%v", v1.Season, v1.Episode)
+	}
+	if int(v2.Season.Int64) != 2025 || int(v2.Episode.Int64) != 1 {
+		t.Fatalf("2025 %v/%v", v2.Season, v2.Episode)
 	}
 }

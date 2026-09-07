@@ -82,6 +82,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/settings/queue", h.settingsQueue)
 	r.Get("/settings/scheduler", h.settingsScheduler)
 	r.Get("/settings/maintenance", h.settingsMaintenance)
+	r.Post("/actions/preview-apply-episode-naming", h.actionPreviewApplyEpisodeNaming)
 	r.Get("/settings/domains", h.settingsDomains)
 	r.Get("/import", h.importPage)
 	r.Get("/actions/import-full-scan-status", h.importFullScanStatus)
@@ -155,5 +156,6 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/refresh-sidecars-scoped", h.actionRefreshSidecarsScoped)
 	r.Post("/actions/apply-episode-naming", h.actionApplyEpisodeNaming)
 	r.Post("/actions/maintenance-run", h.actionMaintenanceRun)
+	r.Post("/actions/maintenance-confirm-summary", h.actionMaintenanceConfirmSummary)
 	r.Post("/actions/ytdlp-update", h.actionYtDlpUpdate)
 }

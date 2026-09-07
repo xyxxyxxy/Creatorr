@@ -1335,6 +1335,62 @@
     const btn = document.getElementById("maintenance-run-submit");
     const n = document.querySelectorAll(".js-maintenance-action:checked:not(:disabled)").length;
     if (btn) btn.disabled = n === 0;
+    updateMaintenancePreviewButton();
+  }
+
+  function updateMaintenancePreviewButton() {
+    const btn = document.getElementById("maintenance-preview-rename");
+    if (!btn) return;
+    const applyEl = document.querySelector(
+      '.js-maintenance-action[value="apply_episode_naming"]'
+    );
+    const applyOn =
+      applyEl && applyEl.checked && !applyEl.disabled;
+    // Join tip stays on .btn.join-item; use aria-disabled (not :disabled) so seams + tip work.
+    if (applyOn) {
+      btn.removeAttribute("aria-disabled");
+      btn.classList.remove("cursor-not-allowed", "tooltip", "tooltip-top");
+      btn.removeAttribute("data-tip");
+    } else {
+      btn.setAttribute("aria-disabled", "true");
+      btn.classList.add("cursor-not-allowed", "tooltip", "tooltip-top");
+      btn.setAttribute("data-tip", "Select 'Apply episode format' to preview renames");
+    }
+  }
+
+  function openMaintenanceRenamePreview() {
+    const toggle = document.getElementById("modal-maintenance-rename-preview");
+    const body = document.getElementById("maintenance-rename-preview-body");
+    const form = document.getElementById("maintenance-run-form");
+    if (!toggle || !body || !form) return;
+    syncMaintenanceScopeFields();
+    body.innerHTML = '<p class="text-sm opacity-60">Loading…</p>';
+    toggle.checked = true;
+    const params = new URLSearchParams();
+    const fd = new FormData(form);
+    for (const [k, v] of fd.entries()) {
+      if (k === "actions") continue;
+      params.append(k, v);
+    }
+    fetch("/actions/preview-apply-episode-naming", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "HX-Request": "true",
+      },
+      body: params.toString(),
+      credentials: "same-origin",
+    })
+      .then((res) => res.text())
+      .then((html) => {
+        body.innerHTML = html;
+        if (window.lucide && typeof window.lucide.createIcons === "function") {
+          window.lucide.createIcons();
+        }
+      })
+      .catch(() => {
+        body.innerHTML = '<p class="text-sm text-error">Preview failed.</p>';
+      });
   }
 
   function refreshMaintenanceScopeUI() {
@@ -1366,9 +1422,23 @@
     const leadEl = document.getElementById("maintenance-confirm-lead");
     const listEl = document.getElementById("maintenance-confirm-list");
     const actionsEl = document.getElementById("maintenance-confirm-actions");
+    const affectedEl = document.getElementById("maintenance-confirm-affected");
+    const externalBox = document.getElementById("maintenance-confirm-external");
+    const externalText = document.getElementById("maintenance-confirm-external-text");
     const form = document.getElementById("maintenance-run-form");
     const actionNames = selectedMaintenanceActionLabels();
-    if (!toggle || !titleEl || !leadEl || !listEl || !actionsEl || !form || actionNames.length === 0) {
+    if (
+      !toggle ||
+      !titleEl ||
+      !leadEl ||
+      !listEl ||
+      !actionsEl ||
+      !affectedEl ||
+      !externalBox ||
+      !externalText ||
+      !form ||
+      actionNames.length === 0
+    ) {
       return false;
     }
     titleEl.textContent = "Confirm run";
@@ -1409,7 +1479,51 @@
           "</span></li>"
       )
       .join("");
+    affectedEl.textContent = "Counting packed videos…";
+    externalBox.classList.add("hidden");
+    externalText.textContent = "";
     toggle.checked = true;
+
+    syncMaintenanceScopeFields();
+    const params = new URLSearchParams();
+    const fd = new FormData(form);
+    for (const [k, v] of fd.entries()) {
+      params.append(k, v);
+    }
+    fetch("/actions/maintenance-confirm-summary", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: params.toString(),
+      credentials: "same-origin",
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!toggle.checked) return;
+        if (data && data.error) {
+          affectedEl.textContent = "Could not count packed videos.";
+          return;
+        }
+        const n = data && typeof data.packed_videos === "number" ? data.packed_videos : 0;
+        affectedEl.textContent =
+          n === 1
+            ? "Affects 1 packed video in this scope."
+            : "Affects " + n + " packed videos in this scope.";
+        if (data && data.contacts_external) {
+          externalText.textContent =
+            "External sites will be contacted. 'Refresh sidecars' queues one fetch per packed video on each video's source domain (cooldown and parallel limits apply). Do not run this against a large scope unless you intend live network traffic to those hosts.";
+          externalBox.classList.remove("hidden");
+        } else {
+          externalBox.classList.add("hidden");
+          externalText.textContent = "";
+        }
+      })
+      .catch(() => {
+        if (!toggle.checked) return;
+        affectedEl.textContent = "Could not count packed videos.";
+      });
     return true;
   }
 
@@ -1446,6 +1560,12 @@
       if (ev.target.closest("#maintenance-scope-clear")) {
         clearMaintenanceScope();
         refreshMaintenanceScopeUI();
+        return;
+      }
+      if (ev.target.closest("#maintenance-preview-rename")) {
+        const btn = document.getElementById("maintenance-preview-rename");
+        if (!btn || btn.getAttribute("aria-disabled") === "true") return;
+        openMaintenanceRenamePreview();
         return;
       }
       if (ev.target.closest("#maintenance-confirm-submit")) {

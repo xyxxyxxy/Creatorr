@@ -1292,6 +1292,25 @@ func (h *Handler) actionApplyEpisodeNaming(w http.ResponseWriter, r *http.Reques
 	redirectSettings(w, r, "/settings/maintenance", "ok=apply-naming"+maintenanceScopeOKSuffix(seriesIDs, videoIDs))
 }
 
+func (h *Handler) actionPreviewApplyEpisodeNaming(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	if h.Library == nil {
+		render(w, "maintenance_rename_preview_body", map[string]any{"Err": "library unavailable"})
+		return
+	}
+	seriesIDs, videoIDs, err := parseMaintenanceScope(r)
+	if err != nil {
+		render(w, "maintenance_rename_preview_body", map[string]any{"Err": err.Error()})
+		return
+	}
+	prev, err := h.Library.PreviewApplyEpisodeNaming(seriesIDs, videoIDs)
+	if err != nil {
+		render(w, "maintenance_rename_preview_body", map[string]any{"Err": err.Error()})
+		return
+	}
+	render(w, "maintenance_rename_preview_body", map[string]any{"Preview": prev})
+}
+
 func (h *Handler) actionMaintenanceRun(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if h.Library == nil {
@@ -1400,6 +1419,39 @@ func (h *Handler) actionMaintenanceRun(w http.ResponseWriter, r *http.Request) {
 		q += "&partial=" + urlQuery(strings.Join(detail, "; "))
 	}
 	redirectSettings(w, r, "/settings/maintenance", q)
+}
+
+func (h *Handler) actionMaintenanceConfirmSummary(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if h.Library == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "library unavailable"})
+		return
+	}
+	seriesIDs, videoIDs, err := parseMaintenanceScope(r)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+		return
+	}
+	n, err := h.Library.CountPackedVideos(seriesIDs, videoIDs)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+		return
+	}
+	contactsExternal := false
+	for _, a := range r.Form["actions"] {
+		if strings.TrimSpace(a) == "refresh_sidecars" {
+			contactsExternal = true
+			break
+		}
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"packed_videos":     n,
+		"contacts_external": contactsExternal,
+	})
 }
 
 func maintenanceQueuedHas(ss []string, want string) bool {

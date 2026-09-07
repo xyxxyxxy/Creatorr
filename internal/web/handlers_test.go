@@ -472,7 +472,91 @@ func TestActionMaintenanceRunQueuesMultiple(t *testing.T) {
 		t.Fatalf("empty status %d", rec2.Code)
 	}
 	if !strings.Contains(rec2.Header().Get("Location"), "err=") {
-		t.Fatalf("empty actions want err, loc=%q", rec2.Header().Get("Location"))
+		t.Fatalf("empty location=%q", rec2.Header().Get("Location"))
+	}
+}
+
+func TestActionPreviewApplyEpisodeNaming(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "preview-rename.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	rootPath := t.TempDir()
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: rootPath})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	req := httptest.NewRequest(http.MethodPost, "/actions/preview-apply-episode-naming", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "No packed episodes") && !strings.Contains(body, "would rename") {
+		t.Fatalf("unexpected preview body: %s", body)
+	}
+}
+
+func TestActionMaintenanceConfirmSummary(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "maint-summary.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	form := strings.NewReader("actions=apply_episode_naming&actions=refresh_sidecars")
+	req := httptest.NewRequest(http.MethodPost, "/actions/maintenance-confirm-summary", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		PackedVideos     int  `json:"packed_videos"`
+		ContactsExternal bool `json:"contacts_external"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.PackedVideos != 0 {
+		t.Fatalf("packed_videos=%d", payload.PackedVideos)
+	}
+	if !payload.ContactsExternal {
+		t.Fatal("expected contacts_external for refresh_sidecars")
+	}
+
+	formLocal := strings.NewReader("actions=regenerate_nfos")
+	req2 := httptest.NewRequest(http.MethodPost, "/actions/maintenance-confirm-summary", formLocal)
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec2 := httptest.NewRecorder()
+	r.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("local status %d", rec2.Code)
+	}
+	var local struct {
+		ContactsExternal bool `json:"contacts_external"`
+	}
+	if err := json.NewDecoder(rec2.Body).Decode(&local); err != nil {
+		t.Fatal(err)
+	}
+	if local.ContactsExternal {
+		t.Fatal("regenerate_nfos must not contact external")
 	}
 }
 
@@ -734,14 +818,23 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "Apply episode format") {
 				t.Fatalf("%s missing apply episode format", path)
 			}
-			if !strings.Contains(body, "1. Select actions") || !strings.Contains(body, "2. Select scope") {
-				t.Fatalf("%s missing numbered maintenance sections", path)
+			if !strings.Contains(body, "Select actions") || !strings.Contains(body, "Select scope") {
+				t.Fatalf("%s missing maintenance sections", path)
 			}
 			if strings.Contains(body, "maintenance-steps") || strings.Contains(body, "steps-vertical") {
 				t.Fatalf("%s still has steps UI", path)
 			}
 			if !strings.Contains(body, `action="/actions/maintenance-run"`) {
 				t.Fatalf("%s missing maintenance-run form", path)
+			}
+			if !strings.Contains(body, `id="maintenance-preview-rename"`) || !strings.Contains(body, "Preview renames") {
+				t.Fatalf("%s missing Preview renames", path)
+			}
+			if !strings.Contains(body, `id="modal-maintenance-rename-preview"`) {
+				t.Fatalf("%s missing rename preview modal", path)
+			}
+			if !strings.Contains(body, `id="maintenance-confirm-affected"`) || !strings.Contains(body, `id="maintenance-confirm-external"`) {
+				t.Fatalf("%s missing confirm affected/external chrome", path)
 			}
 			if !strings.Contains(body, `name="actions"`) || !strings.Contains(body, `value="apply_episode_naming"`) {
 				t.Fatalf("%s missing action checkboxes", path)

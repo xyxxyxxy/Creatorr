@@ -14,14 +14,14 @@ import (
 func TestBuildEpisodePathsRelDefault(t *testing.T) {
 	root := t.TempDir()
 	paths, err := library.BuildEpisodePaths(root, library.EpisodeNFO{
-		SeriesTitle: "Show", Title: "Hello World", Season: 2024, Episode: 31500, UniqueID: "abc",
+		SeriesTitle: "Show", Title: "Hello World", Season: 2024, Episode: 3, UniqueID: "abc",
 	}, library.NamingConfig{
 		EpisodeFormat: library.DefaultEpisodeFormat,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantStem := "S2024E031500 [abc]"
+	wantStem := "S2024E0003 [abc]"
 	if paths.Stem != wantStem {
 		t.Fatalf("stem %q want %q", paths.Stem, wantStem)
 	}
@@ -218,7 +218,7 @@ func TestDisambiguateEpisodeBase(t *testing.T) {
 func TestPackMediaCollisionSuffix(t *testing.T) {
 	root := t.TempDir()
 	meta := library.EpisodeNFO{
-		SeriesTitle: "Show", Title: "Ep", Season: 2024, Episode: 31500, UniqueID: "abc",
+		SeriesTitle: "Show", Title: "Ep", Season: 2024, Episode: 3, UniqueID: "abc",
 	}
 	cfg := library.NamingConfig{EpisodeFormat: library.DefaultEpisodeFormat}
 	paths, err := library.BuildEpisodePaths(root, meta, cfg)

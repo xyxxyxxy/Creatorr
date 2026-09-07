@@ -35,11 +35,8 @@ func TestDefaultEpisodeFormat(t *testing.T) {
 	if strings.Contains(settings.DefaultEpisodeFormat, "{series") {
 		t.Fatalf("default must not include series token: %q", settings.DefaultEpisodeFormat)
 	}
-	if !strings.Contains(settings.DefaultEpisodeFormat, "{episode}") {
-		t.Fatalf("default should include episode token: %q", settings.DefaultEpisodeFormat)
-	}
-	if strings.Contains(settings.DefaultEpisodeFormat, "{episode:") {
-		t.Fatalf("default should use bare {episode} (6-digit pad): %q", settings.DefaultEpisodeFormat)
+	if !strings.Contains(settings.DefaultEpisodeFormat, "{episode:04}") {
+		t.Fatalf("default should include {episode:04}: %q", settings.DefaultEpisodeFormat)
 	}
 	if err := settings.ValidateEpisodeFormat(settings.DefaultEpisodeFormat); err != nil {
 		t.Fatal(err)

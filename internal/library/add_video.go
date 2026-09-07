@@ -75,7 +75,7 @@ func (s *Store) CreateIndexedVideo(p CreateIndexedVideoParams) (*Video, error) {
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
-	if _, err := s.ReindexSeriesUTCDay(p.SeriesID, UploadCalendarDate(upload)); err != nil {
+	if _, err := s.ReindexSeriesUTCYear(p.SeriesID, SeasonYearFromUpload(upload)); err != nil {
 		_, _ = s.DB.SQL.Exec(`DELETE FROM videos WHERE id = ?`, id)
 		return nil, err
 	}

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -349,6 +348,7 @@ func (p applyNamingPayload) payloadMap() map[string]any {
 
 // ApplyEpisodeNamingPass renames packed episodes to the snapshot formats.
 // Optional series_id / video_ids scope the pass. Series tasks may prelude MoveSeriesFolder.
+// Reindexes UTC years in scope first, then two-phase renames under a per-series mutex.
 func (s *Store) ApplyEpisodeNamingPass(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) (renamed, skippedBusy, failed int, err error) {
 	var p applyNamingPayload
 	_ = json.Unmarshal([]byte(task.Payload), &p)
@@ -357,8 +357,14 @@ func (s *Store) ApplyEpisodeNamingPass(ctx context.Context, task *queue.Task, pr
 		return 0, 0, 0, err
 	}
 
+	q, args := buildApplyNamingQuery(p)
+	qrows, err := s.DB.SQL.Query(q, args...)
+	if err != nil {
+		return 0, 0, 0, err
+	}
 	type row struct {
 		ID          int64
+		SeriesID    int64
 		Title       string
 		RemoteID    string
 		Season      int
@@ -369,64 +375,75 @@ func (s *Store) ApplyEpisodeNamingPass(ctx context.Context, task *queue.Task, pr
 		UploadDate  sql.NullString
 		SourceURL   string
 	}
-
-	q, args := buildApplyNamingQuery(p)
-	qrows, err := s.DB.SQL.Query(q, args...)
-	if err != nil {
-		return 0, 0, 0, err
-	}
 	var list []row
+	yearsBySeries := map[int64]map[int]bool{}
 	for qrows.Next() {
 		var r row
 		if err := qrows.Scan(&r.ID, &r.Title, &r.RemoteID, &r.Season, &r.Episode, &r.SeriesTitle, &r.RootID, &r.RootPath, &r.UploadDate, &r.SourceURL); err != nil {
 			_ = qrows.Close()
 			return 0, 0, 0, err
 		}
+		_ = s.DB.SQL.QueryRow(`SELECT series_id FROM videos WHERE id = ?`, r.ID).Scan(&r.SeriesID)
 		list = append(list, r)
+		if r.UploadDate.Valid {
+			if y := SeasonYearFromUpload(r.UploadDate.String); y > 0 && r.SeriesID > 0 {
+				if yearsBySeries[r.SeriesID] == nil {
+					yearsBySeries[r.SeriesID] = map[int]bool{}
+				}
+				yearsBySeries[r.SeriesID][y] = true
+			}
+		}
 	}
 	_ = qrows.Close()
 	if err := qrows.Err(); err != nil {
 		return 0, 0, 0, err
 	}
 
-	total := len(list)
+	for seriesID, years := range yearsBySeries {
+		for y := range years {
+			if _, err := s.ReindexSeriesUTCYear(seriesID, y); err != nil {
+				return 0, 0, 0, err
+			}
+		}
+	}
+
+	// Re-fetch season/episode after reindex.
+	bySeries := map[int64][]int64{}
 	var touched []int64
-	for i, r := range list {
+	for _, r := range list {
+		touched = append(touched, r.ID)
+		bySeries[r.SeriesID] = append(bySeries[r.SeriesID], r.ID)
+	}
+
+	total := len(list)
+	i := 0
+	for seriesID, ids := range bySeries {
 		if err := ctx.Err(); err != nil {
 			return renamed, skippedBusy, failed, err
 		}
-		p.Cursor = r.ID
-		_ = s.Queue.UpdatePayload(task.ID, p.payloadMap())
 		if progress != nil && total > 0 {
 			pct := float64(i) / float64(total)
-			progress(fmt.Sprintf("Renaming %d/%d…", i+1, total), &pct)
+			progress(fmt.Sprintf("Renaming series %d…", seriesID), &pct)
+		}
+		unlock := lockSeriesRename(seriesID)
+		nRenamed, leftovers := s.twoPhaseRepackEpisodeNumbers(ids, task.ID)
+		unlock()
+		renamed += nRenamed
+		for _, id := range leftovers {
+			busy, berr := s.videoBusyForRename(id, task.ID)
+			if berr != nil {
+				failed++
+			} else if busy {
+				skippedBusy++
+			} else {
+				failed++
+			}
 		}
 
-		busy, err := s.videoBusyForRename(r.ID, task.ID)
-		if err != nil {
-			failed++
-			touched = append(touched, r.ID)
-			continue
-		}
-		if busy {
-			skippedBusy++
-			touched = append(touched, r.ID)
-			continue
-		}
-
-		aired := ""
-		if r.UploadDate.Valid {
-			aired = r.UploadDate.String
-		}
-		cfg := p.namingConfigForRoot(r.RootID)
-		ok, skip, fail := s.renameVideoEpisodeSet(task.ID, r.ID, r.SeriesTitle, r.Title, r.RemoteID, r.Season, r.Episode, aired, namingDomain(r.SourceURL), r.RootPath, cfg)
-		touched = append(touched, r.ID)
-		if skip {
-			skippedBusy++
-		} else if fail {
-			failed++
-		} else if ok {
-			renamed++
+		i += len(ids)
+		if len(ids) > 0 {
+			p.Cursor = ids[len(ids)-1]
+			_ = s.Queue.UpdatePayload(task.ID, p.payloadMap())
 		}
 	}
 
@@ -653,126 +670,6 @@ func (s *Store) videoBusyForRename(videoID, exceptTaskID int64) (bool, error) {
 		return false, err
 	}
 	return true, nil
-}
-
-func (s *Store) renameVideoEpisodeSet(taskID, videoID int64, seriesTitle, title, remoteID string, season, episode int, aired, domain, root string, cfg NamingConfig) (renamed, skipped, failed bool) {
-	busy, _ := s.videoBusyForRename(videoID, taskID)
-	if busy {
-		return false, true, false
-	}
-
-	fileRows, err := s.DB.SQL.Query(`SELECT id, kind, path FROM files WHERE video_id = ?`, videoID)
-	if err != nil {
-		return false, false, true
-	}
-	type frow struct {
-		ID   int64
-		Kind string
-		Path string
-	}
-	var files []frow
-	var primary string
-	for fileRows.Next() {
-		var f frow
-		if err := fileRows.Scan(&f.ID, &f.Kind, &f.Path); err != nil {
-			_ = fileRows.Close()
-			return false, false, true
-		}
-		files = append(files, f)
-		if f.Kind == "video" && primary == "" {
-			primary = f.Path
-		}
-	}
-	_ = fileRows.Close()
-	if primary == "" || !fileExists(primary) {
-		return false, false, false
-	}
-
-	meta := EpisodeNFO{
-		SeriesTitle: seriesTitle,
-		Title:       title,
-		Season:      season,
-		Episode:     episode,
-		Aired:       aired,
-		UniqueID:    remoteID,
-		Domain:      domain,
-	}
-	_ = s.EnsureSeriesDirCapped(root, seriesTitle)
-	dest, err := BuildEpisodePaths(root, meta, cfg)
-	if err != nil {
-		return false, false, true
-	}
-
-	oldBase := strings.TrimSuffix(primary, filepath.Ext(primary))
-	newBase := dest.PrimaryBase
-	if filepath.Clean(oldBase) == filepath.Clean(newBase) {
-		return false, false, false
-	}
-
-	currentPaths := make([]string, 0, len(files))
-	for _, f := range files {
-		currentPaths = append(currentPaths, f.Path)
-	}
-
-	type move struct {
-		from, to string
-		id       int64
-	}
-	var moves []move
-	for _, f := range files {
-		if !strings.HasPrefix(f.Path, oldBase) {
-			return false, false, true
-		}
-		rel := strings.TrimPrefix(f.Path, oldBase)
-		to := newBase + rel
-		if DestinationOccupied(to, currentPaths) {
-			// Ideal path still taken: leave current paths (including any _N); not a hard fail.
-			return false, false, false
-		}
-		moves = append(moves, move{from: f.Path, to: to, id: f.ID})
-	}
-
-	if err := os.MkdirAll(dest.EpisodeDir, 0o755); err != nil {
-		return false, false, true
-	}
-
-	var done []move
-	for _, m := range moves {
-		if m.from == m.to {
-			done = append(done, m)
-			continue
-		}
-		if err := moveFile(m.from, m.to); err != nil {
-			for i := len(done) - 1; i >= 0; i-- {
-				d := done[i]
-				if d.from != d.to {
-					_ = moveFile(d.to, d.from)
-				}
-			}
-			return false, false, true
-		}
-		done = append(done, m)
-	}
-
-	for _, m := range done {
-		_, _ = s.DB.SQL.Exec(`UPDATE files SET path = ? WHERE id = ?`, m.to, m.id)
-	}
-
-	oldDir := filepath.Dir(primary)
-	_ = PruneEmptyDir(oldDir)
-	parent := filepath.Dir(oldDir)
-	if parent != "" && filepath.Clean(parent) != filepath.Clean(root) {
-		_ = PruneEmptyDir(parent)
-	}
-
-	_ = s.AddVideoHistory(videoID, "renamed", "Episode files renamed", map[string]any{
-		"previous":      filepath.Base(oldBase),
-		"new":           filepath.Base(newBase),
-		"previous_path": oldBase,
-		"new_path":      newBase,
-	}, taskID)
-
-	return true, false, false
 }
 
 // ApplyNamingMessage formats the finish message.

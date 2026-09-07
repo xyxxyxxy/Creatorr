@@ -2,11 +2,19 @@ package library
 
 import (
 	"database/sql"
-	"fmt"
-	"path/filepath"
 	"strings"
-	"time"
+	"sync"
 )
+
+// seriesRenameMu serializes two-phase peer renames per series (single-process).
+var seriesRenameMu sync.Map // seriesID int64 -> *sync.Mutex
+
+func lockSeriesRename(seriesID int64) func() {
+	v, _ := seriesRenameMu.LoadOrStore(seriesID, &sync.Mutex{})
+	m := v.(*sync.Mutex)
+	m.Lock()
+	return m.Unlock
+}
 
 // SeasonYearFromUpload returns the UTC calendar year used as {year} (year-season, e.g. 2026).
 // Undated upload returns 0.
@@ -18,13 +26,21 @@ func SeasonYearFromUpload(upload string) int {
 	return t.UTC().Year()
 }
 
-// EpisodeMMDDIndex encodes month, day-of-month, and 0-based same-day index as MMDDII.
-func EpisodeMMDDIndex(month, day, dayIndex int) int {
-	return month*10000 + day*100 + dayIndex
+// SeasonYearFromCalendarDay parses YYYY-MM-DD as UTC and returns the year, or 0.
+func SeasonYearFromCalendarDay(dayYYYYMMDD string) int {
+	dayYYYYMMDD = strings.TrimSpace(dayYYYYMMDD)
+	if dayYYYYMMDD == "" {
+		return 0
+	}
+	t, ok := ParseUploadTime(dayYYYYMMDD + "T00:00:00Z")
+	if !ok {
+		return 0
+	}
+	return t.UTC().Year()
 }
 
 // AssignSeasonEpisode assigns season/episode for a dated video after ensuring it is in the DB
-// (videoID > 0). Reindexes the whole UTC calendar day and returns this video's numbers.
+// (videoID > 0). Reindexes the whole UTC calendar year and returns this video's numbers.
 // Undated upload returns season=0, episode=0 without reindexing.
 func (s *Store) AssignSeasonEpisode(seriesID int64, upload string, _ int, videoID int64) (season, episode int, err error) {
 	upload = NormalizeUploadTime(upload)
@@ -41,16 +57,18 @@ func (s *Store) AssignSeasonEpisode(seriesID int64, upload string, _ int, videoI
 		return 0, 0, nil
 	}
 	if videoID <= 0 {
-		// Pre-insert: only valid when no same-day peers yet; callers should insert then Reindex.
+		// Pre-insert provisional: year + episode 1; callers insert then Reindex.
 		t, ok := ParseUploadTime(upload)
 		if !ok {
 			return 0, 0, nil
 		}
-		t = t.UTC()
-		return t.Year(), EpisodeMMDDIndex(int(t.Month()), t.Day(), 0), nil
+		return t.UTC().Year(), 1, nil
 	}
-	day := UploadCalendarDate(upload)
-	if _, err := s.ReindexSeriesUTCDay(seriesID, day); err != nil {
+	year := SeasonYearFromUpload(upload)
+	if year == 0 {
+		return 0, 0, nil
+	}
+	if _, err := s.ReindexSeriesUTCYear(seriesID, year); err != nil {
 		return 0, 0, err
 	}
 	var se, ep sql.NullInt64
@@ -67,7 +85,7 @@ func (s *Store) AssignSeasonEpisode(seriesID int64, upload string, _ int, videoI
 	return season, episode, nil
 }
 
-type dayPeer struct {
+type yearPeer struct {
 	ID         int64
 	UploadDate string
 	Season     sql.NullInt64
@@ -75,37 +93,29 @@ type dayPeer struct {
 	Status     string
 }
 
-// ReindexSeriesUTCDay sets season/episode for all series videos on the given UTC calendar day
-// (YYYY-MM-DD). Order: upload_date ASC, id ASC. Returns video IDs whose episode (or season) changed.
-func (s *Store) ReindexSeriesUTCDay(seriesID int64, dayYYYYMMDD string) (changed []int64, err error) {
-	dayYYYYMMDD = strings.TrimSpace(dayYYYYMMDD)
-	if dayYYYYMMDD == "" || seriesID == 0 {
+// ReindexSeriesUTCYear sets season/episode for all dated series videos in the UTC year.
+// Order: upload_date ASC, id ASC. Episode is 1-based. Returns video IDs whose numbers changed.
+func (s *Store) ReindexSeriesUTCYear(seriesID int64, year int) (changed []int64, err error) {
+	if seriesID == 0 || year <= 0 {
 		return nil, nil
 	}
-	dayStart, err := time.ParseInLocation("2006-01-02", dayYYYYMMDD, time.UTC)
-	if err != nil {
-		return nil, fmt.Errorf("reindex day: %w", err)
-	}
-	year := dayStart.Year()
-	month := int(dayStart.Month())
-	dom := dayStart.Day()
 
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, upload_date, season, episode, status
 		FROM videos
 		WHERE series_id = ?
 		  AND upload_date IS NOT NULL AND trim(upload_date) != ''
-		  AND date(upload_date) = date(?)
+		  AND CAST(strftime('%Y', upload_date) AS INTEGER) = ?
 		ORDER BY upload_date ASC, id ASC
-	`, seriesID, dayYYYYMMDD)
+	`, seriesID, year)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 
-	var peers []dayPeer
+	var peers []yearPeer
 	for rows.Next() {
-		var p dayPeer
+		var p yearPeer
 		if err := rows.Scan(&p.ID, &p.UploadDate, &p.Season, &p.Episode, &p.Status); err != nil {
 			return nil, err
 		}
@@ -116,7 +126,7 @@ func (s *Store) ReindexSeriesUTCDay(seriesID int64, dayYYYYMMDD string) (changed
 	}
 
 	for i, p := range peers {
-		wantEp := EpisodeMMDDIndex(month, dom, i)
+		wantEp := i + 1
 		curSe, curEp := 0, 0
 		if p.Season.Valid {
 			curSe = int(p.Season.Int64)
@@ -135,73 +145,78 @@ func (s *Store) ReindexSeriesUTCDay(seriesID int64, dayYYYYMMDD string) (changed
 	return changed, nil
 }
 
+// packedVideoIDs filters video IDs to those with packed media (downloaded / verify_failed).
+func (s *Store) packedVideoIDs(videoIDs []int64) ([]int64, error) {
+	ids := uniqInt64(videoIDs)
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	q := `SELECT id FROM videos WHERE id IN (` + sqlIntPlaceholders(len(ids)) + `)
+		AND status IN ('downloaded', 'verify_failed')`
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.DB.SQL.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// EnqueueApplyForPackedEpisodeChanges queues scoped Apply when reindex shifted packed peers.
+// No-ops when none packed, queue unavailable, or Apply already covers them.
+func (s *Store) EnqueueApplyForPackedEpisodeChanges(changed []int64) (taskID int64, queued bool, err error) {
+	packed, err := s.packedVideoIDs(changed)
+	if err != nil || len(packed) == 0 {
+		return 0, false, err
+	}
+	if s.Queue == nil {
+		return 0, false, nil
+	}
+	if s.renameEpisodesCoversVideos(packed) {
+		return 0, false, nil
+	}
+	tid, err := s.EnqueueRenameEpisodesVideos(packed)
+	if err != nil {
+		return 0, false, err
+	}
+	return tid, true, nil
+}
+
 // repackEpisodeNumberChanges renames on-disk episode sets + rewrites NFO for packed videos
 // whose season/episode changed. Skips busy download/pack tasks. taskID links renamed history.
 func (s *Store) repackEpisodeNumberChanges(videoIDs []int64, taskID int64) error {
 	if len(videoIDs) == 0 {
 		return nil
 	}
-	for _, videoID := range videoIDs {
-		if err := s.repackOneEpisodeNumbers(videoID, taskID); err != nil {
-			// Best-effort: continue other videos
+	// Group by series for mutex.
+	bySeries := map[int64][]int64{}
+	for _, videoID := range uniqInt64(videoIDs) {
+		var seriesID int64
+		if err := s.DB.SQL.QueryRow(`SELECT series_id FROM videos WHERE id = ?`, videoID).Scan(&seriesID); err != nil {
 			continue
 		}
+		bySeries[seriesID] = append(bySeries[seriesID], videoID)
 	}
-	return nil
-}
-
-func (s *Store) repackOneEpisodeNumbers(videoID int64, taskID int64) error {
-	busy, err := s.videoBusyForRename(videoID, taskID)
-	if err != nil || busy {
-		return err
+	var leftovers []int64
+	for seriesID, ids := range bySeries {
+		unlock := lockSeriesRename(seriesID)
+		_, failed := s.twoPhaseRepackEpisodeNumbers(ids, taskID)
+		unlock()
+		leftovers = append(leftovers, failed...)
 	}
-	v, err := s.GetVideo(videoID)
-	if err != nil {
-		return err
-	}
-	if v.Status != "downloaded" && v.Status != "verify_failed" {
-		return nil
-	}
-	// Undated / cleared index rows leave season/episode NULL → year-season 0 (S0000).
-	season, episode := 0, 0
-	if v.Season.Valid {
-		season = int(v.Season.Int64)
-	}
-	if v.Episode.Valid {
-		episode = int(v.Episode.Int64)
-	}
-	ser, err := s.GetSeries(v.SeriesID, false)
-	if err != nil {
-		return err
-	}
-	root, err := s.GetRoot(ser.RootID)
-	if err != nil {
-		return err
-	}
-	cfg := NamingConfigFromRoot(root)
-	aired := ""
-	if v.UploadDate.Valid {
-		aired = v.UploadDate.String
-	}
-	domain := ""
-	if v.SourceURL.Valid {
-		domain = namingDomain(v.SourceURL.String)
-	}
-	ok, _, fail := s.renameVideoEpisodeSet(taskID, videoID, ser.Title, v.Title, v.RemoteID,
-		season, episode, aired, domain, root.Path, cfg)
-	if fail {
-		return fmt.Errorf("repack rename failed for video %d", videoID)
-	}
-	var mediaPath string
-	_ = s.DB.SQL.QueryRow(`
-		SELECT path FROM files WHERE video_id = ? AND kind = 'video' ORDER BY id LIMIT 1
-	`, videoID).Scan(&mediaPath)
-	if mediaPath == "" || !fileExists(mediaPath) {
-		return nil
-	}
-	nfoBeside := strings.TrimSuffix(mediaPath, filepath.Ext(mediaPath)) + ".nfo"
-	if fileExists(nfoBeside) || ok {
-		_, _ = s.writeEpisodeNFOBeside(v, mediaPath)
+	if len(leftovers) > 0 {
+		_ = s.notifyPeerMoveNeedsApply(leftovers)
 	}
 	return nil
 }

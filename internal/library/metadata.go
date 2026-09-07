@@ -59,25 +59,27 @@ func (s *Store) RefreshListed(seriesID int64, li ListedVideo, taskID int64) (vid
 		_ = s.SetDurationSecondsIfEmpty(existingID, int(li.DurationSeconds+0.5))
 	}
 
-	prevDay := ""
+	prevYear := 0
 	if prevUpload.Valid {
-		prevDay = UploadCalendarDate(prevUpload.String)
+		prevYear = SeasonYearFromUpload(prevUpload.String)
 	}
-	newDay := UploadCalendarDate(upload)
-	if newDay != "" {
-		changed, rerr := s.ReindexSeriesUTCDay(seriesID, newDay)
+	newYear := SeasonYearFromUpload(upload)
+	years := map[int]bool{}
+	if newYear > 0 {
+		years[newYear] = true
+	}
+	if prevYear > 0 && prevYear != newYear {
+		years[prevYear] = true
+	}
+	var allChanged []int64
+	for y := range years {
+		changed, rerr := s.ReindexSeriesUTCYear(seriesID, y)
 		if rerr != nil {
 			return 0, false, rerr
 		}
-		_ = s.repackEpisodeNumberChanges(changed, taskID)
+		allChanged = append(allChanged, changed...)
 	}
-	if prevDay != "" && prevDay != newDay {
-		changed, rerr := s.ReindexSeriesUTCDay(seriesID, prevDay)
-		if rerr != nil {
-			return 0, false, rerr
-		}
-		_ = s.repackEpisodeNumberChanges(changed, taskID)
-	}
+	_ = s.repackEpisodeNumberChanges(uniqInt64(allChanged), taskID)
 
 	return existingID, true, nil
 }
@@ -133,9 +135,9 @@ func (s *Store) SoftFillVideoFromEntry(videoID int64, e ytdlp.Entry, taskID int6
 	}
 	// Soft-fill never overwrites an existing date; only reindex when we actually filled one.
 	if prevDay == "" && upload != "" {
-		newDay := UploadCalendarDate(upload)
-		if newDay != "" {
-			changed, rerr := s.ReindexSeriesUTCDay(v.SeriesID, newDay)
+		year := SeasonYearFromUpload(upload)
+		if year > 0 {
+			changed, rerr := s.ReindexSeriesUTCYear(v.SeriesID, year)
 			if rerr != nil {
 				return rerr
 			}
@@ -333,6 +335,41 @@ func (s *Store) listPackedVideoIDs(seriesIDs []int64) ([]int64, error) {
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+// CountPackedVideos returns how many packed videos match the maintenance scope.
+// seriesIDs and videoIDs are mutually exclusive; both empty = whole library.
+func (s *Store) CountPackedVideos(seriesIDs, videoIDs []int64) (int, error) {
+	seriesIDs = uniqInt64(seriesIDs)
+	videoIDs = uniqInt64(videoIDs)
+	if len(seriesIDs) > 0 && len(videoIDs) > 0 {
+		return 0, fmt.Errorf("%w: series_ids and video_ids are mutually exclusive", ErrInvalid)
+	}
+	q := `
+		SELECT COUNT(*)
+		FROM videos v
+		WHERE EXISTS (
+		  SELECT 1 FROM files f
+		  WHERE f.video_id = v.id AND f.kind = 'video'
+		)`
+	args := []any{}
+	switch {
+	case len(videoIDs) > 0:
+		q += ` AND v.id IN (` + sqlIntPlaceholders(len(videoIDs)) + `)`
+		for _, id := range videoIDs {
+			args = append(args, id)
+		}
+	case len(seriesIDs) > 0:
+		q += ` AND v.series_id IN (` + sqlIntPlaceholders(len(seriesIDs)) + `)`
+		for _, id := range seriesIDs {
+			args = append(args, id)
+		}
+	}
+	var n int
+	if err := s.DB.SQL.QueryRow(q, args...).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // MaybeEnqueueImportSidecarGapFill soft-enqueues a gap-fill metadata rescan when the video

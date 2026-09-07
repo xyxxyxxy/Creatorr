@@ -5,20 +5,20 @@ import (
 	"testing"
 )
 
-func TestExpandBareEpisodePadsSix(t *testing.T) {
+func TestExpandBareEpisodeUnpadded(t *testing.T) {
 	got, err := ExpandAndSanitize("E{episode}", Values{Episode: 101})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "E000101" {
-		t.Fatalf("got %q want E000101", got)
+	if got != "E101" {
+		t.Fatalf("got %q want E101", got)
 	}
-	got2, err := ExpandAndSanitize("E{episode:000}", Values{Episode: 101})
+	got2, err := ExpandAndSanitize("E{episode:04}", Values{Episode: 7})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got2 != "E101" {
-		t.Fatalf("explicit pad: got %q want E101", got2)
+	if got2 != "E0007" {
+		t.Fatalf("explicit pad: got %q want E0007", got2)
 	}
 }
 
@@ -66,6 +66,31 @@ func TestExpandAndSanitize(t *testing.T) {
 	}
 	if got != "Season 3" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestExpandHourMinute(t *testing.T) {
+	v := Values{Hour: 9, Minute: 5, HasClock: true}
+	got, err := ExpandAndSanitize("{hour:02}{minute:02}", v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "0905" {
+		t.Fatalf("got %q", got)
+	}
+	midnight, err := ExpandAndSanitize("{hour:02}", Values{Hour: 0, Minute: 0, HasClock: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if midnight != "00" {
+		t.Fatalf("midnight hour: %q", midnight)
+	}
+	empty, err := ExpandAndSanitize("H{hour}M{minute}", Values{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty != "HM" {
+		t.Fatalf("undated clock: %q", empty)
 	}
 }
 

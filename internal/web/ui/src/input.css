@@ -29,6 +29,19 @@
 }
 
 /*
+  Tall preview dialogs (no daisyUI tips inside): keep the box in the viewport and
+  scroll inside so sticky .app-shell > header.navbar (z-index 1100) does not cover
+  the dialog. DaisyUI .modal is z-index 999.
+*/
+.modal.modal-over-nav {
+  z-index: 1200;
+}
+.modal-box.modal-box-scroll {
+  overflow-y: auto;
+  max-height: min(90vh, 56rem);
+}
+
+/*
   Notifications + flash toasts above daisyUI .modal (z-index 999) so the Select series/video
   library picker does not trap the bell menu or toasts under the backdrop.
 */

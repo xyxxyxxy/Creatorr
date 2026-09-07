@@ -15,9 +15,27 @@
     <p class="text-sm mb-2 font-medium">Scope</p>
     <p class="text-sm mb-2" id="maintenance-confirm-lead"></p>
     <ul id="maintenance-confirm-list" class="list bg-base-200 rounded-box max-h-60 overflow-y-auto mb-2"></ul>
+    <p class="text-sm mb-3" id="maintenance-confirm-affected"></p>
+    <div id="maintenance-confirm-external" class="alert alert-warning text-sm mb-3 hidden" role="status">
+      <span id="maintenance-confirm-external-text"></span>
+    </div>
     <div class="modal-action">
       <label for="modal-maintenance-confirm" class="btn modal-cancel">Cancel</label>
       <button type="button" class="btn btn-warning" id="maintenance-confirm-submit">Run</button>
+    </div>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-maintenance-rename-preview" class="modal-toggle" />
+<div class="modal modal-over-nav" role="dialog" aria-labelledby="maintenance-rename-preview-title">
+  <div class="modal-box modal-box-scroll max-w-3xl flex flex-col gap-2">
+    <h3 class="font-bold text-lg shrink-0" id="maintenance-rename-preview-title">Preview episode renames</h3>
+    <div id="maintenance-rename-preview-body" class="min-h-0 overflow-y-auto grow">
+      <p class="text-sm opacity-60">Loading…</p>
+    </div>
+    <div class="modal-action shrink-0 mt-0">
+      <label for="modal-maintenance-rename-preview" class="btn modal-cancel">Close</label>
     </div>
   </div>
   <div class="modal-backdrop" aria-hidden="true"></div>

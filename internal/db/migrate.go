@@ -48,6 +48,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo8(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 9:
+			if err := d.migrateTo9(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -281,6 +285,16 @@ func (d *DB) migrateTo8() error {
 	}
 	if _, err := d.SQL.Exec(`ALTER TABLE videos RENAME COLUMN acquired_via_new TO acquired_via`); err != nil {
 		return fmt.Errorf("rename acquired_via_new: %w", err)
+	}
+	return nil
+}
+
+// migrateTo9 bumps exact old default episode_format to year-sequential padded default.
+func (d *DB) migrateTo9() error {
+	const legacy = `S{year}/S{year}E{episode} [{id}]`
+	const next = `S{year}/S{year}E{episode:04} [{id}]`
+	if _, err := d.SQL.Exec(`UPDATE root_folders SET episode_format = ? WHERE episode_format = ?`, next, legacy); err != nil {
+		return fmt.Errorf("bump episode_format default: %w", err)
 	}
 	return nil
 }
