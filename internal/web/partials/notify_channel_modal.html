@@ -2,7 +2,7 @@
 {{/*
   Add/edit Apprise notify channel.
   Mode: "add" | "edit"
-  Expects: Redirect, Name, URL, Events ([]string selected), EventOptions ([]{ID,Label}), ID (edit)
+  Expects: Redirect, Name, URL, Events ([]string selected), EventGroups ([]{Level,Label,Icon,IconClass,Options}), ID (edit)
   Optional: URLError (string - daisyUI validator message on URL)
 */}}
 {{$edit := eq .Mode "edit"}}
@@ -10,6 +10,8 @@
 {{if $edit}}{{$id = printf "modal-edit-notify-%d" .ID}}{{end}}
 {{$urlFieldID := "notify-url-field-add"}}
 {{if $edit}}{{$urlFieldID = printf "notify-url-field-%d" .ID}}{{end}}
+{{$allChecked := false}}
+{{range $.Events}}{{if eq . "all"}}{{$allChecked = true}}{{end}}{{end}}
 <input type="checkbox" id="{{$id}}" class="modal-toggle" {{if .URLError}}checked{{end}} />
 <div class="modal">
   <div class="modal-box max-w-lg">
@@ -35,19 +37,38 @@
         )}}
       </fieldset>
 
-      <fieldset class="fieldset" data-notify-events>
-        <legend class="fieldset-legend">Events</legend>
-        <div class="flex flex-col gap-2">
-          {{range $opt := .EventOptions}}
-          {{$checked := false}}
-          {{range $.Events}}{{if eq . $opt.ID}}{{$checked = true}}{{end}}{{end}}
+      <div class="space-y-3" data-notify-events>
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Events</legend>
           <label class="label cursor-pointer justify-start gap-2">
-            <input type="checkbox" name="events" value="{{$opt.ID}}" class="checkbox checkbox-sm" {{if eq $opt.ID "all"}}data-notify-events-all{{else}}data-notify-events-one{{end}} {{if $checked}}checked{{end}} />
-            <span class="label-text">{{$opt.Label}}</span>
+            <input type="checkbox" name="events" value="all" class="checkbox checkbox-sm" data-notify-events-all {{if $allChecked}}checked{{end}} />
+            <span class="label-text">All</span>
           </label>
-          {{end}}
-        </div>
-      </fieldset>
+        </fieldset>
+
+        {{range $g := .EventGroups}}
+        <fieldset class="fieldset gap-2 bg-base-200 border border-base-300 rounded-box p-4">
+          <legend class="fieldset-legend">
+            <span class="inline-flex items-center gap-2">
+              <span class="inline-flex {{$g.IconClass}}" aria-hidden="true">
+                <i data-lucide="{{$g.Icon}}" class="size-4"></i>
+              </span>
+              {{$g.Label}}
+            </span>
+          </legend>
+          <div class="flex flex-col gap-2">
+            {{range $opt := $g.Options}}
+            {{$checked := false}}
+            {{range $.Events}}{{if eq . $opt.ID}}{{$checked = true}}{{end}}{{end}}
+            <label class="label cursor-pointer justify-start gap-2">
+              <input type="checkbox" name="events" value="{{$opt.ID}}" class="checkbox checkbox-sm" data-notify-events-one {{if $checked}}checked{{end}} />
+              <span class="label-text">{{$opt.Label}}</span>
+            </label>
+            {{end}}
+          </div>
+        </fieldset>
+        {{end}}
+      </div>
 
       <div class="modal-action items-center flex-wrap">
         <label for="{{$id}}" class="btn">Cancel</label>

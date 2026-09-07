@@ -5095,11 +5095,12 @@
     if (changed && changed.hasAttribute("data-notify-events-all")) {
       if (allBox.checked) {
         ones.forEach((b) => {
-          b.checked = false;
+          b.checked = true;
           b.disabled = true;
         });
       } else {
         ones.forEach((b) => {
+          b.checked = false;
           b.disabled = false;
         });
       }
@@ -5112,10 +5113,10 @@
       });
       return;
     }
-    // Init / after reset: All checked → disable specifics.
+    // Init / after reset: All checked → show specifics checked + disabled.
     if (allBox.checked) {
       ones.forEach((b) => {
-        b.checked = false;
+        b.checked = true;
         b.disabled = true;
       });
     } else {

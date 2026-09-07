@@ -259,19 +259,6 @@ func PathCollisionRemaining(ctx context.Context, database *db.DB, taskID int64, 
 	return SendEvent(ctx, database, EventPathCollision, nTitle, b.String(), taskID)
 }
 
-// EpisodeRenameQueued informs that Apply episode format was queued to align on-disk names.
-func EpisodeRenameQueued(ctx context.Context, database *db.DB, taskID int64, nVideos int) error {
-	title := "Episode rename queued"
-	body := fmt.Sprintf(
-		"Episode numbers changed for %d packed video(s). Apply episode format was queued to rename files on disk.",
-		nVideos,
-	)
-	if taskID > 0 {
-		body += fmt.Sprintf("\nTask #%d", taskID)
-	}
-	return SendEvent(ctx, database, EventEpisodeRenameQueued, title, body, taskID)
-}
-
 // EpisodeRenameApplyFailed warns that auto-queue of Apply failed; operator should run Maintenance.
 func EpisodeRenameApplyFailed(ctx context.Context, database *db.DB, taskID int64, detail string) error {
 	title := "Episode rename could not be queued"

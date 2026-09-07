@@ -64,6 +64,35 @@ type notifyEventOption struct {
 	Label string
 }
 
+type notifyEventGroupView struct {
+	Level     string
+	Label     string
+	Icon      string
+	IconClass string
+	Options   []notifyEventOption
+}
+
+func notifyEventGroups() []notifyEventGroupView {
+	groups := []notifyEventGroupView{
+		{Level: notify.LevelAlert, Label: "Alert", Icon: "megaphone", IconClass: "text-error"},
+		{Level: notify.LevelWarning, Label: "Warning", Icon: "siren", IconClass: "text-warning"},
+		{Level: notify.LevelInfo, Label: "Info", Icon: "bell", IconClass: "opacity-70"},
+	}
+	byLevel := map[string]*notifyEventGroupView{
+		notify.LevelAlert:   &groups[0],
+		notify.LevelWarning: &groups[1],
+		notify.LevelInfo:    &groups[2],
+	}
+	for _, id := range notify.EventsSortedByLevel() {
+		g := byLevel[notify.EventLevel(id)]
+		if g == nil {
+			continue
+		}
+		g.Options = append(g.Options, notifyEventOption{ID: id, Label: notify.EventLabels[id]})
+	}
+	return groups
+}
+
 func maskAppriseURL(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if len(raw) <= 48 {
@@ -340,18 +369,14 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 			Events: c.Events, EventLabels: labels, InApp: notify.IsInAppChannel(c),
 		})
 	}
-	evOpts := make([]notifyEventOption, 0, 1+len(notify.AllEvents))
-	evOpts = append(evOpts, notifyEventOption{ID: notify.EventAll, Label: notify.EventLabels[notify.EventAll]})
-	for _, id := range notify.EventsSortedByLevel() {
-		evOpts = append(evOpts, notifyEventOption{ID: id, Label: notify.EventLabels[id]})
-	}
+	evGroups := notifyEventGroups()
 	render(w, "settings_connect", struct {
 		pageBase
 		FlareService          externalServiceURLView
 		PotService            externalServiceURLView
 		Settings              []settingsRowView
 		NotifyChannels        []notifyChannelView
-		EventOptions          []notifyEventOption
+		EventGroups           []notifyEventGroupView
 		DefaultEvents         []string
 		YtDlpUpdatesOn        bool
 		YtDlpInstalledVersion ytdlpInstalledVersionView
@@ -362,7 +387,7 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 		PotService:            potJoin,
 		Settings:              rows,
 		NotifyChannels:        chViews,
-		EventOptions:          evOpts,
+		EventGroups:           evGroups,
 		DefaultEvents:         []string{notify.EventAll},
 		YtDlpUpdatesOn:        updatesEnabled,
 		YtDlpInstalledVersion: ytdlpInstalledVersionView{Pending: true},

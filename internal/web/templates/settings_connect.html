@@ -108,14 +108,14 @@
 </section>
 
 {{$redir := "/settings/connect"}}
-{{$evOpts := .EventOptions}}
+{{$evGroups := .EventGroups}}
 {{template "notify_channel_modal" (dict
   "Mode" "add"
   "Redirect" $redir
   "Name" ""
   "URL" ""
   "Events" .DefaultEvents
-  "EventOptions" $evOpts
+  "EventGroups" $evGroups
 )}}
 {{range .NotifyChannels}}
 {{if not .InApp}}
@@ -126,7 +126,7 @@
   "Name" .Name
   "URL" .URL
   "Events" .Events
-  "EventOptions" $evOpts
+  "EventGroups" $evGroups
 )}}
 <input type="checkbox" id="modal-delete-notify-{{.ID}}" class="modal-toggle" />
 <div class="modal">

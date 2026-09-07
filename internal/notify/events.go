@@ -21,7 +21,6 @@ const (
 	EventFileSyncIssues      = "file_sync_issues"
 	EventPOTProvider         = "pot_provider"
 	EventPathCollision       = "path_collision"
-	EventEpisodeRenameQueued = "episode_rename_queued"
 	EventDownloadDigest      = "download_digest"
 	EventLiveSkipped         = "live_skipped"
 	EventArchiveFallback     = "archive_fallback"
@@ -52,7 +51,6 @@ var AllEvents = []string{
 	EventRateLimited,
 	EventPOTProvider,
 	EventPathCollision,
-	EventEpisodeRenameQueued,
 }
 
 // EventLabels are short UI labels for event checkboxes.
@@ -63,9 +61,8 @@ var EventLabels = map[string]string{
 	EventYtDlpFailed:         "yt-dlp / site failure",
 	EventVerifyFailed:        "Verify failed",
 	EventFileSyncIssues:      "File sync issues",
-	EventPOTProvider:         "PO token provider",
+	EventPOTProvider:         "PO token provider failure",
 	EventPathCollision:       "Episode path collision",
-	EventEpisodeRenameQueued: "Episode rename queued",
 	EventDownloadDigest:      "Downloads finished (digest)",
 	EventLiveSkipped:         "Live broadcast skipped",
 	EventArchiveFallback:     "Web Archive fallback used",
@@ -264,7 +261,7 @@ func notifyTypeFor(event string) apprise.NotifyType {
 		return apprise.NotifyFailure
 	case EventDownloadDigest:
 		return apprise.NotifySuccess
-	case EventLiveSkipped, EventArchiveFallback, EventEpisodeRenameQueued:
+	case EventLiveSkipped, EventArchiveFallback:
 		return apprise.NotifyInfo
 	default:
 		return apprise.NotifyInfo

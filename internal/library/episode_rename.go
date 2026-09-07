@@ -463,22 +463,9 @@ func (s *Store) notifyPeerMoveNeedsApply(leftoverIDs []int64) error {
 	if len(leftoverIDs) == 0 || s.DB == nil {
 		return nil
 	}
-	tid, queued, err := s.EnqueueApplyForPackedEpisodeChanges(leftoverIDs)
-	ctx := context.Background()
-	if err != nil || !queued {
-		if err != nil {
-			return notify.EpisodeRenameApplyFailed(ctx, s.DB, 0, err.Error())
-		}
-		// Already covered by Apply or nothing packed.
-		return nil
+	_, _, err := s.EnqueueApplyForPackedEpisodeChanges(leftoverIDs)
+	if err != nil {
+		return notify.EpisodeRenameApplyFailed(context.Background(), s.DB, 0, err.Error())
 	}
-	return notify.EpisodeRenameQueued(ctx, s.DB, tid, len(leftoverIDs))
-}
-
-// NotifyApplyQueuedInfo sends info that Apply was queued after scan/index reindex.
-func (s *Store) NotifyApplyQueuedInfo(taskID int64, nPacked int) {
-	if taskID <= 0 || s.DB == nil {
-		return
-	}
-	_ = notify.EpisodeRenameQueued(context.Background(), s.DB, taskID, nPacked)
+	return nil
 }
