@@ -11,15 +11,17 @@ var HistoryStatuses = []string{StatusDone, StatusFailed, StatusCancelled}
 
 const historySelectCols = `id, kind, status, series_id, video_id, payload,
 	COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-	COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at`
+	COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+	origin, parent_task_id`
 
 // HistoryFilter selects finished tasks for the History list / API.
-// Empty Statuses = all HistoryStatuses; empty Domain/Kind/From/To = no filter on that column.
+// Empty Statuses = all HistoryStatuses; empty Domain/Kind/Origin/From/To = no filter on that column.
 // From/To are inclusive UTC RFC3339Nano bounds on COALESCE(finished_at, created_at).
 type HistoryFilter struct {
 	Statuses []string
 	Domain  string
 	Kind    string
+	Origin  string // manual|scheduled|boot|task; empty = any
 	From    string
 	To      string
 }
@@ -128,6 +130,10 @@ func historyFilterSQL(f HistoryFilter) (string, []any) {
 	if k := strings.TrimSpace(f.Kind); k != "" {
 		parts = append(parts, "kind = ?")
 		args = append(args, k)
+	}
+	if o := strings.TrimSpace(f.Origin); o != "" && ValidOrigin(o) {
+		parts = append(parts, "origin = ?")
+		args = append(args, o)
 	}
 	if from := strings.TrimSpace(f.From); from != "" {
 		parts = append(parts, "datetime(COALESCE(finished_at, created_at)) >= datetime(?)")

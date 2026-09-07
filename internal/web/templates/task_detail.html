@@ -80,6 +80,12 @@
   {{else}}
   {{template "detail_row" (dict "Label" "Domain" "TdClass" "font-mono text-xs")}}
   {{end}}
+  <tr><th class="w-40">Origin</th><td class="font-mono text-xs">{{if .Item.Origin}}{{.Item.Origin}}{{else}}-{{end}}</td></tr>
+  {{if and (eq .Item.Origin "task") .Item.ParentTaskID}}
+  <tr><th class="w-40">Parent</th><td class="font-mono text-xs">
+    <a class="link link-hover" href="/task/{{.Item.ParentTaskID}}">{{if .Item.ParentKind}}{{.Item.ParentKind}} {{end}}#{{.Item.ParentTaskID}}</a>
+  </td></tr>
+  {{end}}
   {{if eq .Item.Status "pending"}}
   <tr><th class="w-40">Message</th><td class="text-sm whitespace-normal break-words" data-task-message>Queued</td></tr>
   {{else if .Item.Message}}

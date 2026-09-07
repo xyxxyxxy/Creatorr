@@ -117,6 +117,7 @@ func (s *Store) enqueueMaturityMedia(limit int) (int, error) {
 				continue
 			}
 			_, err = s.Queue.Enqueue(queue.EnqueueParams{
+				Origin:   queue.OriginScheduled,
 				Kind:     queue.KindDownload,
 				Domain:   r.domain,
 				SeriesID: r.seriesID,
@@ -209,6 +210,7 @@ func (s *Store) enqueueMaturitySidecars(limit int) (int, error) {
 			continue
 		}
 		_, err = s.Queue.Enqueue(queue.EnqueueParams{
+			Origin:   queue.OriginScheduled,
 			Kind:     queue.KindRefreshSidecars,
 			Domain:   domain,
 			SeriesID: seriesID,

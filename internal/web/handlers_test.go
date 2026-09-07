@@ -325,12 +325,14 @@ func TestOverviewShowsRunningTasks(t *testing.T) {
 	lib := library.NewStore(d, q)
 
 	pendingID, err := q.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindScan, Domain: "example.com", Message: "queued only",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	runningID, err := q.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "cdn.example", Message: "Fetching",
 	})
 	if err != nil {
@@ -705,6 +707,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, `id="notifications"`) || !strings.Contains(body, "Finished tasks") {
 				t.Fatalf("/history missing notification/task sections")
 			}
+			if !strings.Contains(body, `name="origin"`) || !strings.Contains(body, "All origins") {
+				t.Fatalf("/history missing origin filter select")
+			}
 			if strings.Contains(body, `class="tooltip tooltip-top join-item"`) {
 				t.Fatalf("/history range clear must not wrap join-item around the button")
 			}
@@ -891,6 +896,7 @@ func TestTaskDetailPage(t *testing.T) {
 	lib := library.NewStore(d, q)
 
 	tid, err := q.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindScan, Domain: "system", Message: "scan",
 	})
 	if err != nil {
@@ -1027,6 +1033,7 @@ func TestTaskDetailRenameEpisodesList(t *testing.T) {
 	}
 
 	tid, err := q.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindRenameEpisodes, Domain: queue.SystemDomain, Message: "Rename",
 	})
 	if err != nil {
@@ -1089,6 +1096,7 @@ func TestSourceDetailPage(t *testing.T) {
 	src := ser.Sources[0]
 	_, _ = q.CancelAll()
 	tid, err := q.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindScan, Domain: "example.com", Message: "Scan: indexed 1 videos",
 		SeriesID: ser.ID,
 		Payload:  map[string]any{"source_id": src.ID},

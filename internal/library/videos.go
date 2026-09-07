@@ -558,7 +558,7 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 		_ = s.CancelArchiveDownloadsForVideo(videoID)
 		_, _ = s.DB.SQL.Exec(`UPDATE videos SET status = 'wanted' WHERE id = ?`, videoID)
 	}
-	params := enqueueDownloadParams(videoID, cur.SeriesID, domain)
+	params := enqueueDownloadParams(videoID, cur.SeriesID, domain, queue.OriginManual)
 	if downloadNow {
 		params = enqueueDownloadNowParams(videoID, cur.SeriesID, domain)
 	}

@@ -10,6 +10,7 @@ import (
 func TestAddVideoPrefetchIsInteractiveAndIgnoresPause(t *testing.T) {
 	s := openStore(t)
 	id, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:   queue.KindPrefetchAddVideo,
 		Domain: "example.com",
 		Payload: map[string]any{

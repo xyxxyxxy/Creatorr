@@ -7,20 +7,20 @@ import (
 )
 
 // EnqueueYtDlpUpdate queues a system-lane yt-dlp GitHub update pass.
-func (s *Store) EnqueueYtDlpUpdate(priority int, trigger string) (int64, error) {
+// origin must be manual|scheduled|boot (API/UI force manual; cron scheduled; boot boot).
+func (s *Store) EnqueueYtDlpUpdate(priority int, origin string) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue unavailable", ErrInvalid)
 	}
-	if trigger == "" {
-		trigger = "manual"
+	if origin == "" {
+		origin = queue.OriginManual
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin:   origin,
 		Kind:     queue.KindYtDlpUpdate,
 		Domain:   queue.SystemDomain,
 		Priority: priority,
 		Message:  "yt-dlp update",
-		Payload: map[string]any{
-			"trigger": trigger,
-		},
+		Payload:  map[string]any{},
 	})
 }

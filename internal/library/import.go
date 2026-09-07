@@ -849,6 +849,7 @@ func (s *Store) EnqueueImport(path string, videoID int64, verify, replace bool) 
 		msg = fmt.Sprintf("Replace %s", filepath.Base(abs))
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:     queue.KindImport,
 		Domain:   queue.SystemDomain,
 		SeriesID: v.SeriesID,
@@ -922,6 +923,7 @@ func (s *Store) EnqueueAttachSidecars(videoID int64, paths []string) (int64, err
 		msg = fmt.Sprintf("Attach sidecar %s", filepath.Base(absPaths[0]))
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:     queue.KindImport,
 		Domain:   queue.SystemDomain,
 		SeriesID: v.SeriesID,

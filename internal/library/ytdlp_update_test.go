@@ -17,14 +17,14 @@ func TestEnqueueYtDlpUpdateDuplicate(t *testing.T) {
 	defer func() { _ = d.Close() }()
 	q := queue.NewStore(d)
 	lib := NewStore(d, q)
-	id1, err := lib.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, "manual")
+	id1, err := lib.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, queue.OriginManual)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if id1 == 0 {
 		t.Fatal("expected task id")
 	}
-	_, err = lib.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, "manual")
+	_, err = lib.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, queue.OriginManual)
 	if err == nil {
 		t.Fatal("expected duplicate rejection")
 	}

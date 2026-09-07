@@ -112,7 +112,7 @@ func TestEventsSortedByLevel(t *testing.T) {
 
 func seedTask(t *testing.T, d *db.DB) int64 {
 	t.Helper()
-	id, err := queue.NewStore(d).Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com"})
+	id, err := queue.NewStore(d).Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}

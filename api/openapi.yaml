@@ -1508,7 +1508,7 @@ components:
 
     Task:
       type: object
-      required: [id, kind, status, domain, created_at]
+      required: [id, kind, status, domain, created_at, origin]
       properties:
         id:
           type: integer
@@ -1553,6 +1553,15 @@ components:
           type: string
           format: date-time
           nullable: true
+        origin:
+          type: string
+          description: Kick source (how the task was queued)
+          enum: [manual, scheduled, boot, task]
+        parent_task_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Spawning task id when origin is task
 
     EnqueueTaskRequest:
       type: object

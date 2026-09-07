@@ -10,7 +10,7 @@ import (
 func TestLiveProgressNotWrittenToDB(t *testing.T) {
 	s := openStore(t)
 	vid := seedVideo(t, s, "live1")
-	id, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com", VideoID: vid})
+	id, err := s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com", VideoID: vid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestLiveProgressNotWrittenToDB(t *testing.T) {
 func TestRequeueStaleRunningClearsProgress(t *testing.T) {
 	s := openStore(t)
 	vid := seedVideo(t, s, "live2")
-	id, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com", VideoID: vid})
+	id, err := s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com", VideoID: vid})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestRequeueStaleRunningClearsProgress(t *testing.T) {
 func TestLiveStateClearedOnFinish(t *testing.T) {
 	s := openStore(t)
 	vid := seedVideo(t, s, "live3")
-	id, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com", VideoID: vid})
+	id, err := s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com", VideoID: vid})
 	if err != nil {
 		t.Fatal(err)
 	}

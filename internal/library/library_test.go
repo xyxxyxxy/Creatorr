@@ -54,6 +54,7 @@ func seedRootProfile(t *testing.T, s *library.Store) (rootID, profileID int64) {
 func seedTaskID(t *testing.T, s *library.Store) int64 {
 	t.Helper()
 	tid, err := s.Queue.InsertRunning(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:    "test",
 		Domain:  queue.SystemDomain,
 		Message: "test",
@@ -240,7 +241,7 @@ func TestUnmonitorSeriesCancelsCatchupKeepsHistory(t *testing.T) {
 	if err := s.SetSeriesMonitored(ser.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.EnqueueScanSource(srcID); err != nil {
+	if _, err := s.EnqueueScanSource(srcID, queue.OriginManual); err != nil {
 		t.Fatal(err)
 	}
 	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = 'scan' AND status = 'pending'`).Scan(&pending)
@@ -1877,8 +1878,8 @@ func TestEnqueueDownloadWantedContinuesOtherDomainsWhenOneFull(t *testing.T) {
 	}
 	// Fill A's download cap without tying series_id (keeps fair RR equal so A stays first).
 	if _, err := s.DB.SQL.Exec(`
-		INSERT INTO tasks (kind, status, domain, message, created_at)
-		VALUES (?, ?, 'a.example.com', 'filler', datetime('now'))
+		INSERT INTO tasks (kind, status, domain, message, origin, created_at)
+		VALUES (?, ?, 'a.example.com', 'filler', 'manual', datetime('now'))
 	`, queue.KindDownload, queue.StatusPending); err != nil {
 		t.Fatal(err)
 	}

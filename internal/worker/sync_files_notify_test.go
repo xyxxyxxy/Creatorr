@@ -90,7 +90,7 @@ func TestSyncFilesHandlerDigestOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tid, err := q.Enqueue(queue.EnqueueParams{Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "sync"})
+	tid, err := q.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "sync"})
 	if err != nil {
 		t.Fatal(err)
 	}

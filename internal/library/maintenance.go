@@ -135,7 +135,7 @@ func (s *Store) EnqueueScansDue(now, notBefore time.Time) (int, error) {
 		if err != nil || !due {
 			continue
 		}
-		if _, err := s.EnqueueScanSource(r.id); err != nil {
+		if _, err := s.EnqueueScanSource(r.id, queue.OriginScheduled); err != nil {
 			if errors.Is(err, ErrConflict) || errors.Is(err, ErrInvalid) {
 				continue
 			}
@@ -355,7 +355,7 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 		if busy {
 			continue
 		}
-		_, err = s.Queue.Enqueue(enqueueDownloadParams(r.id, r.seriesID, r.domain))
+		_, err = s.Queue.Enqueue(enqueueDownloadParams(r.id, r.seriesID, r.domain, queue.OriginScheduled))
 		if err != nil {
 			if errors.Is(err, queue.ErrQueueFull) {
 				if !fullDomains[r.domain] {

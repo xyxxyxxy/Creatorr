@@ -371,6 +371,7 @@ type taskStageView struct {
 	IsFirst    bool
 	IsLast     bool
 	HistoryID  int64             // optional /task/{id} link on Event (0 = none)
+	OriginIcon string            // lucide name when set (origin / pending child); muted middle icon
 	Substages  []taskStageSubview // nested stages under a grouped video-history node
 }
 
@@ -380,6 +381,65 @@ type taskStageSubview struct {
 	Message  string
 	HasError bool
 	Neutral  bool
+}
+
+// taskStagesInput builds Stages for a task detail page.
+type taskStagesInput struct {
+	Events       []library.VideoHistoryEvent
+	Now          time.Time
+	Created      string
+	Started      string
+	Finished     string
+	Status       string
+	Origin       string
+	ParentTaskID int64
+	ParentKind   string
+	Children     []queue.Task
+}
+
+type stageRank int
+
+const (
+	stageRankOrigin stageRank = iota
+	stageRankEnqueued
+	stageRankChild
+	stageRankStarted
+	stageRankHistory
+	stageRankTerminal
+)
+
+type stagedItem struct {
+	view taskStageView
+	at   time.Time
+	rank stageRank
+}
+
+func originLucide(origin string) string {
+	switch origin {
+	case queue.OriginManual:
+		return "mouse-pointer-click"
+	case queue.OriginScheduled:
+		return "calendar-clock"
+	case queue.OriginBoot:
+		return "power"
+	case queue.OriginTask:
+		return "git-branch"
+	default:
+		return ""
+	}
+}
+
+func childStageStyle(status string) (hasError, neutral bool, icon string) {
+	switch status {
+	case queue.StatusPending, queue.StatusRunning:
+		return false, true, "git-branch"
+	case queue.StatusFailed:
+		return true, false, ""
+	case queue.StatusCancelled:
+		return false, true, ""
+	default:
+		return false, false, ""
+	}
 }
 
 // singleVideoHistory is true when every video_history row shares one video_id > 0.
@@ -397,14 +457,13 @@ func singleVideoHistory(events []library.VideoHistoryEvent) bool {
 }
 
 // taskStages builds the Stages timeline for every task view (latest at top, oldest at bottom).
-// Always includes enqueued from created_at when set. Single-video video_history
-// appends those events; otherwise appends started. Terminal done/failed/cancelled
-// is always included when the task has finished.
-func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, taskStarted, taskFinished, status string) []taskStageView {
-	out := make([]taskStageView, 0, len(events)+4)
-	rawTimes := make([]time.Time, 0, len(events)+4)
+// Always includes origin + enqueued from created_at when set. Single-video video_history
+// appends those events; otherwise appends started. Direct children (parent_task_id) appear
+// as kind nodes. Terminal done/failed/cancelled is always included when the task has finished.
+func taskStages(in taskStagesInput) []taskStageView {
+	items := make([]stagedItem, 0, len(in.Events)+len(in.Children)+6)
 
-	appendStage := func(event, message, rawAt string, err, neutral bool) {
+	appendItem := func(event, message, rawAt string, err, neutral bool, historyID int64, originIcon string, rank stageRank) {
 		if event == "" {
 			return
 		}
@@ -414,46 +473,86 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 		}
 		abs, ago := "", ""
 		if rawAt != "" {
-			abs, ago = createdAgoPairShort(rawAt, now)
+			abs, ago = createdAgoPairShort(rawAt, in.Now)
 		}
-		rawTimes = append(rawTimes, tAt)
-		out = append(out, taskStageView{
-			Event:      event,
-			Message:    message,
-			CreatedAt:  abs,
-			CreatedAgo: ago,
-			HasError:   err,
-			Neutral:    neutral && !err,
+		items = append(items, stagedItem{
+			at:   tAt,
+			rank: rank,
+			view: taskStageView{
+				Event:      event,
+				Message:    message,
+				CreatedAt:  abs,
+				CreatedAgo: ago,
+				HasError:   err,
+				Neutral:    neutral && !err,
+				HistoryID:  historyID,
+				OriginIcon: originIcon,
+			},
 		})
 	}
 
-	createdAt := strings.TrimSpace(taskCreated)
+	createdAt := strings.TrimSpace(in.Created)
 	if createdAt == "" {
-		createdAt = now.UTC().Format(time.RFC3339Nano)
+		createdAt = in.Now.UTC().Format(time.RFC3339Nano)
 	}
-	appendStage("enqueued", "", createdAt, false, false)
 
-	if singleVideoHistory(events) {
-		for _, e := range events {
+	origin := strings.TrimSpace(in.Origin)
+	if origin == "" {
+		origin = queue.OriginManual
+	}
+	originMsg := ""
+	originHID := int64(0)
+	if origin == queue.OriginTask && in.ParentTaskID > 0 {
+		originHID = in.ParentTaskID
+		if k := strings.TrimSpace(in.ParentKind); k != "" {
+			originMsg = fmt.Sprintf("%s #%d", k, in.ParentTaskID)
+		} else {
+			originMsg = fmt.Sprintf("#%d", in.ParentTaskID)
+		}
+	}
+	appendItem(origin, originMsg, createdAt, false, false, originHID, originLucide(origin), stageRankOrigin)
+	appendItem("enqueued", "", createdAt, false, false, 0, "", stageRankEnqueued)
+
+	for _, c := range in.Children {
+		err, neutral, icon := childStageStyle(c.Status)
+		appendItem(c.Kind, c.Status, c.CreatedAt, err, neutral, c.ID, icon, stageRankChild)
+	}
+
+	if singleVideoHistory(in.Events) {
+		for _, e := range in.Events {
 			label := historyEventLabel(e.Event, e.Detail)
 			if label == "" {
 				continue
 			}
-			appendStage(label, e.Message, e.CreatedAt, historyEventError(e.Event), historyEventNeutral(e.Event))
+			appendItem(label, e.Message, e.CreatedAt, historyEventError(e.Event), historyEventNeutral(e.Event), 0, "", stageRankHistory)
 		}
-	} else if strings.TrimSpace(taskStarted) != "" {
-		appendStage("started", "", taskStarted, false, false)
+	} else if strings.TrimSpace(in.Started) != "" {
+		appendItem("started", "", in.Started, false, false, 0, "", stageRankStarted)
 	}
 
-	if term, termErr, termNeutral, ok := taskTerminalStage(status); ok {
-		at := taskFinished
+	if term, termErr, termNeutral, ok := taskTerminalStage(in.Status); ok {
+		at := in.Finished
 		if strings.TrimSpace(at) == "" {
-			at = taskStarted
+			at = in.Started
 		}
 		if strings.TrimSpace(at) == "" {
 			at = createdAt
 		}
-		appendStage(term, "", at, termErr, termNeutral)
+		appendItem(term, "", at, termErr, termNeutral, 0, "", stageRankTerminal)
+	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		if !items[i].at.Equal(items[j].at) {
+			return items[i].at.Before(items[j].at)
+		}
+		return items[i].rank < items[j].rank
+	})
+
+	out := make([]taskStageView, len(items))
+	rawTimes := make([]time.Time, len(items))
+	for i := range items {
+		out[i] = items[i].view
+		rawTimes[i] = items[i].at
 	}
 
 	// Durations are how long each stage lasted (older → next) before reversing for display.
@@ -474,8 +573,10 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 		out[a], out[b] = out[b], out[a]
 	}
 	blankDuplicateStageAgos(out)
-	out[0].IsFirst = true
-	out[len(out)-1].IsLast = true
+	if len(out) > 0 {
+		out[0].IsFirst = true
+		out[len(out)-1].IsLast = true
+	}
 	return out
 }
 
@@ -740,7 +841,37 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 	if t.FinishedAt.Valid {
 		taskFinished = t.FinishedAt.String
 	}
-	stages := taskStages(events, now, t.CreatedAt, taskStarted, taskFinished, t.Status)
+	var parentTaskID int64
+	parentKind := ""
+	if t.ParentTaskID.Valid && t.ParentTaskID.Int64 > 0 {
+		parentTaskID = t.ParentTaskID.Int64
+		if pt, err := h.Queue.GetTask(parentTaskID); err == nil && pt != nil {
+			parentKind = pt.Kind
+		}
+	}
+	children, err := h.Queue.ListByParentTaskID(t.ID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	view.Origin = t.Origin
+	if view.Origin == "" {
+		view.Origin = queue.OriginManual
+	}
+	view.ParentTaskID = parentTaskID
+	view.ParentKind = parentKind
+	stages := taskStages(taskStagesInput{
+		Events:       events,
+		Now:          now,
+		Created:      t.CreatedAt,
+		Started:      taskStarted,
+		Finished:     taskFinished,
+		Status:       t.Status,
+		Origin:       t.Origin,
+		ParentTaskID: parentTaskID,
+		ParentKind:   parentKind,
+		Children:     children,
+	})
 	detailFields := h.taskDetailFields(t.Detail)
 	if !singleVideoHistory(events) {
 		histRows := make([]taskDetailHistRow, 0, len(events))

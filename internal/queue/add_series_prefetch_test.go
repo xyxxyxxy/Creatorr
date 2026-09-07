@@ -11,6 +11,7 @@ import (
 func TestAddSeriesPrefetchIsInteractiveAndIgnoresPause(t *testing.T) {
 	s := openStore(t)
 	id, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:   queue.KindPrefetchAddSeries,
 		Domain: "example.com",
 		Payload: map[string]any{
@@ -46,6 +47,7 @@ func TestInteractiveFinishSkipsCooldown(t *testing.T) {
 	_ = settings.SetDomainDefault(s.DB, 30, 8, 1, "10M", "1", false)
 	_ = domains.EnsureHost(s.DB, "example.com")
 	id, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:    queue.KindPrefetchAddSeries,
 		Domain:  "example.com",
 		Payload: map[string]any{"url": "https://example.com/c", "draft_token": "tok"},

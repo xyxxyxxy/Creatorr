@@ -131,6 +131,7 @@ func TestRunSkipsMissedSchedulesAtBoot(t *testing.T) {
 	}
 	lastTip := time.Date(2026, 7, 17, 10, 0, 0, 0, time.UTC)
 	histTask, err := q.InsertRunning(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: "test", Domain: queue.SystemDomain, Message: "hist",
 	})
 	if err != nil {
@@ -287,7 +288,7 @@ func TestFileSyncMarksMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tid, err := q.Enqueue(queue.EnqueueParams{Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "test sync"})
+	tid, err := q.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "test sync"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +351,7 @@ func TestFileSyncRestoresMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tid, err := q.Enqueue(queue.EnqueueParams{Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "test sync"})
+	tid, err := q.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "test sync"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +411,7 @@ func TestFileSyncSkipsOfflineRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tid, err := q.Enqueue(queue.EnqueueParams{Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "test sync"})
+	tid, err := q.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "test sync"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -470,7 +471,7 @@ func TestRetentionPurge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tid, err := q.Enqueue(queue.EnqueueParams{Kind: queue.KindRetentionDelete, Domain: queue.SystemDomain, Message: "test purge"})
+	tid, err := q.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindRetentionDelete, Domain: queue.SystemDomain, Message: "test purge"})
 	if err != nil {
 		t.Fatal(err)
 	}

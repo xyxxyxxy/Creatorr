@@ -56,6 +56,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo10(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 11:
+			if err := d.migrateTo11(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -342,6 +346,55 @@ func (d *DB) migrateTo10() error {
 	if _, err := d.SQL.Exec(`UPDATE tasks SET kind = 'integrity_check' WHERE kind = 'verify_all_media'`); err != nil {
 		if !strings.Contains(err.Error(), "no such table") {
 			return fmt.Errorf("rename tasks verify_all_media: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateTo11 adds tasks.origin + parent_task_id, backfills all origin=manual,
+// and strips legacy yt-dlp payload/detail trigger keys.
+func (d *DB) migrateTo11() error {
+	hasOrigin, err := d.tableHasColumn("tasks", "origin")
+	if err != nil {
+		return err
+	}
+	if !hasOrigin {
+		if _, err := d.SQL.Exec(`ALTER TABLE tasks ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual'`); err != nil {
+			return fmt.Errorf("add tasks.origin: %w", err)
+		}
+	}
+	hasParent, err := d.tableHasColumn("tasks", "parent_task_id")
+	if err != nil {
+		return err
+	}
+	if !hasParent {
+		if _, err := d.SQL.Exec(`ALTER TABLE tasks ADD COLUMN parent_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL`); err != nil {
+			return fmt.Errorf("add tasks.parent_task_id: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id)`); err != nil {
+		return fmt.Errorf("idx_tasks_parent: %w", err)
+	}
+	if _, err := d.SQL.Exec(`UPDATE tasks SET origin = 'manual'`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("backfill tasks.origin manual: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`
+		UPDATE tasks SET payload = json_remove(payload, '$.trigger')
+		WHERE json_valid(payload) AND json_type(payload, '$.trigger') IS NOT NULL
+	`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("strip payload.trigger: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`
+		UPDATE tasks SET detail = json_remove(detail, '$.trigger')
+		WHERE detail IS NOT NULL AND TRIM(detail) != ''
+		  AND json_valid(detail) AND json_type(detail, '$.trigger') IS NOT NULL
+	`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("strip detail.trigger: %w", err)
 		}
 	}
 	return nil

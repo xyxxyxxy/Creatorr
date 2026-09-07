@@ -128,6 +128,7 @@ func (s *Store) EnqueueBulkEditSeries(p BulkEditSeriesParams) (int64, error) {
 		msg = "Bulk edit series metadata"
 	}
 	id, err := s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:    queue.KindBulkEditSeries,
 		Domain:  queue.SystemDomain,
 		Payload: payload,

@@ -157,14 +157,9 @@ func YtDlpUpdateHandler(d Deps) TaskHandler {
 			return err
 		}
 		channel = settings.NormalizeYtDlpUpdateChannel(channel)
-		trigger := "manual"
-		if strings.TrimSpace(t.Payload) != "" {
-			var pl map[string]any
-			if json.Unmarshal([]byte(t.Payload), &pl) == nil {
-				if s, ok := pl["trigger"].(string); ok && strings.TrimSpace(s) != "" {
-					trigger = strings.TrimSpace(s)
-				}
-			}
+		origin := strings.TrimSpace(t.Origin)
+		if origin == "" {
+			origin = queue.OriginManual
 		}
 		managed := d.YtDlp.BinPath()
 		res, err := ytdlp.Update(ctx, ytdlp.UpdateOpts{
@@ -180,7 +175,7 @@ func YtDlpUpdateHandler(d Deps) TaskHandler {
 			detail = map[string]any{
 				"version": res.ToVersion,
 				"channel": res.Channel,
-				"trigger": trigger,
+				"origin":  origin,
 				"skipped": true,
 			}
 			_ = d.Library.Queue.MergeDetailJSON(t.ID, detail)
@@ -190,7 +185,7 @@ func YtDlpUpdateHandler(d Deps) TaskHandler {
 			"from":    res.FromVersion,
 			"to":      res.ToVersion,
 			"channel": res.Channel,
-			"trigger": trigger,
+			"origin":  origin,
 		}
 		d.YtDlp.SetBin(managed)
 		if err := settings.RecordYtDlpInstall(d.Library.DB, res.ToVersion); err != nil {
@@ -387,7 +382,7 @@ func ImportHandler(d Deps) TaskHandler {
 				}
 			}
 			if payload.Verify {
-				if id, err := d.Library.MaybeEnqueueMediaVerifyForImport(t.VideoID.Int64); err != nil {
+				if id, err := d.Library.MaybeEnqueueMediaVerifyForImport(t.VideoID.Int64, t.ID); err != nil {
 					progress("Verify enqueue failed: "+err.Error(), nil)
 				} else if id == 0 {
 					progress("Integrity check skipped (File integrity off)", nil)
@@ -522,7 +517,7 @@ func ImportHandler(d Deps) TaskHandler {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "write nfo failed"), err.Error())
 		}
 		if payload.Verify {
-			if id, err := d.Library.MaybeEnqueueMediaVerifyForImport(t.VideoID.Int64); err != nil {
+			if id, err := d.Library.MaybeEnqueueMediaVerifyForImport(t.VideoID.Int64, t.ID); err != nil {
 				progress("Verify enqueue failed: "+err.Error(), nil)
 			} else if id == 0 {
 				progress("Integrity check skipped (File integrity off)", nil)
@@ -947,6 +942,7 @@ func DownloadHandler(d Deps) TaskHandler {
 			staged.SeriesID = dlctx.Video.SeriesID
 			staged.RootPath = dlctx.RootPath
 			staged.NamingDomain = library.NamingDomain(dlctx.URL)
+			staged.ParentTaskID = t.ID
 			if _, err := d.Library.EnqueueSponsorblockCut(staged); err != nil {
 				d.Library.RemoveSponsorblockCutStaging(t.VideoID.Int64)
 				return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "enqueue SponsorBlock cut failed"), err.Error())
@@ -1149,7 +1145,7 @@ func finishArchivePack(
 		progress("Done", nil)
 	}
 	maturity := library.TaskPayloadMaturity(t.Payload)
-	if _, err := d.Library.MaybeEnqueueMediaVerifyAfterPack(t.VideoID.Int64, maturity); err != nil {
+	if _, err := d.Library.MaybeEnqueueMediaVerifyAfterPack(t.VideoID.Int64, maturity, t.ID); err != nil {
 		// Pack already succeeded; verify enqueue failure should not fail the pack task.
 		progress("Verify enqueue failed: "+err.Error(), nil)
 	}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 func TestParsePOTDetail(t *testing.T) {
@@ -167,16 +168,22 @@ func TestTaskStages(t *testing.T) {
 		{VideoID: 7, Event: "remuxed", Message: "Remuxed to mkv", CreatedAt: "2026-09-06T11:59:00Z"},
 		{VideoID: 7, Event: "packed", Message: "Packed", CreatedAt: "2026-09-06T11:59:30Z"},
 	}
-	got := taskStages(same, now, created, started, finished, "done")
-	if len(got) != 5 || !got[0].IsFirst || !got[4].IsLast {
+	got := taskStages(taskStagesInput{
+		Events: same, Now: now, Created: created, Started: started, Finished: finished,
+		Status: "done", Origin: queue.OriginManual,
+	})
+	if len(got) != 6 || !got[0].IsFirst || !got[5].IsLast {
 		t.Fatalf("stages: %+v", got)
 	}
-	if got[0].Event != "done" || got[1].Event != "packed" || got[2].Event != "remuxed" || got[3].Event != "downloaded" || got[4].Event != "enqueued" {
+	if got[0].Event != "done" || got[1].Event != "packed" || got[2].Event != "remuxed" || got[3].Event != "downloaded" || got[4].Event != "enqueued" || got[5].Event != "manual" {
 		t.Fatalf("order (latest top): %+v", got)
 	}
-	// Durations stay on the stage that lasted that long (packed/remuxed/downloaded/enqueued); terminal done has none.
-	if got[0].Duration != "" || got[1].Duration != "30 sec" || got[2].Duration != "30 sec" || got[3].Duration != "1min" || got[4].Duration != "2min" {
-		t.Fatalf("durations: %q %q %q %q %q", got[0].Duration, got[1].Duration, got[2].Duration, got[3].Duration, got[4].Duration)
+	if got[5].OriginIcon != "mouse-pointer-click" {
+		t.Fatalf("origin icon: %+v", got[5])
+	}
+	// Durations stay on the stage that lasted that long; origin+enqueued same time → no duration on origin.
+	if got[0].Duration != "" || got[1].Duration != "30 sec" || got[2].Duration != "30 sec" || got[3].Duration != "1min" || got[4].Duration != "2min" || got[5].Duration != "" {
+		t.Fatalf("durations: %q %q %q %q %q %q", got[0].Duration, got[1].Duration, got[2].Duration, got[3].Duration, got[4].Duration, got[5].Duration)
 	}
 	if got[3].CreatedAgo == "" || got[4].CreatedAgo == "" {
 		t.Fatalf("want times on downloaded+enqueued: %+v", got)
@@ -185,8 +192,10 @@ func TestTaskStages(t *testing.T) {
 	oneSec := []library.VideoHistoryEvent{
 		{VideoID: 7, Event: "downloaded", Message: "a", CreatedAt: "2026-09-06T11:56:01Z"},
 	}
-	got = taskStages(oneSec, now, created, started, "", "running")
-	if len(got) != 2 || got[0].Event != "downloaded" || got[1].Event != "enqueued" {
+	got = taskStages(taskStagesInput{
+		Events: oneSec, Now: now, Created: created, Started: started, Status: "running", Origin: queue.OriginManual,
+	})
+	if len(got) != 3 || got[0].Event != "downloaded" || got[1].Event != "enqueued" || got[2].Event != "manual" {
 		t.Fatalf("running order: %+v", got)
 	}
 	if got[0].Duration != "" || got[1].Duration != "" {
@@ -198,9 +207,12 @@ func TestTaskStages(t *testing.T) {
 		{VideoID: 7, Event: "remuxed", Message: "b", CreatedAt: ts},
 		{VideoID: 7, Event: "packed", Message: "c", CreatedAt: ts},
 	}
-	got = taskStages(sameLabel, now, "2026-09-04T14:30:00Z", "", "2026-09-05T14:33:00Z", "done")
-	if len(got) != 5 || got[0].Event != "done" || got[4].Event != "enqueued" {
-		t.Fatalf("want done…enqueued: %+v", got)
+	got = taskStages(taskStagesInput{
+		Events: sameLabel, Now: now, Created: "2026-09-04T14:30:00Z", Finished: "2026-09-05T14:33:00Z",
+		Status: "done", Origin: queue.OriginManual,
+	})
+	if len(got) != 6 || got[0].Event != "done" || got[5].Event != "manual" || got[4].Event != "enqueued" {
+		t.Fatalf("want done…enqueued…manual: %+v", got)
 	}
 	// Display top→bottom: first compact time kept, later duplicates blanked; enqueued differs by day.
 	if got[0].CreatedAgo == "" || got[1].CreatedAgo != "" || got[2].CreatedAgo != "" || got[3].CreatedAgo != "" || got[4].CreatedAgo == "" {
@@ -212,38 +224,54 @@ func TestTaskStages(t *testing.T) {
 	fail := []library.VideoHistoryEvent{
 		{VideoID: 7, Event: "download_failed", Message: "boom", CreatedAt: "2026-09-06T11:58:00Z"},
 	}
-	got = taskStages(fail, now, created, started, finished, "failed")
-	if len(got) != 3 || got[0].Event != "failed" || !got[0].HasError || !got[1].HasError || got[2].Event != "enqueued" {
+	got = taskStages(taskStagesInput{
+		Events: fail, Now: now, Created: created, Started: started, Finished: finished,
+		Status: "failed", Origin: queue.OriginManual,
+	})
+	if len(got) != 4 || got[0].Event != "failed" || !got[0].HasError || !got[1].HasError || got[2].Event != "enqueued" || got[3].Event != "manual" {
 		t.Fatalf("fail stage: %+v", got)
 	}
 	if got[0].Duration != "" || got[1].Duration != "2min" || got[2].Duration != "2min" {
 		t.Fatalf("fail durations: %q %q %q", got[0].Duration, got[1].Duration, got[2].Duration)
 	}
-	// Multi-video / no history: lifecycle done → started → enqueued (latest top).
+	// Multi-video / no history: lifecycle done → started → enqueued → origin (latest top).
 	multi := []library.VideoHistoryEvent{
 		{VideoID: 1, Event: "sidecar_missing", CreatedAt: "2026-09-06T11:58:00Z"},
 		{VideoID: 2, Event: "sidecar_missing", CreatedAt: "2026-09-06T11:59:00Z"},
 	}
-	got = taskStages(multi, now, created, started, finished, "done")
-	if len(got) != 3 || got[0].Event != "done" || got[1].Event != "started" || got[2].Event != "enqueued" {
+	got = taskStages(taskStagesInput{
+		Events: multi, Now: now, Created: created, Started: started, Finished: finished,
+		Status: "done", Origin: queue.OriginScheduled,
+	})
+	if len(got) != 4 || got[0].Event != "done" || got[1].Event != "started" || got[2].Event != "enqueued" || got[3].Event != "scheduled" {
 		t.Fatalf("lifecycle: %+v", got)
+	}
+	if got[3].OriginIcon != "calendar-clock" {
+		t.Fatalf("scheduled icon: %+v", got[3])
 	}
 	if got[0].Duration != "" || got[1].Duration != "3min" || got[2].Duration != "1min" {
 		t.Fatalf("lifecycle durations: %q %q %q", got[0].Duration, got[1].Duration, got[2].Duration)
 	}
-	got = taskStages(nil, now, created, started, finished, "failed")
-	if len(got) != 3 || got[0].Event != "failed" || !got[0].HasError {
+	got = taskStages(taskStagesInput{
+		Now: now, Created: created, Started: started, Finished: finished, Status: "failed", Origin: queue.OriginBoot,
+	})
+	if len(got) != 4 || got[0].Event != "failed" || !got[0].HasError || got[3].Event != "boot" {
 		t.Fatalf("failed lifecycle: %+v", got)
 	}
-	got = taskStages(nil, now, created, started, finished, "cancelled")
-	if len(got) != 3 || got[0].Event != "cancelled" || got[0].HasError || !got[0].Neutral {
+	got = taskStages(taskStagesInput{
+		Now: now, Created: created, Started: started, Finished: finished, Status: "cancelled", Origin: queue.OriginManual,
+	})
+	if len(got) != 4 || got[0].Event != "cancelled" || got[0].HasError || !got[0].Neutral {
 		t.Fatalf("cancelled lifecycle: %+v", got)
 	}
 	cancelHist := []library.VideoHistoryEvent{
 		{VideoID: 7, Event: "cancelled", Message: "Cancelled", Detail: `{"kind":"integrity_check"}`, CreatedAt: "2026-09-06T11:58:00Z"},
 	}
-	got = taskStages(cancelHist, now, created, started, finished, "cancelled")
-	// Latest top: cancelled terminal, remapped integrity_check (neutral), enqueued
+	got = taskStages(taskStagesInput{
+		Events: cancelHist, Now: now, Created: created, Started: started, Finished: finished,
+		Status: "cancelled", Origin: queue.OriginManual,
+	})
+	// Latest top: cancelled terminal, remapped integrity_check (neutral), enqueued, origin
 	if len(got) < 2 || got[0].Event != "cancelled" || got[0].HasError || !got[0].Neutral {
 		t.Fatalf("cancelled terminal: %+v", got)
 	}
@@ -256,17 +284,46 @@ func TestTaskStages(t *testing.T) {
 	if !foundNeutralHist {
 		t.Fatalf("cancelled integrity hist not neutral: %+v", got)
 	}
-	got = taskStages(nil, now, created, "", "", "pending")
-	if len(got) != 1 || got[0].Event != "enqueued" || !got[0].IsFirst || !got[0].IsLast {
+	got = taskStages(taskStagesInput{Now: now, Created: created, Status: "pending", Origin: queue.OriginManual})
+	if len(got) != 2 || got[0].Event != "enqueued" || got[1].Event != "manual" || !got[0].IsFirst || !got[1].IsLast {
 		t.Fatalf("pending: %+v", got)
 	}
-	got = taskStages(nil, now, "", "", "", "pending")
-	if len(got) != 1 || got[0].Event != "enqueued" {
+	got = taskStages(taskStagesInput{Now: now, Status: "pending", Origin: queue.OriginManual})
+	if len(got) != 2 || got[0].Event != "enqueued" || got[1].Event != "manual" {
 		t.Fatalf("fallback enqueued: %+v", got)
 	}
-	got = taskStages(nil, now, "", "", "", "done")
-	if len(got) != 2 || got[0].Event != "done" || got[1].Event != "enqueued" {
+	got = taskStages(taskStagesInput{Now: now, Status: "done", Origin: queue.OriginManual})
+	if len(got) != 3 || got[0].Event != "done" || got[1].Event != "enqueued" || got[2].Event != "manual" {
 		t.Fatalf("done without timestamps: %+v", got)
+	}
+
+	// Origin=task + child nodes.
+	childCreated := "2026-09-06T11:56:30Z"
+	got = taskStages(taskStagesInput{
+		Now: now, Created: created, Started: started, Finished: finished, Status: "done",
+		Origin: queue.OriginTask, ParentTaskID: 9, ParentKind: "download",
+		Children: []queue.Task{
+			{ID: 11, Kind: queue.KindIntegrityCheckInitial, Status: queue.StatusPending, CreatedAt: childCreated},
+			{ID: 12, Kind: queue.KindSponsorblockCut, Status: queue.StatusDone, CreatedAt: "2026-09-06T11:58:00Z"},
+		},
+	})
+	if len(got) < 5 {
+		t.Fatalf("task+children: %+v", got)
+	}
+	foundOrigin, foundPendingChild, foundDoneChild := false, false, false
+	for _, s := range got {
+		if s.Event == "task" && s.HistoryID == 9 && s.Message == "download #9" && s.OriginIcon == "git-branch" {
+			foundOrigin = true
+		}
+		if s.Event == queue.KindIntegrityCheckInitial && s.HistoryID == 11 && s.Message == queue.StatusPending && s.OriginIcon == "git-branch" {
+			foundPendingChild = true
+		}
+		if s.Event == queue.KindSponsorblockCut && s.HistoryID == 12 && s.Message == queue.StatusDone && s.OriginIcon == "" && !s.HasError {
+			foundDoneChild = true
+		}
+	}
+	if !foundOrigin || !foundPendingChild || !foundDoneChild {
+		t.Fatalf("origin/children missing: origin=%v pending=%v done=%v got=%+v", foundOrigin, foundPendingChild, foundDoneChild, got)
 	}
 }
 
@@ -281,10 +338,10 @@ func TestHistoryEventLabel(t *testing.T) {
 		{"cancelled", `{}`, "cancelled"},
 		{"cancelled", "", "cancelled"},
 		{library.SourceHistCancelled, `{"mode":"scan"}`, "scan"},
-		{"verified", "", "Integrity check ok"},
-		{"integrity_checked", "", "Integrity check ok"},
-		{"integrity_check_failed", "", "Integrity check failed"},
-		{"verify_failed", "", "Integrity check failed"},
+		{"verified", "", "integrity_checked"},
+		{"integrity_checked", "", "integrity_checked"},
+		{"integrity_check_failed", "", "integrity_check_failed"},
+		{"verify_failed", "", "integrity_check_failed"},
 	}
 	for _, tc := range cases {
 		if got := historyEventLabel(tc.event, tc.detail); got != tc.want {

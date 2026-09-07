@@ -389,6 +389,7 @@ func (s *Store) EnqueueVideoMetaPrefetch(videoID int64, fetchURL string) (int64,
 		domain = settings.NormalizeDomain(u.Hostname())
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:     queue.KindPrefetchVideoMeta,
 		Domain:   domain,
 		SeriesID: v.SeriesID,

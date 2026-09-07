@@ -34,6 +34,7 @@ type SponsorblockCutPayload struct {
 	SeriesID               int64    `json:"series_id,omitempty"`
 	RootPath               string   `json:"root_path,omitempty"`
 	NamingDomain           string   `json:"naming_domain,omitempty"`
+	ParentTaskID           int64    `json:"-"` // enqueue provenance only
 }
 
 // SponsorblockCutStageDir returns {CacheDir}/sponsorblock-cut/{videoID}/.
@@ -160,13 +161,19 @@ func (s *Store) EnqueueSponsorblockCut(p SponsorblockCutPayload) (int64, error) 
 		"root_path":        p.RootPath,
 		"naming_domain":    p.NamingDomain,
 	}
+	origin := queue.OriginManual
+	if p.ParentTaskID > 0 {
+		origin = queue.OriginTask
+	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
-		Kind:     queue.KindSponsorblockCut,
-		Domain:   queue.SystemDomain,
-		SeriesID: p.SeriesID,
-		VideoID:  p.VideoID,
-		Priority: queue.PrioritySponsorblockCut,
-		Message:  "SponsorBlock cut",
-		Payload:  payload,
+		Origin:       origin,
+		ParentTaskID: p.ParentTaskID,
+		Kind:         queue.KindSponsorblockCut,
+		Domain:       queue.SystemDomain,
+		SeriesID:     p.SeriesID,
+		VideoID:      p.VideoID,
+		Priority:     queue.PrioritySponsorblockCut,
+		Message:      "SponsorBlock cut",
+		Payload:      payload,
 	})
 }

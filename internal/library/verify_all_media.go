@@ -9,15 +9,18 @@ import (
 )
 
 // EnqueueVerifyAllMedia queues a resumable library integrity check pass.
-func (s *Store) EnqueueVerifyAllMedia() (int64, error) {
-	return s.EnqueueVerifyAllMediaScoped(nil, nil)
+func (s *Store) EnqueueVerifyAllMedia(origin string) (int64, error) {
+	return s.EnqueueVerifyAllMediaScoped(nil, nil, origin)
 }
 
 // EnqueueVerifyAllMediaScoped queues integrity check for the whole library (empty scope),
 // selected series, or selected videos. seriesIDs and videoIDs must not both be set.
-func (s *Store) EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs []int64) (int64, error) {
+func (s *Store) EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs []int64, origin string) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue unavailable", ErrInvalid)
+	}
+	if origin == "" {
+		origin = queue.OriginManual
 	}
 	seriesIDs = uniqInt64(seriesIDs)
 	videoIDs = uniqInt64(videoIDs)
@@ -39,6 +42,7 @@ func (s *Store) EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs []int64) (int64,
 		msg = "Integrity check (selected)"
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin:  origin,
 		Kind:    queue.KindIntegrityCheck,
 		Domain:  queue.SystemDomain,
 		Payload: payload,

@@ -374,7 +374,7 @@ func (h *Handler) actionRunScheduled(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, redir+"?err="+urlQuery("File sync already queued"), http.StatusSeeOther)
 			return
 		}
-		id, err := h.Library.EnqueueSyncFiles(queue.PrioritySyncFilesDue)
+		id, err := h.Library.EnqueueSyncFiles(queue.PrioritySyncFilesDue, queue.OriginManual)
 		if err != nil {
 			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
 			return
@@ -391,7 +391,7 @@ func (h *Handler) actionRunScheduled(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, redir+"?err="+urlQuery("Retention delete already queued"), http.StatusSeeOther)
 			return
 		}
-		id, err := h.Library.EnqueueRetentionDelete(queue.PriorityRetentionDeleteDue)
+		id, err := h.Library.EnqueueRetentionDelete(queue.PriorityRetentionDeleteDue, queue.OriginManual)
 		if err != nil {
 			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
 			return
@@ -417,7 +417,7 @@ func (h *Handler) actionRunScheduled(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, redir+"?err="+urlQuery("yt-dlp update already queued or running"), http.StatusSeeOther)
 			return
 		}
-		id, err := h.Library.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, "manual")
+		id, err := h.Library.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, queue.OriginManual)
 		if err != nil {
 			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
 			return

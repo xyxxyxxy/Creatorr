@@ -204,6 +204,7 @@ func (s *Store) EnqueueAddVideoPrefetch(sourceURL, draftToken string, seriesID i
 		domain = settings.NormalizeDomain(u.Hostname())
 	}
 	p := queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:   queue.KindPrefetchAddVideo,
 		Domain: domain,
 		Payload: map[string]any{

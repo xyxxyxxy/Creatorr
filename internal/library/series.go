@@ -525,6 +525,7 @@ func (s *Store) UpdateSeriesDetailed(id int64, p UpdateSeriesParams) (UpdateSeri
 			}
 			_ = s.WriteSeriesNFODisk(id)
 			tid, qerr := s.Queue.InsertRunning(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 				Kind:     queue.KindRegenerateNFO,
 				Domain:   queue.SystemDomain,
 				SeriesID: id,
@@ -765,7 +766,7 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 	if s.Queue != nil {
 		domOK, _ := domains.IsActive(s.DB, queue.DomainFromURL(url))
 		if domOK {
-			_, _ = s.EnqueueScanSource(id)
+			_, _ = s.EnqueueScanSource(id, queue.OriginManual)
 		}
 	}
 	return s.GetSource(seriesID, id)

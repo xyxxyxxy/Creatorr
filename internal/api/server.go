@@ -65,6 +65,7 @@ func (s *Server) EnqueueTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:   body.Kind,
 		Domain: body.Domain,
 	}
@@ -238,12 +239,17 @@ func (s *Server) ClearDomainCookies(w http.ResponseWriter, r *http.Request, doma
 }
 
 func mapTask(t queue.Task) gen.Task {
+	origin := gen.TaskOrigin(t.Origin)
+	if origin == "" {
+		origin = gen.TaskOriginManual
+	}
 	gt := gen.Task{
 		Id:        t.ID,
 		Kind:      t.Kind,
 		Status:    gen.TaskStatus(t.Status),
 		Domain:    t.Domain,
 		CreatedAt: parseTime(t.CreatedAt),
+		Origin:    origin,
 	}
 	if t.Message != "" {
 		m := t.Message
@@ -280,6 +286,10 @@ func mapTask(t queue.Task) gen.Task {
 	if t.FinishedAt.Valid {
 		ts := parseTime(t.FinishedAt.String)
 		gt.FinishedAt = &ts
+	}
+	if t.ParentTaskID.Valid {
+		v := t.ParentTaskID.Int64
+		gt.ParentTaskId = &v
 	}
 	return gt
 }

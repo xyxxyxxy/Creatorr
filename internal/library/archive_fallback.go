@@ -112,6 +112,7 @@ func (s *Store) EnqueueArchiveDownload(videoID int64) (int64, bool, error) {
 		return 0, false, err
 	}
 	id, err := s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:     queue.KindDownload,
 		Domain:   domain,
 		SeriesID: v.SeriesID,

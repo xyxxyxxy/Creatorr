@@ -87,7 +87,7 @@ func TestVerifyAllMediaPassSkipsProfileOff(t *testing.T) {
 	if err := s.CompleteImport(res.VideoID, media, "", "", "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
-	id, err := s.EnqueueVerifyAllMedia()
+	id, err := s.EnqueueVerifyAllMedia(queue.OriginManual)
 	if err != nil {
 		t.Fatal(err)
 	}

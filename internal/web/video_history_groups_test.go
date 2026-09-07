@@ -33,6 +33,32 @@ func TestGroupVideoHistoryByTask(t *testing.T) {
 	}
 }
 
+func TestPreferIntegrityHistoryTaskKind(t *testing.T) {
+	views := []videoHistoryView{
+		{Event: "integrity_checked", Message: "Media verified", TaskKind: "integrity_check", HasTask: true},
+		{Event: "verified", Message: "Integrity check ok", TaskKind: "integrity_check_initial", HasTask: true},
+		{Event: "integrity_check_failed", Message: "Integrity check failed", TaskKind: "integrity_check", HasTask: true, HasError: true},
+		{Event: "integrity_checked", Message: "Integrity check ok"}, // no task kind
+		{Event: "downloaded", Message: "Done", TaskKind: "download", HasTask: true},
+	}
+	preferIntegrityHistoryTaskKind(views)
+	if views[0].Event != "integrity_check" || views[0].Message != "Media verified" {
+		t.Fatalf("bulk ok: %+v", views[0])
+	}
+	if views[1].Event != "integrity_check_initial" {
+		t.Fatalf("initial ok: %+v", views[1])
+	}
+	if views[2].Event != "integrity_check" || !views[2].HasError {
+		t.Fatalf("failed: %+v", views[2])
+	}
+	if views[3].Event != "integrity_checked" {
+		t.Fatalf("no kind keeps event: %+v", views[3])
+	}
+	if views[4].Event != "downloaded" {
+		t.Fatalf("non-integrity untouched: %+v", views[4])
+	}
+}
+
 func TestGroupVideoHistoryCancelledNeutral(t *testing.T) {
 	// Event label remapped (e.g. download / integrity_check); Neutral from raw cancelled.
 	cases := []videoHistoryView{

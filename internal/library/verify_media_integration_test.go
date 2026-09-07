@@ -98,11 +98,11 @@ func TestEnqueueMediaVerifyDuplicate(t *testing.T) {
 	if err := s.CompleteImport(res.VideoID, media, "", "", "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
-	id, err := s.EnqueueMediaVerify(res.VideoID)
+	id, err := s.EnqueueMediaVerify(res.VideoID, 0)
 	if err != nil || id <= 0 {
 		t.Fatalf("id=%d err=%v", id, err)
 	}
-	_, err = s.EnqueueMediaVerify(res.VideoID)
+	_, err = s.EnqueueMediaVerify(res.VideoID, 0)
 	if err == nil {
 		t.Fatal("want duplicate")
 	}
@@ -139,7 +139,7 @@ func TestMaybeEnqueueMediaVerifyForImportRespectsProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	id, err := s.MaybeEnqueueMediaVerifyForImport(res.VideoID)
+	id, err := s.MaybeEnqueueMediaVerifyForImport(res.VideoID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestMaybeEnqueueMediaVerifyForImportRespectsProfile(t *testing.T) {
 	if _, err := s.UpdateProfileParams(profileID, library.UpdateProfileParams{VerifyMedia: &on}); err != nil {
 		t.Fatal(err)
 	}
-	id, err = s.MaybeEnqueueMediaVerifyForImport(res.VideoID)
+	id, err = s.MaybeEnqueueMediaVerifyForImport(res.VideoID, 0)
 	if err != nil || id <= 0 {
 		t.Fatalf("profile on: id=%d err=%v", id, err)
 	}

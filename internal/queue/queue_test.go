@@ -52,6 +52,7 @@ func TestEnqueueClaimFinish(t *testing.T) {
 	s := openStore(t)
 	vid := seedVideo(t, s, "v1")
 	id, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com", VideoID: vid,
 		Payload: map[string]any{"url": "https://example.com/watch?v=1"},
 	})
@@ -83,11 +84,11 @@ func TestClaimNextAllowsParallelTasks(t *testing.T) {
 	_ = settings.SetDomainDefault(s.DB, 0, 8, 2, "10M", "0", false)
 	v1 := seedVideo(t, s, "p1")
 	v2 := seedVideo(t, s, "p2")
-	id1, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com", VideoID: v1})
+	id1, err := s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com", VideoID: v1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	id2, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com", VideoID: v2})
+	id2, err := s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com", VideoID: v2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,6 +116,7 @@ func TestCooldownUntil(t *testing.T) {
 	_ = domains.EnsureHost(s.DB, "example.com")
 	vid := seedVideo(t, s, "cd1")
 	id, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com", VideoID: vid,
 		Payload: map[string]any{"url": "https://example.com/watch?v=cd1"},
 	})
@@ -147,6 +149,7 @@ func TestStartCooldownForDomainsBlocksClaim(t *testing.T) {
 	_ = domains.EnsureHost(s.DB, "example.com")
 	vid := seedVideo(t, s, "boot-cd")
 	if _, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com", VideoID: vid,
 		Payload: map[string]any{"url": "https://example.com/watch?v=boot-cd"},
 	}); err != nil {
@@ -173,6 +176,7 @@ func TestSystemLaneNoCooldown(t *testing.T) {
 	_ = settings.SeedDefaults(s.DB)
 	_ = settings.SetDomainDefault(s.DB, 30, 8, 1, "10M", "1", false)
 	id, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "sync",
 	})
 	if err != nil {
@@ -191,6 +195,7 @@ func TestSystemLaneNoCooldown(t *testing.T) {
 		t.Fatal("system must not cool down after finish")
 	}
 	id2, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "sync2",
 	})
 	if err != nil {
@@ -207,7 +212,7 @@ func TestSystemLaneNoCooldown(t *testing.T) {
 
 func TestUnmonitoredBlocksClaim(t *testing.T) {
 	s := openStore(t)
-	_, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindScan, Domain: "example.com"})
+	_, err := s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindScan, Domain: "example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +237,7 @@ func TestUnmonitoredBlocksClaim(t *testing.T) {
 
 func TestPausedBlocksClaimKeepsPending(t *testing.T) {
 	s := openStore(t)
-	id, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindScan, Domain: "example.com"})
+	id, err := s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindScan, Domain: "example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,8 +276,8 @@ func TestListActivePositions(t *testing.T) {
 	s := openStore(t)
 	v1 := seedVideo(t, s, "a1")
 	v2 := seedVideo(t, s, "a2")
-	_, _ = s.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "a.example", VideoID: v1, Priority: 0})
-	_, _ = s.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "a.example", VideoID: v2, Priority: 10})
+	_, _ = s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "a.example", VideoID: v1, Priority: 0})
+	_, _ = s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "a.example", VideoID: v2, Priority: 10})
 	list, err := s.ListActive()
 	if err != nil {
 		t.Fatal(err)
@@ -293,11 +298,11 @@ func TestCancelDomainPendingAndRunning(t *testing.T) {
 	s := openStore(t)
 	v1 := seedVideo(t, s, "cd1")
 	v2 := seedVideo(t, s, "cd2")
-	id1, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "cancel.example", VideoID: v1})
+	id1, err := s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "cancel.example", VideoID: v1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	id2, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "cancel.example", VideoID: v2})
+	id2, err := s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "cancel.example", VideoID: v2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +342,7 @@ func TestDomainFromURL(t *testing.T) {
 
 func TestAppendCommand(t *testing.T) {
 	s := openStore(t)
-	id, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com", Message: "dl"})
+	id, err := s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com", Message: "dl"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +398,7 @@ func TestAppendCommand(t *testing.T) {
 
 func TestAppendCommandNoisyKindSkipsPersistOnSuccess(t *testing.T) {
 	s := openStore(t)
-	id, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindRenameEpisodes, Domain: queue.SystemDomain, Message: "rename"})
+	id, err := s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindRenameEpisodes, Domain: queue.SystemDomain, Message: "rename"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,5 +416,59 @@ func TestAppendCommandNoisyKindSkipsPersistOnSuccess(t *testing.T) {
 	}
 	if len(got.Commands) != 0 {
 		t.Fatalf("rename success should drop commands, got %v", got.Commands)
+	}
+}
+
+func TestEnqueueRejectsEmptyOrigin(t *testing.T) {
+	s := openStore(t)
+	_, err := s.Enqueue(queue.EnqueueParams{Kind: queue.KindScan, Domain: "example.com"})
+	if err == nil {
+		t.Fatal("want origin required error")
+	}
+	_, err = s.Enqueue(queue.EnqueueParams{Origin: "unknown", Kind: queue.KindScan, Domain: "example.com"})
+	if err == nil {
+		t.Fatal("want invalid origin error")
+	}
+	_, err = s.Enqueue(queue.EnqueueParams{Origin: queue.OriginTask, Kind: queue.KindScan, Domain: "example.com"})
+	if err == nil {
+		t.Fatal("want parent_task_id required error")
+	}
+}
+
+func TestListByParentTaskID(t *testing.T) {
+	s := openStore(t)
+	parent, err := s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com", Message: "parent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child1, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginTask, ParentTaskID: parent, Kind: queue.KindIntegrityCheckInitial,
+		Domain: queue.SystemDomain, Message: "child1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child2, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginTask, ParentTaskID: parent, Kind: queue.KindSponsorblockCut,
+		Domain: queue.SystemDomain, Message: "child2",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindScan, Domain: "example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ListByParentTaskID(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != child1 || got[1].ID != child2 {
+		t.Fatalf("children=%+v want %d,%d", got, child1, child2)
+	}
+	for _, c := range got {
+		if c.Origin != queue.OriginTask || !c.ParentTaskID.Valid || c.ParentTaskID.Int64 != parent {
+			t.Fatalf("child provenance: %+v", c)
+		}
 	}
 }
