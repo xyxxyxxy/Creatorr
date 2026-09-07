@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/xyxxyxxy/Creatorr/internal/library/integrity"
+
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
@@ -73,12 +75,7 @@ type verifyAllMediaPayload struct {
 }
 
 // VerifyAllMediaFail is one failed video from VerifyAllMediaPass (for notify).
-type VerifyAllMediaFail struct {
-	VideoID     int64
-	SeriesTitle string
-	VideoTitle  string
-	Detail      string
-}
+type VerifyAllMediaFail = integrity.VerifyAllMediaFail
 
 // VerifyAllMediaPass runs integrity check on packed downloaded/integrity_check_failed media
 // with a cursor for resume. Skips videos whose quality profile has File integrity off.
@@ -307,5 +304,5 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 
 // VerifyAllMediaMessage formats the finish message for an integrity check batch.
 func VerifyAllMediaMessage(checked, partial, skipped, failed int) string {
-	return fmt.Sprintf("Integrity checked %d, partial %d, skipped %d, failed %d", checked, partial, skipped, failed)
+	return integrity.VerifyAllMediaMessage(checked, partial, skipped, failed)
 }

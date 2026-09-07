@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	episode "github.com/xyxxyxxy/Creatorr/internal/library/episode"
+
 	"github.com/xyxxyxxy/Creatorr/internal/notify"
 )
 
@@ -415,15 +417,7 @@ func (s *Store) renameTriggerVideo(taskID int64) (videoID int64, title string) {
 // When triggerVideoID is another video (peer-move after its pack/download), the message
 // names that trigger so History is not mistaken for an Apply-only rename.
 func RenamedHistoryMessage(thisVideoID, triggerVideoID int64, triggerTitle string) string {
-	const base = "Episode files renamed"
-	if triggerVideoID <= 0 || triggerVideoID == thisVideoID {
-		return base
-	}
-	title := strings.TrimSpace(triggerTitle)
-	if title == "" {
-		return base + " (peer move after another video)"
-	}
-	return base + " (peer move after '" + title + "')"
+	return episode.RenamedHistoryMessage(thisVideoID, triggerVideoID, triggerTitle)
 }
 
 func renamedHistoryPayload(videoID int64, oldBase, newBase string, triggerVideoID int64, triggerTitle string) (string, map[string]any) {
