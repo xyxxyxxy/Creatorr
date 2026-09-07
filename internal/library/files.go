@@ -428,6 +428,7 @@ func (s *Store) DeleteVideoSidecar(videoID, fileID int64) error {
 	var taskID int64
 	if s.Queue != nil {
 		tid, qerr := s.Queue.InsertRunning(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 			Kind:     queue.KindDeleteSidecar,
 			Domain:   queue.SystemDomain,
 			SeriesID: v.SeriesID,

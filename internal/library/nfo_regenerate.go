@@ -42,6 +42,7 @@ func (s *Store) EnqueueRegenerateNFOScoped(seriesIDs, videoIDs []int64) (int64, 
 		msg = "Regenerate selected NFO"
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:    queue.KindRegenerateNFO,
 		Domain:  queue.SystemDomain,
 		Payload: payload,

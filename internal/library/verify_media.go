@@ -349,7 +349,8 @@ func (s *Store) CancelMediaVerifyForVideo(videoID int64, message string) error {
 }
 
 // EnqueueMediaVerify queues system-lane initial integrity check for packed library media.
-func (s *Store) EnqueueMediaVerify(videoID int64) (int64, error) {
+// parentTaskID links to the spawning pack/import task (origin=task). Pass 0 only from tests.
+func (s *Store) EnqueueMediaVerify(videoID, parentTaskID int64) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
 	}
@@ -367,20 +368,26 @@ func (s *Store) EnqueueMediaVerify(videoID int64) (int64, error) {
 	if !ok || path == "" {
 		return 0, fmt.Errorf("%w: video has no media file to verify", ErrInvalid)
 	}
+	origin := queue.OriginManual
+	if parentTaskID > 0 {
+		origin = queue.OriginTask
+	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
-		Kind:     queue.KindIntegrityCheckInitial,
-		Domain:   queue.SystemDomain,
-		SeriesID: v.SeriesID,
-		VideoID:  videoID,
-		Message:  "Initial integrity check",
-		Payload:  map[string]any{"video_id": videoID, "media_path": path},
+		Origin:       origin,
+		ParentTaskID: parentTaskID,
+		Kind:         queue.KindIntegrityCheckInitial,
+		Domain:       queue.SystemDomain,
+		SeriesID:     v.SeriesID,
+		VideoID:      videoID,
+		Message:      "Initial integrity check",
+		Payload:      map[string]any{"video_id": videoID, "media_path": path},
 	})
 }
 
 // MaybeEnqueueMediaVerifyForImport cancels prior verify tasks, then enqueues when the
 // series quality profile has File integrity on. Ignores the mature-only timing gate
 // (import verify is an explicit operator opt-in). Returns 0 when File integrity is off.
-func (s *Store) MaybeEnqueueMediaVerifyForImport(videoID int64) (int64, error) {
+func (s *Store) MaybeEnqueueMediaVerifyForImport(videoID, parentTaskID int64) (int64, error) {
 	_ = s.CancelMediaVerifyForVideo(videoID, "Superseded by import")
 	on, err := s.seriesProfileVerifyMedia(videoID)
 	if err != nil {
@@ -389,7 +396,7 @@ func (s *Store) MaybeEnqueueMediaVerifyForImport(videoID int64) (int64, error) {
 	if !on {
 		return 0, nil
 	}
-	id, err := s.EnqueueMediaVerify(videoID)
+	id, err := s.EnqueueMediaVerify(videoID, parentTaskID)
 	if err != nil {
 		if errors.Is(err, queue.ErrDuplicate) {
 			return 0, nil
@@ -400,7 +407,7 @@ func (s *Store) MaybeEnqueueMediaVerifyForImport(videoID int64) (int64, error) {
 }
 
 // MaybeEnqueueMediaVerifyAfterPack cancels prior verify tasks, then enqueues when the profile gate says so.
-func (s *Store) MaybeEnqueueMediaVerifyAfterPack(videoID int64, maturityPack bool) (int64, error) {
+func (s *Store) MaybeEnqueueMediaVerifyAfterPack(videoID int64, maturityPack bool, parentTaskID int64) (int64, error) {
 	_ = s.CancelMediaVerifyForVideo(videoID, "Superseded by new pack")
 	v, err := s.GetVideo(videoID)
 	if err != nil {
@@ -429,7 +436,7 @@ func (s *Store) MaybeEnqueueMediaVerifyAfterPack(videoID int64, maturityPack boo
 	if !ShouldVerifyMedia(*prof, maturityPack, upload, acquired) {
 		return 0, nil
 	}
-	id, err := s.EnqueueMediaVerify(videoID)
+	id, err := s.EnqueueMediaVerify(videoID, parentTaskID)
 	if err != nil {
 		if errors.Is(err, queue.ErrDuplicate) {
 			return 0, nil

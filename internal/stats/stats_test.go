@@ -46,8 +46,8 @@ func TestSampleAndLoadChart(t *testing.T) {
 			(1, 1, 'a', 'A', 'wanted'),
 			(2, 1, 'b', 'B', 'downloaded'),
 			(3, 1, 'c', 'C', 'ignored');
-		INSERT INTO tasks (kind, domain, status, message, created_at)
-		VALUES (?, 'example.com', ?, 'x', datetime('now'))
+		INSERT INTO tasks (kind, domain, status, message, origin, created_at)
+		VALUES (?, 'example.com', ?, 'x', 'manual', datetime('now'))
 	`, queue.KindDownload, queue.StatusPending)
 	if err != nil {
 		t.Fatal(err)

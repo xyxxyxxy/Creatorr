@@ -12,11 +12,11 @@ import (
 
 func TestEnqueueVerifyAllMediaDuplicate(t *testing.T) {
 	s := openLib(t)
-	id, err := s.EnqueueVerifyAllMedia()
+	id, err := s.EnqueueVerifyAllMedia(queue.OriginManual)
 	if err != nil || id <= 0 {
 		t.Fatalf("id=%d err=%v", id, err)
 	}
-	_, err = s.EnqueueVerifyAllMedia()
+	_, err = s.EnqueueVerifyAllMedia(queue.OriginManual)
 	if err == nil {
 		t.Fatal("want duplicate")
 	}
@@ -70,7 +70,7 @@ func TestMarkVerifiedRestoresFromVerifyFailed(t *testing.T) {
 
 func TestVerifyAllMediaPassSkipsEmpty(t *testing.T) {
 	s := openLib(t)
-	id, err := s.EnqueueVerifyAllMedia()
+	id, err := s.EnqueueVerifyAllMedia(queue.OriginManual)
 	if err != nil {
 		t.Fatal(err)
 	}

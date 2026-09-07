@@ -1,7 +1,7 @@
 {{define "timeline_vertical"}}
 {{/* Shared daisyUI vertical timeline (task Stages + video detail History).
    Item fields: Event, Message, CreatedAt, CreatedAgo, Duration?, HasError, Neutral, IsFirst, IsLast,
-   optional HistoryID (task link), optional Substages (nested event/message lines).
+   optional HistoryID (task link), optional OriginIcon (muted lucide), optional Substages.
    Neutral = cancelled / operator abort: muted ban icon (not success green, not error red). */}}
 <ul class="timeline timeline-vertical">
   {{range .}}
@@ -13,7 +13,9 @@
     </div>
     {{end}}
     <div class="timeline-middle">
-      {{if .HasError}}
+      {{if .OriginIcon}}
+      <i data-lucide="{{.OriginIcon}}" class="size-5 text-base-content/50"></i>
+      {{else if .HasError}}
       <i data-lucide="circle-x" class="size-5 text-error"></i>
       {{else if .Neutral}}
       <i data-lucide="ban" class="size-5 text-base-content/50"></i>

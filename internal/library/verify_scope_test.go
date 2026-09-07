@@ -7,11 +7,12 @@ import (
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 func TestEnqueueVerifyAllMediaScopedMutualExclusive(t *testing.T) {
 	s := openLib(t)
-	_, err := s.EnqueueVerifyAllMediaScoped([]int64{1}, []int64{2})
+	_, err := s.EnqueueVerifyAllMediaScoped([]int64{1}, []int64{2}, queue.OriginManual)
 	if err == nil {
 		t.Fatal("want mutual exclusive error")
 	}
@@ -59,7 +60,7 @@ func TestEnqueueVerifyAllMediaScopedSeriesPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	id, err := s.EnqueueVerifyAllMediaScoped([]int64{serA.ID}, nil)
+	id, err := s.EnqueueVerifyAllMediaScoped([]int64{serA.ID}, nil, queue.OriginManual)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +101,7 @@ func TestEnqueueVerifyAllMediaScopedSeriesPayload(t *testing.T) {
 		t.Fatalf("scoped ids=%v want [%d]", ids, resA.VideoID)
 	}
 
-	_, err = s.EnqueueVerifyAllMediaScoped(nil, []int64{resB.VideoID})
+	_, err = s.EnqueueVerifyAllMediaScoped(nil, []int64{resB.VideoID}, queue.OriginManual)
 	if err == nil {
 		t.Fatal("want duplicate while first pending")
 	}

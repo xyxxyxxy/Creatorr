@@ -169,6 +169,7 @@ func (s *Store) EnqueueMetadataRescanSeries(seriesID int64) (int64, error) {
 	}
 	domain := queueDomain(sources[0].URL)
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:     queue.KindRescanMetadata,
 		Domain:   domain,
 		SeriesID: seriesID,
@@ -210,6 +211,7 @@ func (s *Store) enqueueMetadataRescanVideo(videoID int64, gapFill bool) (int64, 
 		msg = "Import metadata gap-fill"
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:     queue.KindRescanMetadata,
 		Domain:   domain,
 		SeriesID: v.SeriesID,
@@ -268,6 +270,7 @@ func (s *Store) EnqueueRefreshSidecarsVideo(videoID int64) (int64, error) {
 		domain = queueDomain(url)
 	}
 	id, err := s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:     queue.KindRefreshSidecars,
 		Domain:   domain,
 		SeriesID: v.SeriesID,

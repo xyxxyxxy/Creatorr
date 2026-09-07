@@ -14,16 +14,19 @@ import (
 )
 
 type historyView struct {
-	ID         int64
-	CreatedAt  string // absolute (title / hover) - finished_at when set
-	CreatedAgo string // relative display
-	Kind       string
-	Status     string // done|failed|cancelled
-	Message    string
-	Domain     string
-	Code       string
-	SeriesID   int64
-	VideoID    int64
+	ID           int64
+	CreatedAt    string // absolute (title / hover) - finished_at when set
+	CreatedAgo   string // relative display
+	Kind         string
+	Status       string // done|failed|cancelled
+	Message      string
+	Domain       string
+	Code         string
+	SeriesID     int64
+	VideoID      int64
+	Origin       string
+	ParentTaskID int64
+	ParentKind   string
 }
 
 type notifyHistoryView struct {
@@ -67,12 +70,16 @@ func taskToHistoryView(t queue.Task, now time.Time) historyView {
 		Message:    t.Message,
 		Domain:     t.Domain,
 		Code:       t.ErrorCode,
+		Origin:     t.Origin,
 	}
 	if t.SeriesID.Valid {
 		v.SeriesID = t.SeriesID.Int64
 	}
 	if t.VideoID.Valid {
 		v.VideoID = t.VideoID.Int64
+	}
+	if t.ParentTaskID.Valid {
+		v.ParentTaskID = t.ParentTaskID.Int64
 	}
 	return v
 }
@@ -133,6 +140,8 @@ func historyEventNeutral(event string) bool {
 // historyEventLabel is the Event column text. Cancelled video rows store
 // event=cancelled with detail.kind (e.g. download); show that kind.
 // Source cancel rows use detail.mode and show "scan".
+// Integrity outcomes keep the stored event id here; video History then prefers
+// tasks.kind when TaskKind is filled (Event = kind, Message = result).
 func historyEventLabel(event, detail string) string {
 	event = strings.TrimSpace(event)
 	if event == library.VideoHistCancelled {
@@ -147,13 +156,14 @@ func historyEventLabel(event, detail string) string {
 	return historyEventDisplay(event)
 }
 
-// historyEventDisplay maps stored event ids to operator-facing labels.
+// historyEventDisplay normalizes legacy event ids; does not invent prose labels
+// (result text stays in Message).
 func historyEventDisplay(event string) string {
 	switch event {
-	case library.VideoHistVerified, library.VideoHistIntegrityChecked:
-		return "Integrity check ok"
-	case library.VideoHistVerifyFailed, "verify_failed":
-		return "Integrity check failed"
+	case library.VideoHistVerified:
+		return library.VideoHistIntegrityChecked
+	case "verify_failed":
+		return library.VideoHistVerifyFailed
 	default:
 		return event
 	}

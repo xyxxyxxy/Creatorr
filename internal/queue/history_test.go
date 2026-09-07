@@ -18,15 +18,15 @@ func TestLastFinishedAt(t *testing.T) {
 	}
 
 	_, err = s.DB.SQL.Exec(`
-		INSERT INTO tasks (kind, status, domain, message, created_at, finished_at)
-		VALUES (?, ?, ?, 'Already up to date', datetime('now'), '2026-08-19T10:00:00Z')
+		INSERT INTO tasks (kind, status, domain, message, origin, created_at, finished_at)
+		VALUES (?, ?, ?, 'Already up to date', 'manual', datetime('now'), '2026-08-19T10:00:00Z')
 	`, queue.KindYtDlpUpdate, queue.StatusDone, queue.SystemDomain)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.DB.SQL.Exec(`
-		INSERT INTO tasks (kind, status, domain, message, created_at, finished_at)
-		VALUES (?, ?, ?, 'Already up to date', datetime('now'), '2026-09-01T12:00:00Z')
+		INSERT INTO tasks (kind, status, domain, message, origin, created_at, finished_at)
+		VALUES (?, ?, ?, 'Already up to date', 'manual', datetime('now'), '2026-09-01T12:00:00Z')
 	`, queue.KindYtDlpUpdate, queue.StatusDone, queue.SystemDomain)
 	if err != nil {
 		t.Fatal(err)
@@ -43,8 +43,8 @@ func TestLastFinishedAt(t *testing.T) {
 func insertFinished(t *testing.T, s *queue.Store, kind, status, domain string) int64 {
 	t.Helper()
 	res, err := s.DB.SQL.Exec(`
-		INSERT INTO tasks (kind, status, domain, message, created_at, finished_at)
-		VALUES (?, ?, ?, 'ok', datetime('now'), datetime('now'))
+		INSERT INTO tasks (kind, status, domain, message, origin, created_at, finished_at)
+		VALUES (?, ?, ?, 'ok', 'manual', datetime('now'), datetime('now'))
 	`, kind, status, domain)
 	if err != nil {
 		t.Fatal(err)
@@ -60,8 +60,8 @@ func TestHistoryFilterDomainKindStatus(t *testing.T) {
 	_ = insertFinished(t, s, queue.KindDownload, queue.StatusCancelled, "b.example")
 	_ = insertFinished(t, s, queue.KindSyncFiles, queue.StatusDone, queue.SystemDomain)
 	_, err := s.DB.SQL.Exec(`
-		INSERT INTO tasks (kind, status, domain, message, created_at)
-		VALUES (?, ?, 'a.example', 'pending', datetime('now'))
+		INSERT INTO tasks (kind, status, domain, message, origin, created_at)
+		VALUES (?, ?, 'a.example', 'pending', 'manual', datetime('now'))
 	`, queue.KindDownload, queue.StatusPending)
 	if err != nil {
 		t.Fatal(err)
@@ -126,10 +126,10 @@ func TestHistoryFilterDomainKindStatus(t *testing.T) {
 func TestHistoryFilterRange(t *testing.T) {
 	s := openStore(t)
 	_, err := s.DB.SQL.Exec(`
-		INSERT INTO tasks (kind, status, domain, message, created_at, finished_at) VALUES
-		(?, ?, 'a.example', 'ok', '2026-07-24T10:00:00Z', '2026-07-24T11:00:00Z'),
-		(?, ?, 'a.example', 'ok', '2026-07-25T09:00:00Z', '2026-07-25T10:30:00Z'),
-		(?, ?, 'a.example', 'ok', '2026-07-25 22:00:00', '2026-07-25 23:15:00')
+		INSERT INTO tasks (kind, status, domain, message, origin, created_at, finished_at) VALUES
+		(?, ?, 'a.example', 'ok', 'manual', '2026-07-24T10:00:00Z', '2026-07-24T11:00:00Z'),
+		(?, ?, 'a.example', 'ok', 'manual', '2026-07-25T09:00:00Z', '2026-07-25T10:30:00Z'),
+		(?, ?, 'a.example', 'ok', 'manual', '2026-07-25 22:00:00', '2026-07-25 23:15:00')
 	`, queue.KindDownload, queue.StatusDone,
 		queue.KindScan, queue.StatusDone,
 		queue.KindDownload, queue.StatusFailed)

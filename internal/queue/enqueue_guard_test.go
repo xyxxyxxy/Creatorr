@@ -14,6 +14,7 @@ func TestEnqueueRejectsDuplicateDownload(t *testing.T) {
 	s := openStore(t)
 	vid := seedVideo(t, s, "dup1")
 	p := queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com", SeriesID: 1, VideoID: vid,
 		Message: "Download",
 	}
@@ -29,6 +30,7 @@ func TestEnqueueRejectsDuplicateDownload(t *testing.T) {
 func TestEnqueueRejectsDuplicateScanSource(t *testing.T) {
 	s := openStore(t)
 	p := queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindScan, Domain: "example.com",
 		Payload: map[string]any{"source_id": int64(7), "mode": "scan"},
 	}
@@ -55,18 +57,21 @@ func TestEnqueueDownloadQueueCap(t *testing.T) {
 	v3 := seedVideo(t, s, "c3")
 	for _, vid := range []int64{v1, v2} {
 		if _, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 			Kind: queue.KindDownload, Domain: "example.com", SeriesID: 1, VideoID: vid,
 		}); err != nil {
 			t.Fatalf("enqueue %d: %v", vid, err)
 		}
 	}
 	_, err = s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com", SeriesID: 1, VideoID: v3,
 	})
 	if !errors.Is(err, queue.ErrQueueFull) {
 		t.Fatalf("want ErrQueueFull, got %v", err)
 	}
 	_, err = s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "other.example", SeriesID: 1, VideoID: v3,
 	})
 	if err != nil {

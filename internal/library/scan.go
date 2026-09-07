@@ -33,8 +33,12 @@ func namingDomain(rawURL string) string {
 	return d
 }
 
-func enqueueDownloadParams(videoID, seriesID int64, domain string) queue.EnqueueParams {
+func enqueueDownloadParams(videoID, seriesID int64, domain, origin string) queue.EnqueueParams {
+	if origin == "" {
+		origin = queue.OriginManual
+	}
 	return queue.EnqueueParams{
+		Origin:   origin,
 		Kind:     queue.KindDownload,
 		Domain:   domain,
 		SeriesID: seriesID,
@@ -45,7 +49,7 @@ func enqueueDownloadParams(videoID, seriesID int64, domain string) queue.Enqueue
 }
 
 func enqueueDownloadNowParams(videoID, seriesID int64, domain string) queue.EnqueueParams {
-	p := enqueueDownloadParams(videoID, seriesID, domain)
+	p := enqueueDownloadParams(videoID, seriesID, domain, queue.OriginManual)
 	p.Message = "Queue download"
 	p.Priority = queue.PriorityDownloadNow
 	p.BypassDownloadCap = true
@@ -97,7 +101,7 @@ func (s *Store) EnqueueFullScansForSeries(seriesID int64) (count int, firstTaskI
 		if !ok {
 			continue
 		}
-		id, err := s.EnqueueScanSource(src.ID)
+		id, err := s.EnqueueScanSource(src.ID, queue.OriginManual)
 		if err != nil {
 			if errors.Is(err, ErrConflict) {
 				continue
@@ -163,7 +167,7 @@ func (s *Store) EnqueueScansForSeries(seriesID int64) (count int, firstTaskID in
 			continue
 		}
 		eligible++
-		id, err := s.EnqueueScanSource(src.ID)
+		id, err := s.EnqueueScanSource(src.ID, queue.OriginManual)
 		if err != nil {
 			if errors.Is(err, ErrConflict) {
 				continue
@@ -187,7 +191,7 @@ func (s *Store) EnqueueScansForSeries(seriesID int64) (count int, firstTaskID in
 // EnqueueScanSource queues one scan for a single source (index-only).
 // Domain must be active. Series.monitored is not required (manual tip Scan and
 // full scan); scheduled tip Scan is filtered in EnqueueScansDue.
-func (s *Store) EnqueueScanSource(sourceID int64) (int64, error) {
+func (s *Store) EnqueueScanSource(sourceID int64, origin string) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
 	}
@@ -224,7 +228,11 @@ func (s *Store) EnqueueScanSource(sourceID int64) (int64, error) {
 		"source_id": sourceID,
 		"mode":      mode,
 	}
+	if origin == "" {
+		origin = queue.OriginManual
+	}
 	id, err := s.Queue.Enqueue(queue.EnqueueParams{
+		Origin:   origin,
 		Kind:     queue.KindScan,
 		Domain:   domain,
 		SeriesID: src.SeriesID,
@@ -338,7 +346,7 @@ func (s *Store) FullRescanSource(sourceID int64) (int64, error) {
 	if err := s.ResetFullScan(sourceID); err != nil {
 		return 0, err
 	}
-	return s.EnqueueScanSource(sourceID)
+	return s.EnqueueScanSource(sourceID, queue.OriginManual)
 }
 
 // FullRescanSeries resets full scan on all sources and enqueues full scans.

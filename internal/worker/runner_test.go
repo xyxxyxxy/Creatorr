@@ -31,7 +31,7 @@ func TestRunnerCompletesStub(t *testing.T) {
 	_ = settings.SeedDefaults(d)
 	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
 	store := queue.NewStore(d)
-	id, err := store.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com"})
+	id, err := store.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,6 +99,7 @@ func TestRunnerCancelDoesNotMarkDownloadFailed(t *testing.T) {
 
 	store := lib.Queue
 	id, err := store.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com", SeriesID: ser.ID, VideoID: videoID,
 	})
 	if err != nil {
@@ -186,6 +187,7 @@ func TestRunnerCancelHistoryUsesCancelledNotLiveProgress(t *testing.T) {
 	videoID, _ := res.LastInsertId()
 
 	id, err := store.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindIntegrityCheckInitial, Domain: queue.SystemDomain, SeriesID: ser.ID, VideoID: videoID,
 	})
 	if err != nil {
@@ -288,6 +290,7 @@ func TestRunnerShutdownLeavesRunningForRequeue(t *testing.T) {
 	videoID, _ := res.LastInsertId()
 
 	id, err := store.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindIntegrityCheckInitial, Domain: queue.SystemDomain, SeriesID: ser.ID, VideoID: videoID,
 	})
 	if err != nil {
@@ -394,7 +397,7 @@ func testRunnerDomainIssueNotify(t *testing.T, returnCode, returnMsg string, wan
 	}
 
 	store := queue.NewStore(d)
-	id, err := store.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com"})
+	id, err := store.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -509,6 +512,7 @@ func TestRunnerAgeRestrictedDoesNotPauseOrNotify(t *testing.T) {
 
 	store := lib.Queue
 	id, err := store.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com", SeriesID: ser.ID, VideoID: res.VideoID,
 	})
 	if err != nil {
@@ -622,11 +626,11 @@ func TestRunnerDownloadsDoneDigest(t *testing.T) {
 	v2 := insertVid("b", "Two")
 
 	store := lib.Queue
-	_, err = store.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com", SeriesID: ser.ID, VideoID: v1})
+	_, err = store.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com", SeriesID: ser.ID, VideoID: v1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = store.Enqueue(queue.EnqueueParams{Kind: queue.KindDownload, Domain: "example.com", SeriesID: ser.ID, VideoID: v2})
+	_, err = store.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com", SeriesID: ser.ID, VideoID: v2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -706,6 +710,7 @@ func TestRunnerLiveBroadcastSkippedStaysWanted(t *testing.T) {
 
 	store := lib.Queue
 	id, err := store.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com", SeriesID: ser.ID, VideoID: videoID,
 	})
 	if err != nil {

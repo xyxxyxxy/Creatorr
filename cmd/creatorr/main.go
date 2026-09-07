@@ -139,7 +139,7 @@ func main() {
 	if enabled, err := settings.YtDlpUpdatesEnabled(database); err != nil {
 		log.Error("yt-dlp updates enabled check", "err", err)
 	} else if enabled {
-		if id, err := lib.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateBoot, "boot"); err != nil {
+		if id, err := lib.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateBoot, queue.OriginBoot); err != nil {
 			log.Warn("yt-dlp boot update enqueue", "err", err)
 		} else if id > 0 {
 			log.Info("yt-dlp boot update enqueued", "task", id)

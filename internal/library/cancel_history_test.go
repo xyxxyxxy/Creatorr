@@ -87,6 +87,7 @@ func TestCancelDownloadWritesVideoHistory(t *testing.T) {
 	}
 
 	tid, err := s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com",
 		SeriesID: ser.ID, VideoID: res.VideoID,
 		Payload: map[string]any{"url": "https://www.example.com/watch?v=1"},

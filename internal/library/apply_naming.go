@@ -27,6 +27,7 @@ func (s *Store) EnqueueRenameEpisodes() (int64, error) {
 		return 0, err
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:   queue.KindRenameEpisodes,
 		Domain: queue.SystemDomain,
 		Payload: map[string]any{
@@ -57,6 +58,7 @@ func (s *Store) EnqueueRenameEpisodesVideos(videoIDs []int64) (int64, error) {
 		return tid, nil
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:   queue.KindRenameEpisodes,
 		Domain: queue.SystemDomain,
 		Payload: map[string]any{
@@ -98,6 +100,7 @@ func (s *Store) EnqueueRenameEpisodesSeries(seriesID int64, oldTitle string, old
 		payload["old_root_id"] = oldRootID
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:     queue.KindRenameEpisodes,
 		Domain:   queue.SystemDomain,
 		SeriesID: seriesID,
@@ -124,6 +127,7 @@ func (s *Store) EnqueueRenameEpisodesSeriesIDs(seriesIDs []int64) (int64, error)
 		return 0, err
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:   queue.KindRenameEpisodes,
 		Domain: queue.SystemDomain,
 		Payload: map[string]any{
@@ -243,9 +247,13 @@ func (s *Store) findPendingRenameSeries(seriesID int64) (taskID int64, found boo
 
 // EnqueueSyncFiles queues a system-lane file sync pass.
 // No-op (returns 0, nil) when the library has no videos.
-func (s *Store) EnqueueSyncFiles(priority int) (int64, error) {
+// origin is the kick source (manual Run now vs scheduled cron).
+func (s *Store) EnqueueSyncFiles(priority int, origin string) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue unavailable", ErrInvalid)
+	}
+	if origin == "" {
+		origin = queue.OriginManual
 	}
 	ok, err := s.anyVideo()
 	if err != nil {
@@ -255,6 +263,7 @@ func (s *Store) EnqueueSyncFiles(priority int) (int64, error) {
 		return 0, nil
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin:   origin,
 		Kind:     queue.KindSyncFiles,
 		Domain:   queue.SystemDomain,
 		Priority: priority,
@@ -264,9 +273,12 @@ func (s *Store) EnqueueSyncFiles(priority int) (int64, error) {
 
 // EnqueueRetentionDelete queues a system-lane retention TTL purge.
 // No-op (returns 0, nil) when no root has retention_ttl_seconds set.
-func (s *Store) EnqueueRetentionDelete(priority int) (int64, error) {
+func (s *Store) EnqueueRetentionDelete(priority int, origin string) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue unavailable", ErrInvalid)
+	}
+	if origin == "" {
+		origin = queue.OriginManual
 	}
 	ok, err := s.AnyRootRetentionTTL()
 	if err != nil {
@@ -276,6 +288,7 @@ func (s *Store) EnqueueRetentionDelete(priority int) (int64, error) {
 		return 0, nil
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin:   origin,
 		Kind:     queue.KindRetentionDelete,
 		Domain:   queue.SystemDomain,
 		Priority: priority,

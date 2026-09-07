@@ -47,6 +47,7 @@ func TestSeriesMetadataBodyDiscardClearsDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 	tid, err := q.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindPrefetchSeriesMeta, Domain: "example.com", SeriesID: ser.ID,
 		Payload: map[string]any{"url": "https://example.com/c"}, Message: "fetch",
 	})

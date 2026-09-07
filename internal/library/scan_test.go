@@ -205,7 +205,7 @@ func TestSingleSourceSkipsCatchup(t *testing.T) {
 	if err := s.MarkFullScanDone(src.ID); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.EnqueueScanSource(src.ID)
+	_, err = s.EnqueueScanSource(src.ID, queue.OriginManual)
 	if err == nil {
 		t.Fatal("want catch-up rejected for single")
 	}
@@ -419,7 +419,7 @@ func TestEnqueueScanSourceConflictMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	srcID := ser.Sources[0].ID
-	_, err = s.EnqueueScanSource(srcID)
+	_, err = s.EnqueueScanSource(srcID, queue.OriginManual)
 	if !errors.Is(err, library.ErrConflict) {
 		t.Fatalf("want conflict while pending from AddSource, got %v", err)
 	}
@@ -452,7 +452,7 @@ func TestManualTipScanAllowsUnmonitored(t *testing.T) {
 	if err := s.MarkFullScanDone(srcID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.EnqueueScanSource(srcID); err != nil {
+	if _, err := s.EnqueueScanSource(srcID, queue.OriginManual); err != nil {
 		t.Fatalf("per-source tip Scan: %v", err)
 	}
 	_, _ = s.DB.SQL.Exec(`UPDATE tasks SET status = 'cancelled' WHERE kind = 'scan'`)

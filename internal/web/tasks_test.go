@@ -34,6 +34,7 @@ func TestTasksLanePagesAtTen(t *testing.T) {
 	const n = 25
 	for i := 1; i <= n; i++ {
 		if _, err := q.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 			Kind:    queue.KindScan,
 			Domain:  "example.com",
 			Payload: map[string]any{"source_id": int64(i), "mode": "scan"},

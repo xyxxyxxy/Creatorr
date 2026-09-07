@@ -87,6 +87,7 @@ func TestAlignSeriesYearEpisodesRenamesPeers(t *testing.T) {
 	}
 
 	tid, err := s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com",
 		SeriesID: ser.ID, VideoID: early.VideoID, Message: "dl",
 	})

@@ -81,6 +81,7 @@ func (s *Store) EnqueueBulkEditVideos(p BulkEditVideosParams) (int64, error) {
 		payload["actors"] = *p.Actors
 	}
 	id, err := s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:    queue.KindBulkEditVideos,
 		Domain:  queue.SystemDomain,
 		Payload: payload,

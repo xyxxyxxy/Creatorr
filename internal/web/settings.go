@@ -1253,7 +1253,7 @@ func (h *Handler) actionVerifyAllMedia(w http.ResponseWriter, r *http.Request) {
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery("'Integrity check' already queued"))
 		return
 	}
-	if _, err := h.Library.EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs); err != nil {
+	if _, err := h.Library.EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs, queue.OriginManual); err != nil {
 		redirectSettings(w, r, "/settings/maintenance", "err="+urlQuery(err.Error()))
 		return
 	}
@@ -1390,7 +1390,7 @@ func (h *Handler) actionMaintenanceRun(w http.ResponseWriter, r *http.Request) {
 				skipMsgs = append(skipMsgs, "'Integrity check' already queued")
 				continue
 			}
-			if _, err := h.Library.EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs); err != nil {
+			if _, err := h.Library.EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs, queue.OriginManual); err != nil {
 				if firstErr == "" {
 					firstErr = err.Error()
 				}
@@ -1402,7 +1402,7 @@ func (h *Handler) actionMaintenanceRun(w http.ResponseWriter, r *http.Request) {
 				skipMsgs = append(skipMsgs, "'File sync' already queued")
 				continue
 			}
-			id, err := h.Library.EnqueueSyncFiles(queue.PrioritySyncFilesDue)
+			id, err := h.Library.EnqueueSyncFiles(queue.PrioritySyncFilesDue, queue.OriginManual)
 			if err != nil {
 				if firstErr == "" {
 					firstErr = err.Error()
@@ -1547,7 +1547,7 @@ func (h *Handler) actionYtDlpUpdate(w http.ResponseWriter, r *http.Request) {
 		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("yt-dlp update already queued or running"))
 		return
 	}
-	id, err := h.Library.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, "manual")
+	id, err := h.Library.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, queue.OriginManual)
 	if err != nil {
 		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(err.Error()))
 		return

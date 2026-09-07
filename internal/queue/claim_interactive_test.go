@@ -13,6 +13,7 @@ func TestClaimInteractiveWhileDomainBusy(t *testing.T) {
 	vid := seedVideo(t, s, "v1")
 
 	dlID, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com", VideoID: vid, Message: "dl",
 	})
 	if err != nil {
@@ -26,6 +27,7 @@ func TestClaimInteractiveWhileDomainBusy(t *testing.T) {
 	var seriesID int64
 	_ = s.DB.SQL.QueryRow(`SELECT series_id FROM videos WHERE id = ?`, vid).Scan(&seriesID)
 	prefID, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindPrefetchSeriesMeta, Domain: "example.com", SeriesID: seriesID,
 		Payload: map[string]any{"url": "https://example.com/x"}, Message: "prefetch",
 	})
@@ -53,6 +55,7 @@ func TestClaimInteractiveIgnoresPause(t *testing.T) {
 	var seriesID int64
 	_ = s.DB.SQL.QueryRow(`SELECT series_id FROM videos WHERE id = ?`, vid).Scan(&seriesID)
 	prefID, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindPrefetchSeriesMeta, Domain: "example.com", SeriesID: seriesID,
 		Payload: map[string]any{"url": "https://example.com/x"}, Message: "prefetch",
 	})

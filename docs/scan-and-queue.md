@@ -8,6 +8,19 @@ Index: [README.md](README.md). Terminology: [`AGENTS.md`](../AGENTS.md).
 
 **Jobs** are **implicit only** - intervals/flags on series, sources, and global settings. No `jobs` table. No Jobs UI. The DB stores **tasks** (domain queue) plus settings.
 
+### Task origin
+
+Every task row has durable **`origin`** (`manual` | `scheduled` | `boot` | `task`) and optional **`parent_task_id`** (required when `origin=task`). Kick source, not task kind: the same `sync_files` is `scheduled` from cron and `manual` from Scheduler **Run now** / Maintenance. Values:
+
+| Origin | Who queues |
+|---|---|
+| `manual` | Operator UI / OpenAPI enqueue (clients cannot set origin; always forced) |
+| `scheduled` | Cron / scan schedule ticks |
+| `boot` | Process start enqueue |
+| `task` | Another task spawned this one (`parent_task_id` = parent) |
+
+Enqueue rejects empty/invalid origin (fail closed). Schema v11 backfilled **all** existing rows to `manual` (knowingly inaccurate for older yt-dlp cron/boot) and stripped legacy `payload`/`detail` `trigger` keys. Task detail **Details** shows Origin (+ Parent when `task`); **Stages** shows an origin node and direct child tasks (no live SSE patch for new children while the page is open).
+
 | Implicit schedule | Creates |
 |---|---|
 | Per-source Scan (`sources.scan_cron` + latest tip `source_history` `scanned` with `mode=scan`) | One **Scan** per due feed source (empty cron = no schedule). Tip Scan when `full_scan_done`; otherwise **full scan**. UI is free-form cron / `@hourly`…`@monthly`; empty = never (manual still OK). Process start does **not** catch up fires missed while down; waits for the next cron after boot. **Cron fields are UTC**; UI labels (`Describe` / Scan row) show the equivalent wall clock in process local time (`TZ` - see compose / `.env`) |

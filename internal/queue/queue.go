@@ -87,6 +87,39 @@ const PriorityYtDlpUpdateBoot = 40
 // PriorityYtDlpUpdateDue is cron/manual yt-dlp update priority.
 const PriorityYtDlpUpdateDue = 50
 
+// Task origin: kick source (writable values only).
+const (
+	OriginManual    = "manual"
+	OriginScheduled = "scheduled"
+	OriginBoot      = "boot"
+	OriginTask      = "task"
+)
+
+// ValidOrigin reports whether origin is a writable provenance value.
+func ValidOrigin(origin string) bool {
+	switch origin {
+	case OriginManual, OriginScheduled, OriginBoot, OriginTask:
+		return true
+	default:
+		return false
+	}
+}
+
+// normalizeEnqueueOrigin validates and normalizes origin/parent for insert.
+func normalizeEnqueueOrigin(p *EnqueueParams) error {
+	if p.ParentTaskID > 0 {
+		p.Origin = OriginTask
+	}
+	p.Origin = strings.TrimSpace(p.Origin)
+	if !ValidOrigin(p.Origin) {
+		return fmt.Errorf("origin required: manual|scheduled|boot|task")
+	}
+	if p.Origin == OriginTask && p.ParentTaskID <= 0 {
+		return fmt.Errorf("parent_task_id required when origin=task")
+	}
+	return nil
+}
+
 // Task is a queued unit of work.
 type Task struct {
 	ID           int64
@@ -103,6 +136,8 @@ type Task struct {
 	Progress     sql.NullFloat64
 	Domain       string
 	Priority     int
+	Origin       string
+	ParentTaskID sql.NullInt64
 	CreatedAt    string
 	StartedAt    sql.NullString
 	FinishedAt   sql.NullString
@@ -118,7 +153,9 @@ type EnqueueParams struct {
 	Payload           map[string]any
 	Priority          int
 	Message           string
-	BypassDownloadCap bool // Queue download: skip max_download_queue
+	Origin            string // required: manual|scheduled|boot|task
+	ParentTaskID      int64  // required when Origin=task; forces OriginTask when >0
+	BypassDownloadCap bool   // Queue download: skip max_download_queue
 }
 
 // Store wraps queue operations.
@@ -209,6 +246,9 @@ func (s *Store) Enqueue(p EnqueueParams) (int64, error) {
 	if p.Kind == "" {
 		return 0, fmt.Errorf("kind required")
 	}
+	if err := normalizeEnqueueOrigin(&p); err != nil {
+		return 0, err
+	}
 	domain := p.Domain
 	if domain == "" {
 		domain = "unknown"
@@ -234,16 +274,20 @@ func (s *Store) Enqueue(p EnqueueParams) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	var series any
 	var video any
+	var parent any
 	if p.SeriesID > 0 {
 		series = p.SeriesID
 	}
 	if p.VideoID > 0 {
 		video = p.VideoID
 	}
+	if p.ParentTaskID > 0 {
+		parent = p.ParentTaskID
+	}
 	res, err := s.DB.SQL.Exec(`
-		INSERT INTO tasks (kind, status, series_id, video_id, payload, message, domain, priority, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.Kind, StatusPending, series, video, payload, nullStr(p.Message), domain, p.Priority, now)
+		INSERT INTO tasks (kind, status, series_id, video_id, payload, message, domain, priority, origin, parent_task_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, p.Kind, StatusPending, series, video, payload, nullStr(p.Message), domain, p.Priority, p.Origin, parent, now)
 	if err != nil {
 		return 0, err
 	}
@@ -252,9 +296,13 @@ func (s *Store) Enqueue(p EnqueueParams) (int64, error) {
 
 // InsertRunning inserts a running task without duplicate or download-cap checks.
 // Used for sync bookkeeping (e.g. series folder move NFO rewrite) so video_history can link a task_id.
+// Caller must pass origin (and real parent_task_id when origin=task); never invent a fake parent.
 func (s *Store) InsertRunning(p EnqueueParams) (int64, error) {
 	if p.Kind == "" {
 		return 0, fmt.Errorf("kind required")
+	}
+	if err := normalizeEnqueueOrigin(&p); err != nil {
+		return 0, err
 	}
 	domain := p.Domain
 	if domain == "" {
@@ -273,16 +321,20 @@ func (s *Store) InsertRunning(p EnqueueParams) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	var series any
 	var video any
+	var parent any
 	if p.SeriesID > 0 {
 		series = p.SeriesID
 	}
 	if p.VideoID > 0 {
 		video = p.VideoID
 	}
+	if p.ParentTaskID > 0 {
+		parent = p.ParentTaskID
+	}
 	res, err := s.DB.SQL.Exec(`
-		INSERT INTO tasks (kind, status, series_id, video_id, payload, message, domain, priority, created_at, started_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.Kind, StatusRunning, series, video, payload, nullStr(p.Message), domain, p.Priority, now, now)
+		INSERT INTO tasks (kind, status, series_id, video_id, payload, message, domain, priority, origin, parent_task_id, created_at, started_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, p.Kind, StatusRunning, series, video, payload, nullStr(p.Message), domain, p.Priority, p.Origin, parent, now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -436,7 +488,8 @@ func (s *Store) ClaimNext() (*Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT t.id, t.kind, t.status, t.series_id, t.video_id, t.payload,
 		       COALESCE(t.error_code,''), COALESCE(t.error_message,''), COALESCE(t.message,''),
-		       COALESCE(t.detail,''), t.progress, t.domain, t.priority, t.created_at, t.started_at, t.finished_at
+		       COALESCE(t.detail,''), t.progress, t.domain, t.priority, t.created_at, t.started_at, t.finished_at,
+		       t.origin, t.parent_task_id
 		FROM tasks t
 		WHERE t.status = ?
 		  AND t.kind NOT IN (?, ?, ?, ?)
@@ -464,7 +517,8 @@ func (s *Store) ClaimInteractive() (*Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT t.id, t.kind, t.status, t.series_id, t.video_id, t.payload,
 		       COALESCE(t.error_code,''), COALESCE(t.error_message,''), COALESCE(t.message,''),
-		       COALESCE(t.detail,''), t.progress, t.domain, t.priority, t.created_at, t.started_at, t.finished_at
+		       COALESCE(t.detail,''), t.progress, t.domain, t.priority, t.created_at, t.started_at, t.finished_at,
+		       t.origin, t.parent_task_id
 		FROM tasks t
 		WHERE t.status = ?
 		  AND t.kind IN (?, ?, ?, ?)
@@ -846,7 +900,8 @@ func (s *Store) CancelDownloadsForVideo(videoID int64, message string) ([]Task, 
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at
+		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       origin, parent_task_id
 		FROM tasks
 		WHERE kind IN (?, ?, ?) AND video_id = ? AND status IN (?, ?)
 	`, KindDownload, KindSponsorblockCut, KindIntegrityCheckInitial, videoID, StatusPending, StatusRunning)
@@ -889,12 +944,41 @@ func (s *Store) CancelDownloadsForVideo(videoID int64, message string) ([]Task, 
 	return out, nil
 }
 
+// ListByParentTaskID returns tasks spawned by parentID, oldest first.
+func (s *Store) ListByParentTaskID(parentID int64) ([]Task, error) {
+	if parentID <= 0 {
+		return nil, nil
+	}
+	rows, err := s.DB.SQL.Query(`
+		SELECT id, kind, status, series_id, video_id, payload,
+		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
+		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       origin, parent_task_id
+		FROM tasks WHERE parent_task_id = ?
+		ORDER BY created_at ASC, id ASC
+	`, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Task
+	for rows.Next() {
+		t, err := s.scanTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *t)
+	}
+	return out, rows.Err()
+}
+
 // GetTask returns a task by id (any status), or nil if missing.
 func (s *Store) GetTask(id int64) (*Task, error) {
 	row := s.DB.SQL.QueryRow(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
 		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       origin, parent_task_id,
 		       COALESCE(NULLIF(commands, ''), '[]')
 		FROM tasks WHERE id = ?
 	`, id)
@@ -923,7 +1007,8 @@ func (s *Store) CancelAll() ([]Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at
+		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       origin, parent_task_id
 		FROM tasks WHERE status = ?
 	`, StatusPending)
 	if err != nil {
@@ -996,7 +1081,8 @@ func (s *Store) cancelDomain(domain, message string, statuses ...string) ([]Task
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at
+		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       origin, parent_task_id
 		FROM tasks WHERE domain = ? AND status IN (`+string(ph)+`)
 	`, args...)
 	if err != nil {
@@ -1083,7 +1169,8 @@ func (s *Store) cancelPendingScans(where, message string, args ...any) (int64, e
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at
+		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       origin, parent_task_id
 		FROM tasks WHERE `+where, args...)
 	if err != nil {
 		return 0, err
@@ -1128,7 +1215,8 @@ func (s *Store) ListActive() ([]Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at
+		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       origin, parent_task_id
 		FROM tasks
 		WHERE status IN (?, ?)
 		ORDER BY domain ASC, CASE status WHEN ? THEN 0 ELSE 1 END, priority DESC, id ASC
@@ -1156,7 +1244,8 @@ func (s *Store) ListActiveFileDelete() ([]Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at
+		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       origin, parent_task_id
 		FROM tasks
 		WHERE kind = ? AND status IN (?, ?)
 		ORDER BY id ASC
@@ -1181,7 +1270,8 @@ func (s *Store) ListActiveForSeries(seriesID int64) ([]Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at
+		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       origin, parent_task_id
 		FROM tasks
 		WHERE series_id = ? AND status IN (?, ?)
 		ORDER BY CASE status WHEN ? THEN 0 ELSE 1 END, id ASC
@@ -1207,7 +1297,8 @@ func (s *Store) ActiveTaskForVideo(videoID int64) (*Task, error) {
 	row := s.DB.SQL.QueryRow(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at
+		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       origin, parent_task_id
 		FROM tasks
 		WHERE video_id = ? AND status IN (?, ?)
 		ORDER BY CASE status WHEN ? THEN 0 ELSE 1 END, id DESC
@@ -1310,7 +1401,8 @@ func (s *Store) ActiveScanForSeries(seriesID int64) (*Task, error) {
 	row := s.DB.SQL.QueryRow(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at
+		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       origin, parent_task_id
 		FROM tasks
 		WHERE kind = ? AND series_id = ? AND status IN (?, ?)
 		ORDER BY CASE status WHEN ? THEN 0 ELSE 1 END, id DESC
@@ -1334,6 +1426,7 @@ func (s *Store) scanTask(scanner interface {
 		&t.ID, &t.Kind, &t.Status, &t.SeriesID, &t.VideoID, &t.Payload,
 		&t.ErrorCode, &t.ErrorMessage, &t.Message, &t.Detail,
 		&t.Progress, &t.Domain, &t.Priority, &t.CreatedAt, &t.StartedAt, &t.FinishedAt,
+		&t.Origin, &t.ParentTaskID,
 	)
 	if err != nil {
 		return nil, err
@@ -1351,6 +1444,7 @@ func (s *Store) scanTaskWithCommands(scanner interface {
 		&t.ID, &t.Kind, &t.Status, &t.SeriesID, &t.VideoID, &t.Payload,
 		&t.ErrorCode, &t.ErrorMessage, &t.Message, &t.Detail,
 		&t.Progress, &t.Domain, &t.Priority, &t.CreatedAt, &t.StartedAt, &t.FinishedAt,
+		&t.Origin, &t.ParentTaskID,
 		&commandsJSON,
 	)
 	if err != nil {

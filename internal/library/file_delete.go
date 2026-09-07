@@ -23,6 +23,7 @@ func (s *Store) EnqueueDeleteFiles(seriesIDs, videoIDs []int64) (int64, error) {
 		return 0, fmt.Errorf("%w: series_ids or video_ids required", ErrInvalid)
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:   queue.KindDeleteFiles,
 		Domain: queue.SystemDomain,
 		Payload: map[string]any{

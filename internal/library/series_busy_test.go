@@ -54,6 +54,7 @@ func TestSeriesHasBusyMediaTasks(t *testing.T) {
 	assertBusy(serB.ID, false)
 
 	_, err = s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com",
 		SeriesID: serA.ID, VideoID: resA.VideoID,
 	})
@@ -64,6 +65,7 @@ func TestSeriesHasBusyMediaTasks(t *testing.T) {
 	assertBusy(serB.ID, false)
 
 	_, err = s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindDownload, Domain: "example.com",
 		SeriesID: serB.ID, VideoID: resB.VideoID,
 	})
@@ -85,6 +87,7 @@ func TestSeriesHasBusyMediaTasks(t *testing.T) {
 	assertBusy(serB.ID, false)
 
 	_, err = s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindSponsorblockCut, Domain: queue.SystemDomain,
 		SeriesID: serA.ID, VideoID: resA.VideoID,
 	})
@@ -99,6 +102,7 @@ func TestSeriesHasBusyMediaTasks(t *testing.T) {
 	}
 
 	_, err = s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindIntegrityCheckInitial, Domain: queue.SystemDomain,
 		SeriesID: serA.ID, VideoID: resA.VideoID,
 	})
@@ -114,6 +118,7 @@ func TestSeriesHasBusyMediaTasks(t *testing.T) {
 
 	// Non-media kinds on A do not lock.
 	if _, err := s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind: queue.KindRenameEpisodes, Domain: queue.SystemDomain,
 		SeriesID: serA.ID,
 		Payload:  map[string]any{"series_id": serA.ID, "formats_by_root": map[string]string{}},
@@ -124,8 +129,8 @@ func TestSeriesHasBusyMediaTasks(t *testing.T) {
 
 	// Video-linked download with null series_id still locks via join.
 	_, err = s.DB.SQL.Exec(`
-		INSERT INTO tasks (kind, status, series_id, video_id, payload, domain, priority, created_at)
-		VALUES (?, 'pending', NULL, ?, '{}', 'example.com', 0, datetime('now'))
+		INSERT INTO tasks (kind, status, series_id, video_id, payload, domain, priority, origin, created_at)
+		VALUES (?, 'pending', NULL, ?, '{}', 'example.com', 0, 'manual', datetime('now'))
 	`, queue.KindDownload, resA.VideoID)
 	if err != nil {
 		t.Fatal(err)

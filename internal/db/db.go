@@ -16,7 +16,7 @@ import (
 var schemaFS embed.FS
 
 // schemaVersion is the latest schema. Fresh installs record this; existing DBs migrate up.
-const schemaVersion = 10
+const schemaVersion = 11
 
 // busyTimeoutMS is how long pooled connections wait on SQLITE_BUSY before failing.
 // Must be set via DSN _pragma so every pool conn gets it (Exec PRAGMA only hits one conn).
@@ -103,6 +103,11 @@ func (d *DB) applySchema() error {
 	}
 	if err := d.migrate(); err != nil {
 		return err
+	}
+	// Indexes that reference columns added by migrate must run after migrate
+	// (schema.sql CREATE TABLE IF NOT EXISTS leaves older tables unchanged).
+	if _, err := d.SQL.Exec(`CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id)`); err != nil {
+		return fmt.Errorf("idx_tasks_parent: %w", err)
 	}
 	return nil
 }

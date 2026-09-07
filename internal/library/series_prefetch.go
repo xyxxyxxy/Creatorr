@@ -28,6 +28,7 @@ func (s *Store) EnqueueSeriesMetaPrefetch(seriesID int64, fetchURL string) (int6
 		domain = settings.NormalizeDomain(u.Hostname())
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:     queue.KindPrefetchSeriesMeta,
 		Domain:   domain,
 		SeriesID: seriesID,
@@ -57,6 +58,7 @@ func (s *Store) EnqueueAddSeriesPrefetch(sourceURL, draftToken string) (int64, e
 		domain = settings.NormalizeDomain(u.Hostname())
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:   queue.KindPrefetchAddSeries,
 		Domain: domain,
 		Payload: map[string]any{

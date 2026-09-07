@@ -249,7 +249,7 @@ func TestPackMediaCollisionSuffix(t *testing.T) {
 
 func TestEnqueueRetentionDeleteSkipsWithoutTTL(t *testing.T) {
 	s := openLib(t)
-	id, err := s.EnqueueRetentionDelete(queue.PriorityRetentionDeleteDue)
+	id, err := s.EnqueueRetentionDelete(queue.PriorityRetentionDeleteDue, queue.OriginManual)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestEnqueueRetentionDeleteSkipsWithoutTTL(t *testing.T) {
 	if _, err := s.CreateRoot("with-ttl", t.TempDir(), "", &ttl); err != nil {
 		t.Fatal(err)
 	}
-	id, err = s.EnqueueRetentionDelete(queue.PriorityRetentionDeleteDue)
+	id, err = s.EnqueueRetentionDelete(queue.PriorityRetentionDeleteDue, queue.OriginManual)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestEnqueueRetentionDeleteSkipsWithoutTTL(t *testing.T) {
 
 func TestEnqueueSyncFilesSkipsWithoutVideos(t *testing.T) {
 	s := openLib(t)
-	id, err := s.EnqueueSyncFiles(queue.PrioritySyncFilesDue)
+	id, err := s.EnqueueSyncFiles(queue.PrioritySyncFilesDue, queue.OriginManual)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func TestEnqueueSyncFilesSkipsWithoutVideos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err = s.EnqueueSyncFiles(queue.PrioritySyncFilesDue)
+	id, err = s.EnqueueSyncFiles(queue.PrioritySyncFilesDue, queue.OriginManual)
 	if err != nil {
 		t.Fatal(err)
 	}

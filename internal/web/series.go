@@ -663,6 +663,32 @@ func fillVideoHistoryTaskKinds(q *queue.Store, views []videoHistoryView) {
 		cache[id] = kind
 		views[i].TaskKind = kind
 	}
+	preferIntegrityHistoryTaskKind(views)
+}
+
+// preferIntegrityHistoryTaskKind uses tasks.kind as the Event link for integrity
+// outcome rows (Message keeps the result text). Matches cancelled/download grouping.
+func preferIntegrityHistoryTaskKind(views []videoHistoryView) {
+	for i := range views {
+		if !isIntegrityHistoryOutcomeEvent(views[i].Event) {
+			continue
+		}
+		kind := strings.TrimSpace(views[i].TaskKind)
+		if kind == "" {
+			continue
+		}
+		views[i].Event = historyKindDisplay(kind)
+	}
+}
+
+func isIntegrityHistoryOutcomeEvent(event string) bool {
+	switch strings.TrimSpace(event) {
+	case library.VideoHistVerified, library.VideoHistIntegrityChecked,
+		library.VideoHistVerifyFailed, "verify_failed":
+		return true
+	default:
+		return false
+	}
 }
 
 // enrichVideoHistoryRenameMessages clarifies peer-move renames triggered by another video's
@@ -1396,7 +1422,7 @@ func (h *Handler) actionScanSource(w http.ResponseWriter, r *http.Request) {
 	if !src.FullScanDone {
 		okFlash = "history-scan"
 	}
-	_, err = h.Library.EnqueueScanSource(srcID)
+	_, err = h.Library.EnqueueScanSource(srcID, queue.OriginManual)
 	if err != nil {
 		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
 		return

@@ -418,6 +418,7 @@ func TestCompleteDownloadRenamesAfterInfoJSONDateWhileDownloadRunning(t *testing
 	_ = s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'ZbPaWvqAEq4'`).Scan(&videoID)
 
 	dlTask, err := s.Queue.InsertRunning(queue.EnqueueParams{
+		Origin: queue.OriginManual,
 		Kind:    queue.KindDownload,
 		Domain:  "youtube.com",
 		VideoID: videoID,
