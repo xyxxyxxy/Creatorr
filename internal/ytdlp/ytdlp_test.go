@@ -102,18 +102,18 @@ func TestNormalizeFormat(t *testing.T) {
 func TestAppendPOTArgs(t *testing.T) {
 	got := appendPOTArgs(nil, options{potFetch: "auto", potProviderURL: "http://creatorr-po-token:4416"})
 	want := []string{
-		"--extractor-args", "youtube:fetch_pot=auto,pot_trace=true",
+		"--extractor-args", "youtube:player_client=default,android,tv;fetch_pot=auto;pot_trace=true",
 		"--extractor-args", "youtubepot-bgutilhttp:base_url=http://creatorr-po-token:4416",
 	}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("got %v want %v", got, want)
 	}
 	got = appendPOTArgs(nil, options{})
-	if len(got) != 2 || got[1] != "youtube:fetch_pot=never" {
+	if len(got) != 2 || got[1] != "youtube:player_client=default,android,tv;fetch_pot=never" {
 		t.Fatalf("empty URL should force never, got %v", got)
 	}
 	got = appendPOTArgs(nil, options{potFetch: "never", potProviderURL: "http://creatorr-po-token:4416"})
-	if len(got) != 2 || got[1] != "youtube:fetch_pot=never" {
+	if len(got) != 2 || got[1] != "youtube:player_client=default,android,tv;fetch_pot=never" {
 		t.Fatalf("never should omit pot_trace and base_url, got %v", got)
 	}
 }

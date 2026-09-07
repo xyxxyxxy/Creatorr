@@ -56,16 +56,19 @@ func withPluginDirs(args []string, pluginRoots ...string) []string {
 }
 
 // appendPOTArgs adds youtube:fetch_pot and optional youtubepot-bgutilhttp:base_url.
-// When a provider URL is set and fetch is not never, also enables pot_trace so
-// mint / provider lines appear in captured yt-dlp output (task logs + detect).
+// Always sets youtube:player_client=default,android,tv so yt-dlp can fall through
+// clients when one profile is cut off (PO/SABR churn). Keys are joined with ';' so
+// commas inside player_client values are not eaten as extra clients. When a
+// provider URL is set and fetch is not never, also enables pot_trace so mint /
+// provider lines appear in output.
 func appendPOTArgs(args []string, o options) []string {
 	fetch := strings.TrimSpace(o.potFetch)
 	if fetch == "" {
 		fetch = "never"
 	}
-	ytArgs := "youtube:fetch_pot=" + fetch
+	ytArgs := "youtube:player_client=default,android,tv;fetch_pot=" + fetch
 	if u := strings.TrimSpace(o.potProviderURL); u != "" && fetch != "never" {
-		ytArgs += ",pot_trace=true"
+		ytArgs += ";pot_trace=true"
 		args = append(args, "--extractor-args", ytArgs)
 		args = append(args, "--extractor-args", "youtubepot-bgutilhttp:base_url="+u)
 		return args
