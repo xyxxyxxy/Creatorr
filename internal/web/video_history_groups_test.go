@@ -36,7 +36,7 @@ func TestGroupVideoHistoryByTask(t *testing.T) {
 func TestPreferIntegrityHistoryTaskKind(t *testing.T) {
 	views := []videoHistoryView{
 		{Event: "integrity_checked", Message: "Media verified", TaskKind: "integrity_check", HasTask: true},
-		{Event: "verified", Message: "Integrity check ok", TaskKind: "integrity_check_initial", HasTask: true},
+		{Event: "integrity_checked", Message: "Integrity check ok", TaskKind: "integrity_check_initial", HasTask: true},
 		{Event: "integrity_check_failed", Message: "Integrity check failed", TaskKind: "integrity_check", HasTask: true, HasError: true},
 		{Event: "integrity_checked", Message: "Integrity check ok"}, // no task kind
 		{Event: "downloaded", Message: "Done", TaskKind: "download", HasTask: true},

@@ -1,28 +1,12 @@
 package library
 
 import (
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
-	"io"
-	"os"
 	"strings"
-)
 
-// sha256File returns lowercase hex SHA-256 of path contents.
-func sha256File(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
+	"github.com/xyxxyxxy/Creatorr/internal/library/integrity"
+)
 
 // SetFileContentHash stores content_hash for a files row.
 func (s *Store) SetFileContentHash(fileID int64, hash string) error {
@@ -52,7 +36,7 @@ func (s *Store) FileContentHash(fileID int64) (hash string, ok bool, err error) 
 // result is IntegrityResultOK, IntegrityResultFilled, or IntegrityResultFailed.
 // mismatch is set when result is failed.
 func (s *Store) ensureOrCompareFileHash(fileID int64, path string) (result, mismatch string, err error) {
-	sum, err := sha256File(path)
+	sum, err := integrity.SHA256File(path)
 	if err != nil {
 		return "", "", err
 	}

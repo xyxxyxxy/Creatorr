@@ -2,7 +2,6 @@ package library
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -248,28 +247,16 @@ func (s *Store) EnqueueScanSource(sourceID int64, origin string) (int64, error) 
 func seriesIDJSON(id int64) int64 { return id }
 
 func (s *Store) hasPendingScanForSource(sourceID int64) (bool, error) {
-	rows, err := s.DB.SQL.Query(`
-		SELECT id, payload FROM tasks
+	var n int
+	err := s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM tasks
 		WHERE kind = ? AND status = ?
-	`, queue.KindScan, queue.StatusPending)
+		  AND CAST(json_extract(payload, '$.source_id') AS INTEGER) = ?
+	`, queue.KindScan, queue.StatusPending, sourceID).Scan(&n)
 	if err != nil {
 		return false, err
 	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var id int64
-		var payload string
-		if err := rows.Scan(&id, &payload); err != nil {
-			return false, err
-		}
-		var p struct {
-			SourceID int64 `json:"source_id"`
-		}
-		if json.Unmarshal([]byte(payload), &p) == nil && p.SourceID == sourceID {
-			return true, nil
-		}
-	}
-	return false, rows.Err()
+	return n > 0, nil
 }
 
 // HasPendingScanForSource reports if a scan is queued (pending) for the source.
@@ -279,28 +266,16 @@ func (s *Store) HasPendingScanForSource(sourceID int64) (bool, error) {
 
 // HasActiveScanForSource reports pending or running scan for the source (UI stall warning).
 func (s *Store) HasActiveScanForSource(sourceID int64) (bool, error) {
-	rows, err := s.DB.SQL.Query(`
-		SELECT id, payload FROM tasks
+	var n int
+	err := s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM tasks
 		WHERE kind = ? AND status IN (?, ?)
-	`, queue.KindScan, queue.StatusPending, queue.StatusRunning)
+		  AND CAST(json_extract(payload, '$.source_id') AS INTEGER) = ?
+	`, queue.KindScan, queue.StatusPending, queue.StatusRunning, sourceID).Scan(&n)
 	if err != nil {
 		return false, err
 	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var id int64
-		var payload string
-		if err := rows.Scan(&id, &payload); err != nil {
-			return false, err
-		}
-		var p struct {
-			SourceID int64 `json:"source_id"`
-		}
-		if json.Unmarshal([]byte(payload), &p) == nil && p.SourceID == sourceID {
-			return true, nil
-		}
-	}
-	return false, rows.Err()
+	return n > 0, nil
 }
 
 // GetSourceByID loads a source without series scope.

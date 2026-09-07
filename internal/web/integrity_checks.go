@@ -31,8 +31,6 @@ var integrityDetailSuppressKeys = map[string]struct{}{
 var integrityHistorySkipMerge = map[string]struct{}{
 	library.VideoHistIntegrityChecked: {},
 	library.VideoHistVerifyFailed:     {},
-	library.VideoHistVerified:         {},
-	"verify_failed":                   {},
 	"sidecar_externally_changed":      {},
 }
 
@@ -182,8 +180,7 @@ func (h *Handler) buildIntegrityChecksInitial(t *queue.Task, events []library.Vi
 		for i := len(events) - 1; i >= 0; i-- {
 			e := events[i]
 			switch e.Event {
-			case library.VideoHistIntegrityChecked, library.VideoHistVerifyFailed,
-				library.VideoHistVerified, "verify_failed":
+			case library.VideoHistIntegrityChecked, library.VideoHistVerifyFailed:
 				if r := parseIntegrityReportFromDetail(e.Detail); r != nil {
 					rep = r
 					break histLoop
@@ -215,7 +212,7 @@ func (h *Handler) buildIntegrityChecksInitial(t *queue.Task, events []library.Vi
 		}
 		if vid == 0 {
 			for _, e := range events {
-				if e.Event == library.VideoHistVerifyFailed || e.Event == "verify_failed" {
+				if e.Event == library.VideoHistVerifyFailed {
 					vid = e.VideoID
 					break
 				}
@@ -276,7 +273,7 @@ func (h *Handler) buildIntegrityChecksBulk(t *queue.Task, events []library.Video
 	notes := map[int64]string{}
 	for _, e := range events {
 		switch e.Event {
-		case library.VideoHistVerifyFailed, "verify_failed":
+		case library.VideoHistVerifyFailed:
 			failedIDs[e.VideoID] = struct{}{}
 			if rep := parseIntegrityReportFromDetail(e.Detail); rep != nil {
 				notes[e.VideoID] = integrityFailingNote(rep)

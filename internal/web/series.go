@@ -1,14 +1,9 @@
 package web
 
 import (
-	"context"
-	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -18,8 +13,6 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
-	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 func videoTaskRunning(tasks []queue.Task) bool {
@@ -106,51 +99,58 @@ func (h *Handler) actionProbeSourceTitle(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if h.YtDlp == nil {
-		slog.Info("probe source title skipped", "url", url, "err", "yt-dlp missing")
+	if h.Queue == nil {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
-	defer cancel()
-	tmp, err := os.MkdirTemp("", "creatorr-probe-*")
-	if err != nil {
-		slog.Error("probe source title temp dir", "err", err)
-		w.WriteHeader(http.StatusNoContent)
-		return
+	domain := queue.DomainFromURL(url)
+	if domain == "" {
+		domain = queue.SystemDomain
 	}
-	defer func() { _ = os.RemoveAll(tmp) }()
-	jar, err := domains.TempJarForURL(h.Library.DB, tmp, url)
-	if err != nil {
-		slog.Warn("probe source title cookies", "url", url, "err", err)
-		jar = ""
-	}
-	flare, err := domains.FlareSolverrURL(h.Library.DB, queue.DomainFromURL(url))
-	if err != nil {
-		slog.Warn("probe source title flaresolverr", "url", url, "err", err)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	authUser, authPass := "", ""
-	if creds, err := settings.CredentialsForURL(h.Library.DB, url); err == nil {
-		authUser, authPass = creds.Username, creds.Password
-	}
-	e, err := h.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
-		URL: url, CookiesPath: jar, Username: authUser, Password: authPass,
-		FlareSolverrURL: flare,
+	tid, err := h.Queue.Enqueue(queue.EnqueueParams{
+		Origin:  queue.OriginManual,
+		Kind:    queue.KindProbeSourceTitle,
+		Domain:  domain,
+		Payload: map[string]any{"url": url},
+		Message: "Probing title…",
 	})
 	if err != nil {
-		slog.Warn("probe source title failed", "url", url, "err", err)
+		slog.Warn("probe source title enqueue", "url", url, "err", err)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	title := strings.TrimSpace(e.Title)
-	if title == "" {
-		w.WriteHeader(http.StatusNoContent)
-		return
+	deadline := time.Now().Add(45 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case <-r.Context().Done():
+			_, _ = h.Queue.CancelWithReason(tid, queue.CancelReasonManual)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		default:
+		}
+		task, gerr := h.Queue.GetTask(tid)
+		if gerr != nil || task == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		switch task.Status {
+		case queue.StatusDone:
+			title := strings.TrimSpace(task.Detail)
+			if title == "" {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write([]byte(title))
+			return
+		case queue.StatusFailed, queue.StatusCancelled:
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = w.Write([]byte(title))
+	_, _ = h.Queue.CancelWithReason(tid, queue.CancelReasonManual)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
@@ -297,46 +297,46 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 	editSettings := editSeriesSettingsFields(ser, roots, profiles, folderRenameBusy, false)
 	render(w, "series_detail", struct {
 		pageBase
-		Series                     *library.Series
-		Sources                    []sourceRow
-		SourcesPage                PageInfo
-		SourceURLs                 []string
-		VideosLive                 seriesVideosLiveData
-		HasVideos                  bool
-		MetaFiles                  []seriesMetaFileView
-		CanScan                    bool
-		ScanBlocked                string
-		SeriesInd                  taskIndicatorView
-		HasMonitoredSource         bool
-		TaskIndicatorsPath         string
-		ScanCronDescriptors        []string
-		Roots                      []library.RootFolder
-		Profiles                   []library.QualityProfile
-		FolderRenameBusy           bool
-		EditSettings               map[string]any
-		MetaForm                   seriesMetadataView
-		Deleting                   bool
+		Series              *library.Series
+		Sources             []sourceRow
+		SourcesPage         PageInfo
+		SourceURLs          []string
+		VideosLive          seriesVideosLiveData
+		HasVideos           bool
+		MetaFiles           []seriesMetaFileView
+		CanScan             bool
+		ScanBlocked         string
+		SeriesInd           taskIndicatorView
+		HasMonitoredSource  bool
+		TaskIndicatorsPath  string
+		ScanCronDescriptors []string
+		Roots               []library.RootFolder
+		Profiles            []library.QualityProfile
+		FolderRenameBusy    bool
+		EditSettings        map[string]any
+		MetaForm            seriesMetadataView
+		Deleting            bool
 	}{
-		pageBase:                   newPage(ser.Title, "series", flashFromQuery(r)),
-		Series:                     ser,
-		Sources:                    pageSrc,
-		SourcesPage:                sourcesPage,
-		SourceURLs:                 sourceURLs,
-		VideosLive:                 videosLive,
-		HasVideos:                  videoTotal > 0,
-		MetaFiles:                  metaFiles,
-		CanScan:                    canScan && !seriesDeleting,
-		ScanBlocked:                blocked,
-		SeriesInd:                  seriesInd,
-		HasMonitoredSource:         ser.Monitored,
-		TaskIndicatorsPath:         indicatorsQ,
-		ScanCronDescriptors:        scanCronDescriptors(),
-		Roots:                      roots,
-		Profiles:                   profiles,
-		FolderRenameBusy:           folderRenameBusy,
-		EditSettings:               editSettings,
-		MetaForm:                   metaForm,
-		Deleting:                   seriesDeleting,
+		pageBase:            newPage(ser.Title, "series", flashFromQuery(r)),
+		Series:              ser,
+		Sources:             pageSrc,
+		SourcesPage:         sourcesPage,
+		SourceURLs:          sourceURLs,
+		VideosLive:          videosLive,
+		HasVideos:           videoTotal > 0,
+		MetaFiles:           metaFiles,
+		CanScan:             canScan && !seriesDeleting,
+		ScanBlocked:         blocked,
+		SeriesInd:           seriesInd,
+		HasMonitoredSource:  ser.Monitored,
+		TaskIndicatorsPath:  indicatorsQ,
+		ScanCronDescriptors: scanCronDescriptors(),
+		Roots:               roots,
+		Profiles:            profiles,
+		FolderRenameBusy:    folderRenameBusy,
+		EditSettings:        editSettings,
+		MetaForm:            metaForm,
+		Deleting:            seriesDeleting,
 	})
 }
 
@@ -515,50 +515,50 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 	selfPath := fmt.Sprintf("/series/%d/sources/%d", seriesID, sourceID)
 	render(w, "source_detail", struct {
 		pageBase
-		Series                     *library.Series
-		Source                     *library.Source
-		Title                      string
-		SelfPath                   string
-		LastScannedAt              string
-		StatusSummary              string
-		LastHistoryID              int64
-		ErrorMessage               string
-		ErrorCode                  string
-		HasScanned                 bool
-		HasError                   bool
-		DomainHost                 string
-		DomainActive               bool
-		DomainDisabledTitle        string
-		ScanActive                 bool
-		ScanCronLabel              string
-		ScanCronDescriptors        []string
-		HasRetryable               bool
-		VideoCount                 int
-		History                    []videoHistoryView
-		HistoryPage                PageInfo
+		Series              *library.Series
+		Source              *library.Source
+		Title               string
+		SelfPath            string
+		LastScannedAt       string
+		StatusSummary       string
+		LastHistoryID       int64
+		ErrorMessage        string
+		ErrorCode           string
+		HasScanned          bool
+		HasError            bool
+		DomainHost          string
+		DomainActive        bool
+		DomainDisabledTitle string
+		ScanActive          bool
+		ScanCronLabel       string
+		ScanCronDescriptors []string
+		HasRetryable        bool
+		VideoCount          int
+		History             []videoHistoryView
+		HistoryPage         PageInfo
 	}{
-		pageBase:                   newPage(title, "series", flashFromQuery(r)),
-		Series:                     ser,
-		Source:                     src,
-		Title:                      title,
-		SelfPath:                   selfPath,
-		LastScannedAt:              lastAt,
-		StatusSummary:              summary,
-		LastHistoryID:              taskID,
-		ErrorMessage:               errMsg,
-		ErrorCode:                  errCode,
-		HasScanned:                 hasScanned,
-		HasError:                   hasError,
-		DomainHost:                 host,
-		DomainActive:               dAct,
-		DomainDisabledTitle:        disTitle,
-		ScanActive:                 scanActive,
-		ScanCronLabel:              cronLabel,
-		ScanCronDescriptors:        scanCronDescriptors(),
-		HasRetryable:               retryable,
-		VideoCount:                 videoTotal,
-		History:                    histViews,
-		HistoryPage:                histPageInfo,
+		pageBase:            newPage(title, "series", flashFromQuery(r)),
+		Series:              ser,
+		Source:              src,
+		Title:               title,
+		SelfPath:            selfPath,
+		LastScannedAt:       lastAt,
+		StatusSummary:       summary,
+		LastHistoryID:       taskID,
+		ErrorMessage:        errMsg,
+		ErrorCode:           errCode,
+		HasScanned:          hasScanned,
+		HasError:            hasError,
+		DomainHost:          host,
+		DomainActive:        dAct,
+		DomainDisabledTitle: disTitle,
+		ScanActive:          scanActive,
+		ScanCronLabel:       cronLabel,
+		ScanCronDescriptors: scanCronDescriptors(),
+		HasRetryable:        retryable,
+		VideoCount:          videoTotal,
+		History:             histViews,
+		HistoryPage:         histPageInfo,
 	})
 }
 
@@ -619,1034 +619,4 @@ type videoHistoryView struct {
 	VideoID    int64
 	VideoTitle string
 	SeriesID   int64
-}
-
-func videoHistoryToView(e library.VideoHistoryEvent, now time.Time) videoHistoryView {
-	abs, ago := createdAgoPairShort(e.CreatedAt, now)
-	v := videoHistoryView{
-		CreatedAt:  abs,
-		CreatedAgo: ago,
-		Event:      historyEventLabel(e.Event, e.Detail),
-		Message:    historyMessageWithDetail(e.Message, e.Detail),
-		Detail:     e.Detail,
-		HasError:   historyEventError(e.Event),
-		Neutral:    historyEventNeutral(e.Event),
-		VideoID:    e.VideoID,
-	}
-	if e.TaskID.Valid {
-		v.HasTask = true
-		v.TaskID = e.TaskID.Int64
-		v.HistoryID = e.TaskID.Int64
-	}
-	return v
-}
-
-// fillVideoHistoryTaskKinds sets TaskKind from tasks.kind for each task_id on the page.
-func fillVideoHistoryTaskKinds(q *queue.Store, views []videoHistoryView) {
-	if q == nil || len(views) == 0 {
-		return
-	}
-	cache := map[int64]string{}
-	for i := range views {
-		id := views[i].TaskID
-		if !views[i].HasTask || id <= 0 {
-			continue
-		}
-		if kind, ok := cache[id]; ok {
-			views[i].TaskKind = kind
-			continue
-		}
-		kind := ""
-		if t, err := q.GetTask(id); err == nil && t != nil {
-			kind = t.Kind
-		}
-		cache[id] = kind
-		views[i].TaskKind = kind
-	}
-	preferIntegrityHistoryTaskKind(views)
-}
-
-// preferIntegrityHistoryTaskKind uses tasks.kind as the Event link for integrity
-// outcome rows (Message keeps the result text). Matches cancelled/download grouping.
-func preferIntegrityHistoryTaskKind(views []videoHistoryView) {
-	for i := range views {
-		if !isIntegrityHistoryOutcomeEvent(views[i].Event) {
-			continue
-		}
-		kind := strings.TrimSpace(views[i].TaskKind)
-		if kind == "" {
-			continue
-		}
-		views[i].Event = historyKindDisplay(kind)
-	}
-}
-
-func isIntegrityHistoryOutcomeEvent(event string) bool {
-	switch strings.TrimSpace(event) {
-	case library.VideoHistVerified, library.VideoHistIntegrityChecked,
-		library.VideoHistVerifyFailed, "verify_failed":
-		return true
-	default:
-		return false
-	}
-}
-
-// enrichVideoHistoryRenameMessages clarifies peer-move renames triggered by another video's
-// pack/download (task.video_id or detail.trigger_video_id differs from this row's video).
-func enrichVideoHistoryRenameMessages(lib *library.Store, q *queue.Store, views []videoHistoryView) {
-	if len(views) == 0 {
-		return
-	}
-	for i := range views {
-		if views[i].Event != "renamed" {
-			continue
-		}
-		if strings.Contains(views[i].Message, "peer move") {
-			continue
-		}
-		triggerID := int64(0)
-		if id, ok := historyDetailInt64FromJSON(views[i].Detail, "trigger_video_id"); ok {
-			triggerID = id
-		}
-		if triggerID <= 0 && views[i].HasTask && q != nil && views[i].TaskID > 0 {
-			if t, err := q.GetTask(views[i].TaskID); err == nil && t != nil && t.VideoID.Valid {
-				triggerID = t.VideoID.Int64
-			}
-		}
-		if triggerID <= 0 || triggerID == views[i].VideoID {
-			continue
-		}
-		title := ""
-		if lib != nil {
-			if v, err := lib.GetVideo(triggerID); err == nil && v != nil {
-				title = v.Title
-			}
-		}
-		views[i].Message = library.RenamedHistoryMessage(views[i].VideoID, triggerID, title)
-	}
-}
-
-func historyDetailInt64FromJSON(detail, key string) (int64, bool) {
-	detail = strings.TrimSpace(detail)
-	if detail == "" {
-		return 0, false
-	}
-	var raw map[string]any
-	if err := json.Unmarshal([]byte(detail), &raw); err != nil {
-		return 0, false
-	}
-	return historyDetailInt64(raw, key)
-}
-
-func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
-	sid, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	vid, _ := strconv.ParseInt(chi.URLParam(r, "vid"), 10, 64)
-	ser, err := h.Library.GetSeries(sid, false)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	video, err := h.Library.GetVideo(vid)
-	if err != nil || video.SeriesID != sid {
-		http.NotFound(w, r)
-		return
-	}
-	histTotal, _ := h.Library.CountVideoTimeline(vid)
-	histPage := ParsePage(r, "page")
-	histPageInfo := NewPageInfo(r, "page", histPage, histTotal)
-	hist, _ := h.Library.ListVideoTimelinePage(vid, PageSize, Offset(histPageInfo.Page))
-	now := time.Now().UTC()
-	histViews := make([]videoHistoryView, 0, len(hist))
-	var errorHistoryID int64
-	for _, e := range hist {
-		v := videoHistoryToView(e, now)
-		histViews = append(histViews, v)
-		if errorHistoryID == 0 && v.HasError && v.HistoryID > 0 {
-			errorHistoryID = v.HistoryID
-		}
-	}
-	fillVideoHistoryTaskKinds(h.Queue, histViews)
-	enrichVideoHistoryRenameMessages(h.Library, h.Queue, histViews)
-	histTimeline := videoHistoryGroupsToTimeline(groupVideoHistoryByTask(histViews))
-	t, _ := h.Queue.ActiveTaskForVideo(vid)
-	dlRunning := deliveryTaskActive(t) && t.Status == queue.StatusRunning
-	deliveryQueued := deliveryTaskActive(t)
-	deleting := taskIsFileDelete(t)
-	detailRows := videoDetailRows(h.Library, video)
-	mediaResolution := ""
-	if video.Width.Valid && video.Height.Valid && video.Width.Int64 > 0 && video.Height.Int64 > 0 {
-		mediaResolution = fmt.Sprintf("%dx%d", video.Width.Int64, video.Height.Int64)
-	}
-	mediaDuration := ""
-	if video.DurationSeconds.Valid && video.DurationSeconds.Int64 > 0 {
-		mediaDuration = formatDetailDuration(float64(video.DurationSeconds.Int64))
-	}
-	fileRows := videoAllFileViews(h.Library, sid, vid)
-	mediaRaw, mediaAudio, hasMediaPlay := videoMediaPlay(fileRows, sid, vid, ser.IsAudio())
-	metaForm := h.buildVideoMetadataView(ser, video)
-	if tidStr := r.URL.Query().Get("meta_prefetch"); tidStr != "" {
-		if tid, err := strconv.ParseInt(tidStr, 10, 64); err == nil && tid > 0 {
-			metaForm.PrefetchTaskID = tid
-			metaForm.Open = true
-			if task, err := h.Queue.GetTask(tid); err == nil && task != nil {
-				switch task.Status {
-				case queue.StatusPending, queue.StatusRunning:
-					metaForm.PrefetchPending = true
-					metaForm.FetchURL = queue.URLFromPayload(task.Payload)
-				case queue.StatusDone:
-					if d, err := h.Library.ReadVideoPrefetchDraft(vid, tid); err == nil {
-						metaForm.PrefetchDraft = d
-						metaForm.Video = applyVideoPrefetchDraft(video, d, h.Library)
-						h.applyVideoMetadataManagedLists(&metaForm, d.Genres)
-						metaForm.PrefetchArt = videoPrefetchArtFromDraft(d)
-						metaForm.FetchURL = queue.URLFromPayload(task.Payload)
-					}
-				case queue.StatusFailed, queue.StatusCancelled:
-					metaForm.PrefetchDraft = library.VideoPrefetchDraft{Error: task.ErrorMessage}
-					if metaForm.PrefetchDraft.Error == "" {
-						metaForm.PrefetchDraft.Error = "Prefetch failed"
-					}
-				}
-			}
-		}
-	}
-	dAct, disTitle := true, ""
-	if video.SourceID.Valid {
-		if src, err := h.Library.GetSourceByID(video.SourceID.Int64); err == nil {
-			host := queue.DomainFromURL(src.URL)
-			dAct, _ = domains.IsActive(h.Queue.DB, host)
-			if !dAct {
-				disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
-			}
-		}
-	}
-	thumbURL := ""
-	if _, ok, _ := h.Library.VideoThumbPath(vid); ok {
-		thumbURL = fmt.Sprintf("/series/%d/videos/%d/thumb", sid, vid)
-	}
-	resolvedSourceURL := ""
-	if video.SourceURL.Valid {
-		resolvedSourceURL = library.DownloadURL(video.SourceURL.String, video.RemoteID)
-	}
-	render(w, "video_detail", struct {
-		pageBase
-		Series              *library.Series
-		Video               *library.Video
-		ResolvedSourceURL   string
-		ThumbURL            string
-		MediaRawHref        string
-		MediaIsAudio        bool
-		HasMediaPlay        bool
-		MediaResolution     string
-		MediaDuration       string
-		Files               []videoFileView
-		DetailRows          []videoDetailRow
-		History             []taskStageView
-		HistoryPage         PageInfo
-		ErrorHistoryID      int64
-		TaskInd             taskIndicatorView
-		DownloadRunning     bool
-		DeliveryQueued      bool
-		DomainActive        bool
-		DomainDisabledTitle string
-		Deleting            bool
-		HasPackAnchor       bool
-		MetaForm            videoMetadataView
-	}{
-		pageBase:            newPage(video.Title, "series", flashFromQuery(r)),
-		Series:              ser,
-		Video:               video,
-		ResolvedSourceURL:   resolvedSourceURL,
-		ThumbURL:            thumbURL,
-		MediaRawHref:        mediaRaw,
-		MediaIsAudio:        mediaAudio,
-		HasMediaPlay:        hasMediaPlay,
-		MediaResolution:     mediaResolution,
-		MediaDuration:       mediaDuration,
-		Files:               fileRows,
-		DetailRows:          detailRows,
-		History:             histTimeline,
-		HistoryPage:         histPageInfo,
-		ErrorHistoryID:      errorHistoryID,
-		TaskInd:             h.videoIndicator(vid, t, video.Status),
-		DownloadRunning:     dlRunning,
-		DeliveryQueued:      deliveryQueued,
-		DomainActive:        dAct,
-		DomainDisabledTitle: disTitle,
-		Deleting:            deleting,
-		HasPackAnchor:       metaForm.HasPackAnchor,
-		MetaForm:            metaForm,
-	})
-}
-
-func (h *Handler) actionFetchAddSeries(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sourceURL := strings.TrimSpace(r.FormValue("source_url"))
-	writeJSON := func(status int, v any) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(v)
-	}
-	if sourceURL == "" {
-		writeJSON(http.StatusBadRequest, map[string]string{"error": "URL is required"})
-		return
-	}
-	if h.Queue == nil {
-		writeJSON(http.StatusServiceUnavailable, map[string]string{"error": "queue is not available"})
-		return
-	}
-	token, err := newAddSeriesDraftToken()
-	if err != nil {
-		writeJSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	tid, err := h.Library.EnqueueAddSeriesPrefetch(sourceURL, token)
-	if err != nil {
-		writeJSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(http.StatusOK, map[string]any{"task_id": tid, "draft_token": token})
-}
-
-func newAddSeriesDraftToken() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}
-
-func (h *Handler) addSeriesPrefetchStatus(w http.ResponseWriter, r *http.Request) {
-	tid, _ := strconv.ParseInt(chi.URLParam(r, "tid"), 10, 64)
-	writeJSON := func(status int, v any) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(v)
-	}
-	task, err := h.Queue.GetTask(tid)
-	if err != nil || task == nil {
-		writeJSON(http.StatusNotFound, map[string]string{"error": "task not found"})
-		return
-	}
-	if task.Kind != queue.KindPrefetchAddSeries {
-		writeJSON(http.StatusNotFound, map[string]string{"error": "task not found"})
-		return
-	}
-	token := queue.DraftTokenFromPayload(task.Payload)
-	out := map[string]any{
-		"status":      task.Status,
-		"task_id":     tid,
-		"draft_token": token,
-	}
-	switch task.Status {
-	case queue.StatusPending, queue.StatusRunning:
-		writeJSON(http.StatusOK, out)
-		return
-	case queue.StatusFailed, queue.StatusCancelled:
-		msg := task.ErrorMessage
-		if msg == "" {
-			msg = "Prefetch failed"
-		}
-		if token != "" {
-			if d, err := h.Library.ReadAddSeriesDraft(token); err == nil && strings.TrimSpace(d.Error) != "" {
-				msg = d.Error
-			}
-		}
-		out["error"] = msg
-		writeJSON(http.StatusOK, out)
-		return
-	case queue.StatusDone:
-		if token == "" {
-			out["error"] = "draft token missing"
-			writeJSON(http.StatusOK, out)
-			return
-		}
-		draft, err := h.Library.ReadAddSeriesDraft(token)
-		if err != nil {
-			out["error"] = "draft not found"
-			writeJSON(http.StatusOK, out)
-			return
-		}
-		if strings.TrimSpace(draft.Error) != "" {
-			out["error"] = draft.Error
-			writeJSON(http.StatusOK, out)
-			return
-		}
-		title := library.SeriesTitleFromDraft(draft)
-		if title == "" {
-			out["error"] = "could not determine series title from URL"
-			writeJSON(http.StatusOK, out)
-			return
-		}
-		out["title"] = title
-		writeJSON(http.StatusOK, out)
-		return
-	default:
-		out["error"] = "unexpected task status"
-		writeJSON(http.StatusOK, out)
-	}
-}
-
-func (h *Handler) actionFetchAddVideo(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sourceURL := strings.TrimSpace(r.FormValue("url"))
-	if sourceURL == "" {
-		sourceURL = strings.TrimSpace(r.FormValue("source_url"))
-	}
-	seriesID, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	writeJSON := func(status int, v any) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(v)
-	}
-	if sourceURL == "" {
-		writeJSON(http.StatusBadRequest, map[string]string{"error": "URL is required"})
-		return
-	}
-	if h.Queue == nil {
-		writeJSON(http.StatusServiceUnavailable, map[string]string{"error": "queue is not available"})
-		return
-	}
-	token, err := newAddSeriesDraftToken()
-	if err != nil {
-		writeJSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	tid, err := h.Library.EnqueueAddVideoPrefetch(sourceURL, token, seriesID)
-	if err != nil {
-		writeJSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(http.StatusOK, map[string]any{"task_id": tid, "draft_token": token})
-}
-
-func (h *Handler) addVideoPrefetchStatus(w http.ResponseWriter, r *http.Request) {
-	tid, _ := strconv.ParseInt(chi.URLParam(r, "tid"), 10, 64)
-	writeJSON := func(status int, v any) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(v)
-	}
-	task, err := h.Queue.GetTask(tid)
-	if err != nil || task == nil {
-		writeJSON(http.StatusNotFound, map[string]string{"error": "task not found"})
-		return
-	}
-	if task.Kind != queue.KindPrefetchAddVideo {
-		writeJSON(http.StatusNotFound, map[string]string{"error": "task not found"})
-		return
-	}
-	token := queue.DraftTokenFromPayload(task.Payload)
-	out := map[string]any{
-		"status":      task.Status,
-		"task_id":     tid,
-		"draft_token": token,
-	}
-	switch task.Status {
-	case queue.StatusPending, queue.StatusRunning:
-		writeJSON(http.StatusOK, out)
-		return
-	case queue.StatusFailed, queue.StatusCancelled:
-		msg := task.ErrorMessage
-		if msg == "" {
-			msg = "Prefetch failed"
-		}
-		if token != "" {
-			if d, err := h.Library.ReadAddVideoDraft(token); err == nil && strings.TrimSpace(d.Error) != "" {
-				msg = d.Error
-			}
-		}
-		out["error"] = msg
-		writeJSON(http.StatusOK, out)
-		return
-	case queue.StatusDone:
-		if token == "" {
-			out["error"] = "draft token missing"
-			writeJSON(http.StatusOK, out)
-			return
-		}
-		draft, err := h.Library.ReadAddVideoDraft(token)
-		if err != nil {
-			out["error"] = "draft not found"
-			writeJSON(http.StatusOK, out)
-			return
-		}
-		if strings.TrimSpace(draft.Error) != "" {
-			out["error"] = draft.Error
-			writeJSON(http.StatusOK, out)
-			return
-		}
-		if strings.TrimSpace(draft.Title) == "" {
-			out["error"] = "could not determine video title from URL"
-			writeJSON(http.StatusOK, out)
-			return
-		}
-		if strings.TrimSpace(draft.UploadDate) == "" {
-			out["error"] = "could not determine upload date from URL"
-			writeJSON(http.StatusOK, out)
-			return
-		}
-		out["title"] = draft.Title
-		out["remote_id"] = draft.RemoteID
-		out["upload_date"] = draft.UploadDate
-		out["source_url"] = draft.SourceURL
-		writeJSON(http.StatusOK, out)
-		return
-	default:
-		out["error"] = "unexpected task status"
-		writeJSON(http.StatusOK, out)
-	}
-}
-
-func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	rootID, _ := strconv.ParseInt(r.PostFormValue("root_id"), 10, 64)
-	qpID, _ := strconv.ParseInt(r.PostFormValue("quality_profile_id"), 10, 64)
-	sourceURL := strings.TrimSpace(r.PostFormValue("source_url"))
-	title := strings.TrimSpace(r.PostFormValue("title"))
-	delivery := r.PostFormValue("delivery_mode")
-	draftToken := strings.TrimSpace(r.PostFormValue("draft_token"))
-	// Monitored defaults on at create; toggle only from series list.
-	wantJSON := strings.Contains(r.Header.Get("Accept"), "application/json") ||
-		r.FormValue("response") == "json" ||
-		r.URL.Query().Get("response") == "json"
-
-	writeJSON := func(status int, v any) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(v)
-	}
-	redirErr := func(msg string) {
-		if wantJSON {
-			writeJSON(http.StatusBadRequest, map[string]string{"error": msg})
-			return
-		}
-		http.Redirect(w, r, "/?err="+urlQuery(msg)+"&add=1", http.StatusSeeOther)
-	}
-	doneOK := func(ser *library.Series, warn string) {
-		if wantJSON {
-			out := map[string]any{"id": ser.ID, "title": ser.Title}
-			if warn != "" {
-				out["warning"] = warn
-			}
-			writeJSON(http.StatusCreated, out)
-			return
-		}
-		if warn != "" {
-			http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", ser.ID, urlQuery(warn)), http.StatusSeeOther)
-			return
-		}
-		http.Redirect(w, r, fmt.Sprintf("/series/%d", ser.ID), http.StatusSeeOther)
-	}
-
-	if sourceURL != "" {
-		var draft library.PrefetchDraft
-		if draftToken != "" {
-			if d, err := h.Library.ReadAddSeriesDraft(draftToken); err == nil {
-				draft = d
-			}
-		}
-		if title == "" {
-			title = library.SeriesTitleFromDraft(draft)
-		}
-		if title == "" {
-			redirErr("title is required - fetch metadata again or enter a title")
-			return
-		}
-
-		sched, err := parseFeedScanCron(r, "@weekly")
-		if err != nil {
-			redirErr(err.Error())
-			return
-		}
-		scanCron := sched
-		fullScanLimit, err := parseFullScanLimitForm(r)
-		if err != nil {
-			redirErr(err.Error())
-			return
-		}
-
-		ser, err := h.Library.CreateSeries(library.CreateSeriesParams{
-			Title:                title,
-			SourceURL:            sourceURL,
-			RootID:               rootID,
-			QualityProfileID:     qpID,
-			Monitored:            r.FormValue("monitored") == "1",
-			DeliveryMode:         delivery,
-			FullScanLimit:        fullScanLimit,
-			ScanCron:             scanCron,
-			IndexAsIgnored:       r.FormValue("index_as_ignored") == "1",
-			TitleRegexpInclude:   strings.TrimSpace(r.FormValue("title_regexp_include")),
-			TitleRegexpExclude:   strings.TrimSpace(r.FormValue("title_regexp_exclude")),
-			SourceLabel:          strings.TrimSpace(r.FormValue("source_label")),
-		})
-		if err != nil {
-			redirErr(err.Error())
-			return
-		}
-		warn := ""
-		if draft.Plot != "" || draft.Studio != "" || draft.OriginalTitle != "" || len(draft.ArtFiles) > 0 ||
-			draft.UniqueIDValue != "" || len(draft.Actors) > 0 {
-			if err := h.Library.SaveSeriesMetadata(ser.ID, library.SaveSeriesMetadataParams{
-				Plot:          draft.Plot,
-				SortTitle:     draft.SortTitle,
-				OriginalTitle: draft.OriginalTitle,
-				Studio:        draft.Studio,
-				UniqueIDType:  draft.UniqueIDType,
-				UniqueIDValue: draft.UniqueIDValue,
-				Actors:        draft.Actors,
-				ArtSrc:        draft.ArtFiles,
-			}); err != nil {
-				slog.Warn("add series metadata save", "series_id", ser.ID, "err", err)
-				warn = "series created but metadata save failed: " + err.Error()
-			}
-		}
-		if draftToken != "" {
-			_ = h.Library.ClearAddSeriesDraft(draftToken)
-		}
-		doneOK(ser, warn)
-		return
-	}
-
-	if title == "" {
-		redirErr("title is required when creating manually")
-		return
-	}
-	ser, err := h.Library.CreateSeries(library.CreateSeriesParams{
-		Title:            title,
-		RootID:           rootID,
-		QualityProfileID: qpID,
-		Monitored:        true,
-		DeliveryMode:     delivery,
-	})
-	if err != nil {
-		redirErr(err.Error())
-		return
-	}
-	doneOK(ser, "")
-}
-
-func (h *Handler) actionUpdateSeries(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if err := h.errIfSeriesDeleting(sid); err != nil {
-		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	if _, err := h.Library.GetSeries(sid, false); err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	title := strings.TrimSpace(r.FormValue("title"))
-	rootID, _ := strconv.ParseInt(r.FormValue("root_id"), 10, 64)
-	qpID, _ := strconv.ParseInt(r.FormValue("quality_profile_id"), 10, 64)
-	dm := library.NormalizeDeliveryMode(r.FormValue("delivery_mode"))
-	out, err := h.Library.UpdateSeriesDetailed(sid, library.UpdateSeriesParams{
-		Title:            &title,
-		RootID:           &rootID,
-		QualityProfileID: &qpID,
-		DeliveryMode:     &dm,
-	})
-	if err != nil {
-		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	monitored := r.FormValue("monitored") == "1"
-	if err := h.Library.SetSeriesMonitored(sid, monitored); err != nil {
-		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	ok := "updated"
-	if out.RenameQueued {
-		ok = "series-rename"
-	}
-	http.Redirect(w, r, fmt.Sprintf("/series/%d?ok=%s", sid, ok), http.StatusSeeOther)
-}
-
-func (h *Handler) actionAddSource(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	kind := r.FormValue("kind")
-	scanCron := ""
-	if kind != library.SourceKindSingle {
-		c, err := parseFeedScanCron(r, "@weekly")
-		if err != nil {
-			http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-			return
-		}
-		scanCron = c
-	}
-	titleInclude := ""
-	titleExclude := ""
-	indexAsIgnored := false
-	fullScanLimit := 0
-	if kind != library.SourceKindSingle {
-		titleInclude = strings.TrimSpace(r.FormValue("title_regexp_include"))
-		titleExclude = strings.TrimSpace(r.FormValue("title_regexp_exclude"))
-		indexAsIgnored = r.FormValue("index_as_ignored") == "1"
-		var err error
-		fullScanLimit, err = parseFullScanLimitForm(r)
-		if err != nil {
-			http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-			return
-		}
-	}
-	_, err := h.Library.AddSource(sid, library.AddSourceParams{
-		URL:                strings.TrimSpace(r.FormValue("url")),
-		Label:              strings.TrimSpace(r.FormValue("label")),
-		Kind:               kind,
-		ScanCron:           scanCron,
-		IndexAsIgnored:     indexAsIgnored,
-		TitleRegexpInclude: titleInclude,
-		TitleRegexpExclude: titleExclude,
-		FullScanLimit:      fullScanLimit,
-	})
-	if err != nil {
-		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, fmt.Sprintf("/series/%d?ok=source", sid), http.StatusSeeOther)
-}
-
-func (h *Handler) actionUpdateSource(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	srcID, _ := strconv.ParseInt(r.FormValue("source_id"), 10, 64)
-	label := strings.TrimSpace(r.FormValue("label"))
-	redir := seriesSourceRedirect(r, sid, srcID)
-	cur, err := h.Library.GetSource(sid, srcID)
-	if err != nil {
-		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	p := library.UpdateSourceParams{
-		Label: &label,
-	}
-	if !cur.IsSingle() {
-		limit, err := parseFullScanLimitForm(r)
-		if err != nil {
-			http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-			return
-		}
-		p.FullScanLimit = &limit
-		if _, ok := r.Form["scan_cron"]; ok {
-			cron, err := cronexpr.NormalizeScanCron(r.FormValue("scan_cron"))
-			if err != nil {
-				http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-				return
-			}
-			p.ScanCron = &cron
-		} else if _, ok := r.Form["scan_cron_schedule"]; ok {
-			cron, err := cronexpr.NormalizeScanCron(r.FormValue("scan_cron_schedule"))
-			if err != nil {
-				http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-				return
-			}
-			p.ScanCron = &cron
-		}
-	}
-	idx := r.FormValue("index_as_ignored") == "1"
-	if !cur.IsSingle() {
-		p.IndexAsIgnored = &idx
-		titleInclude := strings.TrimSpace(r.FormValue("title_regexp_include"))
-		titleExclude := strings.TrimSpace(r.FormValue("title_regexp_exclude"))
-		p.TitleRegexpInclude = &titleInclude
-		p.TitleRegexpExclude = &titleExclude
-	} else {
-		off := false
-		p.IndexAsIgnored = &off
-	}
-	_, err = h.Library.UpdateSource(sid, srcID, p)
-	if err != nil {
-		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, appendQuery(redir, "ok=source-updated"), http.StatusSeeOther)
-}
-
-func (h *Handler) actionDeleteSource(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	srcID, _ := strconv.ParseInt(r.FormValue("source_id"), 10, 64)
-	if r.FormValue("confirm_delete") != "1" {
-		http.Redirect(w, r, appendQuery(seriesSourceRedirect(r, sid, srcID), "err="+urlQuery("confirm delete to remove this source")), http.StatusSeeOther)
-		return
-	}
-	if err := h.Library.DeleteSource(sid, srcID); err != nil {
-		http.Redirect(w, r, appendQuery(seriesSourceRedirect(r, sid, srcID), "err="+urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, fmt.Sprintf("/series/%d?ok=source-deleted", sid), http.StatusSeeOther)
-}
-
-func (h *Handler) actionDeleteSeries(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if r.FormValue("delete_files") != "1" {
-		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery("confirm delete to remove this series and its library files")), http.StatusSeeOther)
-		return
-	}
-	if err := h.Library.DeleteSeries(sid, true); err != nil {
-		http.Redirect(w, r, "/series?err="+urlQuery(err.Error()), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, "/series?ok=delete-queued", http.StatusSeeOther)
-}
-
-func (h *Handler) actionScanSeries(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if err := h.errIfSeriesDeleting(sid); err != nil {
-		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	n, _, err := h.Library.EnqueueScansForSeries(sid)
-	if err != nil {
-		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, fmt.Sprintf("/series/%d?ok=scan-for-new-%d", sid, n), http.StatusSeeOther)
-}
-
-func (h *Handler) actionScanSource(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	srcID, _ := strconv.ParseInt(r.FormValue("source_id"), 10, 64)
-	redir := seriesSourceRedirect(r, sid, srcID)
-	src, err := h.Library.GetSourceByID(srcID)
-	if err != nil {
-		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	okFlash := "scan-for-new"
-	if !src.FullScanDone {
-		okFlash = "history-scan"
-	}
-	_, err = h.Library.EnqueueScanSource(srcID, queue.OriginManual)
-	if err != nil {
-		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, appendQuery(redir, "ok="+okFlash), http.StatusSeeOther)
-}
-
-func (h *Handler) actionFullRescanSeries(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	n, _, err := h.Library.FullRescanSeries(sid)
-	if err != nil {
-		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, fmt.Sprintf("/series/%d?ok=restart-history-%d", sid, n), http.StatusSeeOther)
-}
-
-func (h *Handler) actionFullRescanSource(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	srcID, _ := strconv.ParseInt(r.FormValue("source_id"), 10, 64)
-	redir := seriesSourceRedirect(r, sid, srcID)
-	_, err := h.Library.FullRescanSource(srcID)
-	if err != nil {
-		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, appendQuery(redir, "ok=restart-history"), http.StatusSeeOther)
-}
-
-func (h *Handler) actionMetadataRescanSeries(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if err := h.errIfSeriesDeleting(sid); err != nil {
-		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	_, err := h.Library.EnqueueMetadataRescanSeries(sid)
-	if err != nil {
-		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, fmt.Sprintf("/series/%d?ok=metadata-rescan", sid), http.StatusSeeOther)
-}
-
-func (h *Handler) actionMetadataRescanVideo(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if err := h.errIfVideoDeleting(vid); err != nil {
-		redir := r.FormValue("redirect")
-		if redir == "" {
-			redir = fmt.Sprintf("/series/%d/videos/%d", sid, vid)
-		}
-		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	_, err := h.Library.EnqueueMetadataRescanVideo(vid)
-	redir := r.FormValue("redirect")
-	if redir == "" {
-		redir = fmt.Sprintf("/series/%d/videos/%d", sid, vid)
-	}
-	if err != nil {
-		http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
-		return
-	}
-	sep := "?"
-	if strings.Contains(redir, "?") {
-		sep = "&"
-	}
-	http.Redirect(w, r, redir+sep+"ok=metadata-rescan", http.StatusSeeOther)
-}
-
-func (h *Handler) actionSetSourceMonitored(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "source monitored flag removed; use domain active and series monitored", http.StatusGone)
-}
-
-func (h *Handler) actionSetSeriesMonitored(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if err := h.errIfSeriesDeleting(sid); err != nil {
-		redir := r.FormValue("redirect")
-		if redir == "" {
-			redir = "/series"
-		}
-		sep := "?"
-		if strings.Contains(redir, "?") {
-			sep = "&"
-		}
-		errURL := redir + sep + "err=" + urlQuery(err.Error())
-		if hxRequest(r) {
-			hxRedirect(w, errURL)
-			return
-		}
-		http.Redirect(w, r, errURL, http.StatusSeeOther)
-		return
-	}
-	monitored := r.FormValue("monitored") == "1"
-	redir := r.FormValue("redirect")
-	if redir == "" {
-		redir = "/series"
-	}
-	if err := h.Library.SetSeriesMonitored(sid, monitored); err != nil {
-		sep := "?"
-		if strings.Contains(redir, "?") {
-			sep = "&"
-		}
-		errURL := redir + sep + "err=" + urlQuery(err.Error())
-		if hxRequest(r) {
-			hxRedirect(w, errURL)
-			return
-		}
-		http.Redirect(w, r, errURL, http.StatusSeeOther)
-		return
-	}
-	if hxRequest(r) {
-		if h.tryRenderSeriesListLive(w, r) {
-			return
-		}
-		// Detail (and other pages): monitored is on Edit form; refresh whole page.
-		hxRedirect(w, redir)
-		return
-	}
-	http.Redirect(w, r, redir, http.StatusSeeOther)
-}
-
-func (h *Handler) actionWantVideo(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	redir := r.FormValue("redirect")
-	if redir == "" {
-		redir = fmt.Sprintf("/series/%d", sid)
-	}
-	if err := h.errIfVideoDeleting(vid); err != nil {
-		h.finishVideoAction(w, r, sid, redir, err)
-		return
-	}
-	_, err := h.Library.WantVideo(vid)
-	h.finishVideoAction(w, r, sid, redir, err)
-}
-
-func (h *Handler) actionDownloadVideo(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	redir := r.FormValue("redirect")
-	if redir == "" {
-		redir = fmt.Sprintf("/series/%d", sid)
-	}
-	if err := h.errIfVideoDeleting(vid); err != nil {
-		h.finishVideoAction(w, r, sid, redir, err)
-		return
-	}
-	_, err := h.Library.EnqueueDownloadNow(vid)
-	if err == nil {
-		redir = appendQuery(redir, "ok=download")
-	}
-	h.finishVideoAction(w, r, sid, redir, err)
-}
-
-func (h *Handler) actionRetrySourceErrors(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	srcID, _ := strconv.ParseInt(r.FormValue("source_id"), 10, 64)
-	redir := seriesSourceRedirect(r, sid, srcID)
-	n, err := h.Library.RetrySourceErrors(srcID)
-	if err != nil {
-		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, appendQuery(redir, "ok=retry&n="+strconv.FormatInt(int64(n), 10)), http.StatusSeeOther)
-}
-
-func (h *Handler) actionIgnoreVideo(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	redir := r.FormValue("redirect")
-	if redir == "" {
-		redir = fmt.Sprintf("/series/%d", sid)
-	}
-	if err := h.errIfVideoDeleting(vid); err != nil {
-		h.finishVideoAction(w, r, sid, redir, err)
-		return
-	}
-	_, err := h.Library.IgnoreVideo(vid)
-	if err != nil {
-		h.finishVideoAction(w, r, sid, redir, err)
-		return
-	}
-	h.finishVideoAction(w, r, sid, redir, nil)
-}
-
-func (h *Handler) actionDeleteVideo(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	_, err := h.Library.DeleteVideo(vid)
-	redir := r.FormValue("redirect")
-	if redir == "" {
-		redir = fmt.Sprintf("/series/%d", sid)
-	}
-	if err != nil {
-		h.finishVideoAction(w, r, sid, redir, err)
-		return
-	}
-	h.finishVideoAction(w, r, sid, appendQuery(redir, "ok=delete-queued"), nil)
-}
-
-func (h *Handler) actionDeleteVideoSidecar(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	fid, _ := strconv.ParseInt(r.FormValue("file_id"), 10, 64)
-	redir := strings.TrimSpace(r.FormValue("redirect"))
-	if redir == "" {
-		redir = fmt.Sprintf("/series/%d/videos/%d", sid, vid)
-	}
-	err := h.Library.DeleteVideoSidecar(vid, fid)
-	if err != nil {
-		h.finishVideoAction(w, r, sid, redir, err)
-		return
-	}
-	h.finishVideoAction(w, r, sid, appendQuery(redir, "ok=sidecar-deleted"), nil)
 }

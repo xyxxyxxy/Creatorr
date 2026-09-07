@@ -29,27 +29,27 @@ var (
 
 // ImportCandidate is one untracked file (inbox or library) with match suggestions.
 type ImportCandidate struct {
-	Path              string             `json:"path"`
-	Filename          string             `json:"filename"`
-	Source            string             `json:"source"` // inbox | library
-	Role              string             `json:"role"`   // video | nfo | json | thumb | sub | other
-	IDs               []ImportIDHint     `json:"ids"`
-	SuggestedVideoID  *int64             `json:"suggested_video_id"`
-	SuggestedSeriesID *int64             `json:"suggested_series_id"`
-	SuggestedTitle    string             `json:"suggested_title,omitempty"`
-	SuggestedRemoteID string `json:"suggested_remote_id,omitempty"`
+	Path              string         `json:"path"`
+	Filename          string         `json:"filename"`
+	Source            string         `json:"source"` // inbox | library
+	Role              string         `json:"role"`   // video | nfo | json | thumb | sub | other
+	IDs               []ImportIDHint `json:"ids"`
+	SuggestedVideoID  *int64         `json:"suggested_video_id"`
+	SuggestedSeriesID *int64         `json:"suggested_series_id"`
+	SuggestedTitle    string         `json:"suggested_title,omitempty"`
+	SuggestedRemoteID string         `json:"suggested_remote_id,omitempty"`
 	// SuggestedRemoteIDGenerated is reserved (always false); synthetic remotes are not suggested.
 	SuggestedRemoteIDGenerated bool `json:"suggested_remote_id_generated,omitempty"`
 	// SuggestedUploadDate is RFC3339 UTC prefill for unmatched create (sidecar, else file mtime).
 	SuggestedUploadDate string `json:"suggested_upload_date,omitempty"`
 	// SuggestedUploadDateFromMtime is true when SuggestedUploadDate came from file mtime (not sidecar).
-	SuggestedUploadDateFromMtime bool   `json:"suggested_upload_date_from_mtime,omitempty"`
-	SuggestedHandler             string `json:"suggested_handler_id,omitempty"`
-	SuggestedWebpageURL          string `json:"suggested_webpage_url,omitempty"`
-	MatchType                    string `json:"match_type,omitempty"`
-	MatchLabel                   string `json:"match_label,omitempty"`
-	VideoSuggestions             []VideoSuggestion `json:"video_suggestions"`
-	SeriesSuggestions []SeriesSuggestion `json:"series_suggestions"`
+	SuggestedUploadDateFromMtime bool               `json:"suggested_upload_date_from_mtime,omitempty"`
+	SuggestedHandler             string             `json:"suggested_handler_id,omitempty"`
+	SuggestedWebpageURL          string             `json:"suggested_webpage_url,omitempty"`
+	MatchType                    string             `json:"match_type,omitempty"`
+	MatchLabel                   string             `json:"match_label,omitempty"`
+	VideoSuggestions             []VideoSuggestion  `json:"video_suggestions"`
+	SeriesSuggestions            []SeriesSuggestion `json:"series_suggestions"`
 }
 
 // ImportIDHint is an extracted remote id from filename/sidecars.
@@ -195,30 +195,6 @@ func (s *Store) scanImportLibraryRoot(rootID int64, known map[string]struct{}, v
 	return out, nil
 }
 
-func listAllFilesUnder(absRoot string) ([]string, error) {
-	var files []string
-	err := filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		name := d.Name()
-		if strings.HasPrefix(name, ".") {
-			return nil
-		}
-		files = append(files, path)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(files)
-	return files, nil
-}
-
-// seriesDirsForRoot returns cleaned SeriesDir paths for every series on rootID.
 func (s *Store) seriesDirsForRoot(rootID int64, absRoot string) (map[string]struct{}, error) {
 	rows, err := s.DB.SQL.Query(`SELECT title FROM series WHERE root_id = ?`, rootID)
 	if err != nil {
@@ -596,7 +572,9 @@ func (s *Store) EnqueueImportCreate(path string, p CreateImportVideoParams) (tas
 	if meta.UploadDate != "" {
 		changed, rerr := s.ReindexSeriesUTCYear(p.SeriesID, SeasonYearFromUpload(meta.UploadDate))
 		if rerr != nil {
-			_ = s.Queue.Cancel(taskID)
+			if _, err := s.Queue.CancelWithReason(taskID, queue.CancelReasonVideoDeleted); err != nil {
+				_ = s.Queue.Cancel(taskID)
+			}
 			_, _ = s.DB.SQL.Exec(`DELETE FROM videos WHERE id = ?`, videoID)
 			return 0, 0, rerr
 		}
@@ -796,7 +774,7 @@ func fileModTimeUploadDate(path string) string {
 // (inbox) or binds a library orphan in place. Sidecar paths attach to a video that
 // already has media (in-place files row update). When verify is true, the import
 // task may enqueue integrity_check_initial after a successful pack/bind when the
-	// series quality profile has File integrity on (still ignores mature-only timing).
+// series quality profile has File integrity on (still ignores mature-only timing).
 // When replace is true and the video already has packed media, existing library
 // media (and companion sidecars) are removed during the import task.
 func (s *Store) EnqueueImport(path string, videoID int64, verify, replace bool) (int64, error) {
@@ -853,7 +831,7 @@ func (s *Store) EnqueueImport(path string, videoID int64, verify, replace bool) 
 		msg = fmt.Sprintf("Replace %s", filepath.Base(abs))
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
-		Origin: queue.OriginManual,
+		Origin:   queue.OriginManual,
 		Kind:     queue.KindImport,
 		Domain:   queue.SystemDomain,
 		SeriesID: v.SeriesID,
@@ -927,7 +905,7 @@ func (s *Store) EnqueueAttachSidecars(videoID int64, paths []string) (int64, err
 		msg = fmt.Sprintf("Attach sidecar %s", filepath.Base(absPaths[0]))
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
-		Origin: queue.OriginManual,
+		Origin:   queue.OriginManual,
 		Kind:     queue.KindImport,
 		Domain:   queue.SystemDomain,
 		SeriesID: v.SeriesID,

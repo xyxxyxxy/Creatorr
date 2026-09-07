@@ -64,6 +64,7 @@ const (
 	CodeIntegrityCheckFailed = "IntegrityCheckFailed"
 	CodeUnauthorized = "Unauthorized"
 	CodeSetupRequired = "SetupRequired"
+	CodeValidation = "Validation"
 )
 
 // DownloadFailStage maps a download-task failure code to a pipeline stage for

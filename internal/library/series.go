@@ -159,13 +159,34 @@ func seriesListStatusActive(status string) bool {
 // seriesProgressOpenStatuses: still-open for list progress + Incomplete (wanted, archive wait, download error, verify fail).
 const seriesProgressOpenStatuses = `'wanted', 'wanted_archive', 'wanted_download_error', 'integrity_check_failed'`
 
+// seriesListSelectCols + seriesListFromJoins use one video/source aggregate join instead of
+// five correlated COUNT subqueries per series row.
 const seriesListSelectCols = `s.id, s.title, s.root_id, s.quality_profile_id, s.monitored, s.delivery_mode, s.added_at,
 		       r.name, q.name,
-		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id),
-		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status = 'downloaded'),
-		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('wanted', 'wanted_archive')),
-		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN (` + seriesProgressOpenStatuses + `)),
-		       (SELECT COUNT(*) FROM sources f WHERE f.series_id = s.id)`
+		       COALESCE(vc.video_count, 0),
+		       COALESCE(vc.downloaded_count, 0),
+		       COALESCE(vc.wanted_count, 0),
+		       COALESCE(vc.pending_count, 0),
+		       COALESCE(sc.source_count, 0)`
+
+const seriesListFromJoins = `
+		FROM series s
+		JOIN root_folders r ON r.id = s.root_id
+		JOIN quality_profiles q ON q.id = s.quality_profile_id
+		LEFT JOIN (
+			SELECT series_id,
+				COUNT(*) AS video_count,
+				SUM(CASE WHEN status = 'downloaded' THEN 1 ELSE 0 END) AS downloaded_count,
+				SUM(CASE WHEN status IN ('wanted', 'wanted_archive') THEN 1 ELSE 0 END) AS wanted_count,
+				SUM(CASE WHEN status IN (` + seriesProgressOpenStatuses + `) THEN 1 ELSE 0 END) AS pending_count
+			FROM videos
+			GROUP BY series_id
+		) vc ON vc.series_id = s.id
+		LEFT JOIN (
+			SELECT series_id, COUNT(*) AS source_count
+			FROM sources
+			GROUP BY series_id
+		) sc ON sc.series_id = s.id`
 
 func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilter) {
 	if title := strings.TrimSpace(f.Title); title != "" {
@@ -269,10 +290,7 @@ func (s *Store) CountSeriesFiltered(filter SeriesListFilter) (int, error) {
 func (s *Store) ListSeriesFiltered(filter SeriesListFilter, limit, offset int) ([]Series, error) {
 	var b strings.Builder
 	b.WriteString(`
-		SELECT ` + seriesListSelectCols + `
-		FROM series s
-		JOIN root_folders r ON r.id = s.root_id
-		JOIN quality_profiles q ON q.id = s.quality_profile_id
+		SELECT ` + seriesListSelectCols + seriesListFromJoins + `
 		WHERE 1=1`)
 	args := []any{}
 	appendSeriesListFilterSQL(&b, &args, filter)
@@ -309,14 +327,12 @@ func (s *Store) GetSeries(id int64, withVideos bool) (*Series, error) {
 		       s.plot, s.sorttitle, s.originaltitle, s.studio, s.genres, s.tags,
 		       s.uniqueid_type, s.uniqueid_value, s.actors, s.tagline, s.country, s.mpaa, s.premiered,
 		       r.name, q.name,
-		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id),
-		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status = 'downloaded'),
-		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('wanted', 'wanted_archive')),
-		       (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN (`+seriesProgressOpenStatuses+`)),
-		       (SELECT COUNT(*) FROM sources f WHERE f.series_id = s.id)
-		FROM series s
-		JOIN root_folders r ON r.id = s.root_id
-		JOIN quality_profiles q ON q.id = s.quality_profile_id
+		       COALESCE(vc.video_count, 0),
+		       COALESCE(vc.downloaded_count, 0),
+		       COALESCE(vc.wanted_count, 0),
+		       COALESCE(vc.pending_count, 0),
+		       COALESCE(sc.source_count, 0)
+		`+seriesListFromJoins+`
 		WHERE s.id = ?
 	`, id).Scan(
 		&ser.ID, &ser.Title, &ser.RootID, &ser.QualityProfileID, &mon, &ser.DeliveryMode, &ser.AddedAt,

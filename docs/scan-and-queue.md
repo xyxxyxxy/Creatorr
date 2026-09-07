@@ -72,6 +72,7 @@ There is **no** global Settings `scan_cron`.
 | `prefetch_video_meta` | fetch URL hostname | **Interactive:** same as prefetch_series_meta; resolve into video Metadata modal draft (+ soft-download thumb into `cache/video-meta/{id}/` when URL present) |
 | `prefetch_add_series` | fetch URL hostname | **Interactive:** Add series wizard fetch; draft under `cache/add-series/{token}/` (no series row yet); ignores soft Pause; Finish does not start cooldown; no rate/sleep |
 | `prefetch_add_video` | fetch URL hostname | **Interactive:** Add video modal fetch; draft under `cache/add-video/{token}/` (no video row yet); ignores soft Pause; Finish does not start cooldown; no rate/sleep |
+| `probe_source_title` | fetch URL hostname | **Interactive:** title-only Resolve for Add series probe (`GET /actions/probe-source-title`); title stored in `tasks.detail`; ignores soft Pause; Finish does not start cooldown; no rate/sleep |
 
 System maintenance runs **concurrent with hostname** work (worker goroutines after claim). The **`system` lane is always serial** (exactly one running task), hard-coded in claim - Settings `max_parallel_tasks` and `task_cooldown_seconds` do not apply to `system` (no cooldown between system tasks). Tasks page always shows the `system` lane (pinned first) plus a lane for every known host (domains rows, source URL hostnames, and soft-paused hosts from `domain_runtime`), including empty queues.
 

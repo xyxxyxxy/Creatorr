@@ -15,6 +15,7 @@ import (
 
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
 	"github.com/xyxxyxxy/Creatorr/internal/exectrace"
+	"github.com/xyxxyxxy/Creatorr/internal/library/integrity"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/sponsorblock"
 )
@@ -56,19 +57,21 @@ func ShouldVerifyMedia(p QualityProfile, maturityPack bool, uploadDate string, a
 
 // seriesProfileVerifyMedia returns whether the video's series profile has File integrity on.
 func (s *Store) seriesProfileVerifyMedia(videoID int64) (on bool, err error) {
-	v, err := s.GetVideo(videoID)
+	var v int
+	err = s.DB.SQL.QueryRow(`
+		SELECT qp.verify_media
+		FROM videos v
+		JOIN series s ON s.id = v.series_id
+		JOIN quality_profiles qp ON qp.id = s.quality_profile_id
+		WHERE v.id = ?
+	`, videoID).Scan(&v)
+	if err == sql.ErrNoRows {
+		return false, ErrNotFound
+	}
 	if err != nil {
 		return false, err
 	}
-	ser, err := s.GetSeries(v.SeriesID, false)
-	if err != nil {
-		return false, err
-	}
-	prof, err := s.GetProfile(ser.QualityProfileID)
-	if err != nil {
-		return false, err
-	}
-	return prof.VerifyMedia, nil
+	return v != 0, nil
 }
 
 // SeriesProfileVerifyMedia is the exported form of seriesProfileVerifyMedia (UI).
@@ -91,7 +94,7 @@ func (s *Store) LastFileIntegrityIssue(videoID, fileID int64, kind string) (mess
 	rows, err := s.DB.SQL.Query(`
 		SELECT message, detail, task_id FROM video_history
 		WHERE video_id = ?
-		  AND event IN ('file_externally_changed', 'sidecar_externally_changed', 'integrity_check_failed', 'verify_failed')
+		  AND event IN ('file_externally_changed', 'sidecar_externally_changed', 'integrity_check_failed')
 		ORDER BY id DESC
 		LIMIT 40
 	`, videoID)
@@ -253,7 +256,7 @@ func (s *Store) RunIntegrityCheckVideo(ctx context.Context, videoID int64, progr
 		if result == IntegrityResultFailed {
 			sideFailed++
 			stored, _, _ := s.FileContentHash(f.ID)
-			disk, _ := sha256File(f.Path)
+			disk, _ := integrity.SHA256File(f.Path)
 			_ = s.AddVideoHistory(videoID, "sidecar_externally_changed", "Sidecar integrity check failed", map[string]any{
 				"reason":   "integrity_check",
 				"kind":     f.Kind,

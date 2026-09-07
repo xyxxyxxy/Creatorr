@@ -38,6 +38,7 @@ const (
 	KindPrefetchVideoMeta  = "prefetch_video_meta"
 	KindPrefetchAddSeries  = "prefetch_add_series"
 	KindPrefetchAddVideo   = "prefetch_add_video"
+	KindProbeSourceTitle   = "probe_source_title"
 	KindSyncFiles          = "sync_files"
 	KindRetentionDelete    = "retention_delete"
 	KindRenameEpisodes     = "rename_episodes"
@@ -55,11 +56,12 @@ const (
 	SystemDomain = "system"
 )
 
-// IsPrefetchKind is true for ClaimInteractive metadata prefetch tasks.
+// IsPrefetchKind is true for ClaimInteractive metadata prefetch / probe tasks.
 // These do not occupy max_parallel_tasks slots.
 func IsPrefetchKind(kind string) bool {
 	return kind == KindPrefetchSeriesMeta || kind == KindPrefetchVideoMeta ||
-		kind == KindPrefetchAddSeries || kind == KindPrefetchAddVideo
+		kind == KindPrefetchAddSeries || kind == KindPrefetchAddVideo ||
+		kind == KindProbeSourceTitle
 }
 
 // IsInteractiveKind is true for tasks that must not wait behind other work
@@ -492,7 +494,7 @@ func (s *Store) ClaimNext() (*Task, error) {
 		       t.origin, t.parent_task_id
 		FROM tasks t
 		WHERE t.status = ?
-		  AND t.kind NOT IN (?, ?, ?, ?)
+		  AND t.kind NOT IN (?, ?, ?, ?, ?)
 		  AND NOT EXISTS (
 		    SELECT 1 FROM domains d WHERE d.domain = t.domain AND d.active = 0
 		  )
@@ -500,7 +502,7 @@ func (s *Store) ClaimNext() (*Task, error) {
 		    SELECT 1 FROM domain_runtime r WHERE r.domain = t.domain AND r.paused != 0
 		  )
 		ORDER BY t.priority DESC, t.id ASC
-	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo)
+	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo, KindProbeSourceTitle)
 	if err != nil {
 		return nil, err
 	}
@@ -521,12 +523,12 @@ func (s *Store) ClaimInteractive() (*Task, error) {
 		       t.origin, t.parent_task_id
 		FROM tasks t
 		WHERE t.status = ?
-		  AND t.kind IN (?, ?, ?, ?)
+		  AND t.kind IN (?, ?, ?, ?, ?)
 		  AND NOT EXISTS (
 		    SELECT 1 FROM domains d WHERE d.domain = t.domain AND d.active = 0
 		  )
 		ORDER BY t.priority DESC, t.id ASC
-	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo)
+	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo, KindProbeSourceTitle)
 	if err != nil {
 		return nil, err
 	}
@@ -606,8 +608,8 @@ func (s *Store) domainHasParallelSlot(domain string) bool {
 	_ = s.DB.SQL.QueryRow(`
 		SELECT COUNT(*) FROM tasks
 		WHERE domain = ? AND status = ?
-		  AND kind NOT IN (?, ?, ?, ?)
-	`, domain, StatusRunning, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo).Scan(&n)
+		  AND kind NOT IN (?, ?, ?, ?, ?)
+	`, domain, StatusRunning, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo, KindProbeSourceTitle).Scan(&n)
 	// Prefetch kinds are excluded from the count.
 	return n < max
 }
