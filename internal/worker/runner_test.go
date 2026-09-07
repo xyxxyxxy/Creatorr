@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -456,6 +457,75 @@ func testRunnerDomainIssueNotify(t *testing.T, returnCode, returnMsg string, wan
 func TestRunnerDownloadFailedNotifies(t *testing.T) {
 	// Generic download failure: alert only, no domain soft-pause (cookie/rate still pause).
 	testRunnerDomainIssueNotify(t, apperrors.CodeDownloadFailed, "extractor exploded", false)
+}
+
+func TestRunnerDownloadFailedMergesErrorDetail(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "merge.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
+	_ = domains.EnsureHost(d, "example.com")
+
+	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
+		return nil
+	})
+	defer notify.SetSendFnForTest(old)
+	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{
+		notify.EventYtDlpFailed,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	store := queue.NewStore(d)
+	id, err := store.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MergeDetailJSON(id, map[string]any{
+		domains.DetailKeyDomainAccess: map[string]any{"rate": "10M"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	handlers := worker.StubHandlers()
+	handlers[queue.KindDownload] = func(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) error {
+		return apperrors.WithDetail(apperrors.New(apperrors.CodeDownloadFailed, "yt-dlp download failed"), "ERROR: boom")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go (&worker.Runner{Queue: store, Handlers: handlers, Interval: 20 * time.Millisecond}).Run(ctx)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		task, err := store.GetTask(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if task != nil && task.Status == queue.StatusFailed {
+			if task.ErrorCode != apperrors.CodeDownloadFailed {
+				t.Fatalf("code=%q", task.ErrorCode)
+			}
+			if task.ErrorMessage != "ERROR: boom" {
+				t.Fatalf("error_message=%q", task.ErrorMessage)
+			}
+			var raw map[string]any
+			if err := json.Unmarshal([]byte(task.Detail), &raw); err != nil {
+				t.Fatalf("detail not JSON: %q err=%v", task.Detail, err)
+			}
+			if raw["error"] != "ERROR: boom" {
+				t.Fatalf("detail.error=%v", raw["error"])
+			}
+			if _, ok := raw[domains.DetailKeyDomainAccess]; !ok {
+				t.Fatalf("domain-access wiped: %v", raw)
+			}
+			return
+		}
+		time.Sleep(30 * time.Millisecond)
+	}
+	t.Fatal("timeout waiting for failed task")
 }
 
 func TestRunnerRemuxFailedDoesNotPause(t *testing.T) {

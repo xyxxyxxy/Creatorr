@@ -45,8 +45,12 @@
       <div class="text-xs opacity-60 flex flex-wrap gap-x-2 min-w-0">
         <span class="font-mono">#{{.RelatedTask.ID}}</span>
         {{if .RelatedTask.Domain}}<span class="truncate">{{.RelatedTask.Domain}}</span>{{end}}
-        {{if .RelatedTask.Message}}<span class="truncate">{{.RelatedTask.Message}}</span>{{end}}
+        {{if .RelatedTask.ErrorCode}}<span class="font-mono{{if eq .RelatedTask.Status "failed"}} text-error{{end}}">{{.RelatedTask.ErrorCode}}{{if .RelatedTask.Message}}: {{.RelatedTask.Message}}{{end}}</span>
+        {{else if .RelatedTask.Message}}<span class="truncate">{{.RelatedTask.Message}}</span>{{end}}
       </div>
+      {{if .RelatedTask.ErrorMessage}}
+      <pre class="text-xs whitespace-pre-wrap font-mono mt-1 max-h-24 overflow-y-auto{{if eq .RelatedTask.Status "failed"}} text-error{{end}}">{{.RelatedTask.ErrorMessage}}</pre>
+      {{end}}
     </div>
   </li>
   {{else if .Item.TaskID}}

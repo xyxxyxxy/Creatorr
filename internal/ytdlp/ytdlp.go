@@ -423,9 +423,7 @@ func wrapYtdlpFail(code, message string, stderr, stdout []byte, err error) *appe
 	if detail == "" && err != nil {
 		detail = err.Error()
 	}
-	if len(detail) > 1500 {
-		detail = detail[len(detail)-1500:]
-	}
+	detail = formatFailDetail(detail)
 	code = upgradeCode(code, detail)
 	msg := message
 	if pm := pauseMessage(code); pm != "" {

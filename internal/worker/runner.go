@@ -196,8 +196,9 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 			if err := r.Library.RecordLiveBroadcastSkipped(task.VideoID.Int64, task.ID); err != nil {
 				log.Warn("record live_skipped", "video", task.VideoID.Int64, "err", err)
 			}
-			_ = r.Queue.Finish(task.ID, queue.StatusDone, doneMsg, code, runErr.Error())
-			_ = r.Queue.SetDetail(task.ID, runErr.Error())
+			detail := failDetail(runErr)
+			_ = r.Queue.Finish(task.ID, queue.StatusDone, doneMsg, code, detail)
+			r.mergeFailDetail(task.ID, detail)
 			seriesTitle, videoTitle := "", ""
 			if v, err := r.Library.GetVideo(task.VideoID.Int64); err == nil && v != nil {
 				videoTitle = v.Title
@@ -219,15 +220,11 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 			task.Kind == queue.KindDownload &&
 			task.VideoID.Valid && r.Library != nil {
 			failMsg := "Live unavailable; Web Archive retry queued"
-			_ = r.Queue.SetDetail(task.ID, runErr.Error())
+			detail := failDetail(runErr)
+			r.mergeFailDetail(task.ID, detail)
 			r.Events.TaskFailed(task.ID, task.Kind, task.Domain, failMsg, code, sid, vid)
-			_ = r.Queue.Finish(task.ID, queue.StatusFailed, failMsg, code, runErr.Error())
-			histDetail := runErr.Error()
-			var ae *apperrors.AppError
-			if errors.As(runErr, &ae) && ae != nil && strings.TrimSpace(ae.Detail) != "" {
-				histDetail = ae.Detail
-			}
-			if _, err := r.Library.QueueArchiveFallbackAfterUnavailable(task.VideoID.Int64, task.ID, histDetail); err != nil {
+			_ = r.Queue.Finish(task.ID, queue.StatusFailed, failMsg, code, detail)
+			if _, err := r.Library.QueueArchiveFallbackAfterUnavailable(task.VideoID.Int64, task.ID, detail); err != nil {
 				log.Warn("queue archive fallback", "video", task.VideoID.Int64, "err", err)
 			}
 			if mediaKind(task.Kind) {
@@ -236,15 +233,16 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 			log.Info("task failed (archive fallback queued)", "id", task.ID, "kind", task.Kind)
 			return
 		}
-		_ = r.Queue.SetDetail(task.ID, runErr.Error())
+		detail := failDetail(runErr)
+		r.mergeFailDetail(task.ID, detail)
 		r.Events.TaskFailed(task.ID, task.Kind, task.Domain, msg, code, sid, vid)
 		if task.Kind == queue.KindDownload && task.VideoID.Valid && r.Library != nil {
 			if err := r.Library.MarkDownloadFailed(task.VideoID.Int64, task.ID, code, msg); err != nil {
 				log.Warn("mark wanted_download_error", "video", task.VideoID.Int64, "err", err)
 			}
 		}
-		_ = r.Queue.Finish(task.ID, queue.StatusFailed, msg, code, runErr.Error())
-		r.maybeNotifyFailure(ctx, log, task, code, runErr)
+		_ = r.Queue.Finish(task.ID, queue.StatusFailed, msg, code, detail)
+		r.maybeNotifyFailure(ctx, log, task, code, runErr, detail)
 		if mediaKind(task.Kind) {
 			r.maybeScheduleDigest(ctx, log)
 		}
@@ -265,7 +263,7 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 	log.Info("task done", "id", task.ID, "kind", task.Kind)
 }
 
-func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task *queue.Task, code string, runErr error) {
+func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task *queue.Task, code string, runErr error, detail string) {
 	if task.Domain == "" || task.Domain == "unknown" || task.Domain == "system" {
 		return
 	}
@@ -278,11 +276,37 @@ func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task 
 		apperrors.CodeLiveBroadcastSkipped, apperrors.CodeAgeRestricted:
 		// keep classified code (do not re-detect remux/pack/verify/age into pause)
 	default:
-		if d := apperrors.DetectPauseCode(runErr.Error()); d != "" {
+		detectSrc := detail
+		if detectSrc == "" {
+			detectSrc = runErr.Error()
+		}
+		if d := apperrors.DetectPauseCode(detectSrc); d != "" {
 			code = d
 		}
 	}
-	notify.SoftPauseAndAlert(ctx, r.Queue.DB, log, task.ID, task.Domain, code, runErr.Error())
+	if detail == "" {
+		detail = failDetail(runErr)
+	}
+	notify.SoftPauseAndAlert(ctx, r.Queue.DB, log, task.ID, task.Domain, code, detail)
+}
+
+// failDetail returns AppError.Detail when set, else the full error string.
+func failDetail(runErr error) string {
+	if runErr == nil {
+		return ""
+	}
+	var ae *apperrors.AppError
+	if errors.As(runErr, &ae) && ae != nil && strings.TrimSpace(ae.Detail) != "" {
+		return strings.TrimSpace(ae.Detail)
+	}
+	return strings.TrimSpace(runErr.Error())
+}
+
+func (r *Runner) mergeFailDetail(taskID int64, detail string) {
+	if r == nil || r.Queue == nil || strings.TrimSpace(detail) == "" {
+		return
+	}
+	_ = r.Queue.MergeDetailJSON(taskID, map[string]any{"error": detail})
 }
 
 func (r *Runner) releaseFlareIfIdle(domain string) {

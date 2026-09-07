@@ -40,11 +40,13 @@ func (h *Handler) notificationDetail(w http.ResponseWriter, r *http.Request) {
 	if view.TaskID > 0 && h.Queue != nil {
 		if t, gerr := h.Queue.GetTask(view.TaskID); gerr == nil && t != nil {
 			relatedTask = &notifyRelatedTaskView{
-				ID:      t.ID,
-				Kind:    t.Kind,
-				Status:  t.Status,
-				Domain:  t.Domain,
-				Message: strings.TrimSpace(t.Message),
+				ID:           t.ID,
+				Kind:         t.Kind,
+				Status:       t.Status,
+				Domain:       t.Domain,
+				Message:      strings.TrimSpace(t.Message),
+				ErrorCode:    strings.TrimSpace(t.ErrorCode),
+				ErrorMessage: strings.TrimSpace(t.ErrorMessage),
 			}
 			if view.Event == notify.EventFileSyncIssues {
 				related = fileSyncNotifySectionsFromDetail(t.Detail, h.resolveFileSyncNotifyRef)
@@ -77,11 +79,13 @@ func (h *Handler) notificationDetail(w http.ResponseWriter, r *http.Request) {
 
 // notifyRelatedTaskView is high-level task chrome for notification Related to.
 type notifyRelatedTaskView struct {
-	ID      int64
-	Kind    string
-	Status  string
-	Domain  string
-	Message string
+	ID           int64
+	Kind         string
+	Status       string
+	Domain       string
+	Message      string
+	ErrorCode    string
+	ErrorMessage string
 }
 
 func (h *Handler) actionMarkNotificationRead(w http.ResponseWriter, r *http.Request) {

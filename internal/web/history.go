@@ -22,6 +22,7 @@ type historyView struct {
 	Message      string
 	Domain       string
 	Code         string
+	ErrorMessage string // tasks.error_message (failure detail)
 	SeriesID     int64
 	VideoID      int64
 	Origin       string
@@ -62,15 +63,16 @@ func taskWhen(t queue.Task) string {
 func taskToHistoryView(t queue.Task, now time.Time) historyView {
 	abs, ago := createdAgoPair(taskWhen(t), now)
 	v := historyView{
-		ID:         t.ID,
-		CreatedAt:  abs,
-		CreatedAgo: ago,
-		Kind:       t.Kind,
-		Status:     t.Status,
-		Message:    t.Message,
-		Domain:     t.Domain,
-		Code:       t.ErrorCode,
-		Origin:     t.Origin,
+		ID:           t.ID,
+		CreatedAt:    abs,
+		CreatedAgo:   ago,
+		Kind:         t.Kind,
+		Status:       t.Status,
+		Message:      t.Message,
+		Domain:       t.Domain,
+		Code:         t.ErrorCode,
+		ErrorMessage: t.ErrorMessage,
+		Origin:       t.Origin,
 	}
 	if t.SeriesID.Valid {
 		v.SeriesID = t.SeriesID.Int64

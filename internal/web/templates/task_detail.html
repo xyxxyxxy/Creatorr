@@ -93,6 +93,17 @@
   {{else}}
   {{template "detail_row" (dict "Label" "Message" "TdClass" "text-sm whitespace-normal break-words")}}
   {{end}}
+  {{if .Item.Code}}
+  <tr><th class="w-40">Error code</th><td class="font-mono text-xs{{if eq .Item.Status "failed"}} text-error{{end}}">{{.Item.Code}}</td></tr>
+  {{end}}
+  {{if .FailError}}
+  <tr>
+    <th class="w-40 align-top">Error</th>
+    <td class="text-sm min-w-0">
+      <pre class="text-xs whitespace-pre-wrap font-mono max-h-64 overflow-y-auto{{if eq .Item.Status "failed"}} text-error{{end}}">{{.FailError}}</pre>
+    </td>
+  </tr>
+  {{end}}
   {{if .DomainAccess}}
   <tr><th class="w-40">Domain access</th><td>{{template "domain_access_chips" .DomainAccess}}</td></tr>
   {{end}}
