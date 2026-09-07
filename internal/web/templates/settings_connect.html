@@ -9,9 +9,9 @@
       <legend class="fieldset-legend text-lg font-semibold">yt-dlp</legend>
       <p class="text-sm opacity-60">
         {{if .YtDlpUpdatesOn}}
-        Creatorr checks GitHub for new releases on boot and on the schedule under Settings → Scheduler.
+        Creatorr checks GitHub for new releases on boot and on the schedule under Settings → Scheduler. Update now always uses the channel below.
         {{else}}
-        Automatic GitHub updates are off (empty update schedule under Settings → Scheduler). Replace the binary at the managed path while Creatorr is stopped to run a custom build; set a schedule again to re-enable managed updates.
+        Automatic GitHub updates are off (empty update schedule under Settings → Scheduler). Channel and Update now still work for a one-shot managed install; or replace the binary at the managed path while Creatorr is stopped for a custom build.
         {{end}}
       </p>
       <form method="post" action="/actions/save-settings" class="flex flex-col gap-3 js-settings-autosave">
@@ -30,7 +30,7 @@
 
 <section class="card bg-base-100 border border-base-300 mb-4">
   <div class="card-body gap-6">
-    {{template "list_header" (dict "level" "section" "title" "Notifications" "help" "Creatorr in-app channel (fixed, all events) plus optional Apprise channels. Each Apprise channel has a URL and event subscriptions. Alerts and warnings stay unread until acknowledged in-app; Apprise delivery does not mark them read." "add_modal" "modal-add-notify-channel" "add_label" "Add channel")}}
+    {{template "list_header" (dict "level" "section" "title" "Notifications" "help" "Creatorr in-app channel (fixed, all events) plus optional Apprise channels. Each Apprise channel has a URL and event subscriptions (All = current and future, or pick specific events). Alerts and warnings stay unread until acknowledged in-app; Apprise delivery does not mark them read." "add_modal" "modal-add-notify-channel" "add_label" "Add channel")}}
     {{if not .NotifyChannels}}
     {{template "list_empty" "No notification channels yet."}}
     {{else}}
@@ -108,14 +108,14 @@
 </section>
 
 {{$redir := "/settings/connect"}}
-{{$evOpts := .EventOptions}}
+{{$evGroups := .EventGroups}}
 {{template "notify_channel_modal" (dict
   "Mode" "add"
   "Redirect" $redir
   "Name" ""
   "URL" ""
   "Events" .DefaultEvents
-  "EventOptions" $evOpts
+  "EventGroups" $evGroups
 )}}
 {{range .NotifyChannels}}
 {{if not .InApp}}
@@ -126,7 +126,7 @@
   "Name" .Name
   "URL" .URL
   "Events" .Events
-  "EventOptions" $evOpts
+  "EventGroups" $evGroups
 )}}
 <input type="checkbox" id="modal-delete-notify-{{.ID}}" class="modal-toggle" />
 <div class="modal">

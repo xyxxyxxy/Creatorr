@@ -137,10 +137,8 @@ func (s *Store) UpsertListed(seriesID int64, li ListedVideo, taskID int64) (Upse
 			if rerr != nil {
 				return out, rerr
 			}
-			if tid, queued, qerr := s.EnqueueApplyForPackedEpisodeChanges(changed); qerr != nil {
+			if _, _, qerr := s.EnqueueApplyForPackedEpisodeChanges(changed); qerr != nil {
 				return out, qerr
-			} else if queued {
-				s.NotifyApplyQueuedInfo(tid, len(changed))
 			}
 		}
 		return out, nil

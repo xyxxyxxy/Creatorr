@@ -2,6 +2,8 @@
 {{/*
   Last checked + update channel on Settings → Connect (loaded with page shell).
   Expects ytdlpConnectControlsView fields.
+  Channel + Update now are always available (schedule only gates boot/cron).
+  Busy tip host is the join-item (no nested join-item) so daisyUI join seams stay one border.
 */}}
 <div class="contents">
   {{template "ytdlp_connect_last_checked" .}}
@@ -10,33 +12,14 @@
   <div class="form-control w-full min-w-0 gap-2">
     <span class="label-text">{{.Label}}</span>
     <div class="join w-full">
-      {{if .Disabled}}
-      <input type="hidden" name="{{.Key}}" value="{{.Value}}" />
-      <span class="tooltip tooltip-top join-item grow min-w-0" {{if .DisabledTitle}}data-tip="{{.DisabledTitle}}"{{end}}>
-        <select id="setting-{{.Key}}" class="select select-bordered join-item grow min-w-0 w-full pointer-events-none" disabled>
-          {{range .Options}}
-          <option value="{{.Value}}" {{if eq .Value $channel.Value}}selected{{end}}>{{.Label}}</option>
-          {{end}}
-        </select>
-      </span>
-      {{else}}
       <select name="{{.Key}}" id="setting-{{.Key}}" class="select select-bordered join-item grow min-w-0" data-settings-autosave-change>
         {{range .Options}}
         <option value="{{.Value}}" {{if eq .Value $channel.Value}}selected{{end}}>{{.Label}}</option>
         {{end}}
       </select>
-      {{end}}
       {{if $.YtDlpUpdateBusy}}
-      <span class="tooltip tooltip-top join-item shrink-0" data-tip="{{$.YtDlpUpdateBusyTip}}">
-        <button type="button" class="btn btn-warning btn-square join-item pointer-events-none" disabled aria-label="Update queued">
-          <i data-lucide="refresh-cw" class="size-4"></i>
-        </button>
-      </span>
-      {{else if not $.YtDlpUpdatesOn}}
-      <span class="tooltip tooltip-top join-item shrink-0" data-tip="{{$.YtDlpUpdateOffTip}}">
-        <button type="button" class="btn btn-square join-item pointer-events-none" disabled aria-label="Update now">
-          <i data-lucide="refresh-cw" class="size-4"></i>
-        </button>
+      <span class="btn btn-warning btn-square join-item shrink-0 tooltip tooltip-top pointer-events-none cursor-not-allowed" data-tip="{{$.YtDlpUpdateBusyTip}}" aria-label="Update queued" aria-disabled="true" role="button" tabindex="-1">
+        <i data-lucide="refresh-cw" class="size-4"></i>
       </span>
       {{else}}
       <button type="submit" form="ytdlp-update-form" class="btn btn-secondary btn-square join-item shrink-0 tooltip tooltip-top" data-tip="Update now" aria-label="Update now">

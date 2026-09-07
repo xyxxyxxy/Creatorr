@@ -64,6 +64,35 @@ type notifyEventOption struct {
 	Label string
 }
 
+type notifyEventGroupView struct {
+	Level     string
+	Label     string
+	Icon      string
+	IconClass string
+	Options   []notifyEventOption
+}
+
+func notifyEventGroups() []notifyEventGroupView {
+	groups := []notifyEventGroupView{
+		{Level: notify.LevelAlert, Label: "Alert", Icon: "megaphone", IconClass: "text-error"},
+		{Level: notify.LevelWarning, Label: "Warning", Icon: "siren", IconClass: "text-warning"},
+		{Level: notify.LevelInfo, Label: "Info", Icon: "bell", IconClass: "opacity-70"},
+	}
+	byLevel := map[string]*notifyEventGroupView{
+		notify.LevelAlert:   &groups[0],
+		notify.LevelWarning: &groups[1],
+		notify.LevelInfo:    &groups[2],
+	}
+	for _, id := range notify.EventsSortedByLevel() {
+		g := byLevel[notify.EventLevel(id)]
+		if g == nil {
+			continue
+		}
+		g.Options = append(g.Options, notifyEventOption{ID: id, Label: notify.EventLabels[id]})
+	}
+	return groups
+}
+
 func maskAppriseURL(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if len(raw) <= 48 {
@@ -73,19 +102,7 @@ func maskAppriseURL(raw string) string {
 }
 
 func notifyEventsAll(events []string) bool {
-	if len(events) != len(notify.AllEvents) {
-		return false
-	}
-	have := map[string]bool{}
-	for _, e := range events {
-		have[e] = true
-	}
-	for _, id := range notify.AllEvents {
-		if !have[id] {
-			return false
-		}
-	}
-	return true
+	return notify.HasAllSubscription(events)
 }
 
 func (h *Handler) settingsRedirect(w http.ResponseWriter, r *http.Request) {
@@ -207,9 +224,8 @@ func (h *Handler) ytdlpConnectControlsView() ytdlpConnectControlsView {
 		YtDlpLastCheckedAt: lastCheckedAt,
 		YtDlpUpdatesOn:     updatesEnabled,
 		YtDlpUpdateBusy:    updateBusy,
-		YtDlpUpdateOffTip:  "Automatic updates disabled. Set yt-dlp update schedule under Settings → Scheduler.",
 		YtDlpUpdateBusyTip: "yt-dlp update already queued or running",
-		YtDlpChannel:       h.ytdlpUpdateChannelRow(updatesEnabled),
+		YtDlpChannel:       h.ytdlpUpdateChannelRow(),
 	}
 }
 
@@ -217,7 +233,6 @@ type ytdlpConnectControlsView struct {
 	YtDlpLastCheckedAt string
 	YtDlpUpdatesOn     bool
 	YtDlpUpdateBusy    bool
-	YtDlpUpdateOffTip  string
 	YtDlpUpdateBusyTip string
 	YtDlpChannel       settingsRowView
 }
@@ -273,7 +288,7 @@ func (h *Handler) settingsConnectYtDlpLastChecked(w http.ResponseWriter, r *http
 	render(w, "ytdlp_connect_last_checked", h.ytdlpConnectControlsView())
 }
 
-func (h *Handler) ytdlpUpdateChannelRow(updatesEnabled bool) settingsRowView {
+func (h *Handler) ytdlpUpdateChannelRow() settingsRowView {
 	val, _ := settings.Get(h.Queue.DB, settings.KeyYtDlpUpdateChannel)
 	row := settingsRowView{
 		Key:   settings.KeyYtDlpUpdateChannel,
@@ -284,10 +299,6 @@ func (h *Handler) ytdlpUpdateChannelRow(updatesEnabled bool) settingsRowView {
 	}
 	for _, o := range settings.YtDlpUpdateChannelOptions() {
 		row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
-	}
-	if !updatesEnabled {
-		row.Disabled = true
-		row.DisabledTitle = "Set yt-dlp update schedule under Settings → Scheduler first."
 	}
 	return row
 }
@@ -352,17 +363,14 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 			Events: c.Events, EventLabels: labels, InApp: notify.IsInAppChannel(c),
 		})
 	}
-	evOpts := make([]notifyEventOption, 0, len(notify.AllEvents))
-	for _, id := range notify.EventsSortedByLevel() {
-		evOpts = append(evOpts, notifyEventOption{ID: id, Label: notify.EventLabels[id]})
-	}
+	evGroups := notifyEventGroups()
 	render(w, "settings_connect", struct {
 		pageBase
 		FlareService          externalServiceURLView
 		PotService            externalServiceURLView
 		Settings              []settingsRowView
 		NotifyChannels        []notifyChannelView
-		EventOptions          []notifyEventOption
+		EventGroups           []notifyEventGroupView
 		DefaultEvents         []string
 		YtDlpUpdatesOn        bool
 		YtDlpInstalledVersion ytdlpInstalledVersionView
@@ -373,8 +381,8 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 		PotService:            potJoin,
 		Settings:              rows,
 		NotifyChannels:        chViews,
-		EventOptions:          evOpts,
-		DefaultEvents:         append([]string(nil), notify.AllEvents...),
+		EventGroups:           evGroups,
+		DefaultEvents:         []string{notify.EventAll},
 		YtDlpUpdatesOn:        updatesEnabled,
 		YtDlpInstalledVersion: ytdlpInstalledVersionView{Pending: true},
 		YtDlpControls:         ytdlpControls,
@@ -816,15 +824,18 @@ func (h *Handler) actionUpsertNotifyChannel(w http.ResponseWriter, r *http.Reque
 
 func (h *Handler) writeNotifyURLFieldError(w http.ResponseWriter, r *http.Request, msg string) {
 	fieldID := "notify-url-field-add"
+	formID := "modal-add-notify-channel-form"
 	if idRaw := strings.TrimSpace(r.FormValue("id")); idRaw != "" {
 		if id, err := strconv.ParseInt(idRaw, 10, 64); err == nil && id > 0 {
 			fieldID = fmt.Sprintf("notify-url-field-%d", id)
+			formID = fmt.Sprintf("modal-edit-notify-%d-form", id)
 		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// 200 so HTMX swaps the field fragment (4xx skips swap by default).
 	render(w, "notify_url_field", map[string]any{
 		"FieldID":  fieldID,
+		"FormID":   formID,
 		"URL":      r.FormValue("url"),
 		"URLError": msg,
 	})
@@ -1508,15 +1519,6 @@ func (h *Handler) actionYtDlpUpdate(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if h.Library == nil {
 		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("library unavailable"))
-		return
-	}
-	enabled, err := settings.YtDlpUpdatesEnabled(h.Queue.DB)
-	if err != nil {
-		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(err.Error()))
-		return
-	}
-	if !enabled {
-		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("Automatic yt-dlp updates disabled"))
 		return
 	}
 	if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindYtDlpUpdate, queue.SystemDomain); busy {

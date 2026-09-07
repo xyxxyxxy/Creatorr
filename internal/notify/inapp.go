@@ -6,7 +6,7 @@ import (
 )
 
 // In-app Creatorr channel (virtual; not stored in notification_channels).
-// Always subscribed to AllEvents; not editable or deletable in Settings.
+// Always subscribed via EventAll; not editable or deletable in Settings.
 const (
 	InAppURL  = "creatorr://in-app"
 	InAppName = "Creatorr"
@@ -31,6 +31,6 @@ func InAppChannel() Channel {
 		ID:     0,
 		Name:   InAppName,
 		URL:    InAppURL,
-		Events: append([]string(nil), AllEvents...),
+		Events: []string{EventAll},
 	}
 }

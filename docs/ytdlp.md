@@ -17,9 +17,9 @@ Boot runs `PrepareManagedBin`: when the managed file is missing or fails `--vers
 
 ### Automatic updates
 
-When **`ytdlp_update_cron`** is non-empty (Settings → Scheduler; seed `@weekly`), Creatorr enqueues a **`ytdlp_update`** task on the **`system`** lane on boot, on schedule, and via Settings → Connect → **Update now**. The worker downloads from GitHub (`stable` or `nightly` via **`ytdlp_update_channel`**), verifies **SHA2-256** against the release `SHA2-256SUMS`, runs `--version` on the temp file, then atomically replaces the managed binary and hot-swaps the in-process client path.
+When **`ytdlp_update_cron`** is non-empty (Settings → Scheduler; seed `@weekly`), Creatorr enqueues a **`ytdlp_update`** task on the **`system`** lane on boot and on schedule. Settings → Connect → **Update now** always enqueues the same task (channel from **`ytdlp_update_channel`**: `stable` or `nightly`). The worker downloads from GitHub, verifies **SHA2-256** against the release `SHA2-256SUMS`, runs `--version` on the temp file, then atomically replaces the managed binary and hot-swaps the in-process client path.
 
-**Empty `ytdlp_update_cron`** disables boot, cron, and manual GitHub updates so you can pin a **custom binary**: stop Creatorr, replace the managed path, restart. Set a schedule again to re-enable managed updates.
+**Empty `ytdlp_update_cron`** disables boot and cron only. **Update now** and the release channel stay available. To pin a **custom binary** without GitHub overwrites: stop Creatorr, replace the managed path, restart, and avoid Update now (or clear the schedule and do not click it).
 
 Failed updates leave the prior binary intact and do **not** soft-pause domain lanes.
 

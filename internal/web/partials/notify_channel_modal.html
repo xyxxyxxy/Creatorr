@@ -2,7 +2,7 @@
 {{/*
   Add/edit Apprise notify channel.
   Mode: "add" | "edit"
-  Expects: Redirect, Name, URL, Events ([]string selected), EventOptions ([]{ID,Label}), ID (edit)
+  Expects: Redirect, Name, URL, Events ([]string selected), EventGroups ([]{Level,Label,Icon,IconClass,Options}), ID (edit)
   Optional: URLError (string - daisyUI validator message on URL)
 */}}
 {{$edit := eq .Mode "edit"}}
@@ -10,11 +10,14 @@
 {{if $edit}}{{$id = printf "modal-edit-notify-%d" .ID}}{{end}}
 {{$urlFieldID := "notify-url-field-add"}}
 {{if $edit}}{{$urlFieldID = printf "notify-url-field-%d" .ID}}{{end}}
+{{$formID := printf "%s-form" $id}}
+{{$allChecked := false}}
+{{range $.Events}}{{if eq . "all"}}{{$allChecked = true}}{{end}}{{end}}
 <input type="checkbox" id="{{$id}}" class="modal-toggle" {{if .URLError}}checked{{end}} />
 <div class="modal">
   <div class="modal-box max-w-lg">
     <h3 class="font-bold text-lg mb-2">{{if $edit}}Edit notification channel{{else}}Add notification channel{{end}}</h3>
-    <form method="post" action="/actions/upsert-notify-channel" class="space-y-3" id="{{$id}}-form"
+    <form method="post" action="/actions/upsert-notify-channel" class="space-y-3" id="{{$formID}}"
       hx-post="/actions/upsert-notify-channel"
       hx-target="#{{$urlFieldID}}"
       hx-swap="outerHTML">
@@ -30,31 +33,47 @@
         <legend class="fieldset-legend">Apprise URL</legend>
         {{template "notify_url_field" (dict
           "FieldID" $urlFieldID
+          "FormID" $formID
           "URL" .URL
           "URLError" .URLError
         )}}
       </fieldset>
 
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">Events</legend>
-        <div class="flex flex-col gap-2">
-          {{range $opt := .EventOptions}}
-          {{$checked := false}}
-          {{range $.Events}}{{if eq . $opt.ID}}{{$checked = true}}{{end}}{{end}}
+      <div class="space-y-3" data-notify-events>
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Events</legend>
           <label class="label cursor-pointer justify-start gap-2">
-            <input type="checkbox" name="events" value="{{$opt.ID}}" class="checkbox checkbox-sm" {{if $checked}}checked{{end}} />
-            <span class="label-text">{{$opt.Label}}</span>
+            <input type="checkbox" name="events" value="all" class="checkbox checkbox-sm" data-notify-events-all {{if $allChecked}}checked{{end}} />
+            <span class="label-text">All</span>
           </label>
-          {{end}}
-        </div>
-      </fieldset>
+        </fieldset>
+
+        {{range $g := .EventGroups}}
+        <fieldset class="fieldset gap-2 bg-base-200 border border-base-300 rounded-box p-4">
+          <legend class="fieldset-legend">
+            <span class="inline-flex items-center gap-2">
+              <span class="inline-flex {{$g.IconClass}}" aria-hidden="true">
+                <i data-lucide="{{$g.Icon}}" class="size-4"></i>
+              </span>
+              {{$g.Label}}
+            </span>
+          </legend>
+          <div class="flex flex-col gap-2">
+            {{range $opt := $g.Options}}
+            {{$checked := false}}
+            {{range $.Events}}{{if eq . $opt.ID}}{{$checked = true}}{{end}}{{end}}
+            <label class="label cursor-pointer justify-start gap-2">
+              <input type="checkbox" name="events" value="{{$opt.ID}}" class="checkbox checkbox-sm" data-notify-events-one {{if $checked}}checked{{end}} />
+              <span class="label-text">{{$opt.Label}}</span>
+            </label>
+            {{end}}
+          </div>
+        </fieldset>
+        {{end}}
+      </div>
 
       <div class="modal-action items-center flex-wrap">
         <label for="{{$id}}" class="btn">Cancel</label>
-        <button type="button" class="btn btn-soft btn-info"
-          hx-post="/actions/test-notify-channel"
-          hx-include="#{{$id}}-form"
-          hx-swap="none">Test</button>
         <button type="submit" class="btn btn-primary">{{if $edit}}Save{{else}}Add{{end}}</button>
       </div>
     </form>
@@ -65,12 +84,18 @@
 
 {{define "notify_url_field"}}
 {{/*
-  Apprise URL input + help + optional error. HTMX swap target for upsert validation.
-  Expects: FieldID, URL, URLError (optional)
-  Uses daisyUI validator (https://daisyui.com/components/validator/).
+  Apprise URL input + Test join + help + optional error. HTMX swap target for upsert validation.
+  Expects: FieldID, FormID, URL, URLError (optional)
+  Uses daisyUI validator on the join (https://daisyui.com/components/validator/).
 */}}
 <div id="{{.FieldID}}">
-  <input name="url" class="input w-full font-mono text-sm validator" value="{{.URL}}" placeholder="gotifys://... or smtp2go://" required autocomplete="off"{{if .URLError}} aria-invalid="true"{{end}} />
+  <div class="join w-full validator"{{if .URLError}} aria-invalid="true"{{end}}>
+    <input name="url" class="input join-item grow min-w-0 font-mono text-sm" value="{{.URL}}" placeholder="gotifys://... or smtp2go://" required autocomplete="off" />
+    <button type="button" class="btn btn-soft btn-info join-item shrink-0"
+      hx-post="/actions/test-notify-channel"
+      hx-include="#{{.FormID}}"
+      hx-swap="none">Test</button>
+  </div>
   <p class="validator-hint hidden">{{if .URLError}}{{.URLError}}{{else}}URL is required{{end}}</p>
   <p class="label whitespace-normal">
     <a href="https://appriseit.com/services/" target="_blank" rel="noopener noreferrer" class="link link-primary">Supported services</a>

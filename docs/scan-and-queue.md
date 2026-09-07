@@ -14,7 +14,7 @@ Index: [README.md](README.md). Terminology: [`AGENTS.md`](../AGENTS.md).
 | Download wanted (global cron) | **Download tasks** for wanted videos. Same no-catch-up-on-boot rule as Scan |
 | File sync (`sync_files_cron`) | Enqueues **`sync_files`** on the **`system`** lane when the library has videos (not inline). No catch-up on boot |
 | Retention delete (`retention_delete_cron`) | Enqueues **`retention_delete`** on the **`system`** lane when any root has TTL (not inline). No catch-up on boot |
-| yt-dlp update (`ytdlp_update_cron`, non-empty) | Enqueues **`ytdlp_update`** on boot and on schedule; Settings → Connect → **Update now** when enabled. Empty cron disables all GitHub updates |
+| yt-dlp update (`ytdlp_update_cron`, non-empty) | Enqueues **`ytdlp_update`** on boot and on schedule. Settings → Connect → **Update now** always available (empty cron skips boot/cron only) |
 
 There is **no** global Settings `scan_cron`.
 
