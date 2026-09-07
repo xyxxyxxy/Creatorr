@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS root_folders (
   name TEXT NOT NULL DEFAULT '',
   path TEXT NOT NULL UNIQUE,
   retention_ttl_seconds INTEGER,
-  episode_format TEXT NOT NULL DEFAULT 'S{year}/S{year}E{episode} [{id}]'
+  episode_format TEXT NOT NULL DEFAULT 'S{year}/S{year}E{episode:04} [{id}]'
 );
 
 CREATE TABLE IF NOT EXISTS quality_profiles (

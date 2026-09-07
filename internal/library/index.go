@@ -133,11 +133,15 @@ func (s *Store) UpsertListed(seriesID int64, li ListedVideo, taskID int64) (Upse
 			_ = s.SetMediaType(id, mt)
 		}
 		if upload != "" {
-			changed, rerr := s.ReindexSeriesUTCDay(seriesID, UploadCalendarDate(upload))
+			changed, rerr := s.ReindexSeriesUTCYear(seriesID, SeasonYearFromUpload(upload))
 			if rerr != nil {
 				return out, rerr
 			}
-			_ = s.repackEpisodeNumberChanges(changed, taskID)
+			if tid, queued, qerr := s.EnqueueApplyForPackedEpisodeChanges(changed); qerr != nil {
+				return out, qerr
+			} else if queued {
+				s.NotifyApplyQueuedInfo(tid, len(changed))
+			}
 		}
 		return out, nil
 	}
@@ -505,7 +509,7 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		if err := tx.Commit(); err != nil {
 			return err
 		}
-		changed, rerr := s.ReindexSeriesUTCDay(seriesID, UploadCalendarDate(uploadFromInfo))
+		changed, rerr := s.ReindexSeriesUTCYear(seriesID, SeasonYearFromUpload(uploadFromInfo))
 		if rerr != nil {
 			return rerr
 		}

@@ -346,7 +346,7 @@ func TestSoftFillVideoFromEntry(t *testing.T) {
 	if !v.UploadDate.Valid || library.UploadCalendarDate(v.UploadDate.String) != "2024-07-04" {
 		t.Fatalf("upload_date=%v", v.UploadDate)
 	}
-	if !v.Season.Valid || int(v.Season.Int64) != 2024 || !v.Episode.Valid || int(v.Episode.Int64) != 70400 {
+	if !v.Season.Valid || int(v.Season.Int64) != 2024 || !v.Episode.Valid || int(v.Episode.Int64) != 1 {
 		t.Fatalf("season/episode=%v/%v", v.Season, v.Episode)
 	}
 	if !v.DurationSeconds.Valid || v.DurationSeconds.Int64 != 90 {

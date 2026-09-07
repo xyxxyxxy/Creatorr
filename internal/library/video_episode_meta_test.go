@@ -504,8 +504,8 @@ func TestSaveVideoMetadataUploadDateReindexesAndRenames(t *testing.T) {
 	if !v.Season.Valid || int(v.Season.Int64) != 2024 {
 		t.Fatalf("season=%v", v.Season)
 	}
-	if !v.Episode.Valid || int(v.Episode.Int64) != 31500 {
-		t.Fatalf("episode=%v want 31500", v.Episode)
+	if !v.Episode.Valid || int(v.Episode.Int64) != 1 {
+		t.Fatalf("episode=%v want 1", v.Episode)
 	}
 	var pathBefore string
 	_ = s.DB.SQL.QueryRow(`SELECT path FROM files WHERE video_id = ? AND kind = 'video'`, res.VideoID).Scan(&pathBefore)

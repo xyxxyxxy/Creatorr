@@ -28,8 +28,8 @@
             <td>video title; <code class="text-xs">:N</code> caps runes</td>
           </tr>
           <tr>
-            <td><code class="text-xs">{episode}</code></td>
-            <td><code class="text-xs">MMDD</code> + same-day index (<code class="text-xs">00</code>…; oldest upload first that UTC day). Equal times use arrival order. Zero-padded to 6 digits (January is <code class="text-xs">01…</code>).</td>
+            <td><code class="text-xs">{episode}</code> / <code class="text-xs">{episode:04}</code></td>
+            <td>1-based index within the series UTC year (oldest upload first; equal times use arrival order). Bare form is unpadded; <code class="text-xs">:04</code> zero-pads.</td>
           </tr>
           <tr>
             <td><code class="text-xs">{date}</code></td>
@@ -47,10 +47,18 @@
             <td><code class="text-xs">{day}</code> / <code class="text-xs">{day:02}</code></td>
             <td>UTC release day; <code class="text-xs">:02</code> zero-pads</td>
           </tr>
+          <tr>
+            <td><code class="text-xs">{hour}</code> / <code class="text-xs">{hour:02}</code></td>
+            <td>UTC release hour (0–23); <code class="text-xs">:02</code> zero-pads</td>
+          </tr>
+          <tr>
+            <td><code class="text-xs">{minute}</code> / <code class="text-xs">{minute:02}</code></td>
+            <td>UTC release minute (0–59); <code class="text-xs">:02</code> zero-pads</td>
+          </tr>
         </tbody>
       </table>
     </div>
-    <p>The following tokens become available after the release date of a video is known: <code class="text-xs">{date}</code>, <code class="text-xs">{year}</code>, <code class="text-xs">{month}</code>, <code class="text-xs">{day}</code>, and <code class="text-xs">{episode}</code>.</p>
+    <p>The following tokens become available after the release date of a video is known: <code class="text-xs">{date}</code>, <code class="text-xs">{year}</code>, <code class="text-xs">{month}</code>, <code class="text-xs">{day}</code>, <code class="text-xs">{hour}</code>, <code class="text-xs">{minute}</code>, and <code class="text-xs">{episode}</code>.</p>
   </div>
 </details>
 {{end}}

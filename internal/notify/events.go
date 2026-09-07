@@ -17,10 +17,11 @@ const (
 	EventVerifyFailed    = "verify_failed"
 	EventFileSyncIssues  = "file_sync_issues"
 	EventPOTProvider     = "pot_provider"
-	EventPathCollision   = "path_collision"
-	EventDownloadDigest  = "download_digest"
-	EventLiveSkipped     = "live_skipped"
-	EventArchiveFallback = "archive_fallback"
+	EventPathCollision        = "path_collision"
+	EventEpisodeRenameQueued  = "episode_rename_queued"
+	EventDownloadDigest       = "download_digest"
+	EventLiveSkipped          = "live_skipped"
+	EventArchiveFallback      = "archive_fallback"
 )
 
 // Notification levels (in-app icon / API). Warning matches alert for unread behavior.
@@ -48,20 +49,22 @@ var AllEvents = []string{
 	EventRateLimited,
 	EventPOTProvider,
 	EventPathCollision,
+	EventEpisodeRenameQueued,
 }
 
 // EventLabels are short UI labels for event checkboxes.
 var EventLabels = map[string]string{
-	EventCookieInvalid:   "Cookie / auth failure",
-	EventRateLimited:     "Rate limit / IP block",
-	EventYtDlpFailed:     "yt-dlp / site failure",
-	EventVerifyFailed:    "Verify failed",
-	EventFileSyncIssues:  "File sync issues",
-	EventPOTProvider:     "PO token provider",
-	EventPathCollision:   "Episode path collision",
-	EventDownloadDigest:  "Downloads finished (digest)",
-	EventLiveSkipped:     "Live broadcast skipped",
-	EventArchiveFallback: "Web Archive fallback used",
+	EventCookieInvalid:       "Cookie / auth failure",
+	EventRateLimited:         "Rate limit / IP block",
+	EventYtDlpFailed:         "yt-dlp / site failure",
+	EventVerifyFailed:        "Verify failed",
+	EventFileSyncIssues:      "File sync issues",
+	EventPOTProvider:         "PO token provider",
+	EventPathCollision:       "Episode path collision",
+	EventEpisodeRenameQueued: "Episode rename queued",
+	EventDownloadDigest:      "Downloads finished (digest)",
+	EventLiveSkipped:         "Live broadcast skipped",
+	EventArchiveFallback:     "Web Archive fallback used",
 }
 
 // AlertEvents are unread-eligible failure notifications (red megaphone in UI).
@@ -208,7 +211,7 @@ func notifyTypeFor(event string) apprise.NotifyType {
 		return apprise.NotifyFailure
 	case EventDownloadDigest:
 		return apprise.NotifySuccess
-	case EventLiveSkipped, EventArchiveFallback:
+	case EventLiveSkipped, EventArchiveFallback, EventEpisodeRenameQueued:
 		return apprise.NotifyInfo
 	default:
 		return apprise.NotifyInfo

@@ -431,7 +431,7 @@ func TestCompleteDownloadRenamesAfterInfoJSONDateWhileDownloadRunning(t *testing
 	if err := os.MkdirAll(seasonDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	stem := "S0000E000000 [ZbPaWvqAEq4]"
+	stem := "S0000E0000 [ZbPaWvqAEq4]"
 	media := filepath.Join(seasonDir, stem+".mkv")
 	nfo := filepath.Join(seasonDir, stem+".nfo")
 	info := filepath.Join(seasonDir, stem+".info.json")
@@ -459,8 +459,8 @@ func TestCompleteDownloadRenamesAfterInfoJSONDateWhileDownloadRunning(t *testing
 	if !v.Season.Valid || v.Season.Int64 != 2025 {
 		t.Fatalf("season=%v want 2025", v.Season)
 	}
-	if !v.Episode.Valid || v.Episode.Int64 != 21200 {
-		t.Fatalf("episode=%v want 21200", v.Episode)
+	if !v.Episode.Valid || v.Episode.Int64 != 1 {
+		t.Fatalf("episode=%v want 1", v.Episode)
 	}
 
 	var path string
@@ -470,8 +470,8 @@ func TestCompleteDownloadRenamesAfterInfoJSONDateWhileDownloadRunning(t *testing
 	if strings.Contains(path, "S0000") {
 		t.Fatalf("still under S0000: %s", path)
 	}
-	if !strings.Contains(path, "S2025") || !strings.Contains(path, "E021200") {
-		t.Fatalf("path=%s want S2025…E021200", path)
+	if !strings.Contains(path, "S2025") || !strings.Contains(path, "E0001") {
+		t.Fatalf("path=%s want S2025…E0001", path)
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatal(err)

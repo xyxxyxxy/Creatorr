@@ -1,4 +1,3 @@
-// Package nametemplate expands episode pack path tokens (not text/template).
 package nametemplate
 
 import (
@@ -21,11 +20,14 @@ const (
 	TokYear    = "year"
 	TokMonth   = "month"
 	TokDay     = "day"
+	TokHour    = "hour"
+	TokMinute  = "minute"
 )
 
 var knownTokens = map[string]bool{
 	TokSeries: true, TokEpisode: true, TokTitle: true, TokID: true,
 	TokDate: true, TokDomain: true, TokYear: true, TokMonth: true, TokDay: true,
+	TokHour: true, TokMinute: true,
 }
 
 // tokenRe matches {name} or {name:00} / {name:80} (pad zeros for ints; max runes for series/title).
@@ -46,6 +48,10 @@ type Values struct {
 	// Month, Day are UTC calendar parts from release date (0 = unknown) for {month} {day}.
 	Month int
 	Day   int
+	// Hour, Minute are UTC clock parts; HasClock false when undated (0 is valid midnight).
+	Hour     int
+	Minute   int
+	HasClock bool
 }
 
 // Validate reports unknown tokens. Empty format is allowed (caller decides required).
@@ -57,7 +63,6 @@ func Validate(format string) error {
 			return fmt.Errorf("unknown token {%s}", m[1])
 		}
 	}
-	// Reject bare braces that look like tokens but failed to match (e.g. {}).
 	if strings.Contains(format, "{") || strings.Contains(format, "}") {
 		cleaned := tokenRe.ReplaceAllString(format, "")
 		if strings.Contains(cleaned, "{") || strings.Contains(cleaned, "}") {
@@ -68,7 +73,6 @@ func Validate(format string) error {
 }
 
 // Expand replaces tokens. Numeric pads use the :00 suffix length.
-// For {series}/{title}, :N is max runes (handled fully in ExpandAndSanitize).
 func Expand(format string, v Values) (string, error) {
 	if err := Validate(format); err != nil {
 		return "", err
@@ -99,6 +103,10 @@ func Expand(format string, v Values) (string, error) {
 			return formatDatePart(v.Month, pad)
 		case TokDay:
 			return formatDatePart(v.Day, pad)
+		case TokHour:
+			return formatClockPart(v.Hour, v.HasClock, pad)
+		case TokMinute:
+			return formatClockPart(v.Minute, v.HasClock, pad)
 		default:
 			return tok
 		}
@@ -110,26 +118,30 @@ func formatInt(n int, pad string) string {
 	if pad == "" {
 		return strconv.Itoa(n)
 	}
-	width := len(pad)
+	width := padWidth(pad)
 	return fmt.Sprintf("%0*d", width, n)
 }
 
-// formatEpisode expands {episode}; bare form zero-pads to 6 digits (same as :000000).
-func formatEpisode(n int, pad string) string {
-	if pad == "" {
-		pad = "000000"
+// padWidth: decimal suffix when >0 (e.g. :04 → 4); else length of zero-string (:000 → 3).
+func padWidth(pad string) int {
+	if n, err := strconv.Atoi(pad); err == nil && n > 0 {
+		return n
 	}
+	return len(pad)
+}
+
+// formatEpisode expands {episode}; bare form is unpadded.
+func formatEpisode(n int, pad string) string {
 	return formatInt(n, pad)
 }
 
-// formatYear expands {year}; undated year-season 0 renders as 0000 (min 4 digits).
 func formatYear(n int, pad string) string {
 	if n != 0 {
 		return formatInt(n, pad)
 	}
 	width := 4
 	if pad != "" {
-		width = len(pad)
+		width = padWidth(pad)
 		if width < 4 {
 			width = 4
 		}
@@ -137,9 +149,15 @@ func formatYear(n int, pad string) string {
 	return fmt.Sprintf("%0*d", width, 0)
 }
 
-// formatDatePart formats a calendar component; 0 means unknown → empty.
 func formatDatePart(n int, pad string) string {
 	if n <= 0 {
+		return ""
+	}
+	return formatInt(n, pad)
+}
+
+func formatClockPart(n int, ok bool, pad string) string {
+	if !ok {
 		return ""
 	}
 	return formatInt(n, pad)
@@ -155,9 +173,6 @@ func titleMaxFromSuffix(pad string) int {
 }
 
 // SanitizeFilename hardens a path segment or stem for disk.
-// Keeps letters, numbers, spaces, and -_.,()[]'. Strips controls, emoji, other symbols.
-// Collapses whitespace; trims trailing . and space; empty → "untitled".
-// maxRunes truncates by runes when > 0.
 func SanitizeFilename(s string, maxRunes int) string {
 	s = strings.TrimSpace(s)
 	var b strings.Builder
@@ -183,7 +198,6 @@ func SanitizeFilename(s string, maxRunes int) string {
 			b.WriteRune(r)
 			continue
 		}
-		// Replace FS-illegal and other junk with underscore (collapse runs).
 		if b.Len() > 0 && !lastUnderscore {
 			b.WriteByte('_')
 			lastUnderscore = true
@@ -218,10 +232,6 @@ func isSafeFilenameRune(r rune) bool {
 }
 
 // ExpandAndSanitize expands tokens with per-field sanitize.
-// {series:N}: N = max runes; bare {series} is not truncated.
-// {title:N}: N = max runes; bare {title} is not truncated.
-// {year:0000} / {episode} (bare = 6-digit pad) / {episode:000} / {month:02} / {day:02}: zero-pad width. Undated year-season 0 → 0000 (min 4 digits).
-// {month} / {day}: UTC release-date parts (empty when unknown).
 func ExpandAndSanitize(format string, v Values) (string, error) {
 	if err := Validate(format); err != nil {
 		return "", err
@@ -258,10 +268,13 @@ func ExpandAndSanitize(format string, v Values) (string, error) {
 			return formatDatePart(v.Month, pad)
 		case TokDay:
 			return formatDatePart(v.Day, pad)
+		case TokHour:
+			return formatClockPart(v.Hour, v.HasClock, pad)
+		case TokMinute:
+			return formatClockPart(v.Minute, v.HasClock, pad)
 		default:
 			return tok
 		}
 	})
-	// Whole segment: generous rune cap (filesystem path component).
 	return SanitizeFilename(out, 200), nil
 }

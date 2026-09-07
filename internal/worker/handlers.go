@@ -400,30 +400,25 @@ func ImportHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
-		season, episode := 0, 0
-		if dlctx.Video.Season.Valid {
-			season = int(dlctx.Video.Season.Int64)
+	season, episode := 0, 0
+	if dlctx.Video.Season.Valid {
+		season = int(dlctx.Video.Season.Int64)
+	}
+	if dlctx.Video.Episode.Valid {
+		episode = int(dlctx.Video.Episode.Int64)
+	}
+	upload := ""
+	if dlctx.Video.UploadDate.Valid {
+		upload = dlctx.Video.UploadDate.String
+	}
+	if upload != "" {
+		sNum, eNum, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
+		if aerr != nil {
+			return aerr
 		}
-		if dlctx.Video.Episode.Valid {
-			episode = int(dlctx.Video.Episode.Int64)
-		}
-		if season == 0 || episode == 0 {
-			upload := ""
-			if dlctx.Video.UploadDate.Valid {
-				upload = dlctx.Video.UploadDate.String
-			}
-			s, e, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
-			if aerr != nil {
-				return aerr
-			}
-			if season == 0 {
-				season = s
-			}
-			if episode == 0 {
-				episode = e
-			}
-		}
-		infoSrc, thumbCompanion, subSrcs := library.FindDownloadSidecars(abs)
+		season, episode = sNum, eNum
+	}
+	infoSrc, thumbCompanion, subSrcs := library.FindDownloadSidecars(abs)
 		srcNFO := strings.TrimSuffix(abs, filepath.Ext(abs)) + ".nfo"
 		if _, err := os.Stat(srcNFO); err != nil {
 			srcNFO = ""
@@ -514,6 +509,10 @@ func ImportHandler(d Deps) TaskHandler {
 		}
 		if err := d.Library.CompleteImport(t.VideoID.Int64, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, t.ID); err != nil {
 			return err
+		}
+		if year := library.SeasonYearFromUpload(aired); year > 0 {
+			progress("Aligning episode numbers…", ptrFloat(0.7))
+			_, _ = d.Library.AlignSeriesYearEpisodes(dlctx.Video.SeriesID, int64(year), t.ID)
 		}
 		// NFO soft-fill already ran above when present; ffprobe when duration still empty.
 		_ = d.Library.SoftFillDurationFromMedia(ctx, t.VideoID.Int64, mediaPath)
@@ -925,17 +924,12 @@ func DownloadHandler(d Deps) TaskHandler {
 			if dlctx.Video.Episode.Valid {
 				episode = int(dlctx.Video.Episode.Int64)
 			}
-			if season == 0 || episode == 0 {
-				s, e, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
+			if upload != "" {
+				sNum, eNum, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
 				if aerr != nil {
 					return aerr
 				}
-				if season == 0 {
-					season = s
-				}
-				if episode == 0 {
-					episode = e
-				}
+				season, episode = sNum, eNum
 			}
 			staged.PageURL = dlctx.URL
 			staged.RemoteID = dlctx.Video.RemoteID
@@ -1059,17 +1053,12 @@ func finishArchivePack(
 	if dlctx.Video.Episode.Valid {
 		episode = int(dlctx.Video.Episode.Int64)
 	}
-	if season == 0 || episode == 0 {
-		s, e, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
+	if upload != "" {
+		sNum, eNum, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
 		if aerr != nil {
 			return aerr
 		}
-		if season == 0 {
-			season = s
-		}
-		if episode == 0 {
-			episode = e
-		}
+		season, episode = sNum, eNum
 	}
 	aired := upload
 	if aired == "" && dlctx.Video.UploadDate.Valid {
@@ -1122,6 +1111,10 @@ func finishArchivePack(
 	}
 	if err := d.Library.CompleteDownload(t.VideoID.Int64, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, t.ID); err != nil {
 		return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "record install failed"), err.Error())
+	}
+	if year := library.SeasonYearFromUpload(aired); year > 0 {
+		progress("Aligning episode numbers…", nil)
+		_, _ = d.Library.AlignSeriesYearEpisodes(dlctx.Video.SeriesID, int64(year), t.ID)
 	}
 	if archiveLane {
 		seriesTitle := dlctx.SeriesTitle

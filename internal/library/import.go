@@ -584,7 +584,7 @@ func (s *Store) EnqueueImportCreate(path string, p CreateImportVideoParams) (tas
 		return 0, 0, err
 	}
 	if meta.UploadDate != "" {
-		changed, rerr := s.ReindexSeriesUTCDay(p.SeriesID, UploadCalendarDate(meta.UploadDate))
+		changed, rerr := s.ReindexSeriesUTCYear(p.SeriesID, SeasonYearFromUpload(meta.UploadDate))
 		if rerr != nil {
 			_ = s.Queue.Cancel(taskID)
 			_, _ = s.DB.SQL.Exec(`DELETE FROM videos WHERE id = ?`, videoID)

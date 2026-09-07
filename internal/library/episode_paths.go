@@ -71,6 +71,9 @@ func BuildEpisodePaths(root string, meta EpisodeNFO, cfg NamingConfig) (EpisodeP
 		t = t.UTC()
 		vals.Month = int(t.Month())
 		vals.Day = t.Day()
+		vals.Hour = t.Hour()
+		vals.Minute = t.Minute()
+		vals.HasClock = true
 	}
 
 	seriesDir := SeriesDir(root, meta.SeriesTitle)

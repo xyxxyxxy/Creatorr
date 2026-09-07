@@ -59,25 +59,27 @@ func (s *Store) RefreshListed(seriesID int64, li ListedVideo, taskID int64) (vid
 		_ = s.SetDurationSecondsIfEmpty(existingID, int(li.DurationSeconds+0.5))
 	}
 
-	prevDay := ""
+	prevYear := 0
 	if prevUpload.Valid {
-		prevDay = UploadCalendarDate(prevUpload.String)
+		prevYear = SeasonYearFromUpload(prevUpload.String)
 	}
-	newDay := UploadCalendarDate(upload)
-	if newDay != "" {
-		changed, rerr := s.ReindexSeriesUTCDay(seriesID, newDay)
+	newYear := SeasonYearFromUpload(upload)
+	years := map[int]bool{}
+	if newYear > 0 {
+		years[newYear] = true
+	}
+	if prevYear > 0 && prevYear != newYear {
+		years[prevYear] = true
+	}
+	var allChanged []int64
+	for y := range years {
+		changed, rerr := s.ReindexSeriesUTCYear(seriesID, y)
 		if rerr != nil {
 			return 0, false, rerr
 		}
-		_ = s.repackEpisodeNumberChanges(changed, taskID)
+		allChanged = append(allChanged, changed...)
 	}
-	if prevDay != "" && prevDay != newDay {
-		changed, rerr := s.ReindexSeriesUTCDay(seriesID, prevDay)
-		if rerr != nil {
-			return 0, false, rerr
-		}
-		_ = s.repackEpisodeNumberChanges(changed, taskID)
-	}
+	_ = s.repackEpisodeNumberChanges(uniqInt64(allChanged), taskID)
 
 	return existingID, true, nil
 }
@@ -133,9 +135,9 @@ func (s *Store) SoftFillVideoFromEntry(videoID int64, e ytdlp.Entry, taskID int6
 	}
 	// Soft-fill never overwrites an existing date; only reindex when we actually filled one.
 	if prevDay == "" && upload != "" {
-		newDay := UploadCalendarDate(upload)
-		if newDay != "" {
-			changed, rerr := s.ReindexSeriesUTCDay(v.SeriesID, newDay)
+		year := SeasonYearFromUpload(upload)
+		if year > 0 {
+			changed, rerr := s.ReindexSeriesUTCYear(v.SeriesID, year)
 			if rerr != nil {
 				return rerr
 			}
