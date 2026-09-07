@@ -456,7 +456,7 @@ func lanePageParam(domain string) string {
 func (h *Handler) actionCancelTask(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	_, _ = h.Queue.CancelWithMessage(id, "Cancelled")
+	_, _ = h.Queue.CancelWithReason(id, queue.CancelReasonManual)
 	redir := strings.TrimSpace(r.FormValue("redirect"))
 	if redir == "" || !strings.HasPrefix(redir, "/") || strings.HasPrefix(redir, "//") {
 		redir = "/tasks"

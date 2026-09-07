@@ -391,12 +391,9 @@ func (s *Store) listRegisteredSidecars(videoID int64) ([]VideoFile, error) {
 }
 
 // CancelMediaVerifyForVideo cancels pending/running integrity_check_initial for one video.
-func (s *Store) CancelMediaVerifyForVideo(videoID int64, message string) error {
+func (s *Store) CancelMediaVerifyForVideo(videoID int64, reason string) error {
 	if s.Queue == nil || videoID <= 0 {
 		return nil
-	}
-	if strings.TrimSpace(message) == "" {
-		message = "Cancelled"
 	}
 	rows, err := s.DB.SQL.Query(`
 		SELECT id FROM tasks
@@ -418,7 +415,7 @@ func (s *Store) CancelMediaVerifyForVideo(videoID int64, message string) error {
 		return err
 	}
 	for _, id := range ids {
-		if _, err := s.Queue.CancelWithMessage(id, message); err != nil {
+		if _, err := s.Queue.CancelWithReason(id, reason); err != nil {
 			return err
 		}
 	}
@@ -465,7 +462,7 @@ func (s *Store) EnqueueMediaVerify(videoID, parentTaskID int64) (int64, error) {
 // series quality profile has File integrity on. Ignores the mature-only timing gate
 // (import verify is an explicit operator opt-in). Returns 0 when File integrity is off.
 func (s *Store) MaybeEnqueueMediaVerifyForImport(videoID, parentTaskID int64) (int64, error) {
-	_ = s.CancelMediaVerifyForVideo(videoID, "Superseded by import")
+	_ = s.CancelMediaVerifyForVideo(videoID, queue.CancelReasonSupersededImport)
 	on, err := s.seriesProfileVerifyMedia(videoID)
 	if err != nil {
 		return 0, err
@@ -485,7 +482,7 @@ func (s *Store) MaybeEnqueueMediaVerifyForImport(videoID, parentTaskID int64) (i
 
 // MaybeEnqueueMediaVerifyAfterPack cancels prior verify tasks, then enqueues when the profile gate says so.
 func (s *Store) MaybeEnqueueMediaVerifyAfterPack(videoID int64, maturityPack bool, parentTaskID int64) (int64, error) {
-	_ = s.CancelMediaVerifyForVideo(videoID, "Superseded by new pack")
+	_ = s.CancelMediaVerifyForVideo(videoID, queue.CancelReasonSupersededPack)
 	v, err := s.GetVideo(videoID)
 	if err != nil {
 		return 0, err

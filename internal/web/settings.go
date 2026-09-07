@@ -662,7 +662,7 @@ func (h *Handler) actionSetDomainActive(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !active {
-		_, _ = h.Queue.CancelDomain(domain, "Domain deactivated")
+		_, _ = h.Queue.CancelDomain(domain, queue.CancelReasonDomainDeactivated)
 	}
 	redir := r.FormValue("redirect")
 	if redir == "" {

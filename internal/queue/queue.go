@@ -843,18 +843,19 @@ func (s *Store) taskKind(id int64) string {
 	return kind
 }
 
-// Cancel marks pending/running task cancelled and aborts a running worker if registered.
+// Cancel marks pending/running task cancelled with reason manual and aborts a running worker if registered.
 func (s *Store) Cancel(id int64) error {
-	_, err := s.CancelWithMessage(id, "Cancelled")
+	_, err := s.CancelWithReason(id, CancelReasonManual)
 	return err
 }
 
-// CancelWithMessage marks a pending/running task cancelled with a custom message.
+// CancelWithReason marks a pending/running task cancelled with a closed-set reason code.
 // Returns the status before cancel (pending or running) so callers can record Activity
 // for pending tasks; running cancels are recorded by the worker when the handler returns.
-func (s *Store) CancelWithMessage(id int64, message string) (prevStatus string, err error) {
-	if strings.TrimSpace(message) == "" {
-		message = "Cancelled"
+func (s *Store) CancelWithReason(id int64, reason string) (prevStatus string, err error) {
+	message, err := CancelReasonMessage(reason)
+	if err != nil {
+		return "", err
 	}
 	err = s.DB.SQL.QueryRow(`SELECT status FROM tasks WHERE id = ?`, id).Scan(&prevStatus)
 	if err == sql.ErrNoRows {
@@ -890,12 +891,13 @@ func (s *Store) CancelWithMessage(id int64, message string) (prevStatus string, 
 // CancelDownloadsForVideo cancels pending and running download, sponsorblock_cut,
 // and integrity_check_initial tasks for one video.
 // Returns snapshots with pre-cancel Status (pending|running) and the cancel Message applied.
-func (s *Store) CancelDownloadsForVideo(videoID int64, message string) ([]Task, error) {
+func (s *Store) CancelDownloadsForVideo(videoID int64, reason string) ([]Task, error) {
 	if videoID <= 0 {
 		return nil, fmt.Errorf("video_id required")
 	}
-	if strings.TrimSpace(message) == "" {
-		message = "Cancelled"
+	message, err := CancelReasonMessage(reason)
+	if err != nil {
+		return nil, err
 	}
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
@@ -1002,8 +1004,12 @@ func (s *Store) TaskStatus(id int64) (string, error) {
 	return st, err
 }
 
-// CancelAll cancels all pending tasks and returns snapshots for Activity.
+// CancelAll cancels all pending tasks with reason manual and returns snapshots for Activity.
 func (s *Store) CancelAll() ([]Task, error) {
+	message, err := CancelReasonMessage(CancelReasonManual)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
@@ -1021,7 +1027,7 @@ func (s *Store) CancelAll() ([]Task, error) {
 		if err != nil {
 			return nil, err
 		}
-		t.Message = "Cancelled"
+		t.Message = message
 		out = append(out, *t)
 	}
 	if err := rows.Err(); err != nil {
@@ -1035,9 +1041,9 @@ func (s *Store) CancelAll() ([]Task, error) {
 	}
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = s.DB.SQL.Exec(`
-		UPDATE tasks SET status = ?, finished_at = ?, message = 'Cancelled'
+		UPDATE tasks SET status = ?, finished_at = ?, message = ?
 		WHERE status = ?
-	`, StatusCancelled, finished, StatusPending)
+	`, StatusCancelled, finished, message, StatusPending)
 	if err != nil {
 		return out, err
 	}
@@ -1047,23 +1053,24 @@ func (s *Store) CancelAll() ([]Task, error) {
 
 // CancelPendingDomain cancels pending tasks for one domain lane and returns snapshots for Activity.
 func (s *Store) CancelPendingDomain(domain string) ([]Task, error) {
-	return s.cancelDomain(domain, "Cancelled", StatusPending)
+	return s.cancelDomain(domain, CancelReasonManual, StatusPending)
 }
 
 // CancelDomain cancels pending and running tasks for one domain lane (e.g. on deactivate).
 // Returns snapshots with pre-cancel Status; callers should write Activity for pending rows
 // (running cancels are recorded by the worker when the handler returns).
-func (s *Store) CancelDomain(domain, message string) ([]Task, error) {
-	if strings.TrimSpace(message) == "" {
-		message = "Cancelled"
-	}
-	return s.cancelDomain(domain, message, StatusPending, StatusRunning)
+func (s *Store) CancelDomain(domain, reason string) ([]Task, error) {
+	return s.cancelDomain(domain, reason, StatusPending, StatusRunning)
 }
 
-func (s *Store) cancelDomain(domain, message string, statuses ...string) ([]Task, error) {
+func (s *Store) cancelDomain(domain, reason string, statuses ...string) ([]Task, error) {
 	domain = settings.NormalizeDomain(domain)
 	if domain == "" {
 		return nil, fmt.Errorf("domain required")
+	}
+	message, err := CancelReasonMessage(reason)
+	if err != nil {
+		return nil, err
 	}
 	if len(statuses) == 0 {
 		return nil, nil
@@ -1132,7 +1139,7 @@ func (s *Store) CancelPendingScansForSeries(seriesID int64) (int64, error) {
 	}
 	return s.cancelPendingScans(
 		`kind = ? AND status = ? AND series_id = ?`,
-		"Cancelled",
+		CancelReasonSeriesDeleted,
 		KindScan, StatusPending, seriesID,
 	)
 }
@@ -1146,26 +1153,30 @@ func (s *Store) CancelPendingTipScansForSeries(seriesID int64) (int64, error) {
 	return s.cancelPendingScans(
 		`kind = ? AND status = ? AND series_id = ?
 		  AND COALESCE(json_extract(payload, '$.mode'), '') = 'scan'`,
-		"Cancelled (series unmonitored)",
+		CancelReasonSeriesUnmonitored,
 		KindScan, StatusPending, seriesID,
 	)
 }
 
 // CancelPendingScansForSource cancels pending scan tasks for one source (payload source_id).
-// Running scans are left alone.
-func (s *Store) CancelPendingScansForSource(sourceID int64) (int64, error) {
+// Running scans are left alone. reason must be a closed cancel-reason code.
+func (s *Store) CancelPendingScansForSource(sourceID int64, reason string) (int64, error) {
 	if sourceID <= 0 {
 		return 0, fmt.Errorf("source_id required")
 	}
 	return s.cancelPendingScans(
 		`kind = ? AND status = ?
 		  AND CAST(json_extract(payload, '$.source_id') AS INTEGER) = ?`,
-		"Cancelled (source unmonitored)",
+		reason,
 		KindScan, StatusPending, sourceID,
 	)
 }
 
-func (s *Store) cancelPendingScans(where, message string, args ...any) (int64, error) {
+func (s *Store) cancelPendingScans(where, reason string, args ...any) (int64, error) {
+	message, err := CancelReasonMessage(reason)
+	if err != nil {
+		return 0, err
+	}
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),

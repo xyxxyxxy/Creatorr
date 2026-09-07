@@ -99,9 +99,21 @@ paths:
       summary: Cancel a pending or running task
       parameters:
         - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelTaskRequest"
       responses:
         "204":
           description: Cancelled
+        "400":
+          description: Missing or invalid cancel reason
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Not found / not cancellable
           content:
@@ -2277,6 +2289,17 @@ components:
         active:
           type: boolean
           description: Domain active flag; when false, queue tasks for this hostname do not run and pending+running tasks for the host are cancelled
+
+    CancelTaskRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          description: >
+            Closed cancel reason. Public API accepts only manual (operator cancel).
+            Server maps the code to tasks.message (e.g. Cancelled (manual)).
+          enum: [manual]
 
     SetPausedRequest:
       type: object
