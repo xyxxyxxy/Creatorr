@@ -882,10 +882,6 @@ func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*S
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-	becameNever := !cur.IsSingle() && p.ScanCron != nil && scanCron == "" && !cur.ScanCronNever()
-	if becameNever && s.Queue != nil {
-		_, _ = s.Queue.CancelPendingScansForSource(sourceID, queue.CancelReasonSourceUnmonitored)
-	}
 	return s.GetSource(seriesID, sourceID)
 }
 

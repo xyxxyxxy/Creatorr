@@ -14,7 +14,6 @@ const (
 	CancelReasonSeriesDeleted      = "series_deleted"
 	CancelReasonSourceDeleted      = "source_deleted"
 	CancelReasonSeriesUnmonitored  = "series_unmonitored"
-	CancelReasonSourceUnmonitored  = "source_unmonitored"
 	CancelReasonMetadataDiscarded  = "metadata_discarded"
 	CancelReasonSupersededImport   = "superseded_import"
 	CancelReasonSupersededPack     = "superseded_pack"
@@ -39,8 +38,6 @@ func CancelReasonMessage(code string) (string, error) {
 		return "Cancelled (source deleted)", nil
 	case CancelReasonSeriesUnmonitored:
 		return "Cancelled (series unmonitored)", nil
-	case CancelReasonSourceUnmonitored:
-		return "Cancelled (source unmonitored)", nil
 	case CancelReasonMetadataDiscarded:
 		return "Metadata fetch discarded", nil
 	case CancelReasonSupersededImport:

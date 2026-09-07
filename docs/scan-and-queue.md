@@ -34,13 +34,12 @@ Every cancel sets `tasks.message` from a **closed reason code** (no free text; n
 | `series_deleted` | `Cancelled (series deleted)` |
 | `source_deleted` | `Cancelled (source deleted)` |
 | `series_unmonitored` | `Cancelled (series unmonitored)` |
-| `source_unmonitored` | `Cancelled (source unmonitored)` |
 | `metadata_discarded` | `Metadata fetch discarded` |
 | `superseded_import` | `Superseded by import` |
 | `superseded_pack` | `Superseded by new pack` |
 | `domain_deactivated` | `Domain deactivated` |
 
-Operator UI and `POST /api/tasks/{id}/cancel` always use `manual` (API body required `{"reason":"manual"}`). `POST /api/tasks/cancel-all` and domain Cancel pending are server-forced `manual`. Graceful stop: pending untouched; running resumable → leave `running` for boot `RequeueStaleRunning`; running prefetch → `shutdown`.
+Operator UI and `POST /api/tasks/{id}/cancel` always use `manual` (API body required `{"reason":"manual"}`). `POST /api/tasks/cancel-all` and domain Cancel pending are server-forced `manual`. Graceful stop: pending untouched; running resumable → leave `running` for boot `RequeueStaleRunning`; running prefetch → `shutdown`. Setting a source `scan_cron` to never does **not** cancel already queued scans (schedule only stops new cron kicks).
 
 | Implicit schedule | Creates |
 |---|---|
