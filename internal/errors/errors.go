@@ -61,7 +61,7 @@ const (
 	CodeLiveBroadcastSkipped = "LiveBroadcastSkipped"
 	CodeAgeRestricted        = "AgeRestricted"
 	CodeArchiveFallbackQueued = "ArchiveFallbackQueued"
-	CodeMediaVerifyFailed = "MediaVerifyFailed"
+	CodeIntegrityCheckFailed = "IntegrityCheckFailed"
 	CodeUnauthorized = "Unauthorized"
 	CodeSetupRequired = "SetupRequired"
 )
@@ -74,7 +74,7 @@ func DownloadFailStage(code string) string {
 		return "remux"
 	case CodePackFailed:
 		return "pack"
-	case CodeMediaVerifyFailed:
+	case CodeIntegrityCheckFailed:
 		return "verify"
 	default:
 		return "fetch"

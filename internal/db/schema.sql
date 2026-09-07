@@ -111,7 +111,8 @@ CREATE TABLE IF NOT EXISTS files (
   path TEXT NOT NULL,
   kind TEXT NOT NULL,
   acquired_at TEXT NOT NULL,
-  size_bytes INTEGER
+  size_bytes INTEGER,
+  content_hash TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tasks (

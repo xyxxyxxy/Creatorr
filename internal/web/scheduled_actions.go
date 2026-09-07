@@ -88,6 +88,8 @@ func scheduledTaskKind(key string) string {
 		return "download_wanted"
 	case settings.KeySyncFilesCron:
 		return queue.KindSyncFiles
+	case settings.KeyIntegrityCheckCron:
+		return queue.KindIntegrityCheck
 	case settings.KeyRetentionDeleteCron:
 		return queue.KindRetentionDelete
 	case settings.KeyYtDlpUpdateCron:

@@ -148,6 +148,43 @@ func TestActionSaveSettingsHTMXCronPersists(t *testing.T) {
 	}
 }
 
+func TestActionSaveSettingsClearsIntegrityCheckCron(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "integrity-cron-off.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	if err := settings.SeedDefaults(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	q := queue.NewStore(d)
+	h := &web.Handler{Library: library.NewStore(d, q), Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	form := url.Values{}
+	form.Set("redirect", "/settings/scheduler")
+	form.Set(settings.KeyIntegrityCheckCron, "")
+	req := httptest.NewRequest(http.MethodPost, "/actions/save-settings", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	got, err := settings.Get(d, settings.KeyIntegrityCheckCron)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Fatalf("stored %q want empty (disabled)", got)
+	}
+}
+
 func TestActionSaveSettingsErrorRedirectsToSourceTab(t *testing.T) {
 	r := testSettingsRouter(t)
 	form := url.Values{}

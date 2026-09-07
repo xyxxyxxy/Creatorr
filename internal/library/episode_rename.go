@@ -175,7 +175,7 @@ func (s *Store) AlignSeriesYearEpisodes(seriesID int64, year, taskID int64) (lef
 func (s *Store) packedVideoIDsInYear(seriesID int64, year int) ([]int64, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id FROM videos
-		WHERE series_id = ? AND status IN ('downloaded', 'verify_failed')
+		WHERE series_id = ? AND status IN ('downloaded', 'integrity_check_failed')
 		  AND season = ?
 	`, seriesID, year)
 	if err != nil {
@@ -196,6 +196,7 @@ func (s *Store) packedVideoIDsInYear(seriesID int64, year int) ([]int64, error) 
 // twoPhaseRepackEpisodeNumbers moves packed episode sets via temp stems then ideals.
 // Returns count successfully renamed and video IDs that remain off ideal (busy, failed, or blocked).
 func (s *Store) twoPhaseRepackEpisodeNumbers(videoIDs []int64, taskID int64) (renamed int, leftovers []int64) {
+	triggerVideoID, triggerTitle := s.renameTriggerVideo(taskID)
 	type item struct {
 		videoID  int64
 		oldBase  string
@@ -221,7 +222,7 @@ func (s *Store) twoPhaseRepackEpisodeNumbers(videoIDs []int64, taskID int64) (re
 			leftovers = append(leftovers, videoID)
 			continue
 		}
-		if v.Status != "downloaded" && v.Status != "verify_failed" {
+		if v.Status != "downloaded" && v.Status != "integrity_check_failed" {
 			continue
 		}
 		season, episode := 0, 0
@@ -378,12 +379,8 @@ func (s *Store) twoPhaseRepackEpisodeNumbers(videoIDs []int64, taskID int64) (re
 			_, _ = s.DB.SQL.Exec(`UPDATE files SET path = ? WHERE id = ?`, newPath, it.files[i].id)
 		}
 		_ = PruneEmptyDir(filepath.Dir(it.tempBase))
-		_ = s.AddVideoHistory(it.videoID, "renamed", "Episode files renamed", map[string]any{
-			"previous":      filepath.Base(it.oldBase),
-			"new":           filepath.Base(it.newBase),
-			"previous_path": it.oldBase,
-			"new_path":      it.newBase,
-		}, taskID)
+		msg, detail := renamedHistoryPayload(it.videoID, it.oldBase, it.newBase, triggerVideoID, triggerTitle)
+		_ = s.AddVideoHistory(it.videoID, "renamed", msg, detail, taskID)
 		renamed++
 		var mp string
 		_ = s.DB.SQL.QueryRow(`SELECT path FROM files WHERE video_id = ? AND kind = 'video' ORDER BY id LIMIT 1`, it.videoID).Scan(&mp)
@@ -395,6 +392,52 @@ func (s *Store) twoPhaseRepackEpisodeNumbers(videoIDs []int64, taskID int64) (re
 		}
 	}
 	return renamed, uniqInt64(leftovers)
+}
+
+// renameTriggerVideo returns the task's video_id and title when the rename was driven
+// by a video-scoped task (e.g. download peer-move). Zero id when none.
+func (s *Store) renameTriggerVideo(taskID int64) (videoID int64, title string) {
+	if s.Queue == nil || taskID <= 0 {
+		return 0, ""
+	}
+	t, err := s.Queue.GetTask(taskID)
+	if err != nil || t == nil || !t.VideoID.Valid || t.VideoID.Int64 <= 0 {
+		return 0, ""
+	}
+	videoID = t.VideoID.Int64
+	if v, err := s.GetVideo(videoID); err == nil && v != nil {
+		title = strings.TrimSpace(v.Title)
+	}
+	return videoID, title
+}
+
+// RenamedHistoryMessage is the video History message for a successful episode rename.
+// When triggerVideoID is another video (peer-move after its pack/download), the message
+// names that trigger so History is not mistaken for an Apply-only rename.
+func RenamedHistoryMessage(thisVideoID, triggerVideoID int64, triggerTitle string) string {
+	const base = "Episode files renamed"
+	if triggerVideoID <= 0 || triggerVideoID == thisVideoID {
+		return base
+	}
+	title := strings.TrimSpace(triggerTitle)
+	if title == "" {
+		return base + " (peer move after another video)"
+	}
+	return base + " (peer move after '" + title + "')"
+}
+
+func renamedHistoryPayload(videoID int64, oldBase, newBase string, triggerVideoID int64, triggerTitle string) (string, map[string]any) {
+	detail := map[string]any{
+		"previous":      filepath.Base(oldBase),
+		"new":           filepath.Base(newBase),
+		"previous_path": oldBase,
+		"new_path":      newBase,
+	}
+	if triggerVideoID > 0 && triggerVideoID != videoID {
+		detail["trigger_video_id"] = triggerVideoID
+		detail["reason"] = "peer_move"
+	}
+	return RenamedHistoryMessage(videoID, triggerVideoID, triggerTitle), detail
 }
 
 type epFile struct {

@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -112,17 +113,21 @@ func isHistoryStatus(status string) bool {
 }
 
 // historyEventError reports timeline events that should render in text-error
-// (video download holds, source scan failures, cancelled tasks).
+// (video download holds, source scan failures). Cancelled tasks are neutral, not errors.
 func historyEventError(event string) bool {
 	switch event {
-	case "download_failed", "verify_failed", "file_externally_changed",
-		"sidecar_externally_changed",
-		library.SourceHistScanError,
-		library.VideoHistCancelled: // same string as SourceHistCancelled
+	case "download_failed", "integrity_check_failed", "verify_failed",
+		"file_externally_changed", "sidecar_externally_changed",
+		library.SourceHistScanError:
 		return true
 	default:
 		return false
 	}
+}
+
+// historyEventNeutral reports cancelled (operator abort) events for muted timeline chrome.
+func historyEventNeutral(event string) bool {
+	return event == library.VideoHistCancelled // same string as SourceHistCancelled
 }
 
 // historyEventLabel is the Event column text. Cancelled video rows store
@@ -130,16 +135,98 @@ func historyEventError(event string) bool {
 // Source cancel rows use detail.mode and show "scan".
 func historyEventLabel(event, detail string) string {
 	event = strings.TrimSpace(event)
-	if event != library.VideoHistCancelled {
+	if event == library.VideoHistCancelled {
+		if kind := historyDetailString(detail, "kind"); kind != "" {
+			return historyKindDisplay(kind)
+		}
+		if mode := historyDetailString(detail, "mode"); mode != "" {
+			return queue.KindScan
+		}
 		return event
 	}
-	if kind := historyDetailString(detail, "kind"); kind != "" {
+	return historyEventDisplay(event)
+}
+
+// historyEventDisplay maps stored event ids to operator-facing labels.
+func historyEventDisplay(event string) string {
+	switch event {
+	case library.VideoHistVerified, library.VideoHistIntegrityChecked:
+		return "Integrity check ok"
+	case library.VideoHistVerifyFailed, "verify_failed":
+		return "Integrity check failed"
+	default:
+		return event
+	}
+}
+
+// historyKindDisplay maps task kinds (including legacy) for cancelled history rows.
+func historyKindDisplay(kind string) string {
+	switch kind {
+	case queue.KindIntegrityCheckInitial, "media_verify":
+		return queue.KindIntegrityCheckInitial
+	case queue.KindIntegrityCheck, "verify_all_media":
+		return queue.KindIntegrityCheck
+	default:
 		return kind
 	}
-	if mode := historyDetailString(detail, "mode"); mode != "" {
-		return queue.KindScan
+}
+
+// historyMessageWithDetail appends size/hash deltas from detail JSON when present.
+func historyMessageWithDetail(msg, detail string) string {
+	msg = strings.TrimSpace(msg)
+	detail = strings.TrimSpace(detail)
+	if detail == "" || isEmptyJSONPayload(detail) {
+		return msg
 	}
-	return event
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(detail), &raw); err != nil {
+		return msg
+	}
+	var parts []string
+	if oldSz, okOld := historyDetailInt64(raw, "old_size"); okOld {
+		if newSz, okNew := historyDetailInt64(raw, "new_size"); okNew {
+			parts = append(parts, fmt.Sprintf("%s → %s", library.FormatBytes(oldSz), library.FormatBytes(newSz)))
+		}
+	}
+	oldH := strings.TrimSpace(fmt.Sprint(raw["old_hash"]))
+	newH := strings.TrimSpace(fmt.Sprint(raw["new_hash"]))
+	if oldH != "" && oldH != "<nil>" && newH != "" && newH != "<nil>" {
+		parts = append(parts, truncHashPrefix(oldH)+"… → "+truncHashPrefix(newH)+"…")
+	}
+	if len(parts) == 0 {
+		return msg
+	}
+	suffix := strings.Join(parts, "; ")
+	if msg == "" {
+		return suffix
+	}
+	return msg + " (" + suffix + ")"
+}
+
+func historyDetailInt64(raw map[string]any, key string) (int64, bool) {
+	v, ok := raw[key]
+	if !ok || v == nil {
+		return 0, false
+	}
+	switch n := v.(type) {
+	case float64:
+		return int64(n), true
+	case int64:
+		return n, true
+	case json.Number:
+		i, err := n.Int64()
+		return i, err == nil
+	default:
+		return 0, false
+	}
+}
+
+func truncHashPrefix(h string) string {
+	h = strings.TrimSpace(h)
+	if len(h) <= 12 {
+		return h
+	}
+	return h[:12]
 }
 
 func historyDetailString(detail, key string) string {

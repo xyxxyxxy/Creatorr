@@ -258,7 +258,7 @@ func (s *Store) WantVideosBulk(ids []int64) (updated, skipped int, err error) {
 	return updated, skipped, nil
 }
 
-// IgnoreVideosBulk marks eligible videos ignored. Skips downloaded/verify_failed / missing.
+// IgnoreVideosBulk marks eligible videos ignored. Skips downloaded/integrity_check_failed / missing.
 func (s *Store) IgnoreVideosBulk(ids []int64) (updated, skipped int, err error) {
 	for _, id := range uniqPositive(ids) {
 		if _, err := s.IgnoreVideo(id); err != nil {

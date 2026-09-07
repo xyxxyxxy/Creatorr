@@ -52,6 +52,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo9(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 10:
+			if err := d.migrateTo10(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -295,6 +299,50 @@ func (d *DB) migrateTo9() error {
 	const next = `S{year}/S{year}E{episode:04} [{id}]`
 	if _, err := d.SQL.Exec(`UPDATE root_folders SET episode_format = ? WHERE episode_format = ?`, next, legacy); err != nil {
 		return fmt.Errorf("bump episode_format default: %w", err)
+	}
+	return nil
+}
+
+// migrateTo10 adds files.content_hash, clears NFO size_bytes when present, renames
+// verify_failed status/notify and media_verify / integrity_check task kinds.
+func (d *DB) migrateTo10() error {
+	hasHash, err := d.tableHasColumn("files", "content_hash")
+	if err != nil {
+		return err
+	}
+	if !hasHash {
+		if _, err := d.SQL.Exec(`ALTER TABLE files ADD COLUMN content_hash TEXT`); err != nil {
+			return fmt.Errorf("add content_hash: %w", err)
+		}
+	}
+	// NFO: never size-check; clear stored sizes except known-missing sentinel (-1).
+	if _, err := d.SQL.Exec(`
+		UPDATE files SET size_bytes = NULL
+		WHERE kind = 'nfo' AND size_bytes IS NOT NULL AND size_bytes != -1
+	`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("clear nfo size_bytes: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`UPDATE videos SET status = 'integrity_check_failed' WHERE status = 'verify_failed'`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("rename video status verify_failed: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`UPDATE notifications SET event = 'integrity_check_failed' WHERE event = 'verify_failed'`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("rename notification verify_failed: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`UPDATE tasks SET kind = 'integrity_check_initial' WHERE kind = 'media_verify'`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("rename tasks media_verify: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`UPDATE tasks SET kind = 'integrity_check' WHERE kind = 'verify_all_media'`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("rename tasks verify_all_media: %w", err)
+		}
 	}
 	return nil
 }

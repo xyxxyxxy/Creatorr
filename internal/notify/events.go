@@ -17,7 +17,7 @@ const (
 	EventCookieInvalid       = "cookie_invalid"
 	EventRateLimited         = "rate_limited"
 	EventYtDlpFailed         = "ytdlp_failed"
-	EventVerifyFailed        = "verify_failed"
+	EventVerifyFailed        = "integrity_check_failed"
 	EventFileSyncIssues      = "file_sync_issues"
 	EventPOTProvider         = "pot_provider"
 	EventPathCollision       = "path_collision"
@@ -59,7 +59,7 @@ var EventLabels = map[string]string{
 	EventCookieInvalid:       "Cookie / auth failure",
 	EventRateLimited:         "Rate limit / IP block",
 	EventYtDlpFailed:         "yt-dlp / site failure",
-	EventVerifyFailed:        "Verify failed",
+	EventVerifyFailed:        "Integrity check failed",
 	EventFileSyncIssues:      "File sync issues",
 	EventPOTProvider:         "PO token provider failure",
 	EventPathCollision:       "Episode path collision",

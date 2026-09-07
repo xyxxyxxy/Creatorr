@@ -155,7 +155,7 @@
     <td>
       <div class="inline-flex items-center gap-2 flex-wrap">
         {{template "task_indicator" .TaskInd}}
-        {{if or (eq .Video.Status "wanted_download_error") (eq .Video.Status "wanted_archive") (eq .Video.Status "verify_failed")}}
+        {{if or (eq .Video.Status "wanted_download_error") (eq .Video.Status "wanted_archive") (eq .Video.Status "integrity_check_failed")}}
         {{if .ErrorHistoryID}}
         <a class="link link-hover text-error text-xs" href="/task/{{.ErrorHistoryID}}">Open task for details</a>
         {{end}}

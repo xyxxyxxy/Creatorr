@@ -25,6 +25,7 @@ type Scheduler struct {
 	startedAt           time.Time
 	lastDownload        time.Time
 	lastSyncFiles       time.Time
+	lastIntegrityCheck  time.Time
 	lastRetentionDelete time.Time
 	lastYtDlpUpdate     time.Time
 }
@@ -46,6 +47,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 	s.startedAt = now
 	s.lastDownload = now
 	s.lastSyncFiles = now
+	s.lastIntegrityCheck = now
 	s.lastRetentionDelete = now
 	s.lastYtDlpUpdate = now
 	t := time.NewTicker(s.Tick)
@@ -109,6 +111,16 @@ func (s *Scheduler) TickOnce(_ context.Context, log *slog.Logger) {
 			log.Info("scheduled file sync", "task", id)
 		}
 		s.lastSyncFiles = now
+	}
+
+	if cronDue(database, settings.KeyIntegrityCheckCron, s.lastIntegrityCheck, now, log, "integrity check") {
+		id, err := s.Library.EnqueueVerifyAllMedia()
+		if err != nil {
+			log.Debug("schedule integrity check enqueue", "err", err)
+		} else if id > 0 {
+			log.Info("scheduled integrity check", "task", id)
+		}
+		s.lastIntegrityCheck = now
 	}
 
 	if cronDue(database, settings.KeyRetentionDeleteCron, s.lastRetentionDelete, now, log, "retention purge") {

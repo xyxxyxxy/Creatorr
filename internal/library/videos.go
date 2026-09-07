@@ -554,7 +554,7 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 		}
 	}
 	switch cur.Status {
-	case "ignored", "deleted", "missing", "wanted_download_error", "verify_failed", StatusWantedArchive:
+	case "ignored", "deleted", "missing", "wanted_download_error", "integrity_check_failed", StatusWantedArchive:
 		_ = s.CancelArchiveDownloadsForVideo(videoID)
 		_, _ = s.DB.SQL.Exec(`UPDATE videos SET status = 'wanted' WHERE id = ?`, videoID)
 	}
@@ -585,7 +585,7 @@ func (s *Store) IgnoreVideo(videoID int64) ([]queue.Task, error) {
 		return nil, err
 	}
 	switch cur.Status {
-	case "downloaded", "verify_failed":
+	case "downloaded", "integrity_check_failed":
 		return nil, fmt.Errorf("cannot ignore %s video; delete library files instead", cur.Status)
 	}
 	_, err = s.DB.SQL.Exec(`UPDATE videos SET status = 'ignored' WHERE id = ?`, videoID)
@@ -749,7 +749,7 @@ func (s *Store) ListVideoHistoryByTaskID(taskID int64) ([]VideoHistoryEvent, err
 	return out, rows.Err()
 }
 
-// WantVideo sets status to wanted from ignored, deleted, missing, or verify_failed.
+// WantVideo sets status to wanted from ignored, deleted, missing, or integrity_check_failed.
 // Does not enqueue a download - download_wanted_cron or Queue download picks it up.
 func (s *Store) WantVideo(id int64) (*Video, error) {
 	cur, err := s.GetVideo(id)
@@ -757,10 +757,10 @@ func (s *Store) WantVideo(id int64) (*Video, error) {
 		return nil, err
 	}
 	switch cur.Status {
-	case "ignored", "deleted", "missing", "verify_failed":
+	case "ignored", "deleted", "missing", "integrity_check_failed":
 		// ok
 	default:
-		return nil, fmt.Errorf("%w: want only from ignored, deleted, missing, or verify_failed (got %s)", ErrInvalid, cur.Status)
+		return nil, fmt.Errorf("%w: want only from ignored, deleted, missing, or integrity_check_failed (got %s)", ErrInvalid, cur.Status)
 	}
 	_, err = s.DB.SQL.Exec(`UPDATE videos SET status = 'wanted' WHERE id = ?`, id)
 	if err != nil {

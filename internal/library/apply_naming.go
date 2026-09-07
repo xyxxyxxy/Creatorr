@@ -459,7 +459,7 @@ func buildApplyNamingQuery(p applyNamingPayload) (string, []any) {
 		FROM videos v
 		JOIN series s ON s.id = v.series_id
 		JOIN root_folders r ON r.id = s.root_id
-		WHERE v.status IN ('downloaded', 'verify_failed')
+		WHERE v.status IN ('downloaded', 'integrity_check_failed')
 		  AND v.id > ?
 		  AND EXISTS (
 		    SELECT 1 FROM files f
@@ -537,7 +537,7 @@ func (s *Store) warnRemainingPathCollisions(ctx context.Context, taskID int64, p
 	}
 	ids := uniqInt64(videoIDs)
 	if len(ids) == 0 && (p.SeriesID > 0 || len(p.SeriesIDs) > 0) {
-		q := `SELECT id FROM videos WHERE status IN ('downloaded', 'verify_failed')`
+		q := `SELECT id FROM videos WHERE status IN ('downloaded', 'integrity_check_failed')`
 		var args []any
 		if p.SeriesID > 0 {
 			q += ` AND series_id = ?`
@@ -564,7 +564,7 @@ func (s *Store) warnRemainingPathCollisions(ctx context.Context, taskID int64, p
 	}
 	if len(ids) == 0 && p.isFullLibrary() {
 		rows, err := s.DB.SQL.Query(`
-			SELECT id FROM videos WHERE status IN ('downloaded', 'verify_failed')
+			SELECT id FROM videos WHERE status IN ('downloaded', 'integrity_check_failed')
 		`)
 		if err != nil {
 			return err
@@ -661,7 +661,7 @@ func (s *Store) videoBusyForRename(videoID, exceptTaskID int64) (bool, error) {
 		WHERE video_id = ? AND kind IN (?, ?, ?) AND status IN (?, ?)
 		  AND (? = 0 OR id != ?)
 		LIMIT 1
-	`, videoID, queue.KindDownload, queue.KindSponsorblockCut, queue.KindMediaVerify,
+	`, videoID, queue.KindDownload, queue.KindSponsorblockCut, queue.KindIntegrityCheckInitial,
 		queue.StatusPending, queue.StatusRunning, exceptTaskID, exceptTaskID).Scan(&one)
 	if err == sql.ErrNoRows {
 		return false, nil

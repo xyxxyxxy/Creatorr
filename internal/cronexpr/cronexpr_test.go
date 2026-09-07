@@ -54,6 +54,8 @@ func TestDescribe(t *testing.T) {
 		{"@hourly", "Hourly (top of every hour)"},
 		{"@daily", "Daily (00:00 UTC)"},
 		{"@weekly", "Weekly (Sunday 00:00 UTC)"},
+		{"@monthly", "Monthly (1st 00:00 UTC)"},
+		{"@quarterly", "Quarterly (1st Jan/Apr/Jul/Oct 03:00 UTC)"},
 		{"not a cron", "Invalid cron."},
 		{"5 4 * * *", "Custom schedule."},
 		{cronexpr.ScanCronWeekly, "Weekly (Sunday 03:00 UTC)"},

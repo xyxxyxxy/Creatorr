@@ -1,6 +1,7 @@
 package library_test
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -118,11 +119,12 @@ func TestFileSyncSidecarMissingRestoreAndSize(t *testing.T) {
 	if len(res3.SidecarRestored) != 1 || res3.SidecarRestored[0].Kind != "nfo" {
 		t.Fatalf("restored=%v", res3.SidecarRestored)
 	}
-	if err := s.DB.SQL.QueryRow(`SELECT size_bytes FROM files WHERE video_id = ? AND kind = 'nfo'`, videoID).Scan(&nfoSize); err != nil {
+	var nfoSizeNull sql.NullInt64
+	if err := s.DB.SQL.QueryRow(`SELECT size_bytes FROM files WHERE video_id = ? AND kind = 'nfo'`, videoID).Scan(&nfoSizeNull); err != nil {
 		t.Fatal(err)
 	}
-	if nfoSize != int64(len("nfo-restored")) {
-		t.Fatalf("nfo size after restore=%d", nfoSize)
+	if nfoSizeNull.Valid {
+		t.Fatalf("nfo size after restore=%v want NULL", nfoSizeNull)
 	}
 	var hist string
 	if err := s.DB.SQL.QueryRow(`
@@ -182,13 +184,72 @@ func TestFileSyncSidecarNullSizeBackfillsQuietly(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(res.SidecarMissing) != 0 || len(res.SidecarChanged) != 0 || res.Total() != 0 {
-		t.Fatalf("want quiet backfill, got %#v", res)
+		t.Fatalf("want quiet NFO (no size backfill), got %#v", res)
 	}
-	var nfoSize int64
+	var nfoSize sql.NullInt64
 	if err := s.DB.SQL.QueryRow(`SELECT size_bytes FROM files WHERE video_id = ? AND kind = 'nfo'`, videoID).Scan(&nfoSize); err != nil {
 		t.Fatal(err)
 	}
-	if nfoSize != int64(len(payload)) {
-		t.Fatalf("nfo size=%d want %d", nfoSize, len(payload))
+	if nfoSize.Valid {
+		t.Fatalf("nfo size=%v want NULL (never size-checked)", nfoSize)
+	}
+}
+
+func TestFileSyncNFOSizeDriftNeverAlerts(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "NFOSize", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := s.GetRoot(rootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	media := filepath.Join(root.Path, "ep.mkv")
+	nfo := filepath.Join(root.Path, "ep.nfo")
+	if err := os.WriteFile(media, []byte("m"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nfo, []byte("bigger-nfo-body-now"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.DB.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, status, season, episode)
+		VALUES (?, 'nfosz', 'Ep', 'downloaded', 2026, 1)
+	`, ser.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var videoID int64
+	if err := s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'nfosz'`).Scan(&videoID); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.DB.SQL.Exec(`
+		INSERT INTO files (video_id, path, kind, acquired_at, size_bytes) VALUES (?, ?, 'video', ?, 1)
+	`, videoID, media, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`
+		INSERT INTO files (video_id, path, kind, acquired_at, size_bytes) VALUES (?, ?, 'nfo', ?, 3)
+	`, videoID, nfo, now); err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.FileSyncPass(seedTaskID(t, s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.SidecarChanged) != 0 || len(res.SidecarMissing) != 0 {
+		t.Fatalf("NFO size drift must not alert: %#v", res)
+	}
+	var nfoSize sql.NullInt64
+	if err := s.DB.SQL.QueryRow(`SELECT size_bytes FROM files WHERE video_id = ? AND kind = 'nfo'`, videoID).Scan(&nfoSize); err != nil {
+		t.Fatal(err)
+	}
+	if nfoSize.Valid {
+		t.Fatalf("want NULL after clear, got %v", nfoSize)
 	}
 }

@@ -43,7 +43,7 @@ func TestMarkVerifyFailedKeepsFilesNoThreshold(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Status != "verify_failed" {
+	if v.Status != "integrity_check_failed" {
 		t.Fatalf("status=%s", v.Status)
 	}
 	if _, err := os.Stat(media); err != nil {
@@ -61,7 +61,7 @@ func TestMarkVerifyFailedKeepsFilesNoThreshold(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("missing verify_failed history")
+		t.Fatal("missing integrity_check_failed history")
 	}
 	res2, err := s.UpsertListed(ser.ID, library.ListedVideo{
 		RemoteID: "vf2", Title: "Two", SourceID: srcID,
@@ -110,7 +110,56 @@ func TestEnqueueMediaVerifyDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.Kind != queue.KindMediaVerify || task.Priority != queue.PriorityMediaVerify {
+	if task.Kind != queue.KindIntegrityCheckInitial || task.Priority != 0 {
 		t.Fatalf("%#v", task)
+	}
+}
+
+func TestMaybeEnqueueMediaVerifyForImportRespectsProfile(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "ImpV", SourceURL: "https://www.example.com/@impv", RootID: rootID,
+		QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "impv1", Title: "One", SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "lib")
+	_ = os.MkdirAll(dir, 0o755)
+	media := filepath.Join(dir, "ep.mkv")
+	_ = os.WriteFile(media, []byte("MEDIA"), 0o644)
+	if err := s.CompleteImport(res.VideoID, media, "", "", "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
+		t.Fatal(err)
+	}
+
+	id, err := s.MaybeEnqueueMediaVerifyForImport(res.VideoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != 0 {
+		t.Fatalf("profile off: want id=0, got %d", id)
+	}
+
+	on := true
+	if _, err := s.UpdateProfileParams(profileID, library.UpdateProfileParams{VerifyMedia: &on}); err != nil {
+		t.Fatal(err)
+	}
+	id, err = s.MaybeEnqueueMediaVerifyForImport(res.VideoID)
+	if err != nil || id <= 0 {
+		t.Fatalf("profile on: id=%d err=%v", id, err)
+	}
+	task, err := s.Queue.GetTask(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Kind != queue.KindIntegrityCheckInitial {
+		t.Fatalf("kind=%s", task.Kind)
 	}
 }

@@ -99,5 +99,6 @@ func (h *Handler) writeCronFieldError(w http.ResponseWriter, r *http.Request, ke
 		"Value":           cronValueFromForm(r, key),
 		"Error":           msg,
 		"CronDescriptors": cronexpr.Descriptors(),
+		"CronDefault":     settings.CronSeedDefault(key),
 	})
 }

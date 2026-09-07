@@ -186,7 +186,7 @@ func TestRunnerCancelHistoryUsesCancelledNotLiveProgress(t *testing.T) {
 	videoID, _ := res.LastInsertId()
 
 	id, err := store.Enqueue(queue.EnqueueParams{
-		Kind: queue.KindMediaVerify, Domain: queue.SystemDomain, SeriesID: ser.ID, VideoID: videoID,
+		Kind: queue.KindIntegrityCheckInitial, Domain: queue.SystemDomain, SeriesID: ser.ID, VideoID: videoID,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -195,7 +195,7 @@ func TestRunnerCancelHistoryUsesCancelledNotLiveProgress(t *testing.T) {
 	started := make(chan struct{})
 	done := make(chan struct{})
 	handlers := worker.StubHandlers()
-	handlers[queue.KindMediaVerify] = func(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) error {
+	handlers[queue.KindIntegrityCheckInitial] = func(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) error {
 		progress("Verifying…", nil)
 		close(started)
 		<-ctx.Done()
@@ -288,7 +288,7 @@ func TestRunnerShutdownLeavesRunningForRequeue(t *testing.T) {
 	videoID, _ := res.LastInsertId()
 
 	id, err := store.Enqueue(queue.EnqueueParams{
-		Kind: queue.KindMediaVerify, Domain: queue.SystemDomain, SeriesID: ser.ID, VideoID: videoID,
+		Kind: queue.KindIntegrityCheckInitial, Domain: queue.SystemDomain, SeriesID: ser.ID, VideoID: videoID,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -297,7 +297,7 @@ func TestRunnerShutdownLeavesRunningForRequeue(t *testing.T) {
 	started := make(chan struct{})
 	done := make(chan struct{})
 	handlers := worker.StubHandlers()
-	handlers[queue.KindMediaVerify] = func(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) error {
+	handlers[queue.KindIntegrityCheckInitial] = func(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) error {
 		progress("Verifying…", nil)
 		close(started)
 		<-ctx.Done()

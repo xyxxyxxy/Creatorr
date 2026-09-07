@@ -8,7 +8,6 @@
     <input type="hidden" name="redirect" value="/settings/scheduler" />
     <h2 class="text-lg font-semibold">Scheduler</h2>
     <p class="text-sm opacity-60">The scheduler queues recurring work such as downloading videos and scanning sources for new videos.</p>
-    <p class="text-sm opacity-60">Scan schedule is set individually on each feed source, because it depends heavily on that source. Some creators upload often, others rarely. Use the longest interval that still feels comfortable so Creatorr does not make excessive site requests.</p>
     <div class="grid gap-3 md:grid-cols-2">
       {{range .Settings}}
       {{if .Cron}}
@@ -18,6 +17,7 @@
         "Help" .Help
         "Value" .Value
         "CronDescriptors" $.CronDescriptors
+        "CronDefault" .CronDefault
       )}}
       {{end}}
       {{end}}

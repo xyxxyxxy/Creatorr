@@ -199,6 +199,37 @@
   </div>
 </section>
 {{end}}
+
+{{if .RenameList}}
+<section class="list-panel card bg-base-100 border border-base-300 mb-4">
+  <div class="card-body gap-3">
+    {{if .RenameList.Planned}}
+    {{template "list_header" (dict "level" "section" "title" "Planned renames" "help" "Dry-run of paths this task would change (same as Maintenance Preview renames).")}}
+    <p class="text-sm">
+      {{if eq .RenameList.Total 0}}
+      No packed episodes in this scope would rename.
+      {{else if .RenameList.Truncated}}
+      {{.RenameList.Total}} would rename; showing first {{len .RenameList.Items}}.
+      {{else}}
+      {{.RenameList.Total}} would rename.
+      {{end}}
+    </p>
+    {{else}}
+    {{template "list_header" (dict "level" "section" "title" "Renames" "help" "Episode file sets moved by this task.")}}
+    <p class="text-sm">
+      {{if eq .RenameList.Total 0}}
+      No episode renames recorded for this task.
+      {{else if .RenameList.Truncated}}
+      {{.RenameList.Total}} renamed; showing first {{len .RenameList.Items}}.
+      {{else}}
+      {{.RenameList.Total}} renamed.
+      {{end}}
+    </p>
+    {{end}}
+    {{template "rename_path_list" .RenameList}}
+  </div>
+</section>
+{{end}}
 </div>
 
 {{if .Live}}

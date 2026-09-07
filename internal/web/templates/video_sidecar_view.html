@@ -72,10 +72,19 @@
 <tbody>
   <tr><th class="w-40">Type</th><td>{{.KindLabel}}</td></tr>
   <tr><th class="w-40">Name</th><td><code class="text-xs">{{.Name}}</code></td></tr>
-  {{if eq .SizeLabel "-"}}
-  {{template "detail_row" (dict "Label" "Size" "TdClass" "tabular-nums")}}
-  {{else}}
-  <tr><th class="w-40">Size</th><td class="tabular-nums">{{.SizeLabel}}</td></tr>
+  <tr><th class="w-40">Registered</th><td class="text-xs tabular-nums">{{if eq .Registered "-"}}{{template "empty_value"}}{{else}}{{.Registered}}{{end}}</td></tr>
+  <tr><th class="w-40">Modified</th><td class="text-xs tabular-nums">{{if .MtimeLabel}}{{.MtimeLabel}}{{else}}{{template "empty_value"}}{{end}}</td></tr>
+  <tr><th class="w-40">DB size</th><td class="tabular-nums">{{if eq .DBSizeLabel "-"}}{{template "empty_value"}}{{else}}{{.DBSizeLabel}}{{end}}</td></tr>
+  <tr><th class="w-40">On disk</th><td class="tabular-nums">{{if eq .DiskSizeLabel "-"}}{{template "empty_value"}}{{else}}{{.DiskSizeLabel}}{{end}}</td></tr>
+  <tr><th class="w-40">SHA-256</th><td class="text-xs font-mono">{{if eq .HashLabel "-"}}{{template "empty_value"}}{{else}}{{.HashLabel}}{{end}}</td></tr>
+  {{if .NFOMatchLabel}}
+  <tr><th class="w-40">NFO match</th><td>{{.NFOMatchLabel}}</td></tr>
+  {{end}}
+  {{if .LastIssue}}
+  <tr><th class="w-40">Last issue</th><td class="text-sm">{{if .LastIssueTask}}<a class="link link-hover" href="/task/{{.LastIssueTask}}">{{.LastIssue}}</a>{{else}}{{.LastIssue}}{{end}}</td></tr>
+  {{end}}
+  {{if .KindNote}}
+  <tr><th class="w-40">Note</th><td class="text-sm opacity-80">{{.KindNote}}</td></tr>
   {{end}}
   <tr><th class="w-40">Path</th><td class="text-xs break-all"><code>{{.Path}}</code></td></tr>
 </tbody>

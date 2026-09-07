@@ -44,19 +44,36 @@
       </fieldset>
 
       <fieldset class="fieldset">
-        {{if .VerifyAllMediaBusy}}
+        {{if .SyncFilesBusy}}
         <span class="tooltip tooltip-top inline-flex w-fit max-w-full" data-tip="Already queued">
           <label class="label justify-start gap-2 cursor-not-allowed">
-            <input type="checkbox" name="actions" value="verify_all_media" class="checkbox js-maintenance-action" disabled />
-            <span class="label-text text-base-content opacity-60">Verify all downloaded videos (queued)</span>
+            <input type="checkbox" name="actions" value="sync_files" class="checkbox js-maintenance-action" disabled />
+            <span class="label-text text-base-content opacity-60">File sync (queued)</span>
           </label>
         </span>
         {{else}}
         <label class="label justify-start gap-2 cursor-pointer">
-          <input type="checkbox" name="actions" value="verify_all_media" class="checkbox js-maintenance-action" />
-          <span class="label-text text-base-content">Verify all downloaded videos</span>
+          <input type="checkbox" name="actions" value="sync_files" class="checkbox js-maintenance-action" />
+          <span class="label-text text-base-content">File sync</span>
         </label>
-        <p class="label whitespace-normal">Packed downloaded / 'verify_failed' videos are null-decoded. Failures keep files and set 'verify_failed'. Busy videos are skipped.</p>
+        <p class="label whitespace-normal">Checks registered media and sidecars against disk: missing/restored paths, and size drift for video and non-NFO sidecars. Always whole library (scope does not apply).</p>
+        {{end}}
+      </fieldset>
+
+      <fieldset class="fieldset">
+        {{if .VerifyAllMediaBusy}}
+        <span class="tooltip tooltip-top inline-flex w-fit max-w-full" data-tip="Already queued">
+          <label class="label justify-start gap-2 cursor-not-allowed">
+            <input type="checkbox" name="actions" value="integrity_check" class="checkbox js-maintenance-action" disabled />
+            <span class="label-text text-base-content opacity-60">Integrity check (queued)</span>
+          </label>
+        </span>
+        {{else}}
+        <label class="label justify-start gap-2 cursor-pointer">
+          <input type="checkbox" name="actions" value="integrity_check" class="checkbox js-maintenance-action" />
+          <span class="label-text text-base-content">Integrity check</span>
+        </label>
+        <p class="label whitespace-normal">Only series whose quality profile has 'File integrity' enabled are checked (null-decode, checksums, NFO XML). Failures keep files and set 'integrity_check_failed'. Busy videos are skipped.</p>
         {{end}}
       </fieldset>
 

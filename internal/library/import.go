@@ -791,7 +791,8 @@ func fileModTimeUploadDate(path string) string {
 // EnqueueImport queues an import task that installs media into the series folder
 // (inbox) or binds a library orphan in place. Sidecar paths attach to a video that
 // already has media (in-place files row update). When verify is true, the import
-// task enqueues media_verify after a successful pack/bind (ignores profile mature gate).
+// task may enqueue integrity_check_initial after a successful pack/bind when the
+	// series quality profile has File integrity on (still ignores mature-only timing).
 // When replace is true and the video already has packed media, existing library
 // media (and companion sidecars) are removed during the import task.
 func (s *Store) EnqueueImport(path string, videoID int64, verify, replace bool) (int64, error) {

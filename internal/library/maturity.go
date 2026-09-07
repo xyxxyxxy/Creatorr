@@ -175,7 +175,7 @@ func (s *Store) enqueueMaturitySidecars(limit int) (int, error) {
 		LIMIT ?
 	`,
 		queue.StatusPending, queue.StatusRunning,
-		queue.KindDownload, queue.KindRefreshSidecars, queue.KindSponsorblockCut, queue.KindMediaVerify,
+		queue.KindDownload, queue.KindRefreshSidecars, queue.KindSponsorblockCut, queue.KindIntegrityCheckInitial,
 		limit*4)
 	if err != nil {
 		return 0, err

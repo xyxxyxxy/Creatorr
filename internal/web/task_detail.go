@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
@@ -366,6 +367,7 @@ type taskStageView struct {
 	CreatedAgo string
 	Duration   string // how long this stage lasted until the next (omit ≤1s); kept after reverse for display
 	HasError   bool
+	Neutral    bool // cancelled / operator abort: muted, not success/fail
 	IsFirst    bool
 	IsLast     bool
 	HistoryID  int64             // optional /task/{id} link on Event (0 = none)
@@ -377,6 +379,7 @@ type taskStageSubview struct {
 	Event    string
 	Message  string
 	HasError bool
+	Neutral  bool
 }
 
 // singleVideoHistory is true when every video_history row shares one video_id > 0.
@@ -401,7 +404,7 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 	out := make([]taskStageView, 0, len(events)+4)
 	rawTimes := make([]time.Time, 0, len(events)+4)
 
-	appendStage := func(event, message, rawAt string, err bool) {
+	appendStage := func(event, message, rawAt string, err, neutral bool) {
 		if event == "" {
 			return
 		}
@@ -420,6 +423,7 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 			CreatedAt:  abs,
 			CreatedAgo: ago,
 			HasError:   err,
+			Neutral:    neutral && !err,
 		})
 	}
 
@@ -427,7 +431,7 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 	if createdAt == "" {
 		createdAt = now.UTC().Format(time.RFC3339Nano)
 	}
-	appendStage("enqueued", "", createdAt, false)
+	appendStage("enqueued", "", createdAt, false, false)
 
 	if singleVideoHistory(events) {
 		for _, e := range events {
@@ -435,13 +439,13 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 			if label == "" {
 				continue
 			}
-			appendStage(label, e.Message, e.CreatedAt, historyEventError(e.Event))
+			appendStage(label, e.Message, e.CreatedAt, historyEventError(e.Event), historyEventNeutral(e.Event))
 		}
 	} else if strings.TrimSpace(taskStarted) != "" {
-		appendStage("started", "", taskStarted, false)
+		appendStage("started", "", taskStarted, false, false)
 	}
 
-	if term, termErr, ok := taskTerminalStage(status); ok {
+	if term, termErr, termNeutral, ok := taskTerminalStage(status); ok {
 		at := taskFinished
 		if strings.TrimSpace(at) == "" {
 			at = taskStarted
@@ -449,7 +453,7 @@ func taskStages(events []library.VideoHistoryEvent, now time.Time, taskCreated, 
 		if strings.TrimSpace(at) == "" {
 			at = createdAt
 		}
-		appendStage(term, "", at, termErr)
+		appendStage(term, "", at, termErr, termNeutral)
 	}
 
 	// Durations are how long each stage lasted (older → next) before reversing for display.
@@ -491,16 +495,16 @@ func blankDuplicateStageAgos(out []taskStageView) {
 }
 
 // taskTerminalStage maps finished task status to a Stages event label.
-func taskTerminalStage(status string) (label string, hasError bool, ok bool) {
+func taskTerminalStage(status string) (label string, hasError, neutral, ok bool) {
 	switch status {
 	case "done":
-		return "done", false, true
+		return "done", false, false, true
 	case "failed":
-		return "failed", true, true
+		return "failed", true, false, true
 	case "cancelled":
-		return "cancelled", true, true
+		return "cancelled", false, true, true
 	default:
-		return "", false, false
+		return "", false, false, false
 	}
 }
 
@@ -554,6 +558,111 @@ func mergeVideoHistoryDetailFields(fields []detailField, rows []taskDetailHistRo
 		})
 	}
 	return fields
+}
+
+// taskRenameListView is From→To paths for rename_episodes task detail.
+type taskRenameListView struct {
+	Items     []library.ApplyRenamePreviewItem
+	Total     int
+	Truncated bool
+	Planned   bool // dry-run for pending; false = recorded renames from history
+}
+
+func (h *Handler) buildTaskRenameList(t *queue.Task, events []library.VideoHistoryEvent, live bool) *taskRenameListView {
+	if h.Library == nil || t == nil || t.Kind != queue.KindRenameEpisodes {
+		return nil
+	}
+	if items, total, trunc := renameItemsFromHistory(h, events); total > 0 {
+		return &taskRenameListView{Items: items, Total: total, Truncated: trunc, Planned: false}
+	}
+	if !live {
+		return &taskRenameListView{Planned: false}
+	}
+	seriesIDs, videoIDs := renameScopeFromPayload(t.Payload)
+	prev, err := h.Library.PreviewApplyEpisodeNaming(seriesIDs, videoIDs)
+	if err != nil || prev == nil {
+		return &taskRenameListView{Planned: true}
+	}
+	return &taskRenameListView{
+		Items:     prev.Items,
+		Total:     prev.TotalChanges,
+		Truncated: prev.Truncated,
+		Planned:   true,
+	}
+}
+
+func renameScopeFromPayload(payload string) (seriesIDs, videoIDs []int64) {
+	var p struct {
+		SeriesID  int64   `json:"series_id"`
+		SeriesIDs []int64 `json:"series_ids"`
+		VideoIDs  []int64 `json:"video_ids"`
+	}
+	_ = json.Unmarshal([]byte(payload), &p)
+	if len(p.VideoIDs) > 0 {
+		return nil, p.VideoIDs
+	}
+	if p.SeriesID > 0 {
+		return []int64{p.SeriesID}, nil
+	}
+	return p.SeriesIDs, nil
+}
+
+func renameItemsFromHistory(h *Handler, events []library.VideoHistoryEvent) (items []library.ApplyRenamePreviewItem, total int, truncated bool) {
+	for _, e := range events {
+		if e.Event != "renamed" {
+			continue
+		}
+		total++
+		if len(items) >= library.PreviewApplyRenameCap {
+			truncated = true
+			continue
+		}
+		from, to := renamePathsFromDetail(e.Detail)
+		title := fmt.Sprintf("#%d", e.VideoID)
+		seriesTitle := ""
+		if vv, err := h.Library.GetVideo(e.VideoID); err == nil && vv != nil {
+			title = vv.Title
+			if ser, serr := h.Library.GetSeries(vv.SeriesID, false); serr == nil && ser != nil {
+				seriesTitle = ser.Title
+			}
+		}
+		items = append(items, library.ApplyRenamePreviewItem{
+			VideoID:     e.VideoID,
+			Title:       title,
+			SeriesTitle: seriesTitle,
+			From:        from,
+			To:          to,
+		})
+	}
+	return items, total, truncated
+}
+
+func renamePathsFromDetail(detail string) (from, to string) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(detail), &raw); err != nil {
+		return "", ""
+	}
+	from = jsonStringField(raw, "previous_path")
+	to = jsonStringField(raw, "new_path")
+	if from == "" {
+		from = jsonStringField(raw, "previous")
+	}
+	if to == "" {
+		to = jsonStringField(raw, "new")
+	}
+	return from, to
+}
+
+func jsonStringField(raw map[string]any, key string) string {
+	v, ok := raw[key]
+	if !ok || v == nil {
+		return ""
+	}
+	s := strings.TrimSpace(fmt.Sprint(v))
+	if s == "" || s == "<nil>" {
+		return ""
+	}
+	return s
 }
 
 func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
@@ -667,6 +776,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 	logLines := h.Queue.Logs.Snapshot(id)
 	logText := strings.Join(logLines, "\n")
 	commands := t.Commands
+	renameList := h.buildTaskRenameList(t, events, live)
 
 	render(w, "task_detail", struct {
 		pageBase
@@ -678,6 +788,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		POT          *potDetailView
 		DomainAccess *domains.DomainAccessSnapshot
 		Commands     []string
+		RenameList   *taskRenameListView
 		Progress     *float64
 		Live         bool
 		LogText      string
@@ -697,6 +808,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		POT:          pot,
 		DomainAccess: domainAccess,
 		Commands:     commands,
+		RenameList:   renameList,
 		Progress:     progress,
 		Live:         live,
 		LogText:      logText,

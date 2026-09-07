@@ -81,7 +81,7 @@ type Series struct {
 	VideoCount         int64
 	DownloadedCount    int64 // successful: status downloaded only
 	WantedCount        int64 // status wanted | wanted_archive (API); subset of PendingCount
-	PendingCount       int64 // open work: wanted | wanted_archive | wanted_download_error | verify_failed
+	PendingCount       int64 // open work: wanted | wanted_archive | wanted_download_error | integrity_check_failed
 	SourceCount        int64
 	Sources            []Source
 	Videos             []Video
@@ -157,7 +157,7 @@ func seriesListStatusActive(status string) bool {
 }
 
 // seriesProgressOpenStatuses: still-open for list progress + Incomplete (wanted, archive wait, download error, verify fail).
-const seriesProgressOpenStatuses = `'wanted', 'wanted_archive', 'wanted_download_error', 'verify_failed'`
+const seriesProgressOpenStatuses = `'wanted', 'wanted_archive', 'wanted_download_error', 'integrity_check_failed'`
 
 const seriesListSelectCols = `s.id, s.title, s.root_id, s.quality_profile_id, s.monitored, s.delivery_mode, s.added_at,
 		       r.name, q.name,
@@ -205,7 +205,7 @@ func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilt
 		b.WriteString(` AND (
 			EXISTS (
 				SELECT 1 FROM videos v
-				WHERE v.series_id = s.id AND v.status IN ('wanted_download_error', 'verify_failed')
+				WHERE v.series_id = s.id AND v.status IN ('wanted_download_error', 'integrity_check_failed')
 			)
 			OR EXISTS (
 				SELECT 1 FROM sources src

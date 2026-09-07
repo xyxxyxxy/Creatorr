@@ -79,7 +79,7 @@ func TestEnqueueVerifyAllMediaScopedSeriesPayload(t *testing.T) {
 
 	rows, err := s.DB.SQL.Query(`
 		SELECT v.id FROM videos v
-		WHERE v.status IN ('downloaded', 'verify_failed')
+		WHERE v.status IN ('downloaded', 'integrity_check_failed')
 		  AND v.series_id IN (?)
 		  AND EXISTS (SELECT 1 FROM files f WHERE f.video_id = v.id AND f.kind = 'video')
 		ORDER BY v.id

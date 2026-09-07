@@ -14,6 +14,7 @@ const (
 	KeyPotFetch                     = "pot_fetch"
 	KeyDownloadWantedCron           = "download_wanted_cron"
 	KeySyncFilesCron                = "sync_files_cron"
+	KeyIntegrityCheckCron           = "integrity_check_cron"
 	KeyRetentionDeleteCron          = "retention_delete_cron"
 	KeyMetadataDomainTag            = "metadata_domain_tag"
 	KeyMetadataGenresFromCategories = "metadata_genres_from_categories"
@@ -29,7 +30,8 @@ const (
 var Help = map[string]string{
 	KeyPotFetch: "A PO token (proof of origin) is an attestation token yt-dlp can attach so media hosts treat traffic as more legitimate when an IP is flagged for bot checks. It may help, but does not guarantee avoiding blocks. Creatorr fetches tokens from the provider sidecar above.",
 	KeyDownloadWantedCron:           "Schedule to enqueue wanted videos for monitored series.",
-	KeySyncFilesCron:                "Library scan will detect changed files in the root folders and cache directories.",
+	KeySyncFilesCron:                "Checks registered media and sidecars against disk: missing/restored paths, and size drift for video and non-NFO sidecars.",
+	KeyIntegrityCheckCron:           "Runs library Integrity check on a schedule. Only videos whose quality profile has 'File integrity' enabled are checked (null-decode, checksums, NFO XML).",
 	KeyRetentionDeleteCron:          "Deleting old data according to root folder retention ('Settings → Library').",
 	KeySubtitleLangs:                "Supports all, regex (en.*), and -TAG exclusions. Applies on next download, metadata rescan, or Refresh sidecars.",
 	KeySubtitleAuto:                 "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",
@@ -37,7 +39,7 @@ var Help = map[string]string{
 	KeyMetadataGenresFromCategories: "On download and metadata rescan, add yt-dlp categories as video genres when categories are known.",
 	KeyArchiveFallback:              "When a cataloged video is gone at the live source, queue a Web Archive download (yt-dlp). Original source URL is kept. Operator is notified when archive media packs.",
 	KeyYtDlpUpdateChannel:           "GitHub release channel for Update now and for automatic updates when a schedule is set.",
-	KeyYtDlpUpdateCron:              "When set, Creatorr checks GitHub on boot and on this schedule. Configure update channel under 'Settings → Connect'. Empty disables boot and cron only; Update now on Connect still works.",
+	KeyYtDlpUpdateCron:              "When set, Creatorr checks GitHub on boot and on this schedule. Configure update channel under 'Settings → Connect'. Disabling skips boot and cron.",
 	KeyYtDlpInstalledVersion:        "", // internal; written by ytdlp_update task
 	KeyYtDlpInstalledAt:             "", // internal; written by ytdlp_update task
 	KeyAuthUsername:                 "Single operator account username for Forms login.",
@@ -52,6 +54,7 @@ var Labels = map[string]string{
 	KeyPotFetch:                     "PO token fetch",
 	KeyDownloadWantedCron:           "Download wanted schedule",
 	KeySyncFilesCron:                "File sync schedule",
+	KeyIntegrityCheckCron:           "Integrity check schedule",
 	KeyRetentionDeleteCron:          "Retention delete schedule",
 	KeySubtitleLangs:                "Subtitle languages",
 	KeySubtitleAuto:                 "Include auto-generated subtitles",
@@ -82,6 +85,7 @@ var connectOrder = []string{
 var schedulerOrder = []string{
 	KeyDownloadWantedCron,
 	KeySyncFilesCron,
+	KeyIntegrityCheckCron,
 	KeyRetentionDeleteCron,
 	KeyYtDlpUpdateCron,
 }
@@ -96,6 +100,7 @@ var libraryOrder = []string{
 var CronKeys = map[string]bool{
 	KeyDownloadWantedCron:  true,
 	KeySyncFilesCron:       true,
+	KeyIntegrityCheckCron:  true,
 	KeyRetentionDeleteCron: true,
 	KeyYtDlpUpdateCron:     true,
 }
@@ -120,6 +125,7 @@ func SeedDefaults(database *db.DB) error {
 		KeyPotFetch:                     PotFetchAuto,
 		KeyDownloadWantedCron:           "@hourly",
 		KeySyncFilesCron:                "@daily",
+		KeyIntegrityCheckCron:           "@quarterly",
 		KeyRetentionDeleteCron:          "@daily",
 		KeySubtitleLangs:                DefaultSubtitleLangs,
 		KeySubtitleAuto:                 DefaultSubtitleAuto,
@@ -150,6 +156,22 @@ func SeedDefaults(database *db.DB) error {
 		return fmt.Errorf("seed default domain: %w", err)
 	}
 	return nil
+}
+
+// CronSeedDefault is the seed/re-enable fill for a cron setting (empty if unknown).
+func CronSeedDefault(key string) string {
+	switch key {
+	case KeyDownloadWantedCron:
+		return "@hourly"
+	case KeySyncFilesCron, KeyRetentionDeleteCron:
+		return "@daily"
+	case KeyIntegrityCheckCron:
+		return "@quarterly"
+	case KeyYtDlpUpdateCron:
+		return "@weekly"
+	default:
+		return ""
+	}
 }
 
 // migrateLegacySettingKeys renames settings keys after task-kind renames.
@@ -192,6 +214,8 @@ func migrateLegacyTaskKinds(database *db.DB) error {
 		{"video_meta_prefetch", "prefetch_video_meta"},
 		{"add_series_prefetch", "prefetch_add_series"},
 		{"add_video_prefetch", "prefetch_add_video"},
+		{"media_verify", "integrity_check_initial"},
+		{"verify_all_media", "integrity_check"},
 	}
 	for _, r := range renames {
 		if _, err := database.SQL.Exec(`UPDATE tasks SET kind = ? WHERE kind = ?`, r.neu, r.old); err != nil {
