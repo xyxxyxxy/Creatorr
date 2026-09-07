@@ -248,7 +248,7 @@ func TestScanImportSuggestsUploadDateFromMtime(t *testing.T) {
 	}
 }
 
-func TestScanImportSuggestsGeneratedRemoteID(t *testing.T) {
+func TestScanImportNoSyntheticRemoteID(t *testing.T) {
 	s := openLib(t)
 	inbox := filepath.Join(t.TempDir(), "import")
 	if err := os.MkdirAll(inbox, 0o755); err != nil {
@@ -273,8 +273,8 @@ func TestScanImportSuggestsGeneratedRemoteID(t *testing.T) {
 	if c == nil {
 		t.Fatal("no video candidate")
 	}
-	if !c.SuggestedRemoteIDGenerated || !strings.HasPrefix(c.SuggestedRemoteID, "import-") {
-		t.Fatalf("want generated import-* remote, got id=%q generated=%v", c.SuggestedRemoteID, c.SuggestedRemoteIDGenerated)
+	if c.SuggestedRemoteID != "" || c.SuggestedRemoteIDGenerated {
+		t.Fatalf("want empty suggested remote (assign videos.id on create), got id=%q generated=%v", c.SuggestedRemoteID, c.SuggestedRemoteIDGenerated)
 	}
 	if c.SuggestedUploadDate == "" {
 		t.Fatal("expected suggested upload date from file mtime")

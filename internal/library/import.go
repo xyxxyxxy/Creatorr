@@ -1,7 +1,6 @@
 package library
 
 import (
-	"crypto/sha1"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -9,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,8 +37,8 @@ type ImportCandidate struct {
 	SuggestedVideoID  *int64             `json:"suggested_video_id"`
 	SuggestedSeriesID *int64             `json:"suggested_series_id"`
 	SuggestedTitle    string             `json:"suggested_title,omitempty"`
-	SuggestedRemoteID string             `json:"suggested_remote_id,omitempty"`
-	// SuggestedRemoteIDGenerated is true when SuggestedRemoteID was derived (no id in filename/sidecars).
+	SuggestedRemoteID string `json:"suggested_remote_id,omitempty"`
+	// SuggestedRemoteIDGenerated is reserved (always false); synthetic remotes are not suggested.
 	SuggestedRemoteIDGenerated bool `json:"suggested_remote_id_generated,omitempty"`
 	// SuggestedUploadDate is RFC3339 UTC prefill for unmatched create (sidecar, else file mtime).
 	SuggestedUploadDate string `json:"suggested_upload_date,omitempty"`
@@ -371,11 +371,9 @@ func (s *Store) buildImportCandidate(path, source string, known map[string]struc
 	c.IDs = extractImportIDs(abs)
 	meta := readImportMeta(abs, c.IDs)
 	c.SuggestedTitle = meta.Title
+	// Site/bracket/info.json id only - no synthetic hash. Empty → create assigns videos.id.
 	c.SuggestedRemoteID = meta.RemoteID
-	if c.SuggestedRemoteID == "" {
-		c.SuggestedRemoteID = deriveImportRemoteID(abs)
-		c.SuggestedRemoteIDGenerated = true
-	}
+	c.SuggestedRemoteIDGenerated = false
 	c.SuggestedUploadDate = meta.UploadDate
 	if c.SuggestedUploadDate == "" {
 		c.SuggestedUploadDate = fileModTimeUploadDate(abs)
@@ -541,8 +539,13 @@ func (s *Store) EnqueueImportCreate(path string, p CreateImportVideoParams) (tas
 	if meta.Title == "" {
 		return 0, 0, fmt.Errorf("%w: title required for unmatched import", ErrInvalid)
 	}
-	if meta.RemoteID == "" {
-		meta.RemoteID = deriveImportRemoteID(abs)
+	assignFromID := meta.RemoteID == ""
+	if assignFromID {
+		tmp, err := tempVideoRemoteID()
+		if err != nil {
+			return 0, 0, err
+		}
+		meta.RemoteID = tmp
 	}
 	if meta.HandlerID == "" {
 		meta.HandlerID = "yt-dlp"
@@ -577,6 +580,13 @@ func (s *Store) EnqueueImportCreate(path string, p CreateImportVideoParams) (tas
 		return 0, 0, err
 	}
 	videoID, _ = res.LastInsertId()
+	if assignFromID {
+		if err := s.setVideoRemoteIDToPK(videoID); err != nil {
+			_, _ = s.DB.SQL.Exec(`DELETE FROM videos WHERE id = ?`, videoID)
+			return 0, 0, err
+		}
+		meta.RemoteID = strconv.FormatInt(videoID, 10)
+	}
 	taskID, err = s.EnqueueImport(abs, videoID, p.Verify, false)
 	if err != nil {
 		// Best-effort cleanup so a failed enqueue does not leave an orphan wanted row.
@@ -770,12 +780,6 @@ func CombineUploadFormDateTime(day, clock string) string {
 func UploadFormValue(raw string) string {
 	day, clock := UploadFormParts(raw)
 	return CombineUploadFormDateTime(day, clock)
-}
-
-func deriveImportRemoteID(path string) string {
-	base := filepath.Base(path)
-	sum := sha1.Sum([]byte(base))
-	return fmt.Sprintf("import-%x", sum[:6])
 }
 
 // fileModTimeUploadDate returns the file's modification time as RFC3339 UTC (creation
