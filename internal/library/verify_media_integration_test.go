@@ -36,7 +36,7 @@ func TestMarkVerifyFailedKeepsFilesNoThreshold(t *testing.T) {
 		t.Fatal(err)
 	}
 	tid := seedTaskID(t, s)
-	if err := s.MarkVerifyFailed(res.VideoID, tid, "Media verify failed"); err != nil {
+	if err := s.MarkVerifyFailed(res.VideoID, tid, "Media verify failed", nil); err != nil {
 		t.Fatal(err)
 	}
 	v, err := s.GetVideo(res.VideoID)

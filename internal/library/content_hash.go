@@ -49,23 +49,29 @@ func (s *Store) FileContentHash(fileID int64) (hash string, ok bool, err error) 
 }
 
 // ensureOrCompareFileHash fills NULL hash or compares when set.
-// Returns mismatch detail when hash differs; empty string when OK.
-func (s *Store) ensureOrCompareFileHash(fileID int64, path string) (mismatch string, err error) {
+// result is IntegrityResultOK, IntegrityResultFilled, or IntegrityResultFailed.
+// mismatch is set when result is failed.
+func (s *Store) ensureOrCompareFileHash(fileID int64, path string) (result, mismatch string, err error) {
 	sum, err := sha256File(path)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	stored, ok, err := s.FileContentHash(fileID)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if !ok {
-		return "", s.SetFileContentHash(fileID, sum)
+		if err := s.SetFileContentHash(fileID, sum); err != nil {
+			return "", "", err
+		}
+		return IntegrityResultFilled, "", nil
 	}
 	if stored != sum {
-		return fmt.Sprintf("content hash mismatch (stored %s… disk %s…)", truncHash(stored), truncHash(sum)), nil
+		return IntegrityResultFailed,
+			fmt.Sprintf("content hash mismatch (stored %s… disk %s…)", truncHash(stored), truncHash(sum)),
+			nil
 	}
-	return "", nil
+	return IntegrityResultOK, "", nil
 }
 
 func truncHash(h string) string {

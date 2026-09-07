@@ -28,10 +28,14 @@ func (s *Store) EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs []int64, origin 
 		return 0, fmt.Errorf("%w: series_ids and video_ids are mutually exclusive", ErrInvalid)
 	}
 	payload := map[string]any{
-		"cursor":            0,
-		"integrity_checked": 0,
-		"skipped":           0,
-		"failed":            0,
+		"cursor":              0,
+		"integrity_checked":   0,
+		"partial":             0,
+		"skipped":             0,
+		"failed":              0,
+		"skipped_busy":        0,
+		"skipped_profile_off": 0,
+		"skipped_no_media":    0,
 	}
 	msg := "Integrity check"
 	if len(seriesIDs) > 0 {
@@ -51,13 +55,21 @@ func (s *Store) EnqueueVerifyAllMediaScoped(seriesIDs, videoIDs []int64, origin 
 }
 
 type verifyAllMediaPayload struct {
-	Cursor            int64   `json:"cursor"`
-	IntegrityChecked  int     `json:"integrity_checked"`
-	Verified          int     `json:"verified"` // legacy dual-read
-	Skipped           int     `json:"skipped"`
-	Failed            int     `json:"failed"`
-	SeriesIDs         []int64 `json:"series_ids"`
-	VideoIDs          []int64 `json:"video_ids"`
+	Cursor            int64                     `json:"cursor"`
+	IntegrityChecked  int                       `json:"integrity_checked"`
+	Verified          int                       `json:"verified"` // legacy dual-read
+	Partial           int                       `json:"partial"`
+	Skipped           int                       `json:"skipped"`
+	Failed            int                       `json:"failed"`
+	SkippedBusy       int                       `json:"skipped_busy"`
+	SkippedProfileOff int                       `json:"skipped_profile_off"`
+	SkippedNoMedia    int                       `json:"skipped_no_media"`
+	SeriesIDs         []int64                   `json:"series_ids"`
+	VideoIDs          []int64                   `json:"video_ids"`
+	SkippedBusyIDs    []int64                   `json:"skipped_busy_ids"`
+	SkippedProfileIDs []int64                   `json:"skipped_profile_off_ids"`
+	SkippedNoMediaIDs []int64                   `json:"skipped_no_media_ids"`
+	Checks            map[string]map[string]int `json:"checks"`
 }
 
 // VerifyAllMediaFail is one failed video from VerifyAllMediaPass (for notify).
@@ -71,27 +83,55 @@ type VerifyAllMediaFail struct {
 // VerifyAllMediaPass runs integrity check on packed downloaded/integrity_check_failed media
 // with a cursor for resume. Skips videos whose quality profile has File integrity off.
 // onFail is optional; called after MarkVerifyFailed for each failure.
-func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64), onFail func(VerifyAllMediaFail)) (verified, skipped, failed int, err error) {
+func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64), onFail func(VerifyAllMediaFail)) (*VerifyAllMediaResult, error) {
 	var p verifyAllMediaPayload
 	_ = json.Unmarshal([]byte(task.Payload), &p)
-	verified = p.IntegrityChecked
-	if verified == 0 && p.Verified > 0 {
-		verified = p.Verified
+	res := &VerifyAllMediaResult{
+		IntegrityChecked:  p.IntegrityChecked,
+		Partial:           p.Partial,
+		Skipped:           p.Skipped,
+		Failed:            p.Failed,
+		SkippedBusy:       p.SkippedBusy,
+		SkippedProfileOff: p.SkippedProfileOff,
+		SkippedNoMedia:    p.SkippedNoMedia,
+		SkippedBusyIDs:    append([]int64(nil), p.SkippedBusyIDs...),
+		SkippedProfileIDs: append([]int64(nil), p.SkippedProfileIDs...),
+		SkippedNoMediaIDs: append([]int64(nil), p.SkippedNoMediaIDs...),
+		Checks:            p.Checks,
 	}
-	skipped, failed = p.Skipped, p.Failed
+	if res.IntegrityChecked == 0 && p.Verified > 0 {
+		res.IntegrityChecked = p.Verified
+	}
+	if res.Checks == nil {
+		res.Checks = map[string]map[string]int{}
+	}
 
 	persist := func() error {
 		m := map[string]any{
-			"cursor":            p.Cursor,
-			"integrity_checked": verified,
-			"skipped":           skipped,
-			"failed":            failed,
+			"cursor":              p.Cursor,
+			"integrity_checked":   res.IntegrityChecked,
+			"partial":             res.Partial,
+			"skipped":             res.Skipped,
+			"failed":              res.Failed,
+			"skipped_busy":        res.SkippedBusy,
+			"skipped_profile_off": res.SkippedProfileOff,
+			"skipped_no_media":    res.SkippedNoMedia,
+			"checks":              res.Checks,
 		}
 		if len(p.SeriesIDs) > 0 {
 			m["series_ids"] = p.SeriesIDs
 		}
 		if len(p.VideoIDs) > 0 {
 			m["video_ids"] = p.VideoIDs
+		}
+		if len(res.SkippedBusyIDs) > 0 {
+			m["skipped_busy_ids"] = res.SkippedBusyIDs
+		}
+		if len(res.SkippedProfileIDs) > 0 {
+			m["skipped_profile_off_ids"] = res.SkippedProfileIDs
+		}
+		if len(res.SkippedNoMediaIDs) > 0 {
+			m["skipped_no_media_ids"] = res.SkippedNoMediaIDs
 		}
 		return s.Queue.UpdatePayload(task.ID, m)
 	}
@@ -122,20 +162,20 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 
 	rows, qerr := s.DB.SQL.Query(q, args...)
 	if qerr != nil {
-		return verified, skipped, failed, qerr
+		return res, qerr
 	}
 	var ids []int64
 	for rows.Next() {
 		var id int64
 		if err := rows.Scan(&id); err != nil {
 			_ = rows.Close()
-			return verified, skipped, failed, err
+			return res, err
 		}
 		ids = append(ids, id)
 	}
 	_ = rows.Close()
 	if err := rows.Err(); err != nil {
-		return verified, skipped, failed, err
+		return res, err
 	}
 
 	total := len(ids)
@@ -143,7 +183,7 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 		select {
 		case <-ctx.Done():
 			_ = persist()
-			return verified, skipped, failed, ctx.Err()
+			return res, ctx.Err()
 		default:
 		}
 		p.Cursor = id
@@ -155,36 +195,42 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 
 		busy, berr := s.videoBusyForRename(id, task.ID)
 		if berr != nil {
-			failed++
+			res.Failed++
 			_ = persist()
 			continue
 		}
 		if busy {
-			skipped++
+			res.Skipped++
+			res.SkippedBusy++
+			res.SkippedBusyIDs = appendCappedID(res.SkippedBusyIDs, id)
 			_ = persist()
 			continue
 		}
 
 		profileOn, perr := s.seriesProfileVerifyMedia(id)
 		if perr != nil {
-			failed++
+			res.Failed++
 			_ = persist()
 			continue
 		}
 		if !profileOn {
-			skipped++
+			res.Skipped++
+			res.SkippedProfileOff++
+			res.SkippedProfileIDs = appendCappedID(res.SkippedProfileIDs, id)
 			_ = persist()
 			continue
 		}
 
 		path, ok, herr := s.HasVideoFile(id)
 		if herr != nil {
-			failed++
+			res.Failed++
 			_ = persist()
 			continue
 		}
 		if !ok || path == "" {
-			skipped++
+			res.Skipped++
+			res.SkippedNoMedia++
+			res.SkippedNoMediaIDs = appendCappedID(res.SkippedNoMediaIDs, id)
 			_ = persist()
 			continue
 		}
@@ -205,15 +251,17 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 				progress(msg, &base)
 			}
 		}
-		if verr := s.RunIntegrityCheckVideo(ctx, id, perProgress, IntegrityCheckOpts{
+		report, verr := s.RunIntegrityCheckVideo(ctx, id, perProgress, IntegrityCheckOpts{
 			TaskID: task.ID,
-		}); verr != nil {
+		})
+		if verr != nil {
 			if ctx.Err() != nil {
 				_ = persist()
-				return verified, skipped, failed, ctx.Err()
+				return res, ctx.Err()
 			}
-			failed++
-			_ = s.MarkVerifyFailed(id, task.ID, "Integrity check failed")
+			res.Failed++
+			bumpCheckAgg(res.Checks, report)
+			_ = s.MarkVerifyFailed(id, task.ID, "Integrity check failed", report)
 			if onFail != nil {
 				seriesTitle := ""
 				videoTitle := ""
@@ -230,18 +278,24 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 			_ = persist()
 			continue
 		}
-		if merr := s.MarkVerified(id, task.ID); merr != nil {
-			failed++
+		if merr := s.MarkVerified(id, task.ID, report); merr != nil {
+			res.Failed++
 			_ = persist()
 			continue
 		}
-		verified++
+		bumpCheckAgg(res.Checks, report)
+		if report != nil && report.Outcome == IntegrityOutcomePartial {
+			res.Partial++
+		} else {
+			res.IntegrityChecked++
+		}
 		_ = persist()
 	}
-	return verified, skipped, failed, nil
+	res.FinalizeOutcome()
+	return res, nil
 }
 
 // VerifyAllMediaMessage formats the finish message for an integrity check batch.
-func VerifyAllMediaMessage(checked, skipped, failed int) string {
-	return fmt.Sprintf("Integrity checked %d, skipped %d, failed %d", checked, skipped, failed)
+func VerifyAllMediaMessage(checked, partial, skipped, failed int) string {
+	return fmt.Sprintf("Integrity checked %d, partial %d, skipped %d, failed %d", checked, partial, skipped, failed)
 }

@@ -53,10 +53,10 @@ func TestMarkVerifiedRestoresFromVerifyFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 	tid := seedTaskID(t, s)
-	if err := s.MarkVerifyFailed(res.VideoID, tid, "Media verify failed"); err != nil {
+	if err := s.MarkVerifyFailed(res.VideoID, tid, "Media verify failed", nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkVerified(res.VideoID, tid); err != nil {
+	if err := s.MarkVerified(res.VideoID, tid, nil); err != nil {
 		t.Fatal(err)
 	}
 	v, err := s.GetVideo(res.VideoID)
@@ -78,11 +78,11 @@ func TestVerifyAllMediaPassSkipsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	verified, skipped, failed, err := s.VerifyAllMediaPass(context.Background(), task, nil, nil)
+	res, err := s.VerifyAllMediaPass(context.Background(), task, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if verified != 0 || skipped != 0 || failed != 0 {
-		t.Fatalf("verified=%d skipped=%d failed=%d", verified, skipped, failed)
+	if res.IntegrityChecked != 0 || res.Skipped != 0 || res.Failed != 0 {
+		t.Fatalf("verified=%d skipped=%d failed=%d", res.IntegrityChecked, res.Skipped, res.Failed)
 	}
 }

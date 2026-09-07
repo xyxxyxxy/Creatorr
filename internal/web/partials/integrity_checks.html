@@ -1,0 +1,48 @@
+{{define "integrity_checks"}}
+{{/* Expects *integrityChecksView. daisyUI stats + failed videos. */}}
+{{if .}}
+<section class="list-panel card bg-base-100 border border-base-300 mb-4">
+  <div class="card-body gap-3">
+    {{template "list_header" (dict "level" "section" "title" "Results" "help" "File integrity steps: ffmpeg null-decode, SHA-256 for media and non-NFO sidecars, episode NFO XML compare.")}}
+
+    {{if .Stats}}
+    <div class="stats stats-vertical lg:stats-horizontal shadow bg-base-100 border border-base-300 w-full">
+      {{range .Stats}}
+      <div class="stat">
+        <div class="stat-title">{{.Title}}</div>
+        <div class="stat-value{{if .ValueClass}} {{.ValueClass}}{{end}}">{{.Value}}</div>
+        {{if .Desc}}<div class="stat-desc">{{.Desc}}</div>{{end}}
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+
+    {{if .Failed}}
+    <div class="min-w-0">
+      <h3 class="font-mono text-xs opacity-60 mb-2">Failed videos</h3>
+      <ul class="space-y-2 rounded-box border border-base-300 p-3">
+        {{range .Failed}}
+        <li class="min-w-0">
+          <div class="font-mono text-xs flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span class="opacity-60">#{{.ID}}</span>
+            {{if and (not .Missing) .SeriesID}}
+            <a class="link link-hover font-sans text-sm" href="/series/{{.SeriesID}}/videos/{{.ID}}">{{.Title}}</a>
+            {{else}}
+            <span class="font-sans text-sm{{if .Missing}} opacity-60{{end}}">{{.Title}}</span>
+            {{end}}
+          </div>
+          {{if .Note}}
+          <p class="text-sm text-error whitespace-normal break-words mt-0.5">{{.Note}}</p>
+          {{end}}
+        </li>
+        {{end}}
+      </ul>
+      {{if .Truncated}}
+      <p class="text-xs opacity-60 mt-2">Failed list capped at 100.</p>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+</section>
+{{end}}
+{{end}}

@@ -95,12 +95,12 @@ func TestVerifyAllMediaPassSkipsProfileOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	verified, skipped, failed, err := s.VerifyAllMediaPass(context.Background(), task, nil, nil)
+	resPass, err := s.VerifyAllMediaPass(context.Background(), task, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if verified != 0 || failed != 0 || skipped < 1 {
-		t.Fatalf("verified=%d skipped=%d failed=%d want skip", verified, skipped, failed)
+	if resPass.IntegrityChecked != 0 || resPass.Failed != 0 || resPass.Skipped < 1 {
+		t.Fatalf("verified=%d skipped=%d failed=%d want skip", resPass.IntegrityChecked, resPass.Skipped, resPass.Failed)
 	}
 	if task.Kind != queue.KindIntegrityCheck {
 		t.Fatalf("kind=%s", task.Kind)
