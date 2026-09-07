@@ -119,17 +119,18 @@ func VerifyAllMediaHandler(d Deps) TaskHandler {
 		if d.Library == nil {
 			return apperrors.New(apperrors.CodeInternal, "integrity check deps missing")
 		}
-		verified, skipped, failed, err := d.Library.VerifyAllMediaPass(ctx, t, progress, func(f library.VerifyAllMediaFail) {
+		res, err := d.Library.VerifyAllMediaPass(ctx, t, progress, func(f library.VerifyAllMediaFail) {
 			_ = notify.VerifyFailed(ctx, d.Library.DB, t.ID, f.SeriesTitle, f.VideoTitle, f.Detail)
 		})
 		if err != nil {
 			return err
 		}
-		msg := library.VerifyAllMediaMessage(verified, skipped, failed)
+		if res == nil {
+			res = &library.VerifyAllMediaResult{}
+		}
+		msg := library.VerifyAllMediaMessage(res.IntegrityChecked, res.Partial, res.Skipped, res.Failed)
 		progress(msg, ptrFloat(1))
-		detail, _ := json.Marshal(map[string]any{
-			"integrity_checked": verified, "skipped": skipped, "failed": failed,
-		})
+		detail, _ := json.Marshal(res.DetailMap())
 		_ = d.Library.Queue.SetDetail(t.ID, string(detail))
 		return nil
 	}
@@ -364,8 +365,8 @@ func ImportHandler(d Deps) TaskHandler {
 			infoBeside, thumbBeside, subBeside := library.FindDownloadSidecars(abs)
 			meta := library.MediaCompleteMeta{
 				AcquiredVia: library.AcquiredViaImport,
-				ImportSrc: abs,
-				InPlace:   true,
+				ImportSrc:   abs,
+				InPlace:     true,
 			}
 			// Do not register a foreign .nfo as library provenance - apply metadata then regenerate.
 			if err := d.Library.CompleteImport(t.VideoID.Int64, abs, "", infoBeside, thumbBeside, subBeside, meta, t.ID); err != nil {
@@ -397,25 +398,25 @@ func ImportHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
-	season, episode := 0, 0
-	if dlctx.Video.Season.Valid {
-		season = int(dlctx.Video.Season.Int64)
-	}
-	if dlctx.Video.Episode.Valid {
-		episode = int(dlctx.Video.Episode.Int64)
-	}
-	upload := ""
-	if dlctx.Video.UploadDate.Valid {
-		upload = dlctx.Video.UploadDate.String
-	}
-	if upload != "" {
-		sNum, eNum, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
-		if aerr != nil {
-			return aerr
+		season, episode := 0, 0
+		if dlctx.Video.Season.Valid {
+			season = int(dlctx.Video.Season.Int64)
 		}
-		season, episode = sNum, eNum
-	}
-	infoSrc, thumbCompanion, subSrcs := library.FindDownloadSidecars(abs)
+		if dlctx.Video.Episode.Valid {
+			episode = int(dlctx.Video.Episode.Int64)
+		}
+		upload := ""
+		if dlctx.Video.UploadDate.Valid {
+			upload = dlctx.Video.UploadDate.String
+		}
+		if upload != "" {
+			sNum, eNum, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
+			if aerr != nil {
+				return aerr
+			}
+			season, episode = sNum, eNum
+		}
+		infoSrc, thumbCompanion, subSrcs := library.FindDownloadSidecars(abs)
 		srcNFO := strings.TrimSuffix(abs, filepath.Ext(abs)) + ".nfo"
 		if _, err := os.Stat(srcNFO); err != nil {
 			srcNFO = ""
@@ -1343,14 +1344,18 @@ func MediaVerifyHandler(d Deps) TaskHandler {
 			return nil
 		}
 
-		if err := d.Library.RunIntegrityCheckVideo(ctx, videoID, progress, library.IntegrityCheckOpts{
+		report, err := d.Library.RunIntegrityCheckVideo(ctx, videoID, progress, library.IntegrityCheckOpts{
 			TaskID: t.ID,
-		}); err != nil {
+		})
+		if err != nil {
 			if ctx.Err() != nil || errors.Is(err, context.Canceled) {
 				return context.Canceled
 			}
 			msg := err.Error()
-			_ = d.Library.MarkVerifyFailed(videoID, t.ID, "Integrity check failed")
+			_ = d.Library.MarkVerifyFailed(videoID, t.ID, "Integrity check failed", report)
+			if report != nil {
+				_ = d.Library.Queue.MergeDetailJSON(t.ID, report.DetailMap())
+			}
 			v, _ := d.Library.GetVideo(videoID)
 			seriesTitle := ""
 			videoTitle := ""
@@ -1363,7 +1368,10 @@ func MediaVerifyHandler(d Deps) TaskHandler {
 			_ = notify.VerifyFailed(ctx, d.Library.DB, t.ID, seriesTitle, videoTitle, msg)
 			return err
 		}
-		_ = d.Library.MarkVerified(videoID, t.ID)
+		_ = d.Library.MarkVerified(videoID, t.ID, report)
+		if report != nil {
+			_ = d.Library.Queue.MergeDetailJSON(t.ID, report.DetailMap())
+		}
 		return nil
 	}
 }

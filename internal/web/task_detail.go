@@ -370,8 +370,8 @@ type taskStageView struct {
 	Neutral    bool // cancelled / operator abort: muted, not success/fail
 	IsFirst    bool
 	IsLast     bool
-	HistoryID  int64             // optional /task/{id} link on Event (0 = none)
-	OriginIcon string            // lucide name when set (origin / pending child); muted middle icon
+	HistoryID  int64              // optional /task/{id} link on Event (0 = none)
+	OriginIcon string             // lucide name when set (origin / pending child); muted middle icon
 	Substages  []taskStageSubview // nested stages under a grouped video-history node
 }
 
@@ -873,6 +873,10 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		Children:     children,
 	})
 	detailFields := h.taskDetailFields(t.Detail)
+	integrityChecks := h.buildIntegrityChecks(t, events)
+	if integrityChecks != nil {
+		detailFields = filterSuppressedDetailFields(detailFields, integrityDetailSuppressKeys)
+	}
 	if !singleVideoHistory(events) {
 		histRows := make([]taskDetailHistRow, 0, len(events))
 		for _, e := range events {
@@ -884,6 +888,9 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 				row.VideoTitle = fmt.Sprintf("#%d", e.VideoID)
 			}
 			histRows = append(histRows, row)
+		}
+		if integrityChecks != nil {
+			histRows = filterIntegrityHistoryRows(histRows)
 		}
 		detailFields = mergeVideoHistoryDetailFields(detailFields, histRows)
 	}
@@ -911,44 +918,46 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 
 	render(w, "task_detail", struct {
 		pageBase
-		Item         historyView
-		Payload      string
-		PayloadMuted bool
-		DetailFields []detailField
-		Stages       []taskStageView
-		POT          *potDetailView
-		DomainAccess *domains.DomainAccessSnapshot
-		Commands     []string
-		RenameList   *taskRenameListView
-		Progress     *float64
-		Live         bool
-		LogText      string
-		LogLines     []string
-		Series       *seriesLink
-		Source       *sourceLink
-		Video        *videoLink
-		VideoRow     *seriesVideoRow
-		Crumbs       []breadcrumb
+		Item            historyView
+		Payload         string
+		PayloadMuted    bool
+		DetailFields    []detailField
+		Stages          []taskStageView
+		POT             *potDetailView
+		DomainAccess    *domains.DomainAccessSnapshot
+		Commands        []string
+		RenameList      *taskRenameListView
+		IntegrityChecks *integrityChecksView
+		Progress        *float64
+		Live            bool
+		LogText         string
+		LogLines        []string
+		Series          *seriesLink
+		Source          *sourceLink
+		Video           *videoLink
+		VideoRow        *seriesVideoRow
+		Crumbs          []breadcrumb
 	}{
-		pageBase:     newPage(fmt.Sprintf("Task #%d", id), nav, nil),
-		Item:         view,
-		Payload:      payload,
-		PayloadMuted: payloadMuted,
-		DetailFields: detailFields,
-		Stages:       stages,
-		POT:          pot,
-		DomainAccess: domainAccess,
-		Commands:     commands,
-		RenameList:   renameList,
-		Progress:     progress,
-		Live:         live,
-		LogText:      logText,
-		LogLines:     logLines,
-		Series:       series,
-		Source:       source,
-		Video:        video,
-		VideoRow:     videoRow,
-		Crumbs:       taskBreadcrumbs(series, source, video, view.Kind, live),
+		pageBase:        newPage(fmt.Sprintf("Task #%d", id), nav, nil),
+		Item:            view,
+		Payload:         payload,
+		PayloadMuted:    payloadMuted,
+		DetailFields:    detailFields,
+		Stages:          stages,
+		POT:             pot,
+		DomainAccess:    domainAccess,
+		Commands:        commands,
+		RenameList:      renameList,
+		IntegrityChecks: integrityChecks,
+		Progress:        progress,
+		Live:            live,
+		LogText:         logText,
+		LogLines:        logLines,
+		Series:          series,
+		Source:          source,
+		Video:           video,
+		VideoRow:        videoRow,
+		Crumbs:          taskBreadcrumbs(series, source, video, view.Kind, live),
 	})
 }
 
