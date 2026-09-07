@@ -73,19 +73,7 @@ func maskAppriseURL(raw string) string {
 }
 
 func notifyEventsAll(events []string) bool {
-	if len(events) != len(notify.AllEvents) {
-		return false
-	}
-	have := map[string]bool{}
-	for _, e := range events {
-		have[e] = true
-	}
-	for _, id := range notify.AllEvents {
-		if !have[id] {
-			return false
-		}
-	}
-	return true
+	return notify.HasAllSubscription(events)
 }
 
 func (h *Handler) settingsRedirect(w http.ResponseWriter, r *http.Request) {
@@ -352,7 +340,8 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 			Events: c.Events, EventLabels: labels, InApp: notify.IsInAppChannel(c),
 		})
 	}
-	evOpts := make([]notifyEventOption, 0, len(notify.AllEvents))
+	evOpts := make([]notifyEventOption, 0, 1+len(notify.AllEvents))
+	evOpts = append(evOpts, notifyEventOption{ID: notify.EventAll, Label: notify.EventLabels[notify.EventAll]})
 	for _, id := range notify.EventsSortedByLevel() {
 		evOpts = append(evOpts, notifyEventOption{ID: id, Label: notify.EventLabels[id]})
 	}
@@ -374,7 +363,7 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 		Settings:              rows,
 		NotifyChannels:        chViews,
 		EventOptions:          evOpts,
-		DefaultEvents:         append([]string(nil), notify.AllEvents...),
+		DefaultEvents:         []string{notify.EventAll},
 		YtDlpUpdatesOn:        updatesEnabled,
 		YtDlpInstalledVersion: ytdlpInstalledVersionView{Pending: true},
 		YtDlpControls:         ytdlpControls,

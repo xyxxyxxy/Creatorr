@@ -35,14 +35,14 @@
         )}}
       </fieldset>
 
-      <fieldset class="fieldset">
+      <fieldset class="fieldset" data-notify-events>
         <legend class="fieldset-legend">Events</legend>
         <div class="flex flex-col gap-2">
           {{range $opt := .EventOptions}}
           {{$checked := false}}
           {{range $.Events}}{{if eq . $opt.ID}}{{$checked = true}}{{end}}{{end}}
           <label class="label cursor-pointer justify-start gap-2">
-            <input type="checkbox" name="events" value="{{$opt.ID}}" class="checkbox checkbox-sm" {{if $checked}}checked{{end}} />
+            <input type="checkbox" name="events" value="{{$opt.ID}}" class="checkbox checkbox-sm" {{if eq $opt.ID "all"}}data-notify-events-all{{else}}data-notify-events-one{{end}} {{if $checked}}checked{{end}} />
             <span class="label-text">{{$opt.Label}}</span>
           </label>
           {{end}}

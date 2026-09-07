@@ -37,13 +37,14 @@ func List(database *db.DB) ([]Channel, error) {
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
-		c, err := scanChannel(rows)
+		c, rawJSON, err := scanChannel(rows)
 		if err != nil {
 			return nil, err
 		}
 		if IsInAppChannel(c) {
 			continue // ignore stray DB rows with the reserved URL
 		}
+		persistNormalizedChannelEvents(database, c.ID, c.Events, rawJSON)
 		out = append(out, c)
 	}
 	return out, rows.Err()
@@ -59,11 +60,15 @@ func Get(database *db.DB, id int64) (Channel, error) {
 		SELECT id, name, url, events, created_at, updated_at
 		FROM notification_channels WHERE id = ?
 	`, id)
-	c, err := scanChannel(row)
+	c, rawJSON, err := scanChannel(row)
 	if err == sql.ErrNoRows {
 		return c, fmt.Errorf("notify channel not found")
 	}
-	return c, err
+	if err != nil {
+		return c, err
+	}
+	persistNormalizedChannelEvents(database, c.ID, c.Events, rawJSON)
+	return c, nil
 }
 
 // ListForEvent returns channels subscribed to event (in-app first when subscribed).
@@ -75,7 +80,7 @@ func ListForEvent(database *db.DB, event string) ([]Channel, error) {
 	event = AliasEvent(strings.TrimSpace(event))
 	var out []Channel
 	for _, c := range all {
-		if slicesContains(c.Events, event) {
+		if Subscribes(c.Events, event) {
 			out = append(out, c)
 		}
 	}
@@ -167,19 +172,19 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanChannel(row rowScanner) (Channel, error) {
+func scanChannel(row rowScanner) (Channel, string, error) {
 	var c Channel
 	var evJSON string
 	if err := row.Scan(&c.ID, &c.Name, &c.URL, &evJSON, &c.CreatedAt, &c.UpdatedAt); err != nil {
-		return c, err
+		return c, "", err
 	}
 	if err := json.Unmarshal([]byte(evJSON), &c.Events); err != nil {
-		return c, fmt.Errorf("notify channel %d events: %w", c.ID, err)
+		return c, evJSON, fmt.Errorf("notify channel %d events: %w", c.ID, err)
 	}
 	if c.Events == nil {
 		c.Events = []string{}
 	}
-	// Read-time aliases for legacy channel event ids.
+	// Read-time aliases + collapse full explicit lists / EventAll to ["all"].
 	aliased, err := NormalizeEvents(c.Events)
 	if err == nil {
 		c.Events = aliased
@@ -188,14 +193,21 @@ func scanChannel(row rowScanner) (Channel, error) {
 			c.Events[i] = AliasEvent(id)
 		}
 	}
-	return c, nil
+	return c, evJSON, nil
 }
 
-func slicesContains(ids []string, want string) bool {
-	for _, id := range ids {
-		if id == want {
-			return true
-		}
+// persistNormalizedChannelEvents rewrites events JSON when NormalizeEvents collapsed
+// a legacy full AllEvents list (or mixed EventAll + specifics) to ["all"].
+func persistNormalizedChannelEvents(database *db.DB, id int64, events []string, storedJSON string) {
+	if database == nil || id <= 0 {
+		return
 	}
-	return false
+	want, err := json.Marshal(events)
+	if err != nil || string(want) == storedJSON {
+		return
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, _ = database.SQL.Exec(`
+		UPDATE notification_channels SET events = ?, updated_at = ? WHERE id = ?
+	`, string(want), now, id)
 }

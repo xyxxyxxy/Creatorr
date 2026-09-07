@@ -1,8 +1,8 @@
 // Package notify sends operator alerts via Apprise (github.com/unraid/apprise-go)
 // and records them in the in-app notifications table via the fixed Creatorr channel.
 //
-// Channels: virtual creatorr://in-app (all events, read-only) plus notification_channels
-// (Apprise URL + subscribed event ids).
+// Channels: virtual creatorr://in-app (EventAll, read-only) plus notification_channels
+// (Apprise URL + subscribed event ids or EventAll).
 package notify
 
 import (
@@ -131,7 +131,7 @@ func SendEvent(ctx context.Context, database *db.DB, event, title, body string, 
 		anyAppriseOK = true
 	}
 	if notifID == 0 {
-		// Should not happen: in-app is always subscribed to AllEvents.
+		// Should not happen: in-app is always subscribed via EventAll.
 		id, ierr := InsertNotification(database, event, title, body, taskID, false, readAt)
 		if ierr != nil {
 			return ierr

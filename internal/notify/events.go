@@ -11,17 +11,20 @@ import (
 
 // Event ids stored on notification_channels.events and used by SendEvent.
 const (
-	EventCookieInvalid   = "cookie_invalid"
-	EventRateLimited     = "rate_limited"
-	EventYtDlpFailed     = "ytdlp_failed"
-	EventVerifyFailed    = "verify_failed"
-	EventFileSyncIssues  = "file_sync_issues"
-	EventPOTProvider     = "pot_provider"
-	EventPathCollision        = "path_collision"
-	EventEpisodeRenameQueued  = "episode_rename_queued"
-	EventDownloadDigest       = "download_digest"
-	EventLiveSkipped          = "live_skipped"
-	EventArchiveFallback      = "archive_fallback"
+	// EventAll is a channel subscription token (not a SendEvent id): match every
+	// current and future event. Stored alone as ["all"] when selected.
+	EventAll                 = "all"
+	EventCookieInvalid       = "cookie_invalid"
+	EventRateLimited         = "rate_limited"
+	EventYtDlpFailed         = "ytdlp_failed"
+	EventVerifyFailed        = "verify_failed"
+	EventFileSyncIssues      = "file_sync_issues"
+	EventPOTProvider         = "pot_provider"
+	EventPathCollision       = "path_collision"
+	EventEpisodeRenameQueued = "episode_rename_queued"
+	EventDownloadDigest      = "download_digest"
+	EventLiveSkipped         = "live_skipped"
+	EventArchiveFallback     = "archive_fallback"
 )
 
 // Notification levels (in-app icon / API). Warning matches alert for unread behavior.
@@ -54,6 +57,7 @@ var AllEvents = []string{
 
 // EventLabels are short UI labels for event checkboxes.
 var EventLabels = map[string]string{
+	EventAll:                 "All",
 	EventCookieInvalid:       "Cookie / auth failure",
 	EventRateLimited:         "Rate limit / IP block",
 	EventYtDlpFailed:         "yt-dlp / site failure",
@@ -84,6 +88,47 @@ var WarningEvents = []string{
 
 func validEvent(id string) bool {
 	return slices.Contains(AllEvents, id)
+}
+
+func validChannelEvent(id string) bool {
+	return id == EventAll || validEvent(id)
+}
+
+// HasAllSubscription reports whether channel events subscribe to every event
+// (explicit EventAll token, or a legacy full explicit AllEvents set).
+func HasAllSubscription(events []string) bool {
+	if slices.Contains(events, EventAll) {
+		return true
+	}
+	return isFullEventSet(events)
+}
+
+// Subscribes reports whether a channel's event list includes event (or EventAll).
+func Subscribes(events []string, event string) bool {
+	event = AliasEvent(strings.TrimSpace(event))
+	if event == "" || event == EventAll {
+		return false
+	}
+	if HasAllSubscription(events) {
+		return true
+	}
+	return slices.Contains(events, event)
+}
+
+func isFullEventSet(events []string) bool {
+	if len(events) != len(AllEvents) {
+		return false
+	}
+	have := map[string]bool{}
+	for _, e := range events {
+		have[AliasEvent(e)] = true
+	}
+	for _, id := range AllEvents {
+		if !have[id] {
+			return false
+		}
+	}
+	return true
 }
 
 // IsAlertEvent reports whether event is an alert-level notification.
@@ -185,12 +230,17 @@ func AliasEvent(id string) string {
 func NormalizeEvents(ids []string) ([]string, error) {
 	seen := map[string]bool{}
 	var out []string
+	wantAll := false
 	for _, id := range ids {
 		if id == "" {
 			continue
 		}
 		id = AliasEvent(id)
-		if !validEvent(id) {
+		if id == EventAll {
+			wantAll = true
+			continue
+		}
+		if !validChannelEvent(id) {
 			return nil, fmt.Errorf("unknown notify event %q", id)
 		}
 		if seen[id] {
@@ -198,6 +248,9 @@ func NormalizeEvents(ids []string) ([]string, error) {
 		}
 		seen[id] = true
 		out = append(out, id)
+	}
+	if wantAll || isFullEventSet(out) {
+		return []string{EventAll}, nil
 	}
 	slices.Sort(out)
 	return out, nil

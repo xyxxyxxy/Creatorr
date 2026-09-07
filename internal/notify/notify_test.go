@@ -2,6 +2,7 @@ package notify_test
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -23,6 +24,45 @@ func TestNormalizeEvents(t *testing.T) {
 	}
 	if _, err := notify.NormalizeEvents([]string{"nope"}); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestNormalizeEventsAll(t *testing.T) {
+	got, err := notify.NormalizeEvents([]string{notify.EventAll})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != notify.EventAll {
+		t.Fatalf("got %#v", got)
+	}
+	got, err = notify.NormalizeEvents([]string{notify.EventAll, notify.EventCookieInvalid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != notify.EventAll {
+		t.Fatalf("all+specific collapse: %#v", got)
+	}
+	got, err = notify.NormalizeEvents(append([]string(nil), notify.AllEvents...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != notify.EventAll {
+		t.Fatalf("full set collapse: %#v", got)
+	}
+}
+
+func TestSubscribesAll(t *testing.T) {
+	if !notify.Subscribes([]string{notify.EventAll}, notify.EventCookieInvalid) {
+		t.Fatal("all should match cookie_invalid")
+	}
+	if !notify.Subscribes(append([]string(nil), notify.AllEvents...), notify.EventLiveSkipped) {
+		t.Fatal("legacy full set should match")
+	}
+	if notify.Subscribes([]string{notify.EventCookieInvalid}, notify.EventRateLimited) {
+		t.Fatal("specific should not match other event")
+	}
+	if notify.Subscribes([]string{notify.EventAll}, notify.EventAll) {
+		t.Fatal("EventAll is not a SendEvent id")
 	}
 }
 
@@ -174,8 +214,90 @@ func TestInAppChannelReadOnly(t *testing.T) {
 	if err != nil || len(list) != 1 || !notify.IsInAppChannel(list[0]) {
 		t.Fatalf("list=%v err=%v", list, err)
 	}
-	if len(list[0].Events) != len(notify.AllEvents) {
-		t.Fatalf("events=%v", list[0].Events)
+	if len(list[0].Events) != 1 || list[0].Events[0] != notify.EventAll {
+		t.Fatalf("events=%v want [all]", list[0].Events)
+	}
+}
+
+func TestListForEventAllSubscription(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "all-sub.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	id, err := notify.Upsert(d, 0, "everything", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventAll})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := notify.Get(d, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Events) != 1 || got.Events[0] != notify.EventAll {
+		t.Fatalf("stored events=%v", got.Events)
+	}
+	for _, ev := range []string{notify.EventCookieInvalid, notify.EventDownloadDigest, notify.EventLiveSkipped} {
+		chs, err := notify.ListForEvent(d, ev)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, c := range chs {
+			if c.ID == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("ListForEvent(%q) missing all-channel", ev)
+		}
+	}
+}
+
+func TestLegacyFullEventListUpgradesOnList(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "legacy-all.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	raw, err := json.Marshal(notify.AllEvents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = d.SQL.Exec(`
+		INSERT INTO notification_channels (name, url, events, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, "legacy", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", string(raw), "t", "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, err := notify.List(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var appriseCh notify.Channel
+	for _, c := range list {
+		if !notify.IsInAppChannel(c) {
+			appriseCh = c
+			break
+		}
+	}
+	if appriseCh.ID == 0 {
+		t.Fatal("missing apprise channel")
+	}
+	if len(appriseCh.Events) != 1 || appriseCh.Events[0] != notify.EventAll {
+		t.Fatalf("in-memory events=%v want [all]", appriseCh.Events)
+	}
+	var stored string
+	if err := d.SQL.QueryRow(`SELECT events FROM notification_channels WHERE id = ?`, appriseCh.ID).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	var persisted []string
+	if err := json.Unmarshal([]byte(stored), &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if len(persisted) != 1 || persisted[0] != notify.EventAll {
+		t.Fatalf("persisted events=%v want [all]", persisted)
 	}
 }
 
