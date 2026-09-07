@@ -4,7 +4,7 @@
 {{else}}
 <p class="text-sm mb-2">
   {{if eq .Preview.TotalChanges 0}}
-  No packed episodes in this scope would rename (current stems already match the format after year reindex).
+  No packed episodes in this scope would rename.
   {{else if .Preview.Truncated}}
   {{.Preview.TotalChanges}} would rename; showing first {{len .Preview.Items}}.
   {{else}}
