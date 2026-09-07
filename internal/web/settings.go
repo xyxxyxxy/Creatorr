@@ -830,15 +830,18 @@ func (h *Handler) actionUpsertNotifyChannel(w http.ResponseWriter, r *http.Reque
 
 func (h *Handler) writeNotifyURLFieldError(w http.ResponseWriter, r *http.Request, msg string) {
 	fieldID := "notify-url-field-add"
+	formID := "modal-add-notify-channel-form"
 	if idRaw := strings.TrimSpace(r.FormValue("id")); idRaw != "" {
 		if id, err := strconv.ParseInt(idRaw, 10, 64); err == nil && id > 0 {
 			fieldID = fmt.Sprintf("notify-url-field-%d", id)
+			formID = fmt.Sprintf("modal-edit-notify-%d-form", id)
 		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// 200 so HTMX swaps the field fragment (4xx skips swap by default).
 	render(w, "notify_url_field", map[string]any{
 		"FieldID":  fieldID,
+		"FormID":   formID,
 		"URL":      r.FormValue("url"),
 		"URLError": msg,
 	})
