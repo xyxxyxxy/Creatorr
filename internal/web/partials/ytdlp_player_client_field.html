@@ -1,0 +1,19 @@
+{{define "ytdlp_player_client_field"}}
+{{/*
+  YouTube player_client on Settings → Connect (below version / channel).
+  Expects settingsRowView: Key, Label, Value.
+*/}}
+<fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      <span>{{.Label}}</span>
+    </span>
+  </legend>
+  <input type="text" name="{{.Key}}" id="setting-{{.Key}}"
+         class="input w-full font-mono"
+         placeholder="tv,default"
+         value="{{.Value}}"
+         data-settings-autosave-blur="" />
+  <p class="label whitespace-normal">Comma-separated yt-dlp youtube <a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp#extractor-arguments" target="_blank" rel="noopener noreferrer">extractor-arguments</a> <span class="font-mono text-xs">player_client</span>. Empty uses yt-dlp defaults; example <span class="font-mono text-xs">tv,default</span>.</p>
+</fieldset>
+{{end}}

@@ -14,6 +14,10 @@ func TestParsePOTDetail(t *testing.T) {
 	if got == nil || got.State != "issued" || got.Label != "Issued" || got.Fetch != "auto" {
 		t.Fatalf("got %#v", got)
 	}
+	got = parsePOTDetail(`{"po-token":{"state":"generating","detail":"Generating a player PO Token for mweb","fetch":"always"}}`)
+	if got == nil || got.State != "generating" || got.Label != "Generating" {
+		t.Fatalf("generating: %#v", got)
+	}
 	if parsePOTDetail(`{"created_ids":[1]}`) != nil {
 		t.Fatal("expected nil without pot")
 	}

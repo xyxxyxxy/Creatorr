@@ -8,6 +8,14 @@
   <span>Issued</span>
   {{if .Fetch}}<span class="opacity-60 font-mono text-xs">({{.Fetch}})</span>{{end}}
 </span>
+{{else if eq .State "generating"}}
+<span class="inline-flex items-center gap-2">
+  <span class="inline-flex tooltip tooltip-top text-info" data-tip="{{if .Detail}}{{.Detail}}{{else}}generating{{end}}" aria-label="PO token generating">
+    <i data-lucide="loader-circle" class="size-4 animate-spin"></i>
+  </span>
+  <span>Generating</span>
+  {{if .Fetch}}<span class="opacity-60 font-mono text-xs">({{.Fetch}})</span>{{end}}
+</span>
 {{else if eq .State "failed"}}
 <span class="inline-flex items-center gap-2">
   <span class="inline-flex tooltip tooltip-top text-warning" data-tip="{{if .Detail}}{{.Detail}}{{else}}failed{{end}}" aria-label="PO token failed">

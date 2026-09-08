@@ -26,6 +26,7 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 	vals := map[string]string{}
 	for _, e := range []string{
 		settings.KeyPotFetch,
+		settings.KeyYoutubePlayerClient,
 		settings.KeyDownloadWantedCron,
 		settings.KeySyncFilesCron,
 		settings.KeyIntegrityCheckCron,
@@ -44,6 +45,9 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 		} else {
 			vals[settings.KeyPotFetch] = settings.NormalizePotFetch(raw)
 		}
+	}
+	if raw, ok := vals[settings.KeyYoutubePlayerClient]; ok {
+		vals[settings.KeyYoutubePlayerClient] = settings.NormalizeYoutubePlayerClient(raw)
 	}
 	if r.FormValue("redirect") == "/settings/library" {
 		if r.FormValue("subtitle_settings") == "1" {

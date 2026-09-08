@@ -69,3 +69,19 @@ func RecordYtDlpInstall(database *db.DB, version string) error {
 	}
 	return nil
 }
+
+// SyncYtDlpInstalledVersion writes ytdlp_installed_version from a boot --version probe
+// (does not touch ytdlp_installed_at; that stays update-task only).
+func SyncYtDlpInstalledVersion(database *db.DB, version string) error {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return fmt.Errorf("yt-dlp version empty")
+	}
+	if _, err := database.SQL.Exec(`
+		INSERT INTO settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, KeyYtDlpInstalledVersion, version); err != nil {
+		return fmt.Errorf("record %s: %w", KeyYtDlpInstalledVersion, err)
+	}
+	return nil
+}

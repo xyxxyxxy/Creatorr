@@ -80,6 +80,10 @@ func main() {
 		log.Error("yt-dlp prepare", "err", err)
 		os.Exit(1)
 	}
+	if err := settings.SyncYtDlpInstalledVersion(database, ytVersion); err != nil {
+		log.Error("yt-dlp record version", "err", err)
+		os.Exit(1)
+	}
 	cfg.YtDlpBin = ytPaths.Managed
 	log.Info("yt-dlp ready", "bin", cfg.YtDlpBin, "version", ytVersion)
 	ytClient := &ytdlp.Client{
@@ -93,6 +97,13 @@ func main() {
 				return settings.PotFetchNever
 			}
 			return mode
+		},
+		PlayerClient: func() string {
+			client, err := settings.EffectiveYoutubePlayerClient(database)
+			if err != nil {
+				return settings.DefaultYoutubePlayerClient
+			}
+			return client
 		},
 	}
 

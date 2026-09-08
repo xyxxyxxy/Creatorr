@@ -11,15 +11,14 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
 func (h *Handler) ytdlpConnectControlsView() ytdlpConnectControlsView {
-	updatesEnabled, _ := settings.YtDlpUpdatesEnabled(h.Queue.DB)
 	updateBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindYtDlpUpdate, queue.SystemDomain)
 	lastCheckedAt, _ := h.Queue.LastFinishedAt(queue.KindYtDlpUpdate, queue.SystemDomain, queue.StatusDone)
 	return ytdlpConnectControlsView{
 		YtDlpLastCheckedAt: lastCheckedAt,
-		YtDlpUpdatesOn:     updatesEnabled,
 		YtDlpUpdateBusy:    updateBusy,
 		YtDlpUpdateBusyTip: "yt-dlp update already queued or running",
 		YtDlpChannel:       h.ytdlpUpdateChannelRow(),
@@ -28,7 +27,6 @@ func (h *Handler) ytdlpConnectControlsView() ytdlpConnectControlsView {
 
 type ytdlpConnectControlsView struct {
 	YtDlpLastCheckedAt string
-	YtDlpUpdatesOn     bool
 	YtDlpUpdateBusy    bool
 	YtDlpUpdateBusyTip string
 	YtDlpChannel       settingsRowView
@@ -45,7 +43,8 @@ func (h *Handler) ytdlpInstalledVersionView() ytdlpInstalledVersionView {
 	if installedVer, _ := settings.Get(h.Queue.DB, settings.KeyYtDlpInstalledVersion); strings.TrimSpace(installedVer) != "" {
 		return ytdlpInstalledVersionView{Value: installedVer}
 	}
-	// Version is written by ytdlp_update (boot/cron/Update now). Never invoke yt-dlp from HTTP.
+	// Version is written on boot (PrepareManagedBin --version) and by ytdlp_update.
+	// Never invoke yt-dlp from HTTP.
 	return ytdlpInstalledVersionView{Value: "Unknown"}
 }
 
@@ -72,39 +71,39 @@ func (h *Handler) ytdlpUpdateChannelRow() settingsRowView {
 	return row
 }
 
+func (h *Handler) ytdlpPlayerClientRow() settingsRowView {
+	val, _ := settings.Get(h.Queue.DB, settings.KeyYoutubePlayerClient)
+	return settingsRowView{
+		Key:   settings.KeyYoutubePlayerClient,
+		Label: settings.Labels[settings.KeyYoutubePlayerClient],
+		Value: settings.NormalizeYoutubePlayerClient(val),
+		Help:  settings.Help[settings.KeyYoutubePlayerClient],
+	}
+}
+
+func (h *Handler) potFetchRow() settingsRowView {
+	val, _ := settings.Get(h.Queue.DB, settings.KeyPotFetch)
+	row := settingsRowView{
+		Key:    settings.KeyPotFetch,
+		Label:  settings.Labels[settings.KeyPotFetch],
+		Value:  settings.NormalizePotFetch(val),
+		Help:   settings.Help[settings.KeyPotFetch],
+		Select: true,
+	}
+	for _, o := range settings.PotFetchOptions() {
+		row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
+	}
+	if strings.TrimSpace(h.PotProviderURL) == "" {
+		row.Disabled = true
+		row.Label = row.Label + " (disabled)"
+		row.Value = settings.PotFetchNever
+		row.DisabledTitle = "Set CREATORR_POT_PROVIDER_URL first (Compose default http://creatorr-po-token:4416)."
+	}
+	return row
+}
+
 func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
-	entries, err := settings.Connect(h.Queue.DB)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	updatesEnabled, _ := settings.YtDlpUpdatesEnabled(h.Queue.DB)
 	ytdlpControls := h.ytdlpConnectControlsView()
-	rows := make([]settingsRowView, 0, len(entries))
-	potURLSet := strings.TrimSpace(h.PotProviderURL) != ""
-	for _, e := range entries {
-		if e.Key == settings.KeyYtDlpUpdateChannel {
-			continue
-		}
-		row := settingsRowView{
-			Key: e.Key, Label: e.Label, Value: e.Value, Help: e.Help,
-			Cron: settings.CronKeys[e.Key],
-		}
-		if e.Key == settings.KeyPotFetch {
-			row.Select = true
-			row.Value = settings.NormalizePotFetch(e.Value)
-			for _, o := range settings.PotFetchOptions() {
-				row.Options = append(row.Options, PresetOption{Value: o.Value, Label: o.Label})
-			}
-			if !potURLSet {
-				row.Disabled = true
-				row.Label = row.Label + " (disabled)"
-				row.Value = settings.PotFetchNever
-				row.DisabledTitle = "Set CREATORR_POT_PROVIDER_URL first (Compose default http://creatorr-po-token:4416)."
-			}
-		}
-		rows = append(rows, row)
-	}
 	potJoin := externalServiceURLViewPending(h, false)
 	flareJoin := externalServiceURLViewPending(h, true)
 	channels, err := notify.List(h.Queue.DB)
@@ -133,28 +132,31 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	evGroups := notifyEventGroups()
+	plugins := h.YtDlp.ListPluginPackages()
 	render(w, "settings_connect", struct {
 		pageBase
 		FlareService          externalServiceURLView
 		PotService            externalServiceURLView
-		Settings              []settingsRowView
 		NotifyChannels        []notifyChannelView
 		EventGroups           []notifyEventGroupView
 		DefaultEvents         []string
-		YtDlpUpdatesOn        bool
 		YtDlpInstalledVersion ytdlpInstalledVersionView
 		YtDlpControls         ytdlpConnectControlsView
+		YtDlpPlayerClient     settingsRowView
+		PotFetch              settingsRowView
+		YtDlpPlugins          []ytdlp.PluginPackage
 	}{
 		pageBase:              newSettingsPage("Settings · Connect", "connect", flashFromQuery(r)),
 		FlareService:          flareJoin,
 		PotService:            potJoin,
-		Settings:              rows,
 		NotifyChannels:        chViews,
 		EventGroups:           evGroups,
 		DefaultEvents:         []string{notify.EventAll},
-		YtDlpUpdatesOn:        updatesEnabled,
 		YtDlpInstalledVersion: ytdlpInstalledVersionView{Pending: true},
 		YtDlpControls:         ytdlpControls,
+		YtDlpPlayerClient:     h.ytdlpPlayerClientRow(),
+		PotFetch:              h.potFetchRow(),
+		YtDlpPlugins:          plugins,
 	})
 }
 
@@ -180,7 +182,7 @@ func externalServiceURLViewBase(h *Handler, flare bool) externalServiceURLView {
 	return externalServiceURLView{
 		Label: "PO token provider URL",
 		Value: strings.TrimSpace(h.PotProviderURL),
-		Hint:  "Set CREATORR_POT_PROVIDER_URL and restart.\nEnable 'PO token fetch' below when the URL is set (forced to 'Never' while unset).",
+		Hint:  "Set CREATORR_POT_PROVIDER_URL and restart.\n'fetch_pot' is under 'plugins' above (forced to 'Never' while unset).",
 	}
 }
 

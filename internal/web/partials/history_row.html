@@ -2,6 +2,7 @@
 <tr class="hover cursor-pointer" onclick="location.href='/task/{{.ID}}'">
   <td class="text-xs font-mono max-w-md truncate">{{if .Domain}}{{.Domain}}{{else}}{{template "empty_value"}}{{end}}</td>
   <td>{{.Kind}}</td>
+  <td class="font-mono text-xs">{{if .Origin}}{{.Origin}}{{else}}{{template "empty_value"}}{{end}}</td>
   <td class="text-xs whitespace-nowrap">{{template "rel_time" .}}</td>
   <td class="text-sm{{if eq .Status "failed"}} text-error{{end}}">{{.Message}}</td>
 </tr>

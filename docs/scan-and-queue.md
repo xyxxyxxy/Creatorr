@@ -19,7 +19,7 @@ Every task row has durable **`origin`** (`manual` | `scheduled` | `boot` | `task
 | `boot` | Process start enqueue |
 | `task` | Another task spawned this one (`parent_task_id` = parent) |
 
-Enqueue rejects empty/invalid origin (fail closed). Schema v11 backfilled **all** existing rows to `manual` (knowingly inaccurate for older yt-dlp cron/boot) and stripped legacy `payload`/`detail` `trigger` keys. Task detail **Details** shows Origin (+ Parent when `task`); **Stages** shows an origin node and direct child tasks (no live SSE patch for new children while the page is open). History → Tasks filter includes **Origin** (`?origin=`).
+Enqueue rejects empty/invalid origin (fail closed). Schema v11 backfilled **all** existing rows to `manual` (knowingly inaccurate for older yt-dlp cron/boot) and stripped legacy `payload`/`detail` `trigger` keys. Task detail **Details** shows Origin (+ Parent when `task`); **Stages** shows an origin node and direct child tasks (no live SSE patch for new children while the page is open). History → Tasks filter includes **Origin** (`?origin=`); the table has an **Origin** column.
 
 ### Cancel reasons
 

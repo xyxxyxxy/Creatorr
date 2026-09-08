@@ -667,17 +667,66 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "fieldset-legend") || !strings.Contains(body, "yt-dlp") || !strings.Contains(body, "ytdlp_update_channel") {
 				t.Fatalf("%s missing yt-dlp settings", path)
 			}
+			if !strings.Contains(body, ">plugins<") {
+				t.Fatalf("%s missing plugins subsection", path)
+			}
+			if strings.Contains(body, ">EJS<") {
+				t.Fatalf("%s still has removed EJS subsection", path)
+			}
+			if strings.Contains(body, ">PO token</") || strings.Contains(body, "already integrated") {
+				t.Fatalf("%s still has removed PO token section", path)
+			}
+			if !strings.Contains(body, "yt-dlp-ejs") || !strings.Contains(body, "https://github.com/yt-dlp/ejs") {
+				t.Fatalf("%s missing bundled yt-dlp-ejs row", path)
+			}
+			if !strings.Contains(body, ">Notes<") || !strings.Contains(body, "https://github.com/yt-dlp/yt-dlp#strongly-recommended") ||
+				!strings.Contains(body, "already installed on PATH") {
+				t.Fatalf("%s missing plugins Notes / Deno link", path)
+			}
+			if !strings.Contains(body, ">bundled<") {
+				t.Fatalf("%s missing bundled source for yt-dlp-ejs", path)
+			}
+			if !strings.Contains(body, "/yt-dlp-plugins/") || !strings.Contains(body, "yt_dlp_plugins") {
+				t.Fatalf("%s missing further plugins mount hint", path)
+			}
+			if !strings.Contains(body, "https://github.com/yt-dlp/yt-dlp#plugins") {
+				t.Fatalf("%s missing yt-dlp plugins docs link", path)
+			}
+			if !strings.Contains(body, `id="ytdlp-plugins-present"`) {
+				t.Fatalf("%s missing present plugins list", path)
+			}
+			if !strings.Contains(body, "youtube_player_client") || !strings.Contains(body, ">player_client<") {
+				t.Fatalf("%s missing youtube player client setting", path)
+			}
+			if !strings.Contains(body, ">arguments<") {
+				t.Fatalf("%s missing arguments section header", path)
+			}
+			if !strings.Contains(body, "tv,default") {
+				t.Fatalf("%s missing default youtube player client value", path)
+			}
+			if !strings.Contains(body, "https://github.com/yt-dlp/yt-dlp#extractor-arguments") {
+				t.Fatalf("%s missing extractor-arguments docs link", path)
+			}
 			if !strings.Contains(body, "External services") || !strings.Contains(body, "FlareSolverr URL") || !strings.Contains(body, "PO token provider URL") {
 				t.Fatalf("%s missing external service URL joins", path)
 			}
 			if !strings.Contains(body, "CREATORR_FLARESOLVERR_URL") || !strings.Contains(body, "CREATORR_POT_PROVIDER_URL") {
 				t.Fatalf("%s missing env hints", path)
 			}
-			if !strings.Contains(body, "Enable &#39;PO token fetch&#39; below") {
-				t.Fatalf("%s missing PO token enable hint", path)
+			if !strings.Contains(body, "&#39;fetch_pot&#39; is under &#39;plugins&#39;") &&
+				!strings.Contains(body, "'fetch_pot' is under 'plugins'") {
+				t.Fatalf("%s missing fetch_pot location hint", path)
 			}
-			if !strings.Contains(body, "PO token fetch (disabled)") || !strings.Contains(body, `value="never"`) {
+			if !strings.Contains(body, "fetch_pot (disabled)") || !strings.Contains(body, `value="never"`) {
 				t.Fatalf("%s pot_fetch should be disabled/never when provider URL unset", path)
+			}
+			if !strings.Contains(body, `id="setting-pot_fetch"`) {
+				t.Fatalf("%s pot_fetch should live under plugins", path)
+			}
+			if !strings.Contains(body, `href="https://github.com/yt-dlp/yt-dlp#extractor-arguments"`) ||
+				!strings.Contains(body, ">extractor-arguments<") ||
+				!strings.Contains(body, "fetch_pot") {
+				t.Fatalf("%s missing fetch_pot extractor-arguments link", path)
 			}
 			if !strings.Contains(body, "connect-pot-service-health") || !strings.Contains(body, `hx-get="/settings/connect/external-services/pot"`) {
 				t.Fatalf("%s missing async PO token health load", path)
@@ -696,6 +745,10 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			}
 			if !strings.Contains(body, "ytdlp_update_channel") {
 				t.Fatalf("%s missing yt-dlp update channel on page shell", path)
+			}
+			if !strings.Contains(body, "Configure the update schedule under &#39;Settings → Scheduler&#39;") &&
+				!strings.Contains(body, "Configure the update schedule under 'Settings → Scheduler'") {
+				t.Fatalf("%s missing yt-dlp schedule hint under update channel", path)
 			}
 			if !strings.Contains(body, "Checking") || !strings.Contains(body, "loading-spinner") {
 				t.Fatalf("%s missing pending health spinner", path)

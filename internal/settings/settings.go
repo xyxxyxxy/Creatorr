@@ -12,6 +12,7 @@ import (
 // Keys stored in the settings table (SQLite + UI). Process bootstrap env is config.Load only - never Settings.
 const (
 	KeyPotFetch                     = "pot_fetch"
+	KeyYoutubePlayerClient          = "youtube_player_client"
 	KeyDownloadWantedCron           = "download_wanted_cron"
 	KeySyncFilesCron                = "sync_files_cron"
 	KeyIntegrityCheckCron           = "integrity_check_cron"
@@ -28,7 +29,8 @@ const (
 
 // Help is one-line UI help text per key.
 var Help = map[string]string{
-	KeyPotFetch: "A PO token (proof of origin) is an attestation token yt-dlp can attach so media hosts treat traffic as more legitimate when an IP is flagged for bot checks. It may help, but does not guarantee avoiding blocks. Creatorr fetches tokens from the provider sidecar above.",
+	KeyPotFetch: "Controls when a PO token is fetched, passed to yt-dlp as extractor-arguments fetch_pot (https://github.com/yt-dlp/yt-dlp#extractor-arguments).",
+	KeyYoutubePlayerClient:          "Comma-separated yt-dlp youtube extractor-arguments player_client (https://github.com/yt-dlp/yt-dlp#extractor-arguments). Empty uses yt-dlp defaults.",
 	KeyDownloadWantedCron:           "Schedule to enqueue wanted videos for monitored series.",
 	KeySyncFilesCron:                "Checks registered media and sidecars against disk: missing/restored paths, and size drift for video and non-NFO sidecars.",
 	KeyIntegrityCheckCron:           "Runs library Integrity check on a schedule. Only videos whose quality profile has 'File integrity' enabled are checked (null-decode, checksums, NFO XML).",
@@ -40,7 +42,7 @@ var Help = map[string]string{
 	KeyArchiveFallback:              "When a cataloged video is gone at the live source, queue a Web Archive download (yt-dlp). Original source URL is kept. Operator is notified when archive media packs.",
 	KeyYtDlpUpdateChannel:           "GitHub release channel for Update now and for automatic updates when a schedule is set.",
 	KeyYtDlpUpdateCron:              "When set, Creatorr checks GitHub on boot and on this schedule. Configure update channel under 'Settings → Connect'. Disabling skips boot and cron.",
-	KeyYtDlpInstalledVersion:        "", // internal; written by ytdlp_update task
+	KeyYtDlpInstalledVersion:        "", // internal; boot --version + ytdlp_update
 	KeyYtDlpInstalledAt:             "", // internal; written by ytdlp_update task
 	KeyAuthUsername:                 "Single operator account username for Forms login.",
 	KeyAuthPasswordHash:             "", // internal; never shown
@@ -51,7 +53,8 @@ var Help = map[string]string{
 
 // Labels are human-readable Settings titles (DB/API keys are snake_case).
 var Labels = map[string]string{
-	KeyPotFetch:                     "PO token fetch",
+	KeyPotFetch:                     "fetch_pot",
+	KeyYoutubePlayerClient:          "player_client",
 	KeyDownloadWantedCron:           "Download wanted schedule",
 	KeySyncFilesCron:                "File sync schedule",
 	KeyIntegrityCheckCron:           "Integrity check schedule",
@@ -123,6 +126,7 @@ func SeedDefaults(database *db.DB) error {
 	}
 	defaults := map[string]string{
 		KeyPotFetch:                     PotFetchAuto,
+		KeyYoutubePlayerClient:          DefaultYoutubePlayerClient,
 		KeyDownloadWantedCron:           "@hourly",
 		KeySyncFilesCron:                "@daily",
 		KeyIntegrityCheckCron:           "@quarterly",
@@ -139,6 +143,7 @@ func SeedDefaults(database *db.DB) error {
 	allKeys = append(allKeys, schedulerOrder...)
 	allKeys = append(allKeys, libraryOrder...)
 	allKeys = append(allKeys, KeyMetadataDomainTag, KeyMetadataGenresFromCategories, KeyArchiveFallback)
+	allKeys = append(allKeys, KeyPotFetch, KeyYoutubePlayerClient, KeyYtDlpUpdateChannel)
 	for _, key := range allKeys {
 		val := defaults[key]
 		_, err := database.SQL.Exec(`
@@ -304,6 +309,12 @@ func Set(database *db.DB, key, value string) error {
 		}
 		value = NormalizeYtDlpUpdateChannel(value)
 	}
+	if key == KeyYoutubePlayerClient {
+		if err := validateYoutubePlayerClient(value); err != nil {
+			return err
+		}
+		value = NormalizeYoutubePlayerClient(value)
+	}
 	if err := validateValue(key, value); err != nil {
 		return err
 	}
@@ -339,6 +350,13 @@ func SetMany(database *db.DB, values map[string]string) error {
 		}
 		if k == KeyMetadataDomainTag || k == KeyMetadataGenresFromCategories || k == KeyArchiveFallback {
 			v = NormalizeMetadataFlag(v)
+			values[k] = v
+		}
+		if k == KeyYoutubePlayerClient {
+			if err := validateYoutubePlayerClient(v); err != nil {
+				return err
+			}
+			v = NormalizeYoutubePlayerClient(v)
 			values[k] = v
 		}
 		if err := validateValue(k, v); err != nil {

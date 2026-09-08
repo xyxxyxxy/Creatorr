@@ -69,6 +69,8 @@ func parsePOTDetail(detail string) *potDetailView {
 	switch pot.State {
 	case "issued":
 		label = "Issued"
+	case "generating":
+		label = "Generating"
 	case "failed":
 		label = "Failed"
 	case "skipped":

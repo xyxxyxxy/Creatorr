@@ -1,0 +1,41 @@
+{{define "pot_fetch_field"}}
+{{/*
+  pot_fetch select on Settings → Connect → plugins.
+  Expects settingsRowView: Key, Label, Value, Options, Disabled, DisabledTitle.
+  Link on its own short line (same pattern as player_client) so daisyUI .label flex does not break the anchor.
+*/}}
+{{$disabledTip := .DisabledTitle}}
+{{$sel := .Value}}
+{{if .Disabled}}
+<fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      <span class="opacity-60">{{.Label}}</span>
+    </span>
+  </legend>
+  <input type="hidden" name="{{.Key}}" value="{{.Value}}" />
+  <span class="tooltip tooltip-top block w-full" {{if $disabledTip}}data-tip="{{$disabledTip}}"{{end}}>
+    <select id="setting-{{.Key}}" class="select w-full pointer-events-none" disabled>
+      {{range .Options}}
+      <option value="{{.Value}}" {{if eq .Value $sel}}selected{{end}}>{{.Label}}</option>
+      {{end}}
+    </select>
+  </span>
+  <p class="label whitespace-normal opacity-60">Controls when a PO token is fetched, passed to yt-dlp as <a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp#extractor-arguments" target="_blank" rel="noopener noreferrer">extractor-arguments</a> <span class="font-mono text-xs">fetch_pot</span>.</p>
+</fieldset>
+{{else}}
+<fieldset class="fieldset">
+  <legend class="fieldset-legend">
+    <span class="inline-flex items-center gap-1">
+      <span>{{.Label}}</span>
+    </span>
+  </legend>
+  <select name="{{.Key}}" id="setting-{{.Key}}" class="select w-full" data-settings-autosave-change>
+    {{range .Options}}
+    <option value="{{.Value}}" {{if eq .Value $sel}}selected{{end}}>{{.Label}}</option>
+    {{end}}
+  </select>
+  <p class="label whitespace-normal">Controls when a PO token is fetched, passed to yt-dlp as <a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp#extractor-arguments" target="_blank" rel="noopener noreferrer">extractor-arguments</a> <span class="font-mono text-xs">fetch_pot</span>.</p>
+</fieldset>
+{{end}}
+{{end}}

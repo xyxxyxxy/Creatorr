@@ -24,4 +24,5 @@ type options struct {
 
 	potProviderURL string
 	potFetch       string // youtube:fetch_pot value (auto|always|never)
+	playerClient   string // youtube:player_client value (comma-separated)
 }
