@@ -40,7 +40,7 @@ type potDetailView struct {
 	Fetch  string
 }
 
-func parsePOTDetail(detail string) *potDetailView {
+func parsePOTStatus(detail string) *ytdlp.POTStatus {
 	detail = strings.TrimSpace(detail)
 	if detail == "" {
 		return nil
@@ -57,28 +57,54 @@ func parsePOTDetail(detail string) *potDetailView {
 	if err != nil {
 		return nil
 	}
-	var pot struct {
-		State  string `json:"state"`
-		Detail string `json:"detail"`
-		Fetch  string `json:"fetch"`
-	}
+	var pot ytdlp.POTStatus
 	if err := json.Unmarshal(b, &pot); err != nil || pot.State == "" {
+		return nil
+	}
+	return &pot
+}
+
+// settlePOTForDisplay maps mid-flight generating → skipped on finished tasks
+// (older rows may still store generating before FinalizePOT).
+func settlePOTForDisplay(pot *ytdlp.POTStatus, taskStatus string) *ytdlp.POTStatus {
+	if pot == nil || pot.State != ytdlp.POTGenerating {
+		return pot
+	}
+	switch taskStatus {
+	case queue.StatusDone, queue.StatusFailed, queue.StatusCancelled:
+		out := *pot
+		out.State = ytdlp.POTSkipped
+		if strings.TrimSpace(out.Detail) == "" {
+			out.Detail = "PO token mint started but not retrieved"
+		}
+		return &out
+	default:
+		return pot
+	}
+}
+
+func potDetailFromStatus(pot *ytdlp.POTStatus) *potDetailView {
+	if pot == nil {
 		return nil
 	}
 	label := pot.State
 	switch pot.State {
-	case "issued":
+	case ytdlp.POTIssued:
 		label = "Issued"
-	case "generating":
+	case ytdlp.POTGenerating:
 		label = "Generating"
-	case "failed":
+	case ytdlp.POTFailed:
 		label = "Failed"
-	case "skipped":
+	case ytdlp.POTSkipped:
 		label = "Skipped"
-	case "off":
+	case ytdlp.POTOff:
 		label = "Off"
 	}
 	return &potDetailView{State: pot.State, Label: label, Detail: pot.Detail, Fetch: pot.Fetch}
+}
+
+func parsePOTDetail(detail string) *potDetailView {
+	return potDetailFromStatus(parsePOTStatus(detail))
 }
 
 func parseCookieAttachDetail(detail string) *domains.CookieAttachStatus {
@@ -421,7 +447,7 @@ func (h *Handler) taskDetailFieldsOpts(detail string, hideErrorKey bool) []detai
 	return out
 }
 
-// taskFailErrorText returns operator-facing failure detail for the Details Error row.
+// taskFailErrorText returns operator-facing failure detail for the Details Error block.
 // Prefer tasks.error_message, then JSON detail.error, then plain non-JSON detail.
 func taskFailErrorText(errorMessage, detail string) string {
 	if s := strings.TrimSpace(errorMessage); s != "" {
@@ -468,10 +494,12 @@ type taskStageView struct {
 
 // taskStageSubview is one line inside a grouped timeline box (e.g. downloaded / remuxed / packed).
 type taskStageSubview struct {
-	Event    string
-	Message  string
-	HasError bool
-	Neutral  bool
+	Event     string
+	Message   string
+	HasError  bool
+	Neutral   bool
+	Icon      string // optional lucide name (cookie / shield-*)
+	IconClass string // optional Tailwind classes for the icon
 }
 
 // taskStagesInput builds Stages for a task detail page.
@@ -487,6 +515,7 @@ type taskStagesInput struct {
 	ParentKind   string
 	Children     []queue.Task
 	CookieAttach *domains.CookieAttachStatus
+	POT          *ytdlp.POTStatus
 }
 
 type stageRank int
@@ -496,7 +525,6 @@ const (
 	stageRankEnqueued
 	stageRankChild
 	stageRankStarted
-	stageRankCookies
 	stageRankHistory
 	stageRankTerminal
 )

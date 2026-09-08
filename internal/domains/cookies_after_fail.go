@@ -82,33 +82,48 @@ func AllowStoredJar(cookiesAfterFail, downloadRetryPass bool) bool {
 	return downloadRetryPass
 }
 
-// StageMessage returns the Stages timeline message for a cookie-attach state.
-func (s CookieAttachStatus) StageMessage() string {
+// CookieAttachStage is one Stages note derived from cookie-attach detail.
+type CookieAttachStage struct {
+	Event    string
+	Message  string
+	HasError bool
+}
+
+// SplitDownloadAttempts reports whether Stages should show two download nodes
+// (anonymous failure, then cookie retry) under cookies-after-fail.
+func (s CookieAttachStatus) SplitDownloadAttempts() bool {
+	return s.AfterFail && s.State == CookieAttachRetried
+}
+
+// CookieUsedNote is the Stages line when cookies were actually attached.
+// Empty for anonymous / omitted / off (unused). Setting (after-fail vs always) does not matter.
+func (s CookieAttachStatus) CookieUsedNote() string {
 	switch s.State {
-	case CookieAttachAnonymous:
-		return "Anonymous (no account jar)"
-	case CookieAttachRetried:
-		if s.RetryReason != "" {
-			return "Retried with account cookies (" + s.RetryReason + ")"
-		}
-		return "Retried with account cookies"
-	case CookieAttachCookies:
-		return "Account cookies used"
-	case CookieAttachOmitted:
-		return "Account cookies omitted (download-failure mode)"
+	case CookieAttachCookies, CookieAttachRetried:
+		return "Cookies used"
 	default:
 		return ""
 	}
 }
 
-// ShowStage reports whether Stages should inject a cookies node.
-func (s CookieAttachStatus) ShowStage() bool {
-	switch s.State {
-	case CookieAttachAnonymous, CookieAttachCookies, CookieAttachRetried, CookieAttachOmitted:
-		return true
-	default:
-		return false
+// StageEntries returns the cookie note for nesting under the final download node.
+func (s CookieAttachStatus) StageEntries(taskFailed bool) []CookieAttachStage {
+	_ = taskFailed
+	if note := s.CookieUsedNote(); note != "" {
+		return []CookieAttachStage{{Event: "cookies", Message: note, HasError: false}}
 	}
+	return nil
+}
+
+// StageMessage returns the Stages timeline message for a cookie-attach state.
+// Deprecated for multi-node stages; prefer StageEntries / CookieUsedNote.
+func (s CookieAttachStatus) StageMessage() string {
+	return s.CookieUsedNote()
+}
+
+// ShowStage reports whether Stages should mention cookies under download.
+func (s CookieAttachStatus) ShowStage() bool {
+	return s.CookieUsedNote() != ""
 }
 
 // ValidateCookiesAfterFailForm maps checkbox form values to bool.

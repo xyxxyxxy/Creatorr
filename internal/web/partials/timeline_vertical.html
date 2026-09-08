@@ -1,7 +1,8 @@
 {{define "timeline_vertical"}}
 {{/* Shared daisyUI vertical timeline (task Stages + video detail History).
    Item fields: Event, Message, CreatedAt, CreatedAgo, Duration?, HasError, Neutral, IsFirst, IsLast,
-   optional HistoryID (task link), optional OriginIcon (muted lucide), optional Substages.
+   optional HistoryID (task link), optional OriginIcon (muted lucide), optional Substages
+   (Event/Message; optional Icon + IconClass for lucide, e.g. cookie / shield-*).
    Neutral = cancelled / operator abort: muted ban icon (not success green, not error red). */}}
 <ul class="timeline timeline-vertical">
   {{range .}}
@@ -27,17 +28,21 @@
       <div class="font-mono text-xs{{if .HasError}} text-error{{else if .Neutral}} text-base-content/60{{end}}">
         {{if .HistoryID}}<a class="link link-hover" href="/task/{{.HistoryID}}">{{.Event}}</a>{{else}}{{.Event}}{{end}}
       </div>
+      {{if .Message}}
+      <div class="text-sm mt-0.5{{if .HasError}} text-error{{else if .Neutral}} text-base-content/60{{end}}">{{.Message}}</div>
+      {{end}}
       {{if .Substages}}
       <ul class="list-none space-y-1 m-0 p-0 mt-1">
         {{range .Substages}}
-        <li class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+        <li class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+          {{if .Icon}}
+          <i data-lucide="{{.Icon}}" class="size-4 shrink-0{{if .IconClass}} {{.IconClass}}{{end}}{{if and (not .IconClass) .HasError}} text-error{{else if and (not .IconClass) .Neutral}} text-base-content/50{{end}}" aria-hidden="true"></i>
+          {{end}}
           <span class="font-medium shrink-0{{if .HasError}} text-error{{else if .Neutral}} text-base-content/60{{end}}">{{.Event}}</span>
           {{if .Message}}<span class="opacity-80{{if .HasError}} text-error{{else if .Neutral}} text-base-content/60{{end}}">{{.Message}}</span>{{end}}
         </li>
         {{end}}
       </ul>
-      {{else if .Message}}
-      <div class="text-sm mt-0.5{{if .HasError}} text-error{{else if .Neutral}} text-base-content/60{{end}}">{{.Message}}</div>
       {{end}}
       {{if .Duration}}<div class="text-xs opacity-60 mt-0.5 tabular-nums">{{.Duration}}</div>{{end}}
     </div>

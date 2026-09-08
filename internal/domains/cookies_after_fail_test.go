@@ -58,15 +58,32 @@ func TestCookiesAfterFailDefaultOff(t *testing.T) {
 }
 
 func TestCookieAttachStageMessage(t *testing.T) {
-	st := domains.CookieAttachStatus{State: domains.CookieAttachRetried, RetryReason: "AgeRestricted"}
-	if got := st.StageMessage(); got != "Retried with account cookies (AgeRestricted)" {
-		t.Fatalf("got %q", got)
+	st := domains.CookieAttachStatus{State: domains.CookieAttachRetried, RetryReason: "AgeRestricted", AfterFail: true}
+	if !st.SplitDownloadAttempts() {
+		t.Fatal("retried after-fail must split download attempts")
 	}
-	if !st.ShowStage() {
-		t.Fatal("expected show stage")
+	if st.CookieUsedNote() != "Cookies used" {
+		t.Fatalf("note: %q", st.CookieUsedNote())
+	}
+	ents := st.StageEntries(false)
+	if len(ents) != 1 || ents[0].Message != "Cookies used" || ents[0].HasError {
+		t.Fatalf("stage entries: %+v", ents)
+	}
+	always := domains.CookieAttachStatus{State: domains.CookieAttachCookies, AfterFail: false}
+	if always.CookieUsedNote() != "Cookies used" || always.SplitDownloadAttempts() {
+		t.Fatal("always-attach must mention cookies when used; must not split")
+	}
+	anon := domains.CookieAttachStatus{State: domains.CookieAttachAnonymous, AfterFail: true}
+	if anon.ShowStage() || anon.SplitDownloadAttempts() {
+		t.Fatal("anonymous must not mention cookies on Stages")
 	}
 	off := domains.CookieAttachStatus{State: domains.CookieAttachOff}
 	if off.ShowStage() {
 		t.Fatal("off must not show stage")
+	}
+	fail := domains.CookieAttachStatus{State: domains.CookieAttachRetried, RetryReason: "DownloadFailed", AfterFail: true}
+	ents = fail.StageEntries(true)
+	if len(ents) != 1 || ents[0].Message != "Cookies used" {
+		t.Fatalf("failed retry note: %+v", ents)
 	}
 }

@@ -144,6 +144,7 @@ func DownloadHandler(d Deps) TaskHandler {
 		usedCookies := jar != ""
 		retried := false
 		retryReason := ""
+		_ = ytdlp.TakePOTAttempt(ctx)
 		if err != nil && afterFail && hadStored && !apperrors.CookieRetryWorthless(err) {
 			retryReason = apperrors.ErrorCode(err)
 			if retryReason == "" {
@@ -160,6 +161,7 @@ func DownloadHandler(d Deps) TaskHandler {
 			media, err = downloadMedia(ctx, d, dlOpts(jar2))
 			usedCookies = true
 			retried = true
+			_ = ytdlp.TakePOTAttempt(ctx)
 		}
 		if err != nil {
 			if !archiveLane && apperrors.DetectVideoUnavailable(err.Error()) {

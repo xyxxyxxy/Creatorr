@@ -7,7 +7,8 @@
     <p class="text-xs opacity-60">#{{.Item.ID}}</p>
   </div>
   {{if .Live}}
-  <div class="flex-none flex items-center flex-wrap gap-2">
+  <div class="flex-none flex items-center flex-wrap gap-2 min-w-0">
+    <span class="text-xs opacity-60 truncate min-w-0 max-w-[12rem] sm:max-w-xs text-right" data-task-message>{{if eq .Item.Status "pending"}}Queued{{else if .Item.Message}}{{.Item.Message}}{{else}}{{template "empty_value"}}{{end}}</span>
     <div class="w-24 sm:w-32 shrink-0" data-task-progress-wrap>
       {{if eq .Item.Status "pending"}}
       <progress data-task-progress class="progress progress-secondary w-full" value="0" max="100" aria-label="pending"></progress>
@@ -17,7 +18,7 @@
       <progress data-task-progress class="progress progress-secondary w-full" max="100" aria-label="In progress"></progress>
       {{end}}
     </div>
-    <label for="modal-cancel-task" class="btn btn-ghost text-error">
+    <label for="modal-cancel-task" class="btn btn-ghost text-error shrink-0">
       <i data-lucide="x" class="size-4"></i>
       Cancel
     </label>
@@ -71,20 +72,43 @@
   <a class="link link-hover font-medium" href="/series/{{.Series.ID}}">{{.Series.Title}}</a>
 </div>
 {{end}}
+{{if or .Item.Domain .DomainAccess}}
+<div class="rounded-box border border-base-300 p-3 space-y-2">
+  <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+    <h3 class="text-sm font-semibold">Domain config</h3>
+    <span class="opacity-40 select-none" aria-hidden="true">|</span>
+    {{if .Item.Domain}}
+    <span class="font-mono text-xs">{{.Item.Domain}}</span>
+    {{else}}
+    <span class="text-sm opacity-60">-</span>
+    {{end}}
+  </div>
+  {{if .DomainAccess}}
+  {{template "domain_access_chips" .DomainAccess}}
+  {{end}}
+</div>
+{{end}}
 {{/* table-fixed: long Message text wraps instead of widening the table */}}
 <div class="list-table-wrap rounded-box border border-base-300">
   <table class="table table-sm list-table w-full table-fixed">
 <tbody>
-  {{if .Item.Domain}}
-  <tr><th class="w-40">Domain</th><td class="font-mono text-xs">{{.Item.Domain}}</td></tr>
-  {{else}}
-  {{template "detail_row" (dict "Label" "Domain" "TdClass" "font-mono text-xs")}}
-  {{end}}
-  <tr><th class="w-40">Origin</th><td class="font-mono text-xs">{{if .Item.Origin}}{{.Item.Origin}}{{else}}-{{end}}</td></tr>
   {{if and (eq .Item.Origin "task") .Item.ParentTaskID}}
   <tr><th class="w-40">Parent</th><td class="font-mono text-xs">
     <a class="link link-hover" href="/task/{{.Item.ParentTaskID}}">{{if .Item.ParentKind}}{{.Item.ParentKind}} {{end}}#{{.Item.ParentTaskID}}</a>
   </td></tr>
+  {{end}}
+  {{if .Payload}}
+  <tr><th class="w-40">Payload</th><td>
+    <pre class="text-xs whitespace-pre-wrap font-mono max-h-48 overflow-y-auto{{if .PayloadMuted}} opacity-50{{end}}">{{.Payload}}</pre>
+  </td></tr>
+  {{else}}
+  {{template "detail_row" (dict "Label" "Payload")}}
+  {{end}}
+  {{if .CookieAttach}}
+  <tr><th class="w-40">Account cookies</th><td class="text-sm">{{template "cookie_attach_badge" .CookieAttach}}</td></tr>
+  {{end}}
+  {{if .POT}}
+  <tr><th class="w-40">PO token</th><td class="text-sm" data-task-pot>{{template "pot_badge" .POT}}</td></tr>
   {{end}}
   {{if eq .Item.Status "pending"}}
   <tr><th class="w-40">Message</th><td class="text-sm whitespace-normal break-words" data-task-message>Queued</td></tr>
@@ -95,30 +119,6 @@
   {{end}}
   {{if .Item.Code}}
   <tr><th class="w-40">Error code</th><td class="font-mono text-xs{{if eq .Item.Status "failed"}} text-error{{end}}">{{.Item.Code}}</td></tr>
-  {{end}}
-  {{if .FailError}}
-  <tr>
-    <th class="w-40 align-top">Error</th>
-    <td class="text-sm min-w-0">
-      <pre class="text-xs whitespace-pre-wrap font-mono max-h-64 overflow-y-auto{{if eq .Item.Status "failed"}} text-error{{end}}">{{.FailError}}</pre>
-    </td>
-  </tr>
-  {{end}}
-  {{if .DomainAccess}}
-  <tr><th class="w-40">Domain access</th><td>{{template "domain_access_chips" .DomainAccess}}</td></tr>
-  {{end}}
-  {{if .CookieAttach}}
-  <tr><th class="w-40">Account cookies</th><td class="text-sm">{{template "cookie_attach_badge" .CookieAttach}}</td></tr>
-  {{end}}
-  {{if .POT}}
-  <tr><th class="w-40">PO token</th><td class="text-sm" data-task-pot>{{template "pot_badge" .POT}}</td></tr>
-  {{end}}
-  {{if .Payload}}
-  <tr><th class="w-40">Payload</th><td>
-    <pre class="text-xs whitespace-pre-wrap font-mono max-h-48 overflow-y-auto{{if .PayloadMuted}} opacity-50{{end}}">{{.Payload}}</pre>
-  </td></tr>
-  {{else}}
-  {{template "detail_row" (dict "Label" "Payload")}}
   {{end}}
   {{range .DetailFields}}
   {{if and (not .IsVideoList) (not .IsSkippedTitleList)}}
@@ -192,6 +192,15 @@
 </div>
 
 {{template "integrity_checks" .IntegrityChecks}}
+
+{{if .FailError}}
+<section class="list-panel card bg-base-100 border border-base-300 mb-4">
+  <div class="card-body gap-3">
+    {{template "list_header" (dict "level" "section" "title" "Error")}}
+    <pre class="text-xs whitespace-pre-wrap font-mono max-h-64 overflow-y-auto bg-base-200 rounded-box border border-base-300 p-3{{if eq .Item.Status "failed"}} text-error{{end}}">{{.FailError}}</pre>
+  </div>
+</section>
+{{end}}
 
 {{if .Commands}}
 <section class="list-panel card bg-base-100 border border-base-300 mb-4">

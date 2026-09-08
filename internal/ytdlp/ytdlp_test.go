@@ -155,4 +155,13 @@ func TestUpgradeCodeAgeRestricted(t *testing.T) {
 	if got != "CookieInvalid" {
 		t.Fatalf("generic sign-in must stay cookie, got %q", got)
 	}
+	both := "WARNING: [youtube] The provided YouTube account cookies are no longer valid.\nERROR: Sign in to confirm your age"
+	got = upgradeCode("DownloadFailed", both)
+	if got != "CookieInvalid" {
+		t.Fatalf("cookie+age must be CookieInvalid, got %q", got)
+	}
+	got = upgradeCode("AgeRestricted", both)
+	if got != "CookieInvalid" {
+		t.Fatalf("prior AgeRestricted must upgrade to CookieInvalid, got %q", got)
+	}
 }

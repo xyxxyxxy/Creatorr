@@ -60,7 +60,7 @@ func singleVideoHistory(events []library.VideoHistoryEvent) bool {
 func taskStages(in taskStagesInput) []taskStageView {
 	items := make([]stagedItem, 0, len(in.Events)+len(in.Children)+6)
 
-	appendItem := func(event, message, rawAt string, err, neutral bool, historyID int64, originIcon string, rank stageRank) {
+	appendItem := func(event, message, rawAt string, err, neutral bool, historyID int64, originIcon string, rank stageRank, substages []taskStageSubview) {
 		if event == "" {
 			return
 		}
@@ -84,6 +84,7 @@ func taskStages(in taskStagesInput) []taskStageView {
 				Neutral:    neutral && !err,
 				HistoryID:  historyID,
 				OriginIcon: originIcon,
+				Substages:  substages,
 			},
 		})
 	}
@@ -107,12 +108,12 @@ func taskStages(in taskStagesInput) []taskStageView {
 			originMsg = fmt.Sprintf("#%d", in.ParentTaskID)
 		}
 	}
-	appendItem(origin, originMsg, createdAt, false, false, originHID, originLucide(origin), stageRankOrigin)
-	appendItem("enqueued", "", createdAt, false, false, 0, "", stageRankEnqueued)
+	appendItem(origin, originMsg, createdAt, false, false, originHID, originLucide(origin), stageRankOrigin, nil)
+	appendItem("enqueued", "", createdAt, false, false, 0, "", stageRankEnqueued, nil)
 
 	for _, c := range in.Children {
 		err, neutral, icon := childStageStyle(c.Status)
-		appendItem(c.Kind, c.Status, c.CreatedAt, err, neutral, c.ID, icon, stageRankChild)
+		appendItem(c.Kind, c.Status, c.CreatedAt, err, neutral, c.ID, icon, stageRankChild, nil)
 	}
 
 	if singleVideoHistory(in.Events) {
@@ -121,18 +122,62 @@ func taskStages(in taskStagesInput) []taskStageView {
 			if label == "" {
 				continue
 			}
-			appendItem(label, e.Message, e.CreatedAt, historyEventError(e.Event), historyEventNeutral(e.Event), 0, "", stageRankHistory)
+			var subs []taskStageSubview
+			if e.Event == "downloaded" || e.Event == "download_failed" {
+				potSubsAt := func(attemptIdx int) []taskStageSubview {
+					if in.POT == nil {
+						return nil
+					}
+					att, ok := in.POT.AttemptAt(attemptIdx)
+					if !ok {
+						return nil
+					}
+					attPtr := settlePOTForDisplay(&att, in.Status)
+					if attPtr == nil || !attPtr.ShowStage() {
+						return nil
+					}
+					out := make([]taskStageSubview, 0, 1)
+					for _, pe := range attPtr.StageEntries() {
+						out = append(out, taskStageSubview{
+							Event: pe.Message, HasError: pe.HasError,
+							Icon: pe.Icon, IconClass: pe.IconClass,
+						})
+					}
+					return out
+				}
+				if in.CookieAttach != nil && in.CookieAttach.SplitDownloadAttempts() {
+					firstMsg := "Download failed"
+					if r := strings.TrimSpace(in.CookieAttach.RetryReason); r != "" {
+						firstMsg = r
+					}
+					appendItem("download_failed", firstMsg, e.CreatedAt, true, false, 0, "", stageRankHistory, potSubsAt(0))
+					if in.CookieAttach != nil {
+						if n := in.CookieAttach.CookieUsedNote(); n != "" {
+							subs = append(subs, taskStageSubview{Event: n, Icon: "cookie"})
+						}
+					}
+					// Final attempt: prefer Attempts[1], else last / legacy single.
+					finalIdx := 1
+					if in.POT != nil && len(in.POT.Attempts) == 1 {
+						finalIdx = 0
+					} else if in.POT != nil && len(in.POT.Attempts) > 1 {
+						finalIdx = len(in.POT.Attempts) - 1
+					}
+					subs = append(subs, potSubsAt(finalIdx)...)
+					appendItem(label, e.Message, e.CreatedAt, historyEventError(e.Event), historyEventNeutral(e.Event), 0, "", stageRankHistory, subs)
+					continue
+				}
+				if in.CookieAttach != nil {
+					if n := in.CookieAttach.CookieUsedNote(); n != "" {
+						subs = append(subs, taskStageSubview{Event: n, Icon: "cookie"})
+					}
+				}
+				subs = append(subs, potSubsAt(0)...)
+			}
+			appendItem(label, e.Message, e.CreatedAt, historyEventError(e.Event), historyEventNeutral(e.Event), 0, "", stageRankHistory, subs)
 		}
 	} else if strings.TrimSpace(in.Started) != "" {
-		appendItem("started", "", in.Started, false, false, 0, "", stageRankStarted)
-	}
-
-	if in.CookieAttach != nil && in.CookieAttach.ShowStage() {
-		at := strings.TrimSpace(in.Started)
-		if at == "" {
-			at = createdAt
-		}
-		appendItem("cookies", in.CookieAttach.StageMessage(), at, false, false, 0, "cookie", stageRankCookies)
+		appendItem("started", "", in.Started, false, false, 0, "", stageRankStarted, nil)
 	}
 
 	if term, termErr, termNeutral, ok := taskTerminalStage(in.Status); ok {
@@ -143,7 +188,7 @@ func taskStages(in taskStagesInput) []taskStageView {
 		if strings.TrimSpace(at) == "" {
 			at = createdAt
 		}
-		appendItem(term, "", at, termErr, termNeutral, 0, "", stageRankTerminal)
+		appendItem(term, "", at, termErr, termNeutral, 0, "", stageRankTerminal, nil)
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {
