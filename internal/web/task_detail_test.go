@@ -11,19 +11,19 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
-func TestParsePOTDetail(t *testing.T) {
-	got := parsePOTDetail(`{"po-token":{"state":"issued","detail":"Retrieved a gvs PO Token","fetch":"auto"}}`)
-	if got == nil || got.State != "issued" || got.Label != "Issued" || got.Fetch != "auto" {
+func TestParsePOTStatus(t *testing.T) {
+	got := parsePOTStatus(`{"po-token":{"state":"issued","detail":"Retrieved a gvs PO Token","fetch":"auto"}}`)
+	if got == nil || got.State != "issued" || got.Fetch != "auto" {
 		t.Fatalf("got %#v", got)
 	}
-	got = parsePOTDetail(`{"po-token":{"state":"generating","detail":"Generating a player PO Token for mweb","fetch":"always"}}`)
-	if got == nil || got.State != "generating" || got.Label != "Generating" {
+	got = parsePOTStatus(`{"po-token":{"state":"generating","detail":"Generating a player PO Token for mweb","fetch":"always"}}`)
+	if got == nil || got.State != "generating" {
 		t.Fatalf("generating: %#v", got)
 	}
-	if parsePOTDetail(`{"created_ids":[1]}`) != nil {
+	if parsePOTStatus(`{"created_ids":[1]}`) != nil {
 		t.Fatal("expected nil without pot")
 	}
-	if parsePOTDetail("not-json") != nil {
+	if parsePOTStatus("not-json") != nil {
 		t.Fatal("expected nil for non-json")
 	}
 }

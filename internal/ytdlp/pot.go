@@ -27,7 +27,7 @@ type POTStatus struct {
 type POTStage struct {
 	Message   string
 	HasError  bool
-	Icon      string // lucide name (matches Details pot_badge)
+	Icon      string // lucide name (cookie / shield-* Stages substages)
 	IconClass string // optional Tailwind color/opacity on the icon
 }
 

@@ -104,12 +104,6 @@
   {{else}}
   {{template "detail_row" (dict "Label" "Payload")}}
   {{end}}
-  {{if .CookieAttach}}
-  <tr><th class="w-40">Account cookies</th><td class="text-sm">{{template "cookie_attach_badge" .CookieAttach}}</td></tr>
-  {{end}}
-  {{if .POT}}
-  <tr><th class="w-40">PO token</th><td class="text-sm" data-task-pot>{{template "pot_badge" .POT}}</td></tr>
-  {{end}}
   {{if eq .Item.Status "pending"}}
   <tr><th class="w-40">Message</th><td class="text-sm whitespace-normal break-words" data-task-message>Queued</td></tr>
   {{else if .Item.Message}}

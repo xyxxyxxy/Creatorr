@@ -32,14 +32,6 @@ type detailSkippedTitle struct {
 	Title    string
 }
 
-// potDetailView is PO token state from task detail JSON for the Details table.
-type potDetailView struct {
-	State  string
-	Label  string
-	Detail string
-	Fetch  string
-}
-
 func parsePOTStatus(detail string) *ytdlp.POTStatus {
 	detail = strings.TrimSpace(detail)
 	if detail == "" {
@@ -83,30 +75,6 @@ func settlePOTForDisplay(pot *ytdlp.POTStatus, taskStatus string) *ytdlp.POTStat
 	}
 }
 
-func potDetailFromStatus(pot *ytdlp.POTStatus) *potDetailView {
-	if pot == nil {
-		return nil
-	}
-	label := pot.State
-	switch pot.State {
-	case ytdlp.POTIssued:
-		label = "Issued"
-	case ytdlp.POTGenerating:
-		label = "Generating"
-	case ytdlp.POTFailed:
-		label = "Failed"
-	case ytdlp.POTSkipped:
-		label = "Skipped"
-	case ytdlp.POTOff:
-		label = "Off"
-	}
-	return &potDetailView{State: pot.State, Label: label, Detail: pot.Detail, Fetch: pot.Fetch}
-}
-
-func parsePOTDetail(detail string) *potDetailView {
-	return potDetailFromStatus(parsePOTStatus(detail))
-}
-
 func parseCookieAttachDetail(detail string) *domains.CookieAttachStatus {
 	detail = strings.TrimSpace(detail)
 	if detail == "" {
@@ -129,38 +97,6 @@ func parseCookieAttachDetail(detail string) *domains.CookieAttachStatus {
 		return nil
 	}
 	return &st
-}
-
-type cookieAttachDetailView struct {
-	State  string
-	Label  string
-	Detail string
-}
-
-func cookieAttachView(st *domains.CookieAttachStatus) *cookieAttachDetailView {
-	if st == nil || st.State == "" || st.State == domains.CookieAttachOff {
-		return nil
-	}
-	label := st.State
-	switch st.State {
-	case domains.CookieAttachAnonymous:
-		label = "Anonymous"
-	case domains.CookieAttachCookies:
-		label = "Used"
-	case domains.CookieAttachRetried:
-		label = "Retried"
-	case domains.CookieAttachOmitted:
-		label = "Omitted"
-	}
-	detail := st.Detail
-	if st.RetryReason != "" {
-		if detail != "" {
-			detail = st.RetryReason + " · " + detail
-		} else {
-			detail = st.RetryReason
-		}
-	}
-	return &cookieAttachDetailView{State: st.State, Label: label, Detail: detail}
 }
 
 func parseDomainAccessDetail(detail string) *domains.DomainAccessSnapshot {

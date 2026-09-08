@@ -149,9 +149,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 
 	payload := t.Payload
 	payloadMuted := isEmptyJSONPayload(payload)
-	pot := potDetailFromStatus(potStatus)
 	domainAccess := parseDomainAccessDetail(t.Detail)
-	cookieAttachUI := cookieAttachView(cookieAttach)
 
 	var progress *float64
 	if t.Progress.Valid {
@@ -180,8 +178,6 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		PayloadMuted    bool
 		DetailFields    []detailField
 		Stages          []taskStageView
-		POT             *potDetailView
-		CookieAttach    *cookieAttachDetailView
 		DomainAccess    *domains.DomainAccessSnapshot
 		Commands        []string
 		RenameList      *taskRenameListView
@@ -203,8 +199,6 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		PayloadMuted:    payloadMuted,
 		DetailFields:    detailFields,
 		Stages:          stages,
-		POT:             pot,
-		CookieAttach:    cookieAttachUI,
 		DomainAccess:    domainAccess,
 		Commands:        commands,
 		RenameList:      renameList,
