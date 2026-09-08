@@ -77,7 +77,6 @@ func (h *Handler) ytdlpPlayerClientRow() settingsRowView {
 		Key:   settings.KeyYoutubePlayerClient,
 		Label: settings.Labels[settings.KeyYoutubePlayerClient],
 		Value: settings.NormalizeYoutubePlayerClient(val),
-		Help:  settings.Help[settings.KeyYoutubePlayerClient],
 	}
 }
 
@@ -87,7 +86,6 @@ func (h *Handler) potFetchRow() settingsRowView {
 		Key:    settings.KeyPotFetch,
 		Label:  settings.Labels[settings.KeyPotFetch],
 		Value:  settings.NormalizePotFetch(val),
-		Help:   settings.Help[settings.KeyPotFetch],
 		Select: true,
 	}
 	for _, o := range settings.PotFetchOptions() {
@@ -152,7 +150,7 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 		NotifyChannels:        chViews,
 		EventGroups:           evGroups,
 		DefaultEvents:         []string{notify.EventAll},
-		YtDlpInstalledVersion: ytdlpInstalledVersionView{Pending: true},
+		YtDlpInstalledVersion: h.ytdlpInstalledVersionView(),
 		YtDlpControls:         ytdlpControls,
 		YtDlpPlayerClient:     h.ytdlpPlayerClientRow(),
 		PotFetch:              h.potFetchRow(),

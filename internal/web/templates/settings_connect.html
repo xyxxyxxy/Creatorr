@@ -68,39 +68,37 @@
         <input type="hidden" name="redirect" value="/settings/connect" />
       </form>
     </fieldset>
-    <fieldset class="fieldset gap-3">
-      <fieldset class="fieldset gap-2">
-        <legend class="fieldset-legend">plugins</legend>
-        <p class="text-sm opacity-60">
-          Add further yt-dlp <a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp#plugins" target="_blank" rel="noopener noreferrer">plugins</a> by mounting each package under <span class="font-mono text-xs">/yt-dlp-plugins/&lt;name&gt;/</span> so that folder contains a <span class="font-mono text-xs">yt_dlp_plugins</span> package. Creatorr always passes those dirs as --plugin-dirs.
-        </p>
-        <div id="ytdlp-plugins-present">
-          {{template "list_table"}}
-          <thead><tr><th>Name</th><th>Source</th><th>Notes</th></tr></thead>
-          <tbody>
-            {{range .YtDlpPlugins}}
-            <tr>
-              <td class="font-mono text-xs">
-                {{if .DocsURL}}<a class="link link-primary" href="{{.DocsURL}}" target="_blank" rel="noopener noreferrer">{{.Name}}</a>{{else}}{{.Name}}{{end}}
-              </td>
-              <td>{{.Source}}</td>
-              <td class="text-sm">
-                {{if .NoteDeno}}<a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp#strongly-recommended" target="_blank" rel="noopener noreferrer">Deno</a> is already installed on PATH.{{else if .NotePOT}}PO token provider.{{else}}{{template "empty_value"}}{{end}}
-              </td>
-            </tr>
-            {{else}}
-            <tr><td colspan="3" class="text-sm opacity-60">No plugins found on disk.</td></tr>
-            {{end}}
-          </tbody>
-          {{template "list_table_end"}}
-        </div>
-        <form method="post" action="/actions/save-settings" class="js-settings-autosave">
-          <input type="hidden" name="redirect" value="/settings/connect" />
-          {{with .PotFetch}}
-          {{template "pot_fetch_field" .}}
+    <fieldset class="fieldset gap-2">
+      <legend class="fieldset-legend">plugins</legend>
+      <p class="text-sm opacity-60">
+        Add further yt-dlp <a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp#plugins" target="_blank" rel="noopener noreferrer">plugins</a> by mounting each package under <span class="font-mono text-xs">/yt-dlp-plugins/&lt;name&gt;/</span> so that folder contains a <span class="font-mono text-xs">yt_dlp_plugins</span> package. Creatorr always passes those dirs as --plugin-dirs.
+      </p>
+      <div id="ytdlp-plugins-present">
+        {{template "list_table"}}
+        <thead><tr><th>Name</th><th>Source</th><th>Notes</th></tr></thead>
+        <tbody>
+          {{range .YtDlpPlugins}}
+          <tr>
+            <td class="font-mono text-xs">
+              {{if .DocsURL}}<a class="link link-primary" href="{{.DocsURL}}" target="_blank" rel="noopener noreferrer">{{.Name}}</a>{{else}}{{.Name}}{{end}}
+            </td>
+            <td>{{.Source}}</td>
+            <td class="text-sm">
+              {{if eq .NoteKind "deno"}}<a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp#strongly-recommended" target="_blank" rel="noopener noreferrer">Deno</a> is already installed on PATH.{{else if eq .NoteKind "pot"}}PO token provider.{{else}}{{template "empty_value"}}{{end}}
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="3" class="text-sm opacity-60">No plugins found on disk.</td></tr>
           {{end}}
-        </form>
-      </fieldset>
+        </tbody>
+        {{template "list_table_end"}}
+      </div>
+      <form method="post" action="/actions/save-settings" class="js-settings-autosave">
+        <input type="hidden" name="redirect" value="/settings/connect" />
+        {{with .PotFetch}}
+        {{template "pot_fetch_field" .}}
+        {{end}}
+      </form>
     </fieldset>
   </div>
 </section>

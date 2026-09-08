@@ -3,7 +3,6 @@ package settings
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 )
@@ -53,25 +52,7 @@ func YtDlpUpdatesEnabled(database *db.DB) (bool, error) {
 	return strings.TrimSpace(v) != "", nil
 }
 
-// RecordYtDlpInstall persists installed version metadata after a successful update.
-func RecordYtDlpInstall(database *db.DB, version string) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	for _, kv := range []struct{ k, v string }{
-		{KeyYtDlpInstalledVersion, strings.TrimSpace(version)},
-		{KeyYtDlpInstalledAt, now},
-	} {
-		if _, err := database.SQL.Exec(`
-			INSERT INTO settings (key, value) VALUES (?, ?)
-			ON CONFLICT(key) DO UPDATE SET value = excluded.value
-		`, kv.k, kv.v); err != nil {
-			return fmt.Errorf("record %s: %w", kv.k, err)
-		}
-	}
-	return nil
-}
-
-// SyncYtDlpInstalledVersion writes ytdlp_installed_version from a boot --version probe
-// (does not touch ytdlp_installed_at; that stays update-task only).
+// SyncYtDlpInstalledVersion writes ytdlp_installed_version (boot --version and ytdlp_update).
 func SyncYtDlpInstalledVersion(database *db.DB, version string) error {
 	version = strings.TrimSpace(version)
 	if version == "" {
@@ -84,4 +65,9 @@ func SyncYtDlpInstalledVersion(database *db.DB, version string) error {
 		return fmt.Errorf("record %s: %w", KeyYtDlpInstalledVersion, err)
 	}
 	return nil
+}
+
+// RecordYtDlpInstall persists installed version after a successful update task.
+func RecordYtDlpInstall(database *db.DB, version string) error {
+	return SyncYtDlpInstalledVersion(database, version)
 }

@@ -29,7 +29,7 @@ Editable settings (examples):
 | `archive_fallback` | `1` = when a cataloged video is gone at the live source (narrow unavailable), queue a Web Archive download via yt-dlp (`ytarchive:{id}` on the `archive.org` lane). Original `source_url` kept. Default on. Settings → Library → Metadata. Operator notified (`archive_fallback`) when archive media packs. |
 | `ytdlp_update_cron` | yt-dlp GitHub update schedule. Settings → Scheduler. Seed `@weekly`. **Empty = automatic updates off** (no boot/cron enqueue). Channel + **Update now** on Connect still work. Custom binary: replace managed path while stopped. |
 | `ytdlp_update_channel` | `stable` (default) or `nightly` GitHub release channel for Update now and automatic updates. Settings → Connect → yt-dlp |
-| `ytdlp_installed_version` / `ytdlp_installed_at` | Internal. Version: set on boot from managed-bin `yt-dlp --version` (via `PrepareManagedBin`) and on successful `ytdlp_update`. `installed_at`: update task only. Shown read-only on Connect. |
+| `ytdlp_installed_version` | Internal. Set on boot from managed-bin `yt-dlp --version` (`PrepareManagedBin`) and on successful `ytdlp_update`. Shown read-only on Connect (with the page shell; refreshed after Update via HTMX). |
 
 Sidecars are always converted to SRT via yt-dlp `--convert-subs srt` (no format setting).
 

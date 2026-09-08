@@ -23,14 +23,13 @@ const (
 	KeyYtDlpUpdateCron              = "ytdlp_update_cron"
 	KeyYtDlpUpdateChannel           = "ytdlp_update_channel"
 	KeyYtDlpInstalledVersion        = "ytdlp_installed_version"
-	KeyYtDlpInstalledAt             = "ytdlp_installed_at"
 	// Auth keys: see auth.go (seeded separately; not on generalOrder).
 )
 
 // Help is one-line UI help text per key.
 var Help = map[string]string{
-	KeyPotFetch: "Controls when a PO token is fetched, passed to yt-dlp as extractor-arguments fetch_pot (https://github.com/yt-dlp/yt-dlp#extractor-arguments).",
-	KeyYoutubePlayerClient:          "Comma-separated yt-dlp youtube extractor-arguments player_client (https://github.com/yt-dlp/yt-dlp#extractor-arguments). Empty uses yt-dlp defaults.",
+	KeyPotFetch:            "", // Connect custom partial (HTML hint)
+	KeyYoutubePlayerClient: "", // Connect custom partial (HTML hint)
 	KeyDownloadWantedCron:           "Schedule to enqueue wanted videos for monitored series.",
 	KeySyncFilesCron:                "Checks registered media and sidecars against disk: missing/restored paths, and size drift for video and non-NFO sidecars.",
 	KeyIntegrityCheckCron:           "Runs library Integrity check on a schedule. Only videos whose quality profile has 'File integrity' enabled are checked (null-decode, checksums, NFO XML).",
@@ -43,7 +42,6 @@ var Help = map[string]string{
 	KeyYtDlpUpdateChannel:           "GitHub release channel for Update now and for automatic updates when a schedule is set.",
 	KeyYtDlpUpdateCron:              "When set, Creatorr checks GitHub on boot and on this schedule. Configure update channel under 'Settings → Connect'. Disabling skips boot and cron.",
 	KeyYtDlpInstalledVersion:        "", // internal; boot --version + ytdlp_update
-	KeyYtDlpInstalledAt:             "", // internal; written by ytdlp_update task
 	KeyAuthUsername:                 "Single operator account username for Forms login.",
 	KeyAuthPasswordHash:             "", // internal; never shown
 	KeyAPIKey:                       "API key for X-Api-Key header (Settings → General).",
@@ -67,7 +65,6 @@ var Labels = map[string]string{
 	KeyYtDlpUpdateChannel:           "yt-dlp update channel",
 	KeyYtDlpUpdateCron:              "yt-dlp update schedule",
 	KeyYtDlpInstalledVersion:        "yt-dlp installed version",
-	KeyYtDlpInstalledAt:             "yt-dlp installed at",
 	KeyAuthUsername:                 "Username",
 	KeyAuthPasswordHash:             "Password hash",
 	KeyAPIKey:                       "API key",
@@ -291,7 +288,7 @@ func Set(database *db.DB, key, value string) error {
 	switch key {
 	case KeyAuthPasswordHash, KeyAuthCookieSecret, KeyAuthSessionEpoch, KeyAPIKey:
 		return fmt.Errorf("setting %q is not writable via Set", key)
-	case KeyYtDlpInstalledVersion, KeyYtDlpInstalledAt:
+	case KeyYtDlpInstalledVersion:
 		return fmt.Errorf("setting %q is not writable via Set", key)
 	}
 	if key == KeySubtitleLangs {
@@ -304,15 +301,9 @@ func Set(database *db.DB, key, value string) error {
 		value = NormalizeMetadataFlag(value)
 	}
 	if key == KeyYtDlpUpdateChannel {
-		if err := validateYtDlpUpdateChannel(value); err != nil {
-			return err
-		}
 		value = NormalizeYtDlpUpdateChannel(value)
 	}
 	if key == KeyYoutubePlayerClient {
-		if err := validateYoutubePlayerClient(value); err != nil {
-			return err
-		}
 		value = NormalizeYoutubePlayerClient(value)
 	}
 	if err := validateValue(key, value); err != nil {
@@ -353,9 +344,6 @@ func SetMany(database *db.DB, values map[string]string) error {
 			values[k] = v
 		}
 		if k == KeyYoutubePlayerClient {
-			if err := validateYoutubePlayerClient(v); err != nil {
-				return err
-			}
 			v = NormalizeYoutubePlayerClient(v)
 			values[k] = v
 		}

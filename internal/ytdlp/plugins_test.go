@@ -88,8 +88,8 @@ func TestListPluginPackages(t *testing.T) {
 	if got[0].Name != "yt-dlp-ejs" || !got[0].Bundled || got[0].Source() != "bundled" {
 		t.Fatalf("ejs = %+v source=%q", got[0], got[0].Source())
 	}
-	if got[0].DocsURL() != "https://github.com/yt-dlp/ejs" || !got[0].NoteDeno() {
-		t.Fatalf("ejs docs/notes = %q note=%v", got[0].DocsURL(), got[0].NoteDeno())
+	if got[0].DocsURL() != "https://github.com/yt-dlp/ejs" || got[0].NoteKind() != NoteDeno {
+		t.Fatalf("ejs docs/notes = %q kind=%q", got[0].DocsURL(), got[0].NoteKind())
 	}
 	if got[1].Name != "bgutil" || !got[1].Baked || got[1].Source() != "baked" {
 		t.Fatalf("bgutil = %+v source=%q", got[1], got[1].Source())
@@ -97,8 +97,8 @@ func TestListPluginPackages(t *testing.T) {
 	if got[1].DocsURL() != "https://github.com/Brainicism/bgutil-ytdlp-pot-provider" {
 		t.Fatalf("bgutil docs = %q", got[1].DocsURL())
 	}
-	if !got[1].NotePOT() || got[1].NoteDeno() {
-		t.Fatalf("bgutil notes: pot=%v deno=%v", got[1].NotePOT(), got[1].NoteDeno())
+	if got[1].NoteKind() != NotePOT {
+		t.Fatalf("bgutil notes kind=%q", got[1].NoteKind())
 	}
 	if got[2].Name != "example" || got[2].Baked || got[2].Source() != "mounted" {
 		t.Fatalf("example = %+v source=%q", got[2], got[2].Source())

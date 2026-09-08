@@ -39,14 +39,25 @@ func (p PluginPackage) DocsURL() string {
 	}
 }
 
-// NoteDeno is true when Notes should mention Deno (PATH runtime for EJS).
-func (p PluginPackage) NoteDeno() bool {
-	return p.Name == "yt-dlp-ejs"
-}
+// NoteKind selects the Notes cell treatment on Connect → plugins.
+type NoteKind string
 
-// NotePOT is true when Notes should identify this package as the PO token provider.
-func (p PluginPackage) NotePOT() bool {
-	return p.Name == "bgutil"
+const (
+	NoteNone NoteKind = ""
+	NoteDeno NoteKind = "deno" // Deno on PATH for EJS
+	NotePOT  NoteKind = "pot"  // PO token provider plugin
+)
+
+// NoteKind returns the Notes column kind for this package (empty = dash).
+func (p PluginPackage) NoteKind() NoteKind {
+	switch p.Name {
+	case "yt-dlp-ejs":
+		return NoteDeno
+	case "bgutil":
+		return NotePOT
+	default:
+		return NoteNone
+	}
 }
 
 // ListPluginPackages scans systemRoot then operatorRoot for packages that contain
