@@ -127,6 +127,14 @@ func taskStages(in taskStagesInput) []taskStageView {
 		appendItem("started", "", in.Started, false, false, 0, "", stageRankStarted)
 	}
 
+	if in.CookieAttach != nil && in.CookieAttach.ShowStage() {
+		at := strings.TrimSpace(in.Started)
+		if at == "" {
+			at = createdAt
+		}
+		appendItem("cookies", in.CookieAttach.StageMessage(), at, false, false, 0, "cookie", stageRankCookies)
+	}
+
 	if term, termErr, termNeutral, ok := taskTerminalStage(in.Status); ok {
 		at := in.Finished
 		if strings.TrimSpace(at) == "" {

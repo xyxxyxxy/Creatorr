@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
@@ -360,6 +361,41 @@ func TestTaskStages(t *testing.T) {
 	}
 	if !foundOrigin || !foundPendingChild || !foundDoneChild {
 		t.Fatalf("origin/children missing: origin=%v pending=%v done=%v got=%+v", foundOrigin, foundPendingChild, foundDoneChild, got)
+	}
+}
+
+func TestTaskStagesCookieAttach(t *testing.T) {
+	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
+	created := "2026-09-06T11:56:00Z"
+	started := "2026-09-06T11:57:00Z"
+	ca := &domains.CookieAttachStatus{State: domains.CookieAttachRetried, RetryReason: "CookieInvalid"}
+	got := taskStages(taskStagesInput{
+		Now: now, Created: created, Started: started, Status: "running", Origin: queue.OriginManual,
+		CookieAttach: ca,
+	})
+	var found bool
+	for _, s := range got {
+		if s.Event == "cookies" {
+			found = true
+			if s.Message != "Retried with account cookies (CookieInvalid)" {
+				t.Fatalf("cookies message: %q", s.Message)
+			}
+			if s.OriginIcon != "cookie" {
+				t.Fatalf("cookies icon: %q", s.OriginIcon)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("missing cookies stage: %+v", got)
+	}
+	got = taskStages(taskStagesInput{
+		Now: now, Created: created, Status: "pending", Origin: queue.OriginManual,
+		CookieAttach: &domains.CookieAttachStatus{State: domains.CookieAttachOff},
+	})
+	for _, s := range got {
+		if s.Event == "cookies" {
+			t.Fatal("off must not inject cookies stage")
+		}
 	}
 }
 

@@ -58,7 +58,7 @@ func ScanHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
-		jar, err := domains.TempJarForURL(d.Library.DB, work, src.URL)
+		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, src.URL)
 		if err != nil {
 			mode := library.SourceHistModeScan
 			if !src.FullScanDone {

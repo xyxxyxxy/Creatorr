@@ -51,7 +51,7 @@ func RefreshSidecarsHandler(d Deps) TaskHandler {
 		defer func() { _ = os.RemoveAll(work) }()
 
 		progress("Resolving cookies…", ptrFloat(0.1))
-		jar, err := domains.TempJarForURL(d.Library.DB, work, url)
+		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, url)
 		if err != nil {
 			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 		}
@@ -112,7 +112,7 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 	defer func() { _ = os.RemoveAll(work) }()
 
 	progress("Fetching metadata…", ptrFloat(0.05))
-	jar, err := domains.TempJarForURL(d.Library.DB, work, url)
+	jar, err := domains.TempJarForNonDownload(d.Library.DB, work, url)
 	if err != nil {
 		return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 	}
@@ -217,7 +217,7 @@ func metadataRescanSeries(ctx context.Context, d Deps, t *queue.Task, progress f
 		}
 		progress(fmt.Sprintf("Listing source %d/%d: %s", i+1, n, label), ptrFloat(float64(i)/float64(n)))
 
-		jar, err := domains.TempJarForURL(d.Library.DB, work, src.URL)
+		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, src.URL)
 		if err != nil {
 			_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, err.Error(), map[string]any{
 				"mode": library.SourceHistModeRescanMetadata,
@@ -316,7 +316,7 @@ func PrefetchSeriesMetaHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
-		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
+		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, fetchURL)
 		if err != nil {
 			return err
 		}
@@ -390,7 +390,7 @@ func ProbeSourceTitleHandler(d Deps) TaskHandler {
 			return err
 		}
 		defer func() { _ = os.RemoveAll(work) }()
-		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
+		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, fetchURL)
 		if err != nil {
 			jar = ""
 		}
@@ -446,7 +446,7 @@ func PrefetchAddSeriesHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
-		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
+		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, fetchURL)
 		if err != nil {
 			jar = ""
 		}
@@ -508,7 +508,7 @@ func PrefetchAddVideoHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
-		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
+		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, fetchURL)
 		if err != nil {
 			draft := library.AddVideoDraft{Error: err.Error()}
 			_ = d.Library.WriteAddVideoDraft(token, draft)
@@ -569,7 +569,7 @@ func PrefetchVideoMetaHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
-		jar, err := domains.TempJarForURL(d.Library.DB, work, fetchURL)
+		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, fetchURL)
 		if err != nil {
 			draft := library.VideoPrefetchDraft{Error: err.Error()}
 			_ = d.Library.WriteVideoPrefetchDraft(videoID, t.ID, draft)

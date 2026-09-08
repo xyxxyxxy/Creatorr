@@ -88,6 +88,12 @@
             "ShowGuide" true
           )}}
           {{template "checkbox_field" (dict
+            "Name" "cookies_after_fail"
+            "Label" "Use cookies only after first download failure"
+            "Checked" .CookiesAfterFail
+            "Hint" "Tries download without the account jar first and retries once with cookies on failure, unless the error is clearly unrelated to login (rate limit, live broadcast, removed video). While enabled, scan / metadata / sidecar yt-dlp calls never use the stored jar. Keeps the logged-in session off most traffic and lowers ban risk. Leave unchecked if this site needs the jar on every request (e.g. clearance cookies)."
+          )}}
+          {{template "checkbox_field" (dict
             "Name" "use_flaresolverr"
             "Label" "Use FlareSolverr"
             "Checked" $flareOn

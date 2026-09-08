@@ -1,0 +1,34 @@
+{{define "cookie_attach_badge"}}
+{{/* Account cookie attach outcome from task detail; tip carries optional detail. */}}
+{{if eq .State "anonymous"}}
+<span class="inline-flex items-center gap-2">
+  <span class="inline-flex tooltip tooltip-top text-success" data-tip="{{if .Detail}}{{.Detail}}{{else}}anonymous{{end}}" aria-label="Account cookies anonymous">
+    <i data-lucide="cookie" class="size-4 opacity-50"></i>
+  </span>
+  <span>Anonymous</span>
+</span>
+{{else if eq .State "retried"}}
+<span class="inline-flex items-center gap-2">
+  <span class="inline-flex tooltip tooltip-top text-info" data-tip="{{if .Detail}}{{.Detail}}{{else}}retried{{end}}" aria-label="Account cookies retried">
+    <i data-lucide="cookie" class="size-4"></i>
+  </span>
+  <span>Retried</span>
+</span>
+{{else if eq .State "cookies"}}
+<span class="inline-flex items-center gap-2">
+  <span class="inline-flex tooltip tooltip-top" data-tip="{{if .Detail}}{{.Detail}}{{else}}used{{end}}" aria-label="Account cookies used">
+    <i data-lucide="cookie" class="size-4"></i>
+  </span>
+  <span>Used</span>
+</span>
+{{else if eq .State "omitted"}}
+<span class="inline-flex items-center gap-2">
+  <span class="inline-flex tooltip tooltip-top" data-tip="{{if .Detail}}{{.Detail}}{{else}}omitted{{end}}" aria-label="Account cookies omitted">
+    <i data-lucide="cookie" class="size-4 opacity-60"></i>
+  </span>
+  <span class="opacity-60">Omitted</span>
+</span>
+{{else}}
+<span class="opacity-60">{{.Label}}</span>
+{{end}}
+{{end}}

@@ -81,6 +81,62 @@ func parsePOTDetail(detail string) *potDetailView {
 	return &potDetailView{State: pot.State, Label: label, Detail: pot.Detail, Fetch: pot.Fetch}
 }
 
+func parseCookieAttachDetail(detail string) *domains.CookieAttachStatus {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return nil
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(detail), &raw); err != nil {
+		return nil
+	}
+	caRaw, ok := raw[domains.DetailKeyCookieAttach]
+	if !ok || caRaw == nil {
+		return nil
+	}
+	b, err := json.Marshal(caRaw)
+	if err != nil {
+		return nil
+	}
+	var st domains.CookieAttachStatus
+	if err := json.Unmarshal(b, &st); err != nil || st.State == "" {
+		return nil
+	}
+	return &st
+}
+
+type cookieAttachDetailView struct {
+	State  string
+	Label  string
+	Detail string
+}
+
+func cookieAttachView(st *domains.CookieAttachStatus) *cookieAttachDetailView {
+	if st == nil || st.State == "" || st.State == domains.CookieAttachOff {
+		return nil
+	}
+	label := st.State
+	switch st.State {
+	case domains.CookieAttachAnonymous:
+		label = "Anonymous"
+	case domains.CookieAttachCookies:
+		label = "Used"
+	case domains.CookieAttachRetried:
+		label = "Retried"
+	case domains.CookieAttachOmitted:
+		label = "Omitted"
+	}
+	detail := st.Detail
+	if st.RetryReason != "" {
+		if detail != "" {
+			detail = st.RetryReason + " · " + detail
+		} else {
+			detail = st.RetryReason
+		}
+	}
+	return &cookieAttachDetailView{State: st.State, Label: label, Detail: detail}
+}
+
 func parseDomainAccessDetail(detail string) *domains.DomainAccessSnapshot {
 	detail = strings.TrimSpace(detail)
 	if detail == "" {
@@ -295,6 +351,9 @@ func (h *Handler) taskDetailFieldsOpts(detail string, hideErrorKey bool) []detai
 		case ytdlp.DetailKeyPOToken:
 			// Shown as dedicated Details row (PO token).
 			continue
+		case domains.DetailKeyCookieAttach:
+			// Shown as dedicated Details row (Account cookies).
+			continue
 		case domains.DetailKeyDomainAccess:
 			// Shown as dedicated Details row (Domain access chips).
 			continue
@@ -427,6 +486,7 @@ type taskStagesInput struct {
 	ParentTaskID int64
 	ParentKind   string
 	Children     []queue.Task
+	CookieAttach *domains.CookieAttachStatus
 }
 
 type stageRank int
@@ -436,6 +496,7 @@ const (
 	stageRankEnqueued
 	stageRankChild
 	stageRankStarted
+	stageRankCookies
 	stageRankHistory
 	stageRankTerminal
 )

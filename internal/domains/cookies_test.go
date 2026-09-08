@@ -18,7 +18,7 @@ func TestCookieJarHostOnlyNoDefault(t *testing.T) {
 	defer func() { _ = database.Close() }()
 
 	dir := t.TempDir()
-	path, err := domains.TempJarForURL(database, dir, "https://www.example.com/v")
+	path, err := domains.TempJarForURL(database, dir, "https://www.example.com/v", true)
 	if err != nil || path != "" {
 		t.Fatalf("expected empty jar, got %q err=%v", path, err)
 	}
@@ -28,7 +28,7 @@ func TestCookieJarHostOnlyNoDefault(t *testing.T) {
 	}
 	_ = domains.ClearCookies(database, settings.DomainDefault)
 
-	path, err = domains.TempJarForURL(database, dir, "https://www.example.com/v")
+	path, err = domains.TempJarForURL(database, dir, "https://www.example.com/v", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestCookieJarHostOnlyNoDefault(t *testing.T) {
 	if err := domains.SetCookies(database, "example.com", "# Netscape\nhost=1\n"); err != nil {
 		t.Fatal(err)
 	}
-	path, err = domains.TempJarForURL(database, dir, "https://www.example.com/v")
+	path, err = domains.TempJarForURL(database, dir, "https://www.example.com/v", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +52,11 @@ func TestCookieJarHostOnlyNoDefault(t *testing.T) {
 	}
 	if string(b) != "# Netscape\nhost=1\n" {
 		t.Fatalf("host jar should win, got %q", b)
+	}
+
+	path, err = domains.TempJarForURL(database, dir, "https://www.example.com/v", false)
+	if err != nil || path != "" {
+		t.Fatalf("allowStored=false must omit jar, got %q err=%v", path, err)
 	}
 
 	ok, tip, err := domains.CookiesApply(database, "example.com")
