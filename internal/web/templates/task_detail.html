@@ -251,10 +251,10 @@
 {{end}}
 </div>
 
-{{if .Live}}
+{{if or .Live .LogText}}
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Logs")}}
-{{template "task_logs" (dict "ID" .Item.ID "Live" .Live "LogText" .LogText "Lines" .LogLines "RefreshOnLoad" true)}}
+{{template "task_logs" (dict "ID" .Item.ID "Live" .Live "LogText" .LogText "Lines" .LogLines "RefreshOnLoad" .Live)}}
 {{template "list_panel_end"}}
 {{end}}
 

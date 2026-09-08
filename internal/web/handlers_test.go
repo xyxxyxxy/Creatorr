@@ -1039,6 +1039,8 @@ func TestTaskDetailFailedShowsError(t *testing.T) {
 	if err != nil || claimed == nil || claimed.ID != tid {
 		t.Fatalf("claim: err=%v task=%v", err, claimed)
 	}
+	q.Logs.Append(tid, "Downloading video")
+	q.Logs.Append(tid, "ERROR: unable to download")
 	if err := q.Finish(tid, queue.StatusFailed, "yt-dlp download failed", "DownloadFailed", "ERROR: unable to download"); err != nil {
 		t.Fatal(err)
 	}
@@ -1064,6 +1066,12 @@ func TestTaskDetailFailedShowsError(t *testing.T) {
 	}
 	if !strings.Contains(body, "ERROR: unable to download") {
 		t.Fatalf("missing error text: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `id="task-logs"`) || !strings.Contains(body, "Downloading video") {
+		t.Fatalf("failed task should show persisted Logs: %s", truncate(body, 600))
+	}
+	if strings.Contains(body, `hx-trigger="load"`) || strings.Contains(body, `hx-target="#task-logs"`) {
+		t.Fatalf("failed Logs must not offer Refresh: %s", truncate(body, 600))
 	}
 	if strings.Contains(body, ">raw</th>") {
 		t.Fatalf("should not show unlabeled raw: %s", truncate(body, 600))

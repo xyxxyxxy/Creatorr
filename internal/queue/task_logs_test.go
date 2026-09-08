@@ -33,3 +33,15 @@ func TestTaskLogsCap(t *testing.T) {
 		t.Fatalf("ring window wrong: first=%q last=%q", got[0], got[len(got)-1])
 	}
 }
+
+func TestPersistLogsOnStatus(t *testing.T) {
+	if !PersistLogsOnStatus(StatusFailed) {
+		t.Fatal("failed should persist")
+	}
+	if PersistLogsOnStatus(StatusDone) {
+		t.Fatal("done should not persist")
+	}
+	if PersistLogsOnStatus(StatusCancelled) {
+		t.Fatal("cancelled should not persist")
+	}
+}

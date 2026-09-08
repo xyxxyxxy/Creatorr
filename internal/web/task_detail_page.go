@@ -160,6 +160,9 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		nav = "tasks"
 	}
 	logLines := h.Queue.Logs.Snapshot(id)
+	if len(logLines) == 0 {
+		logLines = t.Logs
+	}
 	logText := strings.Join(logLines, "\n")
 	commands := t.Commands
 	renameList := h.buildTaskRenameList(t, events, live)

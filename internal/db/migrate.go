@@ -64,6 +64,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo12(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 13:
+			if err := d.migrateTo13(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -400,6 +404,21 @@ func (d *DB) migrateTo11() error {
 		if !strings.Contains(err.Error(), "no such table") {
 			return fmt.Errorf("strip detail.trigger: %w", err)
 		}
+	}
+	return nil
+}
+
+// migrateTo13 adds tasks.logs for progress lines kept on failed tasks.
+func (d *DB) migrateTo13() error {
+	has, err := d.tableHasColumn("tasks", "logs")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE tasks ADD COLUMN logs TEXT NOT NULL DEFAULT '[]'`); err != nil {
+		return fmt.Errorf("add tasks.logs: %w", err)
 	}
 	return nil
 }
