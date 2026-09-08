@@ -195,6 +195,25 @@ paths:
             type: string
             enum: [done, failed, cancelled]
           description: Filter by terminal task status
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by queue domain (hostname or system)
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by task kind
+        - name: origin
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [manual, scheduled, boot, task]
+          description: Filter by task origin (kick source)
         - name: limit
           in: query
           required: false
@@ -1825,7 +1844,7 @@ components:
 
     HistoryItem:
       type: object
-      required: [id, created_at, kind, status, message]
+      required: [id, created_at, kind, status, message, origin]
       properties:
         id:
           type: integer
@@ -1859,6 +1878,15 @@ components:
           nullable: true
         domain:
           type: string
+        origin:
+          type: string
+          description: Kick source (how the task was queued)
+          enum: [manual, scheduled, boot, task]
+        parent_task_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: Spawning task id when origin is task
 
     Notification:
       type: object

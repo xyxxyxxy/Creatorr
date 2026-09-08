@@ -13,6 +13,8 @@ func TestClassifyPOT(t *testing.T) {
 		{"off", "", "auto", "", POTOff},
 		{"never", "", "never", "http://creatorr-po-token:4416", POTSkipped},
 		{"auto skip", "[info] ok", "auto", "http://creatorr-po-token:4416", POTSkipped},
+		{"generating", "[youtube] [pot:bgutil:http] Generating a player PO Token for mweb client via bgutil HTTP server", "always", "http://creatorr-po-token:4416", POTGenerating},
+		{"issued beats generating", "[pot] Generating a player PO Token for mweb\nRetrieved a gvs PO Token for mweb client", "always", "http://x", POTIssued},
 		{"issued", "[debug] Retrieved a gvs PO Token for web_safari client", "auto", "http://creatorr-po-token:4416", POTIssued},
 		{"failed providers", "[debug] [youtube] [pot] PO Token Providers: none", "always", "http://creatorr-po-token:4416", POTFailed},
 		{"failed ping", "WARNING: [youtube] [pot:bgutil:http] Error reaching GET http://127.0.0.1:4416/ping", "auto", "http://creatorr-po-token:4416", POTFailed},
@@ -52,9 +54,15 @@ func TestDetectPOTIssue(t *testing.T) {
 func TestPOTTrackerRank(t *testing.T) {
 	ctx := ContextWithPOTTracker(t.Context(), nil, nil)
 	ObservePOT(ctx, POTStatus{State: POTSkipped, Fetch: "auto"})
-	ObservePOT(ctx, POTStatus{State: POTIssued, Detail: "Retrieved a gvs PO Token"})
+	ObservePOT(ctx, POTStatus{State: POTGenerating, Detail: "Generating a player PO Token"})
 	ObservePOT(ctx, POTStatus{State: POTSkipped, Detail: "should not win"})
 	st := POTStatusFromContext(ctx)
+	if st.State != POTGenerating {
+		t.Fatalf("generating should beat skipped, got %#v", st)
+	}
+	ObservePOT(ctx, POTStatus{State: POTIssued, Detail: "Retrieved a gvs PO Token"})
+	ObservePOT(ctx, POTStatus{State: POTGenerating, Detail: "should not downgrade"})
+	st = POTStatusFromContext(ctx)
 	if st.State != POTIssued {
 		t.Fatalf("got %#v", st)
 	}

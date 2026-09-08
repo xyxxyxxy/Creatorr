@@ -60,6 +60,14 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo11(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 12:
+			if err := d.migrateTo12(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
+		case 13:
+			if err := d.migrateTo13(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -395,6 +403,54 @@ func (d *DB) migrateTo11() error {
 	`); err != nil {
 		if !strings.Contains(err.Error(), "no such table") {
 			return fmt.Errorf("strip detail.trigger: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateTo13 adds tasks.logs for progress lines kept on failed tasks.
+func (d *DB) migrateTo13() error {
+	has, err := d.tableHasColumn("tasks", "logs")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE tasks ADD COLUMN logs TEXT NOT NULL DEFAULT '[]'`); err != nil {
+		return fmt.Errorf("add tasks.logs: %w", err)
+	}
+	return nil
+}
+
+// migrateTo12 renames leftover video_history events from legacy verify_* names
+// (migrateTo10 covered videos.status, notifications, and tasks.kind only).
+func (d *DB) migrateTo12() error {
+	if _, err := d.SQL.Exec(`UPDATE video_history SET event = 'integrity_checked' WHERE event = 'verified'`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("rename video_history verified: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`UPDATE video_history SET event = 'integrity_check_failed' WHERE event = 'verify_failed'`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("rename video_history verify_failed: %w", err)
+		}
+	}
+	// Task detail / history rows may still name the old kinds inside JSON.
+	if _, err := d.SQL.Exec(`
+		UPDATE video_history SET detail = REPLACE(detail, '"media_verify"', '"integrity_check_initial"')
+		WHERE detail LIKE '%media_verify%'
+	`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("rewrite video_history detail media_verify: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`
+		UPDATE video_history SET detail = REPLACE(detail, '"verify_all_media"', '"integrity_check"')
+		WHERE detail LIKE '%verify_all_media%'
+	`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("rewrite video_history detail verify_all_media: %w", err)
 		}
 	}
 	return nil

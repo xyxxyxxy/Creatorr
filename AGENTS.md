@@ -2,7 +2,7 @@
 
 Mandatory reading for AI agents. Creatorr is a Sonarr-shaped Go daemon for creator VOD: mirror channels/playlists, download via in-tree yt-dlp (+ optional plugins), track videos + packed `info.json`, pack TV libraries (video + NFO).
 
-**Stack:** Go only (`github.com/xyxxyxxy/Creatorr`). SQLite for app state; published images on GHCR (`:latest` / `:dev` / `:sha-<short>`).
+**Stack:** Go only (`github.com/xyxxyxxy/Creatorr`). SQLite for app state; published images on GHCR (`:latest` / `:dev` / `:X.Y.Z` / `:X.Y` / `:sha-<short>`).
 
 ## Hard rules
 
@@ -57,7 +57,7 @@ New domain term → matching docs file (domain-model by default).
 ## API & errors
 
 - Contract: [`api/openapi.yaml`](api/openapi.yaml). Generate: `make generate`. Serve: `GET /api/openapi.json`. CI: `make openapi-check`.
-- **ErrorResponse:** `{code, message, detail?}` - stable `code` (`CookieInvalid`, `DownloadFailed`, `RemuxFailed`, `PackFailed`, …). Worker stores `code` + `message` on tasks/sources. Cookie/rate failures (`CookieInvalid` / `RateLimited`) **auto soft-pause** the domain lane and notify as alerts (no auto-deactivate). Generic `DownloadFailed` / `ResolveFailed` fail the task (download → `wanted_download_error`) and notify `ytdlp_failed` but do **not** soft-pause. Never bare HTTP status with empty body.
+- **ErrorResponse:** `{code, message, detail?}` - stable `code` (`CookieInvalid`, `DownloadFailed`, `RemuxFailed`, `PackFailed`, …). Worker stores `error_code` + `error_message` on tasks (plus separate `message`); sources keep their own error fields. Cookie/rate failures (`CookieInvalid` / `RateLimited`) **auto soft-pause** the domain lane and notify as alerts (no auto-deactivate). Generic `DownloadFailed` / `ResolveFailed` fail the task (download → `wanted_download_error`) and notify `ytdlp_failed` but do **not** soft-pause. Never bare HTTP status with empty body.
 - **Out of OpenAPI:** HTMX routes + SSE `GET /api/events` (`EventSource`). Events: `task.updated` | `task.done` | `task.failed` | `notification.created` | `notification.read` (JSON in `data:`; keepalive ~15s; outside 60s HTTP timeout). Product behavior: [`docs/`](docs/README.md).
 
 ## Workflow
@@ -71,7 +71,7 @@ New domain term → matching docs file (domain-model by default).
 ## Ship
 
 - **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker` (in-process heartbeat, not SQLite), `ytdlp`, `disk`, `flaresolverr`, `pot_provider` (last two skipped if URL unset). Compose healthcheck should use it.
-- **Images:** `ghcr.io/xyxxyxxy/creatorr:latest` and `:vX.Y.Z` from version tags (`v*`) on `main`; `:dev` tracks tip of `main` (and `workflow_dispatch` rebuilds); `:sha-<short>` on every `main` push for pins and pre-release testing. Compose: [`docker-compose.yml`](docker-compose.yml).
+- **Images:** `ghcr.io/xyxxyxxy/creatorr:latest`, `:X.Y.Z`, and `:X.Y` from git tags `v*` on `main` (docker/metadata strips the `v` prefix); `:dev` tracks tip of `main` (and `workflow_dispatch` rebuilds); `:sha-<short>` on every `main` push for pins and pre-release testing. Compose: [`docker-compose.yml`](docker-compose.yml).
 - **Tests:** unit (domain/settings), yt-dlp fixtures (no live net), integration (temp SQLite + worker/queue), API httptest + schema. Prefer golden fixtures; add tests for behavior changes.
 - **Branching:** GitHub Flow - `main` is the only long-lived branch. Never commit on `main`. Short-lived branch, then a pull request into `main`.
 - **Commits:** Conventional Commits; one logical step each; subject ≤72 chars; body explains why when not obvious.

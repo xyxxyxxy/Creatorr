@@ -907,8 +907,15 @@
         ? data.status
         : root.getAttribute("data-task-row-status") || "running";
       if (st === "done" || st === "failed" || st === "cancelled") {
-        const wrap = root.querySelector("[data-task-progress-wrap]");
-        if (wrap) wrap.hidden = true;
+        // Drop progress + Cancel chrome (not just hide the bar).
+        const chrome = root.querySelector("[data-task-progress-wrap]")?.closest(".flex-none");
+        if (chrome) chrome.remove();
+        else {
+          const wrap = root.querySelector("[data-task-progress-wrap]");
+          if (wrap) wrap.remove();
+          root.querySelector('label[for="modal-cancel-task"]')?.remove();
+        }
+        root.removeAttribute("data-task-row-status");
       } else {
         let progress = null;
         if (progressChanged) {
@@ -1695,6 +1702,7 @@
       refreshVideoHistoryIfMatch(ev);
       refreshTaskVideoHistoryIfMatch(ev);
     } else if (ev.type === "task.done" || ev.type === "task.failed") {
+      patchTaskDetail(ev);
       refreshTasksPanel(true);
       refreshTaskIndicators();
       refreshHistoryPanel();
@@ -2043,7 +2051,7 @@
   window.showFlashToast = function (message, opts) {
     opts = opts || {};
     const toast = document.createElement("div");
-    toast.className = "toast toast-top toast-end z-[1100]";
+    toast.className = "toast toast-top toast-end z-[1300]";
     toast.setAttribute("data-flash-toast", "");
     const alert = document.createElement("div");
     alert.setAttribute("role", "status");

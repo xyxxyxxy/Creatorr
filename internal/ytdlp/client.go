@@ -18,6 +18,8 @@ type Client struct {
 	PotProviderURL   string // CREATORR_POT_PROVIDER_URL; empty forces fetch_pot=never
 	// PotFetch returns Settings pot_fetch (or never when URL unset). Optional; defaults apply when nil.
 	PotFetch func() string
+	// PlayerClient returns Settings youtube_player_client. Optional; empty omits youtube:player_client.
+	PlayerClient func() string
 }
 
 // BinPath returns the current managed yt-dlp binary path.
@@ -102,6 +104,9 @@ func (c *Client) fill(o *options) {
 	o.pluginDirs = strings.TrimSpace(c.PluginsDir)
 	o.systemPluginDirs = strings.TrimSpace(c.SystemPluginsDir)
 	o.potProviderURL = strings.TrimSpace(c.PotProviderURL)
+	if c.PlayerClient != nil {
+		o.playerClient = strings.TrimSpace(c.PlayerClient())
+	}
 	if o.potProviderURL == "" {
 		o.potFetch = "never"
 		return

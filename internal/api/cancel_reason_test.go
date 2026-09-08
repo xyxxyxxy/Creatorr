@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/db"
@@ -51,8 +52,8 @@ func TestCancelTaskRequiresManualReason(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, path, bytes.NewReader([]byte(`{"reason":"shutdown"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("non-manual: status %d want 400 body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"code":"Validation"`) {
+		t.Fatalf("non-manual: status %d body=%s", rec.Code, rec.Body.String())
 	}
 
 	rec = httptest.NewRecorder()

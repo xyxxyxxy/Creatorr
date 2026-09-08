@@ -249,8 +249,11 @@ func TestSettingsConnectYtDlpInstalledVersionFragment(t *testing.T) {
 	if !strings.Contains(body, "Installed version") {
 		t.Fatalf("missing installed version label: %q", body)
 	}
-	if !strings.Contains(body, "Binary not found") || !strings.Contains(body, "input-error") {
-		t.Fatalf("missing installed version error when yt-dlp unavailable: %q", body)
+	if !strings.Contains(body, "Unknown") {
+		t.Fatalf("missing Unknown when installed version unset: %q", body)
+	}
+	if strings.Contains(body, "Binary not found") || strings.Contains(body, "input-error") {
+		t.Fatalf("should not error when version unset (cache-only): %q", body)
 	}
 	if strings.Contains(body, "fieldset-legend") {
 		t.Fatalf("full page leaked into installed version fragment: %q", body)

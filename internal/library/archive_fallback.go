@@ -209,7 +209,9 @@ func (s *Store) CancelArchiveDownloadsForVideo(videoID int64) error {
 		if err := rows.Scan(&tid); err != nil {
 			return err
 		}
-		_ = s.Queue.Cancel(tid)
+		if _, err := s.Queue.CancelWithReason(tid, queue.CancelReasonSupersededPack); err != nil {
+			_ = s.Queue.Cancel(tid)
+		}
 	}
 	return rows.Err()
 }

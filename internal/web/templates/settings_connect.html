@@ -5,31 +5,6 @@
 
 <section class="card bg-base-100 border border-base-300 mb-4">
   <div class="card-body gap-6">
-    <fieldset class="fieldset gap-3">
-      <legend class="fieldset-legend text-lg font-semibold">yt-dlp</legend>
-      <p class="text-sm opacity-60">
-        {{if .YtDlpUpdatesOn}}
-        Creatorr checks GitHub for new releases on boot and on the schedule under Settings → Scheduler. Update now always uses the channel below.
-        {{else}}
-        Automatic GitHub updates are off (empty update schedule under Settings → Scheduler). Channel and Update now still work for a one-shot managed install; or replace the binary at the managed path while Creatorr is stopped for a custom build.
-        {{end}}
-      </p>
-      <form method="post" action="/actions/save-settings" class="flex flex-col gap-3 js-settings-autosave">
-        <input type="hidden" name="redirect" value="/settings/connect" />
-        <div class="grid gap-3 sm:grid-cols-3 w-full items-end">
-          {{template "ytdlp_connect_installed_version" .YtDlpInstalledVersion}}
-          {{template "ytdlp_connect_controls" .YtDlpControls}}
-        </div>
-      </form>
-      <form id="ytdlp-update-form" method="post" action="/actions/ytdlp-update" class="hidden" aria-hidden="true">
-        <input type="hidden" name="redirect" value="/settings/connect" />
-      </form>
-    </fieldset>
-  </div>
-</section>
-
-<section class="card bg-base-100 border border-base-300 mb-4">
-  <div class="card-body gap-6">
     {{template "list_header" (dict "level" "section" "title" "Notifications" "help" "Creatorr in-app channel (fixed, all events) plus optional Apprise channels. Each Apprise channel has a URL and event subscriptions (All = current and future, or pick specific events). Alerts and warnings stay unread until acknowledged in-app; Apprise delivery does not mark them read." "add_modal" "modal-add-notify-channel" "add_label" "Add channel")}}
     {{if not .NotifyChannels}}
     {{template "list_empty" "No notification channels yet."}}
@@ -75,34 +50,68 @@
 <section class="card bg-base-100 border border-base-300 mb-4">
   <div class="card-body gap-6">
     <fieldset class="fieldset gap-3">
-      <legend class="fieldset-legend text-lg font-semibold">External services</legend>
-      <p class="text-sm opacity-60">FlareSolverr for CloudFlare challenges, and a PO token (proof-of-origin) provider for extractors that need attestation tokens.</p>
-
+      <legend class="fieldset-legend text-lg font-semibold">yt-dlp</legend>
       <form method="post" action="/actions/save-settings" class="flex flex-col gap-3 js-settings-autosave">
         <input type="hidden" name="redirect" value="/settings/connect" />
-        <div class="grid gap-3 md:grid-cols-2 w-full items-start">
-          <div class="flex flex-col gap-3 w-full min-w-0">
-            {{template "external_service_url_join" .PotService}}
-            {{range .Settings}}
-            {{if eq .Key "pot_fetch"}}
-            {{template "field_input" (dict
-              "Name" .Key
-              "ID" (printf "setting-%s" .Key)
-              "Label" .Label
-              "Type" "select"
-              "Value" .Value
-              "Hint" .Help
-              "Options" .Options
-              "Disabled" .Disabled
-              "DisabledTitle" .DisabledTitle
-              "AutosaveChange" true
-            )}}
-            {{end}}
-            {{end}}
-          </div>
-          {{template "external_service_url_join" .FlareService}}
+        <div class="grid gap-3 sm:grid-cols-3 w-full items-start">
+          {{template "ytdlp_connect_installed_version" .YtDlpInstalledVersion}}
+          {{template "ytdlp_connect_controls" .YtDlpControls}}
         </div>
+        <fieldset class="fieldset gap-2">
+          <legend class="fieldset-legend text-lg font-semibold">arguments</legend>
+          {{with .YtDlpPlayerClient}}
+          {{template "ytdlp_player_client_field" .}}
+          {{end}}
+        </fieldset>
       </form>
+      <form id="ytdlp-update-form" method="post" action="/actions/ytdlp-update" class="hidden" aria-hidden="true">
+        <input type="hidden" name="redirect" value="/settings/connect" />
+      </form>
+    </fieldset>
+    <fieldset class="fieldset gap-2">
+      <legend class="fieldset-legend">plugins</legend>
+      <p class="text-sm opacity-60">
+        Add further yt-dlp <a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp#plugins" target="_blank" rel="noopener noreferrer">plugins</a> by mounting each package under <span class="font-mono text-xs">/yt-dlp-plugins/&lt;name&gt;/</span> so that folder contains a <span class="font-mono text-xs">yt_dlp_plugins</span> package. Creatorr always passes those dirs as --plugin-dirs.
+      </p>
+      <div id="ytdlp-plugins-present">
+        {{template "list_table"}}
+        <thead><tr><th>Name</th><th>Source</th><th>Notes</th></tr></thead>
+        <tbody>
+          {{range .YtDlpPlugins}}
+          <tr>
+            <td class="font-mono text-xs">
+              {{if .DocsURL}}<a class="link link-primary" href="{{.DocsURL}}" target="_blank" rel="noopener noreferrer">{{.Name}}</a>{{else}}{{.Name}}{{end}}
+            </td>
+            <td>{{.Source}}</td>
+            <td class="text-sm">
+              {{if eq .NoteKind "deno"}}<a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp#strongly-recommended" target="_blank" rel="noopener noreferrer">Deno</a> is already installed on PATH.{{else if eq .NoteKind "pot"}}PO token provider.{{else}}{{template "empty_value"}}{{end}}
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="3" class="text-sm opacity-60">No plugins found on disk.</td></tr>
+          {{end}}
+        </tbody>
+        {{template "list_table_end"}}
+      </div>
+      <form method="post" action="/actions/save-settings" class="js-settings-autosave">
+        <input type="hidden" name="redirect" value="/settings/connect" />
+        {{with .PotFetch}}
+        {{template "pot_fetch_field" .}}
+        {{end}}
+      </form>
+    </fieldset>
+  </div>
+</section>
+
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <div class="card-body gap-6">
+    <fieldset class="fieldset gap-3">
+      <legend class="fieldset-legend text-lg font-semibold">External services</legend>
+      <p class="text-sm opacity-60">FlareSolverr for CloudFlare challenges, and a PO token (proof-of-origin) provider for extractors that need attestation tokens.</p>
+      <div class="grid gap-3 md:grid-cols-2 w-full items-start">
+        {{template "external_service_url_join" .PotService}}
+        {{template "external_service_url_join" .FlareService}}
+      </div>
     </fieldset>
   </div>
 </section>

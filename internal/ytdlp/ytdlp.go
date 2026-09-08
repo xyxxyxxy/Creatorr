@@ -56,16 +56,22 @@ func withPluginDirs(args []string, pluginRoots ...string) []string {
 }
 
 // appendPOTArgs adds youtube:fetch_pot and optional youtubepot-bgutilhttp:base_url.
-// When a provider URL is set and fetch is not never, also enables pot_trace so
-// mint / provider lines appear in captured yt-dlp output (task logs + detect).
+// When Settings youtube_player_client is non-empty, also sets youtube:player_client
+// (empty omits it so yt-dlp uses its own client order). Keys are joined with ';' so
+// commas inside player_client values are not eaten as extra clients. When a
+// provider URL is set and fetch is not never, also enables pot_trace so mint /
+// provider lines appear in output.
 func appendPOTArgs(args []string, o options) []string {
 	fetch := strings.TrimSpace(o.potFetch)
 	if fetch == "" {
 		fetch = "never"
 	}
 	ytArgs := "youtube:fetch_pot=" + fetch
+	if client := strings.TrimSpace(o.playerClient); client != "" {
+		ytArgs = "youtube:player_client=" + client + ";fetch_pot=" + fetch
+	}
 	if u := strings.TrimSpace(o.potProviderURL); u != "" && fetch != "never" {
-		ytArgs += ",pot_trace=true"
+		ytArgs += ";pot_trace=true"
 		args = append(args, "--extractor-args", ytArgs)
 		args = append(args, "--extractor-args", "youtubepot-bgutilhttp:base_url="+u)
 		return args
@@ -169,7 +175,7 @@ func normalizeFormat(sel string) string {
 
 // dumpJSON runs `yt-dlp --skip-download -J [--flat-playlist] URL` and parses the result.
 func dumpJSON(ctx context.Context, url, cookiesPath string, flat bool, playlistEnd int, userAgent string, o options) (map[string]any, error) {
-	args := []string{"--no-mtime", "--skip-download", "-J"}
+	args := []string{"--skip-download", "-J"}
 	if flat {
 		args = append(args, "--flat-playlist")
 	}
@@ -204,7 +210,7 @@ func downloadMedia(ctx context.Context, url, outdir, format, cookiesPath, userAg
 		return "", appErr(apperrors.CodeDownloadFailed, "could not create output directory", err.Error())
 	}
 	args := []string{
-		"--no-mtime", "--newline",
+		"--newline",
 		"-f", normalizeFormat(format),
 		"-o", "%(title).200B [%(id)s].%(ext)s",
 		"--write-info-json", "--write-thumbnail",
@@ -251,7 +257,7 @@ func fetchSidecars(ctx context.Context, url, outdir, cookiesPath, userAgent stri
 		return "", "", nil, appErr(apperrors.CodeResolveFailed, "could not create output directory", err.Error())
 	}
 	args := []string{
-		"--no-mtime", "--skip-download", "-o", "meta.%(ext)s",
+		"--skip-download", "-o", "meta.%(ext)s",
 		"--write-info-json", "--write-thumbnail",
 	}
 	args = appendSubtitleFlags(args, o.subLangs, o.subAuto)

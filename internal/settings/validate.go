@@ -11,6 +11,9 @@ func validateValue(key, value string) error {
 	if key == KeyPotFetch {
 		return validatePotFetch(value)
 	}
+	if key == KeyYoutubePlayerClient {
+		return validateYoutubePlayerClient(value)
+	}
 	if key == KeySubtitleLangs {
 		return validateSubtitleLangs(value)
 	}

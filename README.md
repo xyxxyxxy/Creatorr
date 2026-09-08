@@ -11,6 +11,8 @@ Sonarr for creator VOD: manage creators as TV-style series. Merge multiple sourc
 - **Metadata fetching & management** - fetch and edit series/video metadata; pack NFO and sidecars for Emby, Jellyfin, and similar
 - **Quality profiles** - format selectors and optional maturity media/sidecar refresh
 - **Integrity check** - optional per-profile file integrity (null-decode + checksums)
+- **Year-season episodes** - season = UTC calendar year; episode index within the year; per-root `episode_format` tokens
+- **Bulk edit** - multi-select series and videos (settings, metadata, monitor, delete, and related actions)
 - **Domains & queues** - per-host rate limits, credentials (Access cookies), and soft pause
 - **Web Archive fallback** - when an indexed YouTube video is deleted or unavailable, queue a [Web Archive](https://archive.org/) download
 - **Import existing downloads** - bring in files already on disk with automated matching
@@ -18,7 +20,7 @@ Sonarr for creator VOD: manage creators as TV-style series. Merge multiple sourc
 - **Video retention** - delete media after a configured number of days
 - **SponsorBlock** - chapters, cut-out, and cut-out with an inserted info card
 - **FlareSolverr & PO tokens** - Compose sidecars out of the box for challenge pre-solve and proof-of-origin minting
-- **Automatic yt-dlp updates** - scheduled GitHub release checks and managed binary updates
+- **Automatic yt-dlp updates** - scheduled GitHub checks when cron is set; Connect **Update now** always works (even with empty schedule)
 - **Notifications** - in-app alerts plus Apprise channels for digests and warnings
 - **Web UI & API** - library overview and stats in the browser; public OpenAPI REST for automation
 

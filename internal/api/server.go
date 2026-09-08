@@ -105,7 +105,7 @@ func (s *Server) CancelTask(w http.ResponseWriter, r *http.Request, id gen.TaskI
 		return
 	}
 	if body.Reason != gen.CancelTaskRequestReasonManual {
-		writeErr(w, http.StatusBadRequest, apperrors.CodeInternal, "cancel reason required", "reason must be manual")
+		writeErr(w, http.StatusBadRequest, apperrors.CodeValidation, "cancel reason required", "reason must be manual")
 		return
 	}
 	_, err := s.Queue.CancelWithReason(int64(id), queue.CancelReasonManual)
@@ -171,7 +171,17 @@ func (s *Server) ListHistory(w http.ResponseWriter, r *http.Request, params gen.
 	if params.Offset != nil {
 		offset = *params.Offset
 	}
-	items, err := s.Queue.ListHistory(queue.HistoryFilter{Statuses: statuses}, limit, offset)
+	f := queue.HistoryFilter{Statuses: statuses}
+	if params.Domain != nil {
+		f.Domain = *params.Domain
+	}
+	if params.Kind != nil {
+		f.Kind = *params.Kind
+	}
+	if params.Origin != nil {
+		f.Origin = string(*params.Origin)
+	}
+	items, err := s.Queue.ListHistory(f, limit, offset)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "list history failed", err.Error())
 		return
@@ -304,12 +314,17 @@ func mapTask(t queue.Task) gen.Task {
 }
 
 func mapHistoryTask(t queue.Task) gen.HistoryItem {
+	origin := gen.HistoryItemOrigin(t.Origin)
+	if origin == "" {
+		origin = gen.HistoryItemOriginManual
+	}
 	item := gen.HistoryItem{
 		Id:        t.ID,
 		CreatedAt: parseTime(t.CreatedAt),
 		Kind:      t.Kind,
 		Status:    gen.HistoryItemStatus(t.Status),
 		Message:   t.Message,
+		Origin:    origin,
 	}
 	if t.FinishedAt.Valid && t.FinishedAt.String != "" {
 		ts := parseTime(t.FinishedAt.String)
@@ -334,6 +349,10 @@ func mapHistoryTask(t queue.Task) gen.HistoryItem {
 	if t.VideoID.Valid {
 		v := t.VideoID.Int64
 		item.VideoId = &v
+	}
+	if t.ParentTaskID.Valid {
+		v := t.ParentTaskID.Int64
+		item.ParentTaskId = &v
 	}
 	return item
 }

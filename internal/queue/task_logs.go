@@ -8,7 +8,7 @@ import (
 const taskLogCap = 200
 
 // TaskLogs is an in-memory ring of progress() status lines per running task.
-// Not persisted; cleared when the task finishes or is cancelled.
+// Flushed to tasks.logs on failed Finish; cleared from memory on any finish/cancel.
 type TaskLogs struct {
 	mu   sync.Mutex
 	byID map[int64]*taskLogBuf

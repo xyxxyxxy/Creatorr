@@ -667,17 +667,66 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "fieldset-legend") || !strings.Contains(body, "yt-dlp") || !strings.Contains(body, "ytdlp_update_channel") {
 				t.Fatalf("%s missing yt-dlp settings", path)
 			}
+			if !strings.Contains(body, ">plugins<") {
+				t.Fatalf("%s missing plugins subsection", path)
+			}
+			if strings.Contains(body, ">EJS<") {
+				t.Fatalf("%s still has removed EJS subsection", path)
+			}
+			if strings.Contains(body, ">PO token</") || strings.Contains(body, "already integrated") {
+				t.Fatalf("%s still has removed PO token section", path)
+			}
+			if !strings.Contains(body, "yt-dlp-ejs") || !strings.Contains(body, "https://github.com/yt-dlp/ejs") {
+				t.Fatalf("%s missing bundled yt-dlp-ejs row", path)
+			}
+			if !strings.Contains(body, ">Notes<") || !strings.Contains(body, "https://github.com/yt-dlp/yt-dlp#strongly-recommended") ||
+				!strings.Contains(body, "already installed on PATH") {
+				t.Fatalf("%s missing plugins Notes / Deno link", path)
+			}
+			if !strings.Contains(body, ">bundled<") {
+				t.Fatalf("%s missing bundled source for yt-dlp-ejs", path)
+			}
+			if !strings.Contains(body, "/yt-dlp-plugins/") || !strings.Contains(body, "yt_dlp_plugins") {
+				t.Fatalf("%s missing further plugins mount hint", path)
+			}
+			if !strings.Contains(body, "https://github.com/yt-dlp/yt-dlp#plugins") {
+				t.Fatalf("%s missing yt-dlp plugins docs link", path)
+			}
+			if !strings.Contains(body, `id="ytdlp-plugins-present"`) {
+				t.Fatalf("%s missing present plugins list", path)
+			}
+			if !strings.Contains(body, "youtube_player_client") || !strings.Contains(body, ">player_client<") {
+				t.Fatalf("%s missing youtube player client setting", path)
+			}
+			if !strings.Contains(body, ">arguments<") {
+				t.Fatalf("%s missing arguments section header", path)
+			}
+			if !strings.Contains(body, "tv,default") {
+				t.Fatalf("%s missing default youtube player client value", path)
+			}
+			if !strings.Contains(body, "https://github.com/yt-dlp/yt-dlp#extractor-arguments") {
+				t.Fatalf("%s missing extractor-arguments docs link", path)
+			}
 			if !strings.Contains(body, "External services") || !strings.Contains(body, "FlareSolverr URL") || !strings.Contains(body, "PO token provider URL") {
 				t.Fatalf("%s missing external service URL joins", path)
 			}
 			if !strings.Contains(body, "CREATORR_FLARESOLVERR_URL") || !strings.Contains(body, "CREATORR_POT_PROVIDER_URL") {
 				t.Fatalf("%s missing env hints", path)
 			}
-			if !strings.Contains(body, "Enable &#39;PO token fetch&#39; below") {
-				t.Fatalf("%s missing PO token enable hint", path)
+			if !strings.Contains(body, "&#39;fetch_pot&#39; is under &#39;plugins&#39;") &&
+				!strings.Contains(body, "'fetch_pot' is under 'plugins'") {
+				t.Fatalf("%s missing fetch_pot location hint", path)
 			}
-			if !strings.Contains(body, "PO token fetch (disabled)") || !strings.Contains(body, `value="never"`) {
+			if !strings.Contains(body, "fetch_pot (disabled)") || !strings.Contains(body, `value="never"`) {
 				t.Fatalf("%s pot_fetch should be disabled/never when provider URL unset", path)
+			}
+			if !strings.Contains(body, `id="setting-pot_fetch"`) {
+				t.Fatalf("%s pot_fetch should live under plugins", path)
+			}
+			if !strings.Contains(body, `href="https://github.com/yt-dlp/yt-dlp#extractor-arguments"`) ||
+				!strings.Contains(body, ">extractor-arguments<") ||
+				!strings.Contains(body, "fetch_pot") {
+				t.Fatalf("%s missing fetch_pot extractor-arguments link", path)
 			}
 			if !strings.Contains(body, "connect-pot-service-health") || !strings.Contains(body, `hx-get="/settings/connect/external-services/pot"`) {
 				t.Fatalf("%s missing async PO token health load", path)
@@ -685,17 +734,24 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "connect-flare-service-health") || !strings.Contains(body, `hx-get="/settings/connect/external-services/flare"`) {
 				t.Fatalf("%s missing async Flare health load", path)
 			}
-			if !strings.Contains(body, `id="ytdlp-connect-installed-version"`) || !strings.Contains(body, `hx-get="/settings/connect/ytdlp-installed-version"`) {
-				t.Fatalf("%s missing async yt-dlp installed version load", path)
+			if !strings.Contains(body, `id="ytdlp-connect-installed-version"`) {
+				t.Fatalf("%s missing installed version field", path)
 			}
-			if !strings.Contains(body, `placeholder="loading"`) {
-				t.Fatalf("%s missing yt-dlp installed version loading placeholder", path)
+			if strings.Contains(body, `hx-get="/settings/connect/ytdlp-installed-version"`) {
+				t.Fatalf("%s should render installed version with the page shell (not hx Pending)", path)
+			}
+			if strings.Contains(body, `placeholder="loading"`) {
+				t.Fatalf("%s should not show loading placeholder for installed version on shell", path)
 			}
 			if !strings.Contains(body, `id="ytdlp-connect-last-checked"`) || !strings.Contains(body, "Last checked") {
 				t.Fatalf("%s missing yt-dlp last checked field", path)
 			}
 			if !strings.Contains(body, "ytdlp_update_channel") {
 				t.Fatalf("%s missing yt-dlp update channel on page shell", path)
+			}
+			if !strings.Contains(body, "Configure the update schedule under &#39;Settings → Scheduler&#39;") &&
+				!strings.Contains(body, "Configure the update schedule under 'Settings → Scheduler'") {
+				t.Fatalf("%s missing yt-dlp schedule hint under update channel", path)
 			}
 			if !strings.Contains(body, "Checking") || !strings.Contains(body, "loading-spinner") {
 				t.Fatalf("%s missing pending health spinner", path)
@@ -942,6 +998,9 @@ func TestTaskDetailPage(t *testing.T) {
 	if !strings.Contains(body, `hx-trigger="load"`) {
 		t.Fatalf("expected one-shot logs refresh on open: %s", truncate(body, 400))
 	}
+	if !strings.Contains(body, `for="modal-cancel-task"`) || !strings.Contains(body, "data-task-progress") {
+		t.Fatalf("running task should show Cancel + progress: %s", truncate(body, 400))
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/task/"+strconv.FormatInt(tid, 10)+"/logs", nil)
 	rec = httptest.NewRecorder()
@@ -1005,6 +1064,9 @@ func TestTaskDetailPage(t *testing.T) {
 	if strings.Contains(body, "id=\"task-logs\"") {
 		t.Fatalf("logs section should be hidden when finished: %s", truncate(body, 400))
 	}
+	if strings.Contains(body, `for="modal-cancel-task"`) || strings.Contains(body, "data-task-progress") {
+		t.Fatalf("finished task must not show Cancel + progress: %s", truncate(body, 400))
+	}
 }
 
 func TestTaskDetailFailedShowsError(t *testing.T) {
@@ -1033,6 +1095,8 @@ func TestTaskDetailFailedShowsError(t *testing.T) {
 	if err != nil || claimed == nil || claimed.ID != tid {
 		t.Fatalf("claim: err=%v task=%v", err, claimed)
 	}
+	q.Logs.Append(tid, "Downloading video")
+	q.Logs.Append(tid, "ERROR: unable to download")
 	if err := q.Finish(tid, queue.StatusFailed, "yt-dlp download failed", "DownloadFailed", "ERROR: unable to download"); err != nil {
 		t.Fatal(err)
 	}
@@ -1059,11 +1123,20 @@ func TestTaskDetailFailedShowsError(t *testing.T) {
 	if !strings.Contains(body, "ERROR: unable to download") {
 		t.Fatalf("missing error text: %s", truncate(body, 600))
 	}
+	if !strings.Contains(body, `id="task-logs"`) || !strings.Contains(body, "Downloading video") {
+		t.Fatalf("failed task should show persisted Logs: %s", truncate(body, 600))
+	}
+	if strings.Contains(body, `hx-trigger="load"`) || strings.Contains(body, `hx-target="#task-logs"`) {
+		t.Fatalf("failed Logs must not offer Refresh: %s", truncate(body, 600))
+	}
 	if strings.Contains(body, ">raw</th>") {
 		t.Fatalf("should not show unlabeled raw: %s", truncate(body, 600))
 	}
 	if !strings.Contains(body, "keep") {
 		t.Fatalf("other detail keys should remain: %s", truncate(body, 600))
+	}
+	if strings.Contains(body, `for="modal-cancel-task"`) || strings.Contains(body, "data-task-progress") {
+		t.Fatalf("failed task must not show Cancel + progress: %s", truncate(body, 600))
 	}
 }
 

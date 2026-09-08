@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/xyxxyxxy/Creatorr/internal/library/episode"
+
 	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
@@ -100,7 +102,7 @@ func (s *Store) EnqueueRenameEpisodesSeries(seriesID int64, oldTitle string, old
 		payload["old_root_id"] = oldRootID
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
-		Origin: queue.OriginManual,
+		Origin:   queue.OriginManual,
 		Kind:     queue.KindRenameEpisodes,
 		Domain:   queue.SystemDomain,
 		SeriesID: seriesID,
@@ -687,5 +689,5 @@ func (s *Store) videoBusyForRename(videoID, exceptTaskID int64) (bool, error) {
 
 // ApplyNamingMessage formats the finish message.
 func ApplyNamingMessage(renamed, skippedBusy, failed int) string {
-	return fmt.Sprintf("Renamed %d, skipped busy %d, failed %d", renamed, skippedBusy, failed)
+	return episode.ApplyNamingMessage(renamed, skippedBusy, failed)
 }

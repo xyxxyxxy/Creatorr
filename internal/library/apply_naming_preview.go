@@ -4,28 +4,14 @@ import (
 	"database/sql"
 	"path/filepath"
 	"strings"
+
+	"github.com/xyxxyxxy/Creatorr/internal/library/episode"
 )
 
-// PreviewApplyRenameCap is the max rename rows returned in a preview modal.
-const PreviewApplyRenameCap = 500
+const PreviewApplyRenameCap = episode.PreviewApplyRenameCap
 
-// ApplyRenamePreviewItem is one planned disk rename for PreviewApplyEpisodeNaming.
-type ApplyRenamePreviewItem struct {
-	VideoID     int64
-	Title       string
-	SeriesTitle string
-	From        string // path under root when possible
-	To          string
-}
-
-// ApplyRenamePreview is a dry-run of Apply episode format for a maintenance scope.
-type ApplyRenamePreview struct {
-	Items        []ApplyRenamePreviewItem
-	TotalChanges int
-	SkippedBusy  int
-	Unchanged    int
-	Truncated    bool
-}
+type ApplyRenamePreviewItem = episode.ApplyRenamePreviewItem
+type ApplyRenamePreview = episode.ApplyRenamePreview
 
 // PreviewApplyEpisodeNaming simulates year reindex (no DB writes) and lists packed
 // videos whose on-disk stem would move to the current root episode_format ideal.

@@ -38,6 +38,7 @@ const (
 	KindPrefetchVideoMeta  = "prefetch_video_meta"
 	KindPrefetchAddSeries  = "prefetch_add_series"
 	KindPrefetchAddVideo   = "prefetch_add_video"
+	KindProbeSourceTitle   = "probe_source_title"
 	KindSyncFiles          = "sync_files"
 	KindRetentionDelete    = "retention_delete"
 	KindRenameEpisodes     = "rename_episodes"
@@ -55,11 +56,12 @@ const (
 	SystemDomain = "system"
 )
 
-// IsPrefetchKind is true for ClaimInteractive metadata prefetch tasks.
+// IsPrefetchKind is true for ClaimInteractive metadata prefetch / probe tasks.
 // These do not occupy max_parallel_tasks slots.
 func IsPrefetchKind(kind string) bool {
 	return kind == KindPrefetchSeriesMeta || kind == KindPrefetchVideoMeta ||
-		kind == KindPrefetchAddSeries || kind == KindPrefetchAddVideo
+		kind == KindPrefetchAddSeries || kind == KindPrefetchAddVideo ||
+		kind == KindProbeSourceTitle
 }
 
 // IsInteractiveKind is true for tasks that must not wait behind other work
@@ -133,6 +135,7 @@ type Task struct {
 	Message      string
 	Detail       string   // structured outcome JSON for History
 	Commands     []string // shell-formatted external argv lines (yt-dlp/ffmpeg/…)
+	Logs         []string // progress lines (live buffer or persisted on failed)
 	Progress     sql.NullFloat64
 	Domain       string
 	Priority     int
@@ -166,7 +169,7 @@ type Store struct {
 	cooldown map[string]time.Time // domain -> earliest next claim
 	cancels  sync.Map             // taskID (int64) -> context.CancelFunc for running tasks
 
-	// Logs holds in-memory progress lines for running tasks (not persisted).
+	// Logs holds in-memory progress lines for running tasks; flushed to tasks.logs on failed Finish.
 	Logs *TaskLogs
 	// Live holds latest message + progress fraction for running tasks (not persisted).
 	Live *LiveState
@@ -492,7 +495,7 @@ func (s *Store) ClaimNext() (*Task, error) {
 		       t.origin, t.parent_task_id
 		FROM tasks t
 		WHERE t.status = ?
-		  AND t.kind NOT IN (?, ?, ?, ?)
+		  AND t.kind NOT IN (?, ?, ?, ?, ?)
 		  AND NOT EXISTS (
 		    SELECT 1 FROM domains d WHERE d.domain = t.domain AND d.active = 0
 		  )
@@ -500,7 +503,7 @@ func (s *Store) ClaimNext() (*Task, error) {
 		    SELECT 1 FROM domain_runtime r WHERE r.domain = t.domain AND r.paused != 0
 		  )
 		ORDER BY t.priority DESC, t.id ASC
-	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo)
+	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo, KindProbeSourceTitle)
 	if err != nil {
 		return nil, err
 	}
@@ -521,12 +524,12 @@ func (s *Store) ClaimInteractive() (*Task, error) {
 		       t.origin, t.parent_task_id
 		FROM tasks t
 		WHERE t.status = ?
-		  AND t.kind IN (?, ?, ?, ?)
+		  AND t.kind IN (?, ?, ?, ?, ?)
 		  AND NOT EXISTS (
 		    SELECT 1 FROM domains d WHERE d.domain = t.domain AND d.active = 0
 		  )
 		ORDER BY t.priority DESC, t.id ASC
-	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo)
+	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo, KindProbeSourceTitle)
 	if err != nil {
 		return nil, err
 	}
@@ -606,8 +609,8 @@ func (s *Store) domainHasParallelSlot(domain string) bool {
 	_ = s.DB.SQL.QueryRow(`
 		SELECT COUNT(*) FROM tasks
 		WHERE domain = ? AND status = ?
-		  AND kind NOT IN (?, ?, ?, ?)
-	`, domain, StatusRunning, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo).Scan(&n)
+		  AND kind NOT IN (?, ?, ?, ?, ?)
+	`, domain, StatusRunning, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo, KindProbeSourceTitle).Scan(&n)
 	// Prefetch kinds are excluded from the count.
 	return n < max
 }
@@ -715,6 +718,9 @@ func (s *Store) Finish(id int64, status, message, errCode, errMsg string) error 
 	}
 
 	if err := s.persistCommands(id, status, s.taskKind(id)); err != nil {
+		return err
+	}
+	if err := s.persistLogs(id, status); err != nil {
 		return err
 	}
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
@@ -837,6 +843,40 @@ func (s *Store) persistCommands(id int64, status, kind string) error {
 	return nil
 }
 
+// PersistLogsOnStatus reports whether progress log lines should be written to SQLite.
+// Only failed tasks keep the ring (debugging yt-dlp / PO / remux); done and cancelled drop it.
+func PersistLogsOnStatus(status string) bool {
+	return status == StatusFailed
+}
+
+// persistLogs writes buffered progress lines to tasks.logs on failure, else clears the column.
+func (s *Store) persistLogs(id int64, status string) error {
+	if s == nil || id <= 0 {
+		return nil
+	}
+	if !PersistLogsOnStatus(status) {
+		s.Logs.Clear(id)
+		_, err := s.DB.SQL.Exec(`UPDATE tasks SET logs = '[]' WHERE id = ?`, id)
+		return err
+	}
+	lines := s.Logs.Snapshot(id)
+	if len(lines) == 0 {
+		s.Logs.Clear(id)
+		_, err := s.DB.SQL.Exec(`UPDATE tasks SET logs = '[]' WHERE id = ?`, id)
+		return err
+	}
+	b, err := json.Marshal(lines)
+	if err != nil {
+		return err
+	}
+	_, err = s.DB.SQL.Exec(`UPDATE tasks SET logs = ? WHERE id = ?`, string(b), id)
+	if err != nil {
+		return err
+	}
+	s.Logs.Clear(id)
+	return nil
+}
+
 func (s *Store) taskKind(id int64) string {
 	var kind string
 	_ = s.DB.SQL.QueryRow(`SELECT kind FROM tasks WHERE id = ?`, id).Scan(&kind)
@@ -880,6 +920,7 @@ func (s *Store) CancelWithReason(id int64, reason string) (prevStatus string, er
 		return prevStatus, fmt.Errorf("task %d not cancellable", id)
 	}
 	_ = s.persistCommands(id, StatusCancelled, s.taskKind(id))
+	_ = s.persistLogs(id, StatusCancelled)
 	s.clearLive(id)
 	s.abortRunning(id)
 	if t, err := s.GetTask(id); err == nil && t != nil {
@@ -939,6 +980,7 @@ func (s *Store) CancelDownloadsForVideo(videoID int64, reason string) ([]Task, e
 			return out, err
 		}
 		_ = s.persistCommands(t.ID, StatusCancelled, t.Kind)
+		_ = s.persistLogs(t.ID, StatusCancelled)
 		s.clearLive(t.ID)
 		s.abortRunning(t.ID)
 	}
@@ -981,10 +1023,11 @@ func (s *Store) GetTask(id int64) (*Task, error) {
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
 		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
 		       origin, parent_task_id,
-		       COALESCE(NULLIF(commands, ''), '[]')
+		       COALESCE(NULLIF(commands, ''), '[]'),
+		       COALESCE(NULLIF(logs, ''), '[]')
 		FROM tasks WHERE id = ?
 	`, id)
-	t, err := s.scanTaskWithCommands(row)
+	t, err := s.scanTaskWithExtras(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -1124,6 +1167,7 @@ func (s *Store) cancelDomain(domain, reason string, statuses ...string) ([]Task,
 			return out, err
 		}
 		_ = s.persistCommands(t.ID, StatusCancelled, t.Kind)
+		_ = s.persistLogs(t.ID, StatusCancelled)
 		s.clearLive(t.ID)
 		s.abortRunning(t.ID)
 	}
@@ -1446,24 +1490,26 @@ func (s *Store) scanTask(scanner interface {
 	return &t, nil
 }
 
-func (s *Store) scanTaskWithCommands(scanner interface {
+func (s *Store) scanTaskWithExtras(scanner interface {
 	Scan(dest ...any) error
 }) (*Task, error) {
 	var t Task
-	var commandsJSON string
+	var commandsJSON, logsJSON string
 	err := scanner.Scan(
 		&t.ID, &t.Kind, &t.Status, &t.SeriesID, &t.VideoID, &t.Payload,
 		&t.ErrorCode, &t.ErrorMessage, &t.Message, &t.Detail,
 		&t.Progress, &t.Domain, &t.Priority, &t.CreatedAt, &t.StartedAt, &t.FinishedAt,
 		&t.Origin, &t.ParentTaskID,
-		&commandsJSON,
+		&commandsJSON, &logsJSON,
 	)
 	if err != nil {
 		return nil, err
 	}
 	t.Commands = parseCommandsJSON(commandsJSON)
+	t.Logs = parseCommandsJSON(logsJSON)
 	s.applyLive(&t)
 	s.applyCommands(&t)
+	s.applyLogs(&t)
 	return &t, nil
 }
 
@@ -1477,6 +1523,16 @@ func parseCommandsJSON(raw string) []string {
 		return nil
 	}
 	return out
+}
+
+// applyLogs overlays in-memory progress lines onto a running/pending task row.
+func (s *Store) applyLogs(t *Task) {
+	if s == nil || t == nil || (t.Status != StatusPending && t.Status != StatusRunning) {
+		return
+	}
+	if lines := s.Logs.Snapshot(t.ID); len(lines) > 0 {
+		t.Logs = lines
+	}
 }
 
 // RequeueStaleRunning marks interrupted running tasks as pending after process restart.

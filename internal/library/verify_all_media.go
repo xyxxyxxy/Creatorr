@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/xyxxyxxy/Creatorr/internal/library/integrity"
+
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
@@ -73,12 +75,7 @@ type verifyAllMediaPayload struct {
 }
 
 // VerifyAllMediaFail is one failed video from VerifyAllMediaPass (for notify).
-type VerifyAllMediaFail struct {
-	VideoID     int64
-	SeriesTitle string
-	VideoTitle  string
-	Detail      string
-}
+type VerifyAllMediaFail = integrity.VerifyAllMediaFail
 
 // VerifyAllMediaPass runs integrity check on packed downloaded/integrity_check_failed media
 // with a cursor for resume. Skips videos whose quality profile has File integrity off.
@@ -136,7 +133,18 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 		return s.Queue.UpdatePayload(task.ID, m)
 	}
 
-	q := `
+	const batchSize = 50
+	const persistEvery = 10
+	processed := 0
+	for {
+		select {
+		case <-ctx.Done():
+			_ = persist()
+			return res, ctx.Err()
+		default:
+		}
+
+		q := `
 		SELECT v.id
 		FROM videos v
 		WHERE v.status IN ('downloaded', 'integrity_check_failed')
@@ -145,157 +153,156 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 		    SELECT 1 FROM files f
 		    WHERE f.video_id = v.id AND f.kind = 'video'
 		  )`
-	args := []any{p.Cursor}
-	if len(p.SeriesIDs) > 0 {
-		q += ` AND v.series_id IN (` + sqlIntPlaceholders(len(p.SeriesIDs)) + `)`
-		for _, id := range p.SeriesIDs {
-			args = append(args, id)
+		args := []any{p.Cursor}
+		if len(p.SeriesIDs) > 0 {
+			q += ` AND v.series_id IN (` + sqlIntPlaceholders(len(p.SeriesIDs)) + `)`
+			for _, id := range p.SeriesIDs {
+				args = append(args, id)
+			}
 		}
-	}
-	if len(p.VideoIDs) > 0 {
-		q += ` AND v.id IN (` + sqlIntPlaceholders(len(p.VideoIDs)) + `)`
-		for _, id := range p.VideoIDs {
-			args = append(args, id)
+		if len(p.VideoIDs) > 0 {
+			q += ` AND v.id IN (` + sqlIntPlaceholders(len(p.VideoIDs)) + `)`
+			for _, id := range p.VideoIDs {
+				args = append(args, id)
+			}
 		}
-	}
-	q += ` ORDER BY v.id ASC`
+		q += ` ORDER BY v.id ASC LIMIT ?`
+		args = append(args, batchSize)
 
-	rows, qerr := s.DB.SQL.Query(q, args...)
-	if qerr != nil {
-		return res, qerr
-	}
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			_ = rows.Close()
+		rows, qerr := s.DB.SQL.Query(q, args...)
+		if qerr != nil {
+			return res, qerr
+		}
+		var ids []int64
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return res, err
+			}
+			ids = append(ids, id)
+		}
+		_ = rows.Close()
+		if err := rows.Err(); err != nil {
 			return res, err
 		}
-		ids = append(ids, id)
-	}
-	_ = rows.Close()
-	if err := rows.Err(); err != nil {
-		return res, err
-	}
-
-	total := len(ids)
-	for i, id := range ids {
-		select {
-		case <-ctx.Done():
-			_ = persist()
-			return res, ctx.Err()
-		default:
-		}
-		p.Cursor = id
-		_ = persist()
-		if progress != nil && total > 0 {
-			pct := float64(i) / float64(total)
-			progress(fmt.Sprintf("Integrity check %d/%d…", i+1, total), &pct)
+		if len(ids) == 0 {
+			break
 		}
 
-		busy, berr := s.videoBusyForRename(id, task.ID)
-		if berr != nil {
-			res.Failed++
-			_ = persist()
-			continue
-		}
-		if busy {
-			res.Skipped++
-			res.SkippedBusy++
-			res.SkippedBusyIDs = appendCappedID(res.SkippedBusyIDs, id)
-			_ = persist()
-			continue
-		}
-
-		profileOn, perr := s.seriesProfileVerifyMedia(id)
-		if perr != nil {
-			res.Failed++
-			_ = persist()
-			continue
-		}
-		if !profileOn {
-			res.Skipped++
-			res.SkippedProfileOff++
-			res.SkippedProfileIDs = appendCappedID(res.SkippedProfileIDs, id)
-			_ = persist()
-			continue
-		}
-
-		path, ok, herr := s.HasVideoFile(id)
-		if herr != nil {
-			res.Failed++
-			_ = persist()
-			continue
-		}
-		if !ok || path == "" {
-			res.Skipped++
-			res.SkippedNoMedia++
-			res.SkippedNoMediaIDs = appendCappedID(res.SkippedNoMediaIDs, id)
-			_ = persist()
-			continue
-		}
-
-		perProgress := func(msg string, pct *float64) {
-			if progress == nil {
-				return
-			}
-			base := 0.0
-			if total > 0 {
-				base = float64(i) / float64(total)
-			}
-			span := 1.0 / float64(total+1)
-			if pct != nil {
-				f := base + *pct*span
-				progress(msg, &f)
-			} else {
-				progress(msg, &base)
-			}
-		}
-		report, verr := s.RunIntegrityCheckVideo(ctx, id, perProgress, IntegrityCheckOpts{
-			TaskID: task.ID,
-		})
-		if verr != nil {
-			if ctx.Err() != nil {
+		for i, id := range ids {
+			select {
+			case <-ctx.Done():
 				_ = persist()
 				return res, ctx.Err()
+			default:
 			}
-			res.Failed++
-			bumpCheckAgg(res.Checks, report)
-			_ = s.MarkVerifyFailed(id, task.ID, "Integrity check failed", report)
-			if onFail != nil {
-				seriesTitle := ""
-				videoTitle := ""
-				if v, gerr := s.GetVideo(id); gerr == nil && v != nil {
-					videoTitle = v.Title
-					if ser, serr := s.GetSeries(v.SeriesID, false); serr == nil && ser != nil {
-						seriesTitle = ser.Title
+			p.Cursor = id
+			processed++
+			dirty := false
+			if progress != nil {
+				// Indeterminate across batches: show count processed so far.
+				pct := float64(processed%1000) / 1000.0
+				progress(fmt.Sprintf("Integrity check %d…", processed), &pct)
+			}
+
+			busy, berr := s.videoBusyForRename(id, task.ID)
+			if berr != nil {
+				res.Failed++
+				dirty = true
+			} else if busy {
+				res.Skipped++
+				res.SkippedBusy++
+				res.SkippedBusyIDs = appendCappedID(res.SkippedBusyIDs, id)
+				dirty = true
+			} else {
+				profileOn, perr := s.seriesProfileVerifyMedia(id)
+				if perr != nil {
+					res.Failed++
+					dirty = true
+				} else if !profileOn {
+					res.Skipped++
+					res.SkippedProfileOff++
+					res.SkippedProfileIDs = appendCappedID(res.SkippedProfileIDs, id)
+					dirty = true
+				} else {
+					path, ok, herr := s.HasVideoFile(id)
+					if herr != nil {
+						res.Failed++
+						dirty = true
+					} else if !ok || path == "" {
+						res.Skipped++
+						res.SkippedNoMedia++
+						res.SkippedNoMediaIDs = appendCappedID(res.SkippedNoMediaIDs, id)
+						dirty = true
+					} else {
+						perProgress := func(msg string, pct *float64) {
+							if progress == nil {
+								return
+							}
+							base := float64(i) / float64(len(ids)+1)
+							span := 1.0 / float64(len(ids)+1)
+							if pct != nil {
+								f := base + *pct*span
+								progress(msg, &f)
+							} else {
+								progress(msg, &base)
+							}
+						}
+						report, verr := s.RunIntegrityCheckVideo(ctx, id, perProgress, IntegrityCheckOpts{
+							TaskID: task.ID,
+						})
+						if verr != nil {
+							if ctx.Err() != nil {
+								_ = persist()
+								return res, ctx.Err()
+							}
+							res.Failed++
+							bumpCheckAgg(res.Checks, report)
+							_ = s.MarkVerifyFailed(id, task.ID, "Integrity check failed", report)
+							if onFail != nil {
+								seriesTitle := ""
+								videoTitle := ""
+								if v, gerr := s.GetVideo(id); gerr == nil && v != nil {
+									videoTitle = v.Title
+									if ser, serr := s.GetSeries(v.SeriesID, false); serr == nil && ser != nil {
+										seriesTitle = ser.Title
+									}
+								}
+								onFail(VerifyAllMediaFail{
+									VideoID: id, SeriesTitle: seriesTitle, VideoTitle: videoTitle, Detail: verr.Error(),
+								})
+							}
+							dirty = true
+						} else if merr := s.MarkVerified(id, task.ID, report); merr != nil {
+							res.Failed++
+							dirty = true
+						} else {
+							bumpCheckAgg(res.Checks, report)
+							if report != nil && report.Outcome == IntegrityOutcomePartial {
+								res.Partial++
+							} else {
+								res.IntegrityChecked++
+							}
+							dirty = true
+						}
 					}
 				}
-				onFail(VerifyAllMediaFail{
-					VideoID: id, SeriesTitle: seriesTitle, VideoTitle: videoTitle, Detail: verr.Error(),
-				})
 			}
-			_ = persist()
-			continue
+			if dirty && (processed%persistEvery == 0 || i == len(ids)-1) {
+				_ = persist()
+			}
 		}
-		if merr := s.MarkVerified(id, task.ID, report); merr != nil {
-			res.Failed++
-			_ = persist()
-			continue
+		if len(ids) < batchSize {
+			break
 		}
-		bumpCheckAgg(res.Checks, report)
-		if report != nil && report.Outcome == IntegrityOutcomePartial {
-			res.Partial++
-		} else {
-			res.IntegrityChecked++
-		}
-		_ = persist()
 	}
+	_ = persist()
 	res.FinalizeOutcome()
 	return res, nil
 }
 
 // VerifyAllMediaMessage formats the finish message for an integrity check batch.
 func VerifyAllMediaMessage(checked, partial, skipped, failed int) string {
-	return fmt.Sprintf("Integrity checked %d, partial %d, skipped %d, failed %d", checked, partial, skipped, failed)
+	return integrity.VerifyAllMediaMessage(checked, partial, skipped, failed)
 }

@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   message TEXT,
   detail TEXT,
   commands TEXT NOT NULL DEFAULT '[]',
+  logs TEXT NOT NULL DEFAULT '[]',
   progress REAL,
   domain TEXT NOT NULL DEFAULT 'unknown',
   priority INTEGER NOT NULL DEFAULT 0,

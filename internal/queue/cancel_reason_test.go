@@ -71,4 +71,7 @@ func TestKindResumableOnShutdown(t *testing.T) {
 			t.Fatalf("unexpected kind %s", kind)
 		}
 	}
+	if queue.KindResumableOnShutdown(queue.KindProbeSourceTitle) {
+		t.Fatal("probe_source_title should not be resumable")
+	}
 }

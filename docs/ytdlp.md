@@ -13,7 +13,7 @@ Creatorr invokes **yt-dlp in-process** (`internal/ytdlp`). There is no external 
 | `/yt-dlp-plugins` (container) or `var/yt-dlp-plugins` (local) | Operator plugin mounts; always passed as `--plugin-dirs` (subdirs with a `yt_dlp_plugins` package are included). |
 | `/usr/local/share/yt-dlp-plugins/bgutil` (container) or `var/yt-dlp-plugins/bgutil` (local after `make pot-plugin`) | Baked / seeded **PO Token provider plugin** (GPL-3.0; separate package). Creatorr passes the **parent** (`…/yt-dlp-plugins`) as `--plugin-dirs` so yt-dlp discovers the `bgutil` package. Survives mounting over `/yt-dlp-plugins`. |
 
-Boot runs `PrepareManagedBin`: when the managed file is missing or fails `--version`, Creatorr copies the image bootstrap (or, local dev only, GitHub-downloads once when no bootstrap exists). Startup **exits** if yt-dlp cannot be established at the managed path.
+Boot runs `PrepareManagedBin`: when the managed file is missing or fails `--version`, Creatorr copies the image bootstrap (or, local dev only, GitHub-downloads once when no bootstrap exists). Startup **exits** if yt-dlp cannot be established at the managed path. The probed `--version` string is stored in Settings `ytdlp_installed_version` for Connect (no yt-dlp from HTTP).
 
 ### Automatic updates
 
@@ -25,7 +25,7 @@ Failed updates leave the prior binary intact and do **not** soft-pause domain la
 
 Image rebuild refreshes the bootstrap baseline; a running instance updates via `ytdlp_update`, not rebuild.
 
-Image also ships **ffmpeg** (remux) and **Deno** (yt-dlp EJS challenge solver).
+Image also ships **ffmpeg** (remux) and **[Deno](https://github.com/yt-dlp/yt-dlp#strongly-recommended)** (JS runtime for yt-dlp’s [EJS](https://github.com/yt-dlp/yt-dlp/wiki/EJS) n/sig challenge solver). The official managed `yt-dlp_linux` binary **bundles** the [`yt-dlp-ejs`](https://github.com/yt-dlp/ejs) scripts (listed on Connect → plugins as source `bundled`, Notes link Deno). A custom binary that omits EJS would need `--remote-components ejs:npm` (Deno) or an explicit EJS package.
 
 ## FlareSolverr
 
@@ -47,10 +47,11 @@ Compose service **`creatorr-po-token`** (`brainicism/bgutil-ytdlp-pot-provider:*
 
 | Piece | Detail |
 | --- | --- |
-| Env | `CREATORR_POT_PROVIDER_URL` (default in Compose: `http://creatorr-po-token:4416`). Empty → Settings **PO token fetch** disabled; yt-dlp gets `youtube:fetch_pot=never`. |
-| Settings | `pot_fetch`: `auto` (default) / `always` / `never` → `youtube:fetch_pot=…` when URL is set. |
+| Env | `CREATORR_POT_PROVIDER_URL` (default in Compose: `http://creatorr-po-token:4416`). Empty → Settings **fetch_pot** disabled; yt-dlp gets `youtube:fetch_pot=never`. |
+| Settings | `pot_fetch` on Connect → plugins: `auto` (default) / `always` / `never` → `youtube:fetch_pot=…` when URL is set. |
+| Player client | Settings `youtube_player_client` (Connect → yt-dlp; default empty) → `youtube:player_client=…` only when set. Empty omits the arg (yt-dlp client order). Operator-editable comma list (`tv`, `default`/`web`, `mweb`, `android`, `ios`, …). |
 | Trace | When URL is set and fetch is not `never`, Creatorr also passes `youtube:pot_trace=true` so mint/provider lines appear in task logs. |
-| Detect | yt-dlp output is scanned for provider failures (`Providers: none`, HTTP ping/mint errors) and successful mints (`Retrieved a … PO Token`). The task still succeeds on provider problems; Creatorr emits warning notification `pot_provider` (unread like alerts). Outcome is stored on the task as detail JSON `po-token` (`issued` / `failed` / `skipped` / `off`) and shown on the task Details row **PO token**. |
+| Detect | yt-dlp output is scanned for provider failures (`Providers: none`, HTTP ping/mint errors), mint start (`Generating a … PO Token` → `generating`), and successful mints (`Retrieved a … PO Token` → `issued`). The task still succeeds on provider problems; Creatorr emits warning notification `pot_provider` (unread like alerts). Outcome is stored on the task as detail JSON `po-token` (`issued` / `generating` / `failed` / `skipped` / `off`) and shown on the task Details row **PO token**. Live task detail refreshes that row via HTMX while the task runs. |
 | Health | `/api/health` check `pot_provider` probes `GET {URL}/ping` (skipped if URL unset). Settings → Connect loads the same probe asynchronously after the page shell (Healthy join). |
 | Local Go | `make pot-plugin` installs the zip under `var/yt-dlp-plugins/bgutil`; run a provider yourself and set `CREATORR_POT_PROVIDER_URL`. |
 
@@ -59,7 +60,8 @@ Creatorr passes `--extractor-args youtubepot-bgutilhttp:base_url=…` when the e
 ## What Creatorr owns
 
 - FlareSolverr pre-solve when the host override sets **Use FlareSolverr** On and `CREATORR_FLARESOLVERR_URL` is set (see **FlareSolverr** above).
-- PO Token provider URL (env) + Settings **PO token fetch** mode (see above).
+- PO Token provider URL (env) + Settings **fetch_pot** mode (see above).
+- YouTube `player_client` from Settings **player_client** (`youtube_player_client`; empty = yt-dlp defaults).
 - Netscape cookie jars on host Domain overrides only (`domains.cookies`; Settings → Queue / Domains) for Cloudflare clearance and similar. No default-jar fallback.
 - Membership credentials on host `domains` override rows only (`username` / `password`): passed as yt-dlp `--username` / `--password` when non-empty. Site plugins may cache access tokens in yt-dlp's default cache (`~/.cache/yt-dlp` under process `HOME`; Creatorr does not pass `--cache-dir`). Do not export member session cookies into the jar when a plugin supports login.
 - **Delivery mode format selector:** series `delivery_mode` picks the format string. **Video** (default) passes the series' quality profile `format_selector` as `--format`. **Audio** ignores the profile selector and always passes `ba/bestaudio/b` (best available audio); the quality profile is still attached to the series (maturity delays, SponsorBlock) but its format ladder does not apply.

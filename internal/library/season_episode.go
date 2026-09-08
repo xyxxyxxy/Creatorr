@@ -2,8 +2,9 @@ package library
 
 import (
 	"database/sql"
-	"strings"
 	"sync"
+
+	epyear "github.com/xyxxyxxy/Creatorr/internal/library/episode"
 )
 
 // seriesRenameMu serializes two-phase peer renames per series (single-process).
@@ -17,26 +18,13 @@ func lockSeriesRename(seriesID int64) func() {
 }
 
 // SeasonYearFromUpload returns the UTC calendar year used as {year} (year-season, e.g. 2026).
-// Undated upload returns 0.
 func SeasonYearFromUpload(upload string) int {
-	t, ok := ParseUploadTime(upload)
-	if !ok {
-		return 0
-	}
-	return t.UTC().Year()
+	return epyear.YearFromUpload(upload)
 }
 
-// SeasonYearFromCalendarDay parses YYYY-MM-DD as UTC and returns the year, or 0.
+// SeasonYearFromCalendarDay returns UTC year for YYYYMMDD (empty/invalid -> 0).
 func SeasonYearFromCalendarDay(dayYYYYMMDD string) int {
-	dayYYYYMMDD = strings.TrimSpace(dayYYYYMMDD)
-	if dayYYYYMMDD == "" {
-		return 0
-	}
-	t, ok := ParseUploadTime(dayYYYYMMDD + "T00:00:00Z")
-	if !ok {
-		return 0
-	}
-	return t.UTC().Year()
+	return epyear.YearFromCalendarDay(dayYYYYMMDD)
 }
 
 // AssignSeasonEpisode assigns season/episode for a dated video after ensuring it is in the DB

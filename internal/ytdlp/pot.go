@@ -8,15 +8,16 @@ import (
 
 // PO token outcome for task detail / UI.
 const (
-	POTOff     = "off"     // provider URL unset
-	POTSkipped = "skipped" // never, or auto/always with no mint attempt
-	POTIssued  = "issued"  // Retrieved a PO Token
-	POTFailed  = "failed"  // provider/plugin error
+	POTOff        = "off"        // provider URL unset
+	POTSkipped    = "skipped"    // never, or auto/always with no mint attempt
+	POTGenerating = "generating" // mint started (Generating a … PO Token); not yet Retrieved
+	POTIssued     = "issued"     // Retrieved a PO Token
+	POTFailed     = "failed"     // provider/plugin error
 )
 
 // POTStatus is stored under task detail JSON key "po-token".
 type POTStatus struct {
-	State  string `json:"state"`            // off|skipped|issued|failed
+	State  string `json:"state"`            // off|skipped|generating|issued|failed
 	Detail string `json:"detail,omitempty"` // short operator note
 	Fetch  string `json:"fetch,omitempty"`  // auto|always|never
 }
@@ -106,10 +107,12 @@ func potRank(state string) int {
 		return 4
 	case POTIssued:
 		return 3
-	case POTSkipped:
+	case POTGenerating:
 		return 2
-	case POTOff:
+	case POTSkipped:
 		return 1
+	case POTOff:
+		return 0
 	default:
 		return 0
 	}
@@ -144,6 +147,9 @@ func ClassifyPOT(output, fetch, providerURL string) POTStatus {
 	if issued, detail := detectPOTIssued(output); issued {
 		return POTStatus{State: POTIssued, Fetch: fetch, Detail: detail}
 	}
+	if generating, detail := detectPOTGenerating(output); generating {
+		return POTStatus{State: POTGenerating, Fetch: fetch, Detail: detail}
+	}
 	// auto/always with no mint attempt: extractor skipped attestation.
 	detail := "No PO token requested for this extract"
 	if fetch == "always" {
@@ -171,6 +177,15 @@ func detectPOTIssued(output string) (bool, string) {
 	return false, ""
 }
 
+func detectPOTGenerating(output string) (bool, string) {
+	for _, line := range strings.Split(output, "\n") {
+		if d := potGeneratingFromLine(line); d != "" {
+			return true, d
+		}
+	}
+	return false, ""
+}
+
 func potIssuedFromLine(line string) string {
 	line = strings.TrimSpace(line)
 	if line == "" {
@@ -178,6 +193,19 @@ func potIssuedFromLine(line string) string {
 	}
 	low := strings.ToLower(line)
 	if strings.Contains(low, "retrieved a") && strings.Contains(low, "po token") {
+		return trimPOTLine(line)
+	}
+	return ""
+}
+
+// potGeneratingFromLine matches bgutil/yt-dlp mint-start lines (not yet Retrieved).
+func potGeneratingFromLine(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ""
+	}
+	low := strings.ToLower(line)
+	if strings.Contains(low, "generating a") && strings.Contains(low, "po token") {
 		return trimPOTLine(line)
 	}
 	return ""
@@ -240,5 +268,9 @@ func observePOTLine(ctx context.Context, o options, line string) {
 	}
 	if d := potIssuedFromLine(line); d != "" {
 		ObservePOT(ctx, POTStatus{State: POTIssued, Fetch: o.potFetch, Detail: d})
+		return
+	}
+	if d := potGeneratingFromLine(line); d != "" {
+		ObservePOT(ctx, POTStatus{State: POTGenerating, Fetch: o.potFetch, Detail: d})
 	}
 }

@@ -125,7 +125,7 @@ func isHistoryStatus(status string) bool {
 // (video download holds, source scan failures). Cancelled tasks are neutral, not errors.
 func historyEventError(event string) bool {
 	switch event {
-	case "download_failed", "integrity_check_failed", "verify_failed",
+	case "download_failed", "integrity_check_failed",
 		"file_externally_changed", "sidecar_externally_changed",
 		library.SourceHistScanError:
 		return true
@@ -160,6 +160,7 @@ func historyEventLabel(event, detail string) string {
 
 // historyEventDisplay normalizes legacy event ids; does not invent prose labels
 // (result text stays in Message).
+// historyEventDisplay normalizes leftover legacy event ids for display only.
 func historyEventDisplay(event string) string {
 	switch event {
 	case library.VideoHistVerified:
@@ -171,12 +172,12 @@ func historyEventDisplay(event string) string {
 	}
 }
 
-// historyKindDisplay maps task kinds (including legacy) for cancelled history rows.
+// historyKindDisplay maps task kinds (including leftover legacy ids) for cancelled history rows.
 func historyKindDisplay(kind string) string {
 	switch kind {
-	case queue.KindIntegrityCheckInitial, "media_verify":
+	case "media_verify":
 		return queue.KindIntegrityCheckInitial
-	case queue.KindIntegrityCheck, "verify_all_media":
+	case "verify_all_media":
 		return queue.KindIntegrityCheck
 	default:
 		return kind
