@@ -892,10 +892,6 @@
     if (!id) return false;
     const row = document.getElementById("task-row-" + id);
     if (!row) return false;
-    // Drop leftover To top if row already left pending (in-place SSE never re-rendered actions).
-    if (row.getAttribute("data-task-row-status") !== "pending") {
-      row.querySelector("[data-task-to-front]")?.remove();
-    }
     const prevStatus = row.getAttribute("data-task-row-status") || "";
     const nextStatus = typeof data.status === "string" && data.status ? data.status : "";
     // Progress ticks always include status=running; only act when it actually changes.
@@ -905,12 +901,11 @@
       const panel = lanePanelFor(row);
       const wrap = panel && panel.querySelector("[data-domain-cooldown]");
       if (wrap) applyInferredLaneStatus(wrap);
-      if (nextStatus !== "pending") {
-        row.querySelector("[data-task-to-front]")?.remove();
+      if (nextStatus === "running") {
         const pos = row.querySelector("[data-task-pos]");
-        if (nextStatus === "running" && pos) setTaskPosRunning(pos);
+        if (pos) setTaskPosRunning(pos);
       }
-      // Queue #N is server-side (pending-only). Client renumber drifted after pause/HTMX.
+      // Queue #N + To top enabled/disabled come from server (pending-only position).
       refreshTasksPanel(true);
     }
     const msgEl = row.querySelector("[data-task-message]");
