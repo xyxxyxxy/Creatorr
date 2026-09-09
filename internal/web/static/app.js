@@ -817,6 +817,21 @@
     createLucideIcons(cell);
   }
 
+  function setTaskPosRunning(posEl) {
+    if (!posEl) return;
+    posEl.replaceChildren();
+    const tip = document.createElement("span");
+    tip.className = "tooltip tooltip-top inline-flex";
+    tip.setAttribute("data-tip", "Running");
+    tip.setAttribute("aria-label", "Running");
+    const i = document.createElement("i");
+    i.setAttribute("data-lucide", "activity");
+    i.className = "size-5";
+    tip.appendChild(i);
+    posEl.appendChild(tip);
+    createLucideIcons(posEl);
+  }
+
   /** Sync Tasks list progress bar in place. Skip no-op writes so daisyUI
    * indeterminate CSS animation is not restarted every SSE tick. */
   function syncTaskRowProgress(row, status, progress) {
@@ -877,17 +892,26 @@
     if (!id) return false;
     const row = document.getElementById("task-row-" + id);
     if (!row) return false;
-    const statusChanged = typeof data.status === "string" && data.status;
+    const prevStatus = row.getAttribute("data-task-row-status") || "";
+    const nextStatus = typeof data.status === "string" && data.status ? data.status : "";
+    // Progress ticks always include status=running; only act when it actually changes.
+    const statusChanged = nextStatus !== "" && nextStatus !== prevStatus;
     if (statusChanged) {
-      patchStatusCell(row, data.status);
+      patchStatusCell(row, nextStatus);
       const panel = lanePanelFor(row);
       const wrap = panel && panel.querySelector("[data-domain-cooldown]");
       if (wrap) applyInferredLaneStatus(wrap);
+      if (nextStatus === "running") {
+        const pos = row.querySelector("[data-task-pos]");
+        if (pos) setTaskPosRunning(pos);
+      }
+      // Queue #N + To top enabled/disabled come from server (pending-only position).
+      refreshTasksPanel(true);
     }
     const msgEl = row.querySelector("[data-task-message]");
     if (msgEl) {
       const st = statusChanged
-        ? data.status
+        ? nextStatus
         : row.getAttribute("data-task-row-status") || "";
       if (st === "pending") {
         msgEl.textContent = "Queued";
@@ -898,7 +922,7 @@
     const progressChanged = Object.prototype.hasOwnProperty.call(data, "progress");
     if (statusChanged || progressChanged) {
       const st = statusChanged
-        ? data.status
+        ? nextStatus
         : row.getAttribute("data-task-row-status") || "running";
       let progress = null;
       if (progressChanged) {

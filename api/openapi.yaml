@@ -1543,7 +1543,7 @@ components:
         queue_position:
           type: integer
           nullable: true
-          description: 1 = front of domain queue
+          description: Pending only; 1 = next to claim in the domain queue (omitted when running)
         error_code:
           type: string
         error_message:

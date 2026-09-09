@@ -166,7 +166,7 @@ type Task struct {
 	CreatedAt    string
 	StartedAt    sql.NullString
 	FinishedAt   sql.NullString
-	QueuePos     int // 1 = front among pending+running in domain; set by ListActive
+	QueuePos     int // pending only: 1 = next to claim in domain; 0 when running
 }
 
 // EnqueueParams creates a pending task.
@@ -1454,8 +1454,10 @@ func (s *Store) ListActive() ([]Task, error) {
 		if err != nil {
 			return nil, err
 		}
-		pos[t.Domain]++
-		t.QueuePos = pos[t.Domain]
+		if t.Status == StatusPending {
+			pos[t.Domain]++
+			t.QueuePos = pos[t.Domain]
+		}
 		out = append(out, *t)
 	}
 	return out, rows.Err()

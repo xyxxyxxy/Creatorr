@@ -56,19 +56,22 @@
               {{end}}
             </span>
             <span class="join shrink-0" data-lane-stable-actions="{{.Domain}}:queue">
-            {{if .ShowCooldown}}
+            {{$skipOff := or .Paused (not .ShowCooldown)}}
+            {{$skipTip := "Skip cooldown"}}
+            {{if .Paused}}{{$skipTip = "Domain paused"}}
+            {{else if not .ShowCooldown}}{{$skipTip = "No active cooldown"}}
+            {{end}}
+            {{if not $skipOff}}
             <form method="post" action="/actions/skip-domain-cooldown" class="contents">
               <input type="hidden" name="domain" value="{{.Domain}}" />
               <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
-              <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Skip cooldown" aria-label="Skip cooldown">
+              <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="{{$skipTip}}" aria-label="Skip cooldown">
                 <i data-lucide="fast-forward" class="size-3.5"></i>
               </button>
             </form>
             {{else}}
-            <span class="tooltip tooltip-top inline-flex" data-tip="No active cooldown">
-              <button type="button" class="btn btn-soft btn-primary btn-xs btn-square join-item pointer-events-none" disabled aria-label="Skip cooldown">
-                <i data-lucide="fast-forward" class="size-3.5"></i>
-              </button>
+            <span class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="{{$skipTip}}" aria-label="Skip cooldown" aria-disabled="true" role="button" tabindex="-1">
+              <i data-lucide="fast-forward" class="size-3.5 opacity-50" aria-hidden="true"></i>
             </span>
             {{end}}
             {{if .ShowCancelPending}}
@@ -76,10 +79,8 @@
               <i data-lucide="list-x" class="size-3.5"></i>
             </label>
             {{else}}
-            <span class="tooltip tooltip-top inline-flex" data-tip="No pending tasks">
-              <button type="button" class="btn btn-soft btn-error btn-xs btn-square join-item pointer-events-none" disabled aria-label="Cancel all pending">
-                <i data-lucide="list-x" class="size-3.5"></i>
-              </button>
+            <span class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="No pending tasks" aria-label="Cancel all pending" aria-disabled="true" role="button" tabindex="-1">
+              <i data-lucide="list-x" class="size-3.5 opacity-50" aria-hidden="true"></i>
             </span>
             {{end}}
             </span>

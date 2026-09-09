@@ -46,9 +46,15 @@ func (h *Handler) actionCancelDomainTasks(w http.ResponseWriter, r *http.Request
 func (h *Handler) actionSkipDomainCooldown(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	domain := settings.NormalizeDomain(r.FormValue("domain"))
-	if domain != "" && domain != queue.SystemDomain {
-		_ = h.Queue.ClearCooldown(domain)
+	if domain == "" || domain == queue.SystemDomain {
+		http.Redirect(w, r, safeTasksRedirect(r, ""), http.StatusSeeOther)
+		return
 	}
+	if paused, err := domains.IsPaused(h.Queue.DB, domain); err == nil && paused {
+		http.Redirect(w, r, safeTasksRedirect(r, ""), http.StatusSeeOther)
+		return
+	}
+	_ = h.Queue.ClearCooldown(domain)
 	http.Redirect(w, r, safeTasksRedirect(r, "ok=cooldown-skipped"), http.StatusSeeOther)
 }
 
