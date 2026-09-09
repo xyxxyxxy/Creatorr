@@ -3,7 +3,7 @@
   <span class="shrink-0 self-center inline-flex items-center justify-center min-w-[1.75rem] opacity-60" data-task-pos>
     {{if eq .Status "running"}}
     <span class="tooltip tooltip-top inline-flex" data-tip="Running" aria-label="Running">
-      <i data-lucide="loader-circle" class="size-5 animate-spin"></i>
+      <i data-lucide="play" class="size-5"></i>
     </span>
     {{else}}
     <span class="font-mono text-lg tabular-nums" aria-label="Queue position {{.Position}}">#{{.Position}}</span>

@@ -825,8 +825,8 @@
     tip.setAttribute("data-tip", "Running");
     tip.setAttribute("aria-label", "Running");
     const i = document.createElement("i");
-    i.setAttribute("data-lucide", "loader-circle");
-    i.className = "size-5 animate-spin";
+    i.setAttribute("data-lucide", "play");
+    i.className = "size-5";
     tip.appendChild(i);
     posEl.appendChild(tip);
     createLucideIcons(posEl);
