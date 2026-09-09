@@ -1,6 +1,14 @@
 {{define "task_row"}}
 <li id="task-row-{{.ID}}" class="list-row" data-task-row-status="{{.Status}}"{{if .LanePaused}} data-lane-paused{{end}}>
-  <span class="shrink-0 self-center font-mono text-lg tabular-nums opacity-60" data-task-pos>#{{.Position}}</span>
+  <span class="shrink-0 self-center inline-flex items-center justify-center min-w-[1.75rem] opacity-60" data-task-pos>
+    {{if eq .Status "running"}}
+    <span class="tooltip tooltip-top inline-flex" data-tip="Running" aria-label="Running">
+      <i data-lucide="loader-circle" class="size-5 animate-spin"></i>
+    </span>
+    {{else}}
+    <span class="font-mono text-lg tabular-nums" aria-label="Queue position {{.Position}}">#{{.Position}}</span>
+    {{end}}
+  </span>
   <div class="list-col-grow min-w-0">
     <div class="flex items-center gap-2 min-w-0">
       <a class="link link-hover font-medium truncate" href="/task/{{.ID}}">{{.Kind}}</a>
@@ -32,7 +40,7 @@
     </div>
     <span class="join shrink-0">
       {{if eq .Status "pending"}}
-      <form method="post" action="/actions/task-to-front" class="contents">
+      <form method="post" action="/actions/task-to-front" class="contents" data-task-to-front>
         <input type="hidden" name="id" value="{{.ID}}" />
         <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
         <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="To top of queue" aria-label="To top of queue">
