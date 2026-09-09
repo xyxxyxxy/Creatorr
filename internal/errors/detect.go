@@ -16,16 +16,23 @@ var ageRestrictRe = regexp.MustCompile(`(?i)(` +
 
 // Pause-worthy external-service failures (domain queue should stop).
 var (
-	cookieAuthRe = regexp.MustCompile(`(?i)(` +
+	// Strong cookie/session failure: wins over age-gate wording in the same stderr
+	// (yt-dlp often prints both when a stale jar is used on an age-gated video).
+	cookieStrongRe = regexp.MustCompile(`(?i)(` +
 		`cookies?\s+are\s+no\s+longer\s+valid|` +
 		`cookie.*expired|expired.*cookie|` +
-		`sign\s+in\s+to\s+confirm|` +
-		`login\s+required|` +
-		`please\s+sign\s+in|` +
 		`re-?export\s+cookies|` +
 		`token\s+refresh\s+failed|` +
 		`missing\s+.*token|` +
 		`missing\s+cookies` +
+		`)`)
+
+	// Weaker auth prompts. "Sign in to confirm your age" is age-only (see DetectPauseCode).
+	cookieAuthRe = regexp.MustCompile(`(?i)(` +
+		`sign\s+in\s+to\s+confirm|` +
+		`login\s+required|` +
+		`please\s+sign\s+in|` +
+		`private\s+video` +
 		`)`)
 
 	// Tier paywalls ("outside your membership tier") must not match: those are
@@ -88,14 +95,18 @@ func DetectVideoUnavailable(message string) bool {
 
 // DetectPauseCode inspects external-tool stderr / error text.
 // Returns CookieInvalid, RateLimited, or "" if not a pause trigger.
+// Strong cookie/session lines beat age-gate text in the same blob.
 func DetectPauseCode(message string) string {
 	if strings.TrimSpace(message) == "" {
 		return ""
 	}
+	if cookieStrongRe.MatchString(message) || cookieHTTPRe.MatchString(message) {
+		return CodeCookieInvalid
+	}
 	if DetectAgeRestricted(message) {
 		return ""
 	}
-	if cookieAuthRe.MatchString(message) || cookieHTTPRe.MatchString(message) {
+	if cookieAuthRe.MatchString(message) {
 		return CodeCookieInvalid
 	}
 	if rateLimitRe.MatchString(message) {
@@ -104,19 +115,26 @@ func DetectPauseCode(message string) string {
 	return ""
 }
 
-// UpgradeCode replaces a generic failure code when message indicates pause.
-// Keeps CookieInvalid / RateLimited / CookieMissing unchanged.
+// UpgradeCode replaces a generic failure code when message indicates pause or age gate.
+// CookieInvalid / RateLimited win over AgeRestricted when both appear in the message.
+// Keeps CookieInvalid / RateLimited / CookieMissing / remux/pack/verify / live-skip / archive unchanged.
 func UpgradeCode(code, message string) string {
 	switch code {
 	case CodeCookieInvalid, CodeRateLimited, CodeCookieMissing, CodeRemuxFailed, CodePackFailed, CodeIntegrityCheckFailed,
-		CodeLiveBroadcastSkipped, CodeAgeRestricted, CodeArchiveFallbackQueued:
+		CodeLiveBroadcastSkipped, CodeArchiveFallbackQueued:
 		return code
-	}
-	if DetectAgeRestricted(message) {
-		return CodeAgeRestricted
+	case CodeAgeRestricted:
+		// Prior age label may have been set before cookie lines were considered.
+		if d := DetectPauseCode(message); d != "" {
+			return d
+		}
+		return code
 	}
 	if d := DetectPauseCode(message); d != "" {
 		return d
+	}
+	if DetectAgeRestricted(message) {
+		return CodeAgeRestricted
 	}
 	return code
 }

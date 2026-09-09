@@ -107,6 +107,8 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	view.ParentTaskID = parentTaskID
 	view.ParentKind = parentKind
+	cookieAttach := parseCookieAttachDetail(t.Detail)
+	potStatus := settlePOTForDisplay(parsePOTStatus(t.Detail), t.Status)
 	stages := taskStages(taskStagesInput{
 		Events:       events,
 		Now:          now,
@@ -118,6 +120,8 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		ParentTaskID: parentTaskID,
 		ParentKind:   parentKind,
 		Children:     children,
+		CookieAttach: cookieAttach,
+		POT:          potStatus,
 	})
 	failError := taskFailErrorText(t.ErrorMessage, t.Detail)
 	detailFields := h.taskDetailFieldsOpts(t.Detail, failError != "")
@@ -145,7 +149,6 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 
 	payload := t.Payload
 	payloadMuted := isEmptyJSONPayload(payload)
-	pot := parsePOTDetail(t.Detail)
 	domainAccess := parseDomainAccessDetail(t.Detail)
 
 	var progress *float64
@@ -175,7 +178,6 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		PayloadMuted    bool
 		DetailFields    []detailField
 		Stages          []taskStageView
-		POT             *potDetailView
 		DomainAccess    *domains.DomainAccessSnapshot
 		Commands        []string
 		RenameList      *taskRenameListView
@@ -197,7 +199,6 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 		PayloadMuted:    payloadMuted,
 		DetailFields:    detailFields,
 		Stages:          stages,
-		POT:             pot,
 		DomainAccess:    domainAccess,
 		Commands:        commands,
 		RenameList:      renameList,

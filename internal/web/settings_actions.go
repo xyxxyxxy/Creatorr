@@ -319,6 +319,10 @@ func (h *Handler) actionUpsertDomainOverride(w http.ResponseWriter, r *http.Requ
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
+	if err := domains.SetCookiesAfterFail(h.Queue.DB, domain, domains.ValidateCookiesAfterFailForm(r.FormValue("cookies_after_fail"))); err != nil {
+		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
+		return
+	}
 	inheritCreds := r.FormValue("credentials_inherit") == "1"
 	credUser := strings.TrimSpace(r.FormValue("username"))
 	credPass := r.FormValue("password")

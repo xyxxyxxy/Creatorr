@@ -40,9 +40,14 @@
 /*
   Notifications + flash toasts above .modal (z-index 1200) so the Select series/video
   library picker does not trap the bell menu or toasts under the backdrop.
+  daisyUI .toast-top defaults to top:1rem (over sticky navbar bell/user); offset below
+  min-h-14 header + small gap.
 */
 .app-shell > header.navbar {
   z-index: 1100;
+}
+.toast.toast-top[data-flash-toast] {
+  top: 4.5rem;
 }
 
 /*

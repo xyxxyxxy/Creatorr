@@ -77,20 +77,31 @@ func DownloadHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
+		cookieURL := dlctx.URL
+		if archiveLane {
+			cookieURL = "https://archive.org/"
+		}
 		var jar string
+		var hadStored bool
+		var afterFail bool
+		persistCookieAttach := func(st domains.CookieAttachStatus) {
+			if d.Library.Queue == nil {
+				return
+			}
+			_ = d.Library.Queue.MergeDetailJSON(t.ID, map[string]any{domains.DetailKeyCookieAttach: st})
+		}
 		if archiveLane {
 			progress("Web Archive download…", nil)
-			// Optional Access cookies only if operator configured archive.org; never use YouTube jar.
-			jar, err = domains.TempJarForURL(d.Library.DB, work, "https://archive.org/")
-			if err != nil {
-				return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
-			}
 		} else {
 			progress("Resolving cookies…", nil)
-			jar, err = domains.TempJarForURL(d.Library.DB, work, dlctx.URL)
-			if err != nil {
-				return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
-			}
+		}
+		afterFail, err = domains.CookiesAfterFailForURL(d.Library.DB, cookieURL)
+		if err != nil {
+			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
+		}
+		jar, hadStored, err = domains.StoredJarForURL(d.Library.DB, work, cookieURL, domains.AllowStoredJar(afterFail, false))
+		if err != nil {
+			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 		}
 
 		audioOnly := dlctx.DeliveryMode == library.DeliveryAudio
@@ -100,26 +111,58 @@ func DownloadHandler(d Deps) TaskHandler {
 			formatSelector = library.AudioFormatSelector
 		}
 
-		if !archiveLane {
-			progress("Downloading…", nil)
-		}
 		lim, _ := settings.LimitsForDomain(d.Library.DB, t.Domain)
 		subOpts, _ := settings.GetSubtitleOpts(d.Library.DB)
 		matchFilter := library.BuildDownloadMatchFilter()
-		media, err := downloadMedia(ctx, d, ytdlp.DownloadOpts{
-			URL:            downloadURL,
-			CookiesPath:    jar,
-			FormatSelector: formatSelector,
-			OutDir:         work,
-			LimitRate:      lim.DownloadRateLimit,
-			SleepRequests:  lim.SleepRequests,
-			MatchFilter:    matchFilter,
-			SubLangs:       subOpts.Langs,
-			SubAuto:        subOpts.Auto,
-			// StepProgress (in ytdlp) labels video/audio (1/2) and resets the bar
-			// 0→100% per format on purpose.
-			OnProgress: progress,
-		})
+		dlOpts := func(cookiesPath string) ytdlp.DownloadOpts {
+			return ytdlp.DownloadOpts{
+				URL:            downloadURL,
+				CookiesPath:    cookiesPath,
+				FormatSelector: formatSelector,
+				OutDir:         work,
+				LimitRate:      lim.DownloadRateLimit,
+				SleepRequests:  lim.SleepRequests,
+				MatchFilter:    matchFilter,
+				SubLangs:       subOpts.Langs,
+				SubAuto:        subOpts.Auto,
+				// StepProgress (in ytdlp) labels video/audio (1/2) and resets the bar
+				// 0→100% per format on purpose.
+				OnProgress: progress,
+			}
+		}
+
+		if !archiveLane {
+			if afterFail && hadStored {
+				progress("Downloading without account cookies…", nil)
+			} else if jar != "" {
+				progress("Downloading with account cookies…", nil)
+			} else {
+				progress("Downloading…", nil)
+			}
+		}
+		media, err := downloadMedia(ctx, d, dlOpts(jar))
+		usedCookies := jar != ""
+		retried := false
+		retryReason := ""
+		_ = ytdlp.TakePOTAttempt(ctx)
+		if err != nil && afterFail && hadStored && !apperrors.CookieRetryWorthless(err) {
+			retryReason = apperrors.ErrorCode(err)
+			if retryReason == "" {
+				retryReason = apperrors.CodeDownloadFailed
+			}
+			progress(fmt.Sprintf("Failure without cookies (%s); retrying with account cookies…", retryReason), nil)
+			jar2, _, jerr := domains.StoredJarForURL(d.Library.DB, work, cookieURL, true)
+			if jerr != nil {
+				return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), jerr.Error())
+			}
+			if !archiveLane {
+				progress("Downloading with account cookies…", nil)
+			}
+			media, err = downloadMedia(ctx, d, dlOpts(jar2))
+			usedCookies = true
+			retried = true
+			_ = ytdlp.TakePOTAttempt(ctx)
+		}
 		if err != nil {
 			if !archiveLane && apperrors.DetectVideoUnavailable(err.Error()) {
 				on, _ := settings.ArchiveFallbackEnabled(d.Library.DB)
@@ -135,8 +178,44 @@ func DownloadHandler(d Deps) TaskHandler {
 					)
 				}
 			}
+			// Persist cookie path even on failure so Stages/Details stay accurate.
+			st := domains.CookieAttachStatus{AfterFail: afterFail}
+			switch {
+			case !hadStored:
+				st.State = domains.CookieAttachOff
+			case retried:
+				st.State = domains.CookieAttachRetried
+				st.RetryReason = retryReason
+				st.Detail = "cookie retry failed"
+			case afterFail:
+				st.State = domains.CookieAttachAnonymous
+				st.Detail = "download failed without account cookies"
+			case usedCookies:
+				st.State = domains.CookieAttachCookies
+			default:
+				st.State = domains.CookieAttachOff
+			}
+			persistCookieAttach(st)
 			return err
 		}
+		st := domains.CookieAttachStatus{AfterFail: afterFail}
+		switch {
+		case !hadStored:
+			st.State = domains.CookieAttachOff
+		case retried:
+			st.State = domains.CookieAttachRetried
+			st.RetryReason = retryReason
+			st.Detail = "succeeded after cookie retry"
+		case afterFail:
+			st.State = domains.CookieAttachAnonymous
+			st.Detail = "succeeded without account cookies"
+		case usedCookies:
+			st.State = domains.CookieAttachCookies
+			st.Detail = "account cookies attached"
+		default:
+			st.State = domains.CookieAttachOff
+		}
+		persistCookieAttach(st)
 
 		if st, _ := d.Library.Queue.TaskStatus(t.ID); st == queue.StatusCancelled {
 			return context.Canceled

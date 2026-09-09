@@ -32,15 +32,7 @@ type detailSkippedTitle struct {
 	Title    string
 }
 
-// potDetailView is PO token state from task detail JSON for the Details table.
-type potDetailView struct {
-	State  string
-	Label  string
-	Detail string
-	Fetch  string
-}
-
-func parsePOTDetail(detail string) *potDetailView {
+func parsePOTStatus(detail string) *ytdlp.POTStatus {
 	detail = strings.TrimSpace(detail)
 	if detail == "" {
 		return nil
@@ -57,28 +49,54 @@ func parsePOTDetail(detail string) *potDetailView {
 	if err != nil {
 		return nil
 	}
-	var pot struct {
-		State  string `json:"state"`
-		Detail string `json:"detail"`
-		Fetch  string `json:"fetch"`
-	}
+	var pot ytdlp.POTStatus
 	if err := json.Unmarshal(b, &pot); err != nil || pot.State == "" {
 		return nil
 	}
-	label := pot.State
-	switch pot.State {
-	case "issued":
-		label = "Issued"
-	case "generating":
-		label = "Generating"
-	case "failed":
-		label = "Failed"
-	case "skipped":
-		label = "Skipped"
-	case "off":
-		label = "Off"
+	return &pot
+}
+
+// settlePOTForDisplay maps mid-flight generating → skipped on finished tasks
+// (older rows may still store generating before FinalizePOT).
+func settlePOTForDisplay(pot *ytdlp.POTStatus, taskStatus string) *ytdlp.POTStatus {
+	if pot == nil || pot.State != ytdlp.POTGenerating {
+		return pot
 	}
-	return &potDetailView{State: pot.State, Label: label, Detail: pot.Detail, Fetch: pot.Fetch}
+	switch taskStatus {
+	case queue.StatusDone, queue.StatusFailed, queue.StatusCancelled:
+		out := *pot
+		out.State = ytdlp.POTSkipped
+		if strings.TrimSpace(out.Detail) == "" {
+			out.Detail = "PO token mint started but not retrieved"
+		}
+		return &out
+	default:
+		return pot
+	}
+}
+
+func parseCookieAttachDetail(detail string) *domains.CookieAttachStatus {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return nil
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(detail), &raw); err != nil {
+		return nil
+	}
+	caRaw, ok := raw[domains.DetailKeyCookieAttach]
+	if !ok || caRaw == nil {
+		return nil
+	}
+	b, err := json.Marshal(caRaw)
+	if err != nil {
+		return nil
+	}
+	var st domains.CookieAttachStatus
+	if err := json.Unmarshal(b, &st); err != nil || st.State == "" {
+		return nil
+	}
+	return &st
 }
 
 func parseDomainAccessDetail(detail string) *domains.DomainAccessSnapshot {
@@ -295,6 +313,9 @@ func (h *Handler) taskDetailFieldsOpts(detail string, hideErrorKey bool) []detai
 		case ytdlp.DetailKeyPOToken:
 			// Shown as dedicated Details row (PO token).
 			continue
+		case domains.DetailKeyCookieAttach:
+			// Shown as dedicated Details row (Account cookies).
+			continue
 		case domains.DetailKeyDomainAccess:
 			// Shown as dedicated Details row (Domain access chips).
 			continue
@@ -362,7 +383,7 @@ func (h *Handler) taskDetailFieldsOpts(detail string, hideErrorKey bool) []detai
 	return out
 }
 
-// taskFailErrorText returns operator-facing failure detail for the Details Error row.
+// taskFailErrorText returns operator-facing failure detail for the Details Error block.
 // Prefer tasks.error_message, then JSON detail.error, then plain non-JSON detail.
 func taskFailErrorText(errorMessage, detail string) string {
 	if s := strings.TrimSpace(errorMessage); s != "" {
@@ -409,10 +430,12 @@ type taskStageView struct {
 
 // taskStageSubview is one line inside a grouped timeline box (e.g. downloaded / remuxed / packed).
 type taskStageSubview struct {
-	Event    string
-	Message  string
-	HasError bool
-	Neutral  bool
+	Event     string
+	Message   string
+	HasError  bool
+	Neutral   bool
+	Icon      string // optional lucide name (cookie / shield-*)
+	IconClass string // optional Tailwind classes for the icon
 }
 
 // taskStagesInput builds Stages for a task detail page.
@@ -427,6 +450,8 @@ type taskStagesInput struct {
 	ParentTaskID int64
 	ParentKind   string
 	Children     []queue.Task
+	CookieAttach *domains.CookieAttachStatus
+	POT          *ytdlp.POTStatus
 }
 
 type stageRank int

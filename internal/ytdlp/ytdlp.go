@@ -460,28 +460,27 @@ func classifyMatchFilterReject(stderr, matchFilter string) (code, message string
 	return apperrors.CodeLiveBroadcastSkipped, "currently live"
 }
 
-// upgradeCode reclassifies a generic failure as AgeRestricted / CookieInvalid /
-// RateLimited when yt-dlp's own error text matches well-known site responses.
+// upgradeCode reclassifies a generic failure as CookieInvalid / RateLimited /
+// AgeRestricted when yt-dlp's own error text matches well-known site responses.
+// Delegates to errors.UpgradeCode so cookie/session lines beat age-gate text.
 func upgradeCode(code, text string) string {
-	if apperrors.DetectAgeRestricted(text) {
-		return apperrors.CodeAgeRestricted
+	u := apperrors.UpgradeCode(code, text)
+	if u != code {
+		return u
+	}
+	switch u {
+	case apperrors.CodeDownloadFailed, apperrors.CodeResolveFailed, "":
+		// keep going for bare HTTP auth codes not covered by DetectPauseCode
+	default:
+		return u
 	}
 	low := strings.ToLower(text)
 	switch {
-	case strings.Contains(low, "sign in") ||
-		strings.Contains(low, "login required") ||
-		strings.Contains(low, "private video") ||
-		strings.Contains(low, "cookies") && (strings.Contains(low, "expired") || strings.Contains(low, "invalid")) ||
-		strings.Contains(low, "http error 401") ||
+	case strings.Contains(low, "http error 401") ||
 		strings.Contains(low, "http error 403"):
 		return apperrors.CodeCookieInvalid
-	case strings.Contains(low, "429") ||
-		strings.Contains(low, "too many requests") ||
-		strings.Contains(low, "rate-limit") ||
-		strings.Contains(low, "rate limit"):
-		return apperrors.CodeRateLimited
 	default:
-		return code
+		return u
 	}
 }
 

@@ -5,24 +5,41 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
+	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
-func TestParsePOTDetail(t *testing.T) {
-	got := parsePOTDetail(`{"po-token":{"state":"issued","detail":"Retrieved a gvs PO Token","fetch":"auto"}}`)
-	if got == nil || got.State != "issued" || got.Label != "Issued" || got.Fetch != "auto" {
+func TestParsePOTStatus(t *testing.T) {
+	got := parsePOTStatus(`{"po-token":{"state":"issued","detail":"Retrieved a gvs PO Token","fetch":"auto"}}`)
+	if got == nil || got.State != "issued" || got.Fetch != "auto" {
 		t.Fatalf("got %#v", got)
 	}
-	got = parsePOTDetail(`{"po-token":{"state":"generating","detail":"Generating a player PO Token for mweb","fetch":"always"}}`)
-	if got == nil || got.State != "generating" || got.Label != "Generating" {
+	got = parsePOTStatus(`{"po-token":{"state":"generating","detail":"Generating a player PO Token for mweb","fetch":"always"}}`)
+	if got == nil || got.State != "generating" {
 		t.Fatalf("generating: %#v", got)
 	}
-	if parsePOTDetail(`{"created_ids":[1]}`) != nil {
+	if parsePOTStatus(`{"created_ids":[1]}`) != nil {
 		t.Fatal("expected nil without pot")
 	}
-	if parsePOTDetail("not-json") != nil {
+	if parsePOTStatus("not-json") != nil {
 		t.Fatal("expected nil for non-json")
+	}
+}
+
+func TestSettlePOTForDisplay(t *testing.T) {
+	gen := &ytdlp.POTStatus{State: ytdlp.POTGenerating, Fetch: "always", Detail: "Generating a player PO Token"}
+	got := settlePOTForDisplay(gen, queue.StatusFailed)
+	if got == nil || got.State != ytdlp.POTSkipped {
+		t.Fatalf("finished must settle generating: %#v", got)
+	}
+	if settlePOTForDisplay(gen, queue.StatusRunning).State != ytdlp.POTGenerating {
+		t.Fatal("live must keep generating")
+	}
+	issued := &ytdlp.POTStatus{State: ytdlp.POTIssued}
+	if settlePOTForDisplay(issued, queue.StatusDone).State != ytdlp.POTIssued {
+		t.Fatal("issued unchanged")
 	}
 }
 
@@ -360,6 +377,137 @@ func TestTaskStages(t *testing.T) {
 	}
 	if !foundOrigin || !foundPendingChild || !foundDoneChild {
 		t.Fatalf("origin/children missing: origin=%v pending=%v done=%v got=%+v", foundOrigin, foundPendingChild, foundDoneChild, got)
+	}
+}
+
+func TestTaskStagesCookieAttach(t *testing.T) {
+	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
+	created := "2026-09-06T11:56:00Z"
+	started := "2026-09-06T11:57:00Z"
+	ca := &domains.CookieAttachStatus{
+		State: domains.CookieAttachRetried, RetryReason: "AgeRestricted", AfterFail: true,
+	}
+	events := []library.VideoHistoryEvent{
+		{VideoID: 7, Event: "download_failed", Message: "Download failed", CreatedAt: "2026-09-06T11:58:00Z"},
+	}
+	got := taskStages(taskStagesInput{
+		Events: events, Now: now, Created: created, Started: started, Status: "failed", Origin: queue.OriginManual,
+		CookieAttach: ca,
+		POT: &ytdlp.POTStatus{
+			State: ytdlp.POTIssued, Fetch: "always",
+			Attempts: []ytdlp.POTStatus{
+				{State: ytdlp.POTSkipped, Fetch: "always"},
+				{State: ytdlp.POTIssued, Fetch: "always"},
+			},
+		},
+	})
+	var fails []taskStageView
+	for _, s := range got {
+		if s.Event == "download_failed" {
+			fails = append(fails, s)
+		}
+	}
+	if len(fails) != 2 {
+		t.Fatalf("want 2 download_failed nodes, got %d: %+v", len(fails), got)
+	}
+	// Newest-first: final attempt first, anonymous fail second.
+	if fails[0].Message != "Download failed" {
+		t.Fatalf("final attempt message: %q", fails[0].Message)
+	}
+	if len(fails[0].Substages) != 2 {
+		t.Fatalf("final substages (cookies+PO): %+v", fails[0].Substages)
+	}
+	if fails[0].Substages[0].Event != "Cookies used" || fails[0].Substages[0].Icon != "cookie" {
+		t.Fatalf("cookies note: %+v", fails[0].Substages[0])
+	}
+	if fails[0].Substages[1].Event != "PO used" {
+		t.Fatalf("final PO note: %+v", fails[0].Substages[1])
+	}
+	if fails[1].Message != "AgeRestricted" || !fails[1].HasError {
+		t.Fatalf("first attempt: %+v", fails[1])
+	}
+	if len(fails[1].Substages) != 1 || fails[1].Substages[0].Event != "PO skipped" {
+		t.Fatalf("first attempt PO from pass 0: %+v", fails[1].Substages)
+	}
+	for _, s := range got {
+		if s.Event == "cookies" {
+			t.Fatal("cookies must not be a top-level stage")
+		}
+	}
+
+	// Always-attach: cookies mentioned when used; PO when present.
+	got = taskStages(taskStagesInput{
+		Events: events, Now: now, Created: created, Status: "failed", Origin: queue.OriginManual,
+		CookieAttach: &domains.CookieAttachStatus{State: domains.CookieAttachCookies, AfterFail: false},
+		POT:          &ytdlp.POTStatus{State: ytdlp.POTSkipped},
+	})
+	var one *taskStageView
+	for i := range got {
+		if got[i].Event == "download_failed" {
+			one = &got[i]
+			break
+		}
+	}
+	if one == nil || len(one.Substages) != 2 {
+		t.Fatalf("always-attach want cookies+PO: %+v", one)
+	}
+	if one.Substages[0].Event != "Cookies used" || one.Substages[1].Event != "PO skipped" {
+		t.Fatalf("always-attach substages: %+v", one.Substages)
+	}
+
+	got = taskStages(taskStagesInput{
+		Now: now, Created: created, Status: "pending", Origin: queue.OriginManual,
+		CookieAttach: &domains.CookieAttachStatus{State: domains.CookieAttachOff},
+	})
+	for _, s := range got {
+		if s.Event == "cookies" || len(s.Substages) > 0 {
+			t.Fatal("off must not inject cookie stages")
+		}
+	}
+}
+
+func TestTaskStagesPOTUnderDownload(t *testing.T) {
+	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
+	created := "2026-09-06T11:56:00Z"
+	events := []library.VideoHistoryEvent{
+		{VideoID: 7, Event: "downloaded", Message: "Downloaded", CreatedAt: "2026-09-06T11:58:00Z"},
+	}
+	got := taskStages(taskStagesInput{
+		Events: events, Now: now, Created: created, Status: "done", Origin: queue.OriginManual,
+		CookieAttach: &domains.CookieAttachStatus{State: domains.CookieAttachCookies, AfterFail: false},
+		POT:          &ytdlp.POTStatus{State: ytdlp.POTIssued},
+	})
+	var dl *taskStageView
+	for i := range got {
+		if got[i].Event == "downloaded" {
+			dl = &got[i]
+			break
+		}
+	}
+	if dl == nil {
+		t.Fatalf("missing downloaded: %+v", got)
+	}
+	if len(dl.Substages) != 2 {
+		t.Fatalf("want cookies+PO used, got %+v", dl.Substages)
+	}
+	if dl.Substages[0].Event != "Cookies used" || dl.Substages[1].Event != "PO used" {
+		t.Fatalf("substages: %+v", dl.Substages)
+	}
+	for _, s := range got {
+		if s.Event == "PO used" || strings.HasPrefix(s.Event, "PO ") {
+			t.Fatal("PO must not be a top-level stage")
+		}
+	}
+	got = taskStages(taskStagesInput{
+		Events: events, Now: now, Created: created, Status: "done", Origin: queue.OriginManual,
+		POT: &ytdlp.POTStatus{State: ytdlp.POTOff},
+	})
+	for _, s := range got {
+		if s.Event == "downloaded" {
+			if len(s.Substages) != 1 || s.Substages[0].Event != "PO skipped" {
+				t.Fatalf("off should nest PO skipped: %+v", s.Substages)
+			}
+		}
 	}
 }
 

@@ -888,17 +888,23 @@
         root.setAttribute("data-task-row-status", data.status);
       }
     }
-    const msgEl = page.querySelector("[data-task-message]");
-    if (msgEl) {
+    const msgEls = page.querySelectorAll("[data-task-message]");
+    if (msgEls.length) {
       const st = statusChanged
         ? data.status
         : root.getAttribute("data-task-row-status") ||
           page.querySelector("[data-task-status]")?.getAttribute("aria-label") ||
           "";
+      let text = null;
       if (st === "pending") {
-        msgEl.textContent = "Queued";
+        text = "Queued";
       } else if (typeof data.message === "string") {
-        msgEl.textContent = data.message || "-";
+        text = data.message || "-";
+      }
+      if (text != null) {
+        msgEls.forEach((el) => {
+          el.textContent = text;
+        });
       }
     }
     const progressChanged = Object.prototype.hasOwnProperty.call(data, "progress");

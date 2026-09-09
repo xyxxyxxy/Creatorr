@@ -148,7 +148,9 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 	} else {
 		runErr = handler(taskCtx, task, progress)
 	}
-	if st := ytdlp.POTStatusFromContext(taskCtx); st.State != "" {
+	if st := ytdlp.FinalizePOT(taskCtx); st.State != "" {
+		persistPOT(st)
+	} else if st := ytdlp.POTStatusFromContext(taskCtx); st.State != "" {
 		persistPOT(st)
 	}
 

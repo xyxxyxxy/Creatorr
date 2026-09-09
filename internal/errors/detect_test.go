@@ -26,6 +26,8 @@ func TestDetectPauseCode(t *testing.T) {
 		// Age gate: per-video, not domain cookie failure.
 		{"ERROR: [youtube] zHLscLwx0rM: Take a few minutes to verify your age. To view this video, please provide more info so we can be sure you're an adult.", ""},
 		{"Sign in to confirm your age", ""},
+		// Stale jar + age wording in one stderr: cookie is the domain failure.
+		{"WARNING: [youtube] The provided YouTube account cookies are no longer valid.\nERROR: [youtube] abc: Sign in to confirm your age", apperrors.CodeCookieInvalid},
 	}
 	for _, tc := range cases {
 		if got := apperrors.DetectPauseCode(tc.msg); got != tc.want {
@@ -59,6 +61,15 @@ func TestUpgradeCode(t *testing.T) {
 	got = apperrors.UpgradeCode(apperrors.CodeDownloadFailed, "Sign in to confirm your age")
 	if got != apperrors.CodeAgeRestricted {
 		t.Fatalf("youtube age sign-in upgrade=%q want AgeRestricted", got)
+	}
+	both := "WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated.\nERROR: Sign in to confirm your age"
+	got = apperrors.UpgradeCode(apperrors.CodeDownloadFailed, both)
+	if got != apperrors.CodeCookieInvalid {
+		t.Fatalf("cookie+age upgrade=%q want CookieInvalid", got)
+	}
+	got = apperrors.UpgradeCode(apperrors.CodeAgeRestricted, both)
+	if got != apperrors.CodeCookieInvalid {
+		t.Fatalf("AgeRestricted→CookieInvalid=%q", got)
 	}
 }
 

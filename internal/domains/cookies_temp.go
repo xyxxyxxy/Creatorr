@@ -32,12 +32,44 @@ func WriteTempJar(dir, domain, content string) (string, error) {
 }
 
 // TempJarForURL resolves the host override jar for rawURL and materializes a temp Netscape file.
-// Returns empty path when nothing is stored (omit --cookies).
-func TempJarForURL(database *db.DB, dir, rawURL string) (string, error) {
+// Returns empty path when nothing is stored or allowStored is false (omit --cookies).
+// allowStored is false when cookies_after_fail is on for non-retry yt-dlp invokes.
+func TempJarForURL(database *db.DB, dir, rawURL string, allowStored bool) (string, error) {
+	if !allowStored {
+		return "", nil
+	}
 	host := queue.DomainFromURL(rawURL)
 	content, err := ResolveCookies(database, host)
 	if err != nil || content == "" {
 		return "", err
 	}
 	return WriteTempJar(dir, host, content)
+}
+
+// TempJarForNonDownload materializes the stored jar unless cookies_after_fail is on
+// (scan / meta / sidecars never use the account jar in that mode).
+func TempJarForNonDownload(database *db.DB, dir, rawURL string) (string, error) {
+	afterFail, err := CookiesAfterFailForURL(database, rawURL)
+	if err != nil {
+		return "", err
+	}
+	return TempJarForURL(database, dir, rawURL, AllowStoredJar(afterFail, false))
+}
+
+// StoredJarForURL returns whether a stored jar exists and a temp path when allowStored.
+// hadStored is true when ResolveCookies finds content (independent of allowStored).
+func StoredJarForURL(database *db.DB, dir, rawURL string, allowStored bool) (path string, hadStored bool, err error) {
+	host := queue.DomainFromURL(rawURL)
+	content, err := ResolveCookies(database, host)
+	if err != nil {
+		return "", false, err
+	}
+	if content == "" {
+		return "", false, nil
+	}
+	if !allowStored {
+		return "", true, nil
+	}
+	path, err = WriteTempJar(dir, host, content)
+	return path, true, err
 }

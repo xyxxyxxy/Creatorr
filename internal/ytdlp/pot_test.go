@@ -13,7 +13,7 @@ func TestClassifyPOT(t *testing.T) {
 		{"off", "", "auto", "", POTOff},
 		{"never", "", "never", "http://creatorr-po-token:4416", POTSkipped},
 		{"auto skip", "[info] ok", "auto", "http://creatorr-po-token:4416", POTSkipped},
-		{"generating", "[youtube] [pot:bgutil:http] Generating a player PO Token for mweb client via bgutil HTTP server", "always", "http://creatorr-po-token:4416", POTGenerating},
+		{"generating", "[youtube] [pot:bgutil:http] Generating a player PO Token for mweb client via bgutil HTTP server", "always", "http://creatorr-po-token:4416", POTSkipped},
 		{"issued beats generating", "[pot] Generating a player PO Token for mweb\nRetrieved a gvs PO Token for mweb client", "always", "http://x", POTIssued},
 		{"issued", "[debug] Retrieved a gvs PO Token for web_safari client", "auto", "http://creatorr-po-token:4416", POTIssued},
 		{"failed providers", "[debug] [youtube] [pot] PO Token Providers: none", "always", "http://creatorr-po-token:4416", POTFailed},
@@ -51,6 +51,26 @@ func TestDetectPOTIssue(t *testing.T) {
 	}
 }
 
+func TestPOTStatusStageEntries(t *testing.T) {
+	off := POTStatus{State: POTOff}
+	got := off.StageEntries()
+	if !off.ShowStage() || len(got) != 1 || got[0].Message != "PO skipped" {
+		t.Fatalf("off → skipped: %#v", got)
+	}
+	got = (POTStatus{State: POTIssued}).StageEntries()
+	if len(got) != 1 || got[0].Message != "PO used" || got[0].HasError || got[0].Icon != "shield-check" {
+		t.Fatalf("issued: %#v", got)
+	}
+	got = (POTStatus{State: POTFailed}).StageEntries()
+	if len(got) != 1 || got[0].Message != "PO failed" || !got[0].HasError || got[0].Icon != "triangle-alert" {
+		t.Fatalf("failed: %#v", got)
+	}
+	got = (POTStatus{State: POTSkipped}).StageEntries()
+	if len(got) != 1 || got[0].Message != "PO skipped" || got[0].Icon != "shield-off" {
+		t.Fatalf("skipped: %#v", got)
+	}
+}
+
 func TestPOTTrackerRank(t *testing.T) {
 	ctx := ContextWithPOTTracker(t.Context(), nil, nil)
 	ObservePOT(ctx, POTStatus{State: POTSkipped, Fetch: "auto"})
@@ -70,5 +90,52 @@ func TestPOTTrackerRank(t *testing.T) {
 	st = POTStatusFromContext(ctx)
 	if st.State != POTFailed {
 		t.Fatalf("failed should win, got %#v", st)
+	}
+}
+
+func TestFinalizePOT(t *testing.T) {
+	ctx := ContextWithPOTTracker(t.Context(), nil, nil)
+	ObservePOT(ctx, POTStatus{State: POTGenerating, Fetch: "always", Detail: "Generating a player PO Token"})
+	st := FinalizePOT(ctx)
+	if st.State != POTSkipped || st.Fetch != "always" {
+		t.Fatalf("finalize generating → skipped: %#v", st)
+	}
+	if POTStatusFromContext(ctx).State != POTSkipped {
+		t.Fatalf("tracker %#v", POTStatusFromContext(ctx))
+	}
+	// Terminal states unchanged.
+	ObservePOT(ctx, POTStatus{State: POTIssued, Detail: "Retrieved"})
+	st = FinalizePOT(ctx)
+	if st.State != POTIssued {
+		t.Fatalf("issued must stay: %#v", st)
+	}
+}
+
+func TestTakePOTAttemptPerPass(t *testing.T) {
+	ctx := ContextWithPOTTracker(t.Context(), nil, nil)
+	ObservePOT(ctx, POTStatus{State: POTGenerating, Fetch: "always", Detail: "pass1 generating"})
+	a1 := TakePOTAttempt(ctx)
+	if a1.State != POTSkipped {
+		t.Fatalf("pass1: %#v", a1)
+	}
+	ObservePOT(ctx, POTStatus{State: POTIssued, Fetch: "always", Detail: "pass2 retrieved"})
+	a2 := TakePOTAttempt(ctx)
+	if a2.State != POTIssued {
+		t.Fatalf("pass2: %#v", a2)
+	}
+	agg := POTStatusFromContext(ctx)
+	if agg.State != POTIssued || len(agg.Attempts) != 2 {
+		t.Fatalf("aggregate: %#v", agg)
+	}
+	if agg.Attempts[0].State != POTSkipped || agg.Attempts[1].State != POTIssued {
+		t.Fatalf("attempts: %#v", agg.Attempts)
+	}
+	first, ok := agg.AttemptAt(0)
+	if !ok || first.State != POTSkipped {
+		t.Fatalf("AttemptAt0: %#v ok=%v", first, ok)
+	}
+	second, ok := agg.AttemptAt(1)
+	if !ok || second.State != POTIssued {
+		t.Fatalf("AttemptAt1: %#v ok=%v", second, ok)
 	}
 }

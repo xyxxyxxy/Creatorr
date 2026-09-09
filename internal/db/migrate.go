@@ -68,6 +68,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo13(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 14:
+			if err := d.migrateTo14(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -419,6 +423,21 @@ func (d *DB) migrateTo13() error {
 	}
 	if _, err := d.SQL.Exec(`ALTER TABLE tasks ADD COLUMN logs TEXT NOT NULL DEFAULT '[]'`); err != nil {
 		return fmt.Errorf("add tasks.logs: %w", err)
+	}
+	return nil
+}
+
+// migrateTo14 adds domains.cookies_after_fail (omit stored jar until download retry).
+func (d *DB) migrateTo14() error {
+	has, err := d.tableHasColumn("domains", "cookies_after_fail")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE domains ADD COLUMN cookies_after_fail INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return fmt.Errorf("add domains.cookies_after_fail: %w", err)
 	}
 	return nil
 }

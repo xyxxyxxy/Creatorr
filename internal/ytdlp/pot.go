@@ -17,9 +17,61 @@ const (
 
 // POTStatus is stored under task detail JSON key "po-token".
 type POTStatus struct {
-	State  string `json:"state"`            // off|skipped|generating|issued|failed
-	Detail string `json:"detail,omitempty"` // short operator note
-	Fetch  string `json:"fetch,omitempty"`  // auto|always|never
+	State    string      `json:"state"`              // off|skipped|generating|issued|failed
+	Detail   string      `json:"detail,omitempty"`   // short operator note
+	Fetch    string      `json:"fetch,omitempty"`    // auto|always|never
+	Attempts []POTStatus `json:"attempts,omitempty"` // per yt-dlp invoke (cookie retry); no nested Attempts
+}
+
+// POTStage is one Stages substage line under downloaded / download_failed.
+type POTStage struct {
+	Message   string
+	HasError  bool
+	Icon      string // lucide name (cookie / shield-* Stages substages)
+	IconClass string // optional Tailwind color/opacity on the icon
+}
+
+// StageEntries returns download-nested Stages lines for this PO token outcome.
+// Always emits for known states: used (issued), skipped (skipped/off), plus failed/generating.
+func (s POTStatus) StageEntries() []POTStage {
+	switch s.State {
+	case POTIssued:
+		return []POTStage{{Message: "PO used", Icon: "shield-check", IconClass: "text-success"}}
+	case POTFailed:
+		return []POTStage{{Message: "PO failed", HasError: true, Icon: "triangle-alert", IconClass: "text-warning"}}
+	case POTGenerating:
+		return []POTStage{{Message: "PO generating", Icon: "loader-circle", IconClass: "text-info animate-spin"}}
+	case POTSkipped, POTOff:
+		return []POTStage{{Message: "PO skipped", Icon: "shield-off", IconClass: "opacity-70"}}
+	default:
+		return nil
+	}
+}
+
+// ShowStage reports whether Stages should nest a PO token line under download.
+func (s POTStatus) ShowStage() bool {
+	return s.State != "" && len(s.StageEntries()) > 0
+}
+
+// AttemptAt returns the i-th yt-dlp pass snapshot when Attempts is set; otherwise s itself for i==0.
+func (s POTStatus) AttemptAt(i int) (POTStatus, bool) {
+	if i < 0 {
+		return POTStatus{}, false
+	}
+	if len(s.Attempts) > 0 {
+		if i >= len(s.Attempts) {
+			return POTStatus{}, false
+		}
+		a := s.Attempts[i]
+		a.Attempts = nil
+		return a, a.State != ""
+	}
+	if i == 0 && s.State != "" {
+		out := s
+		out.Attempts = nil
+		return out, true
+	}
+	return POTStatus{}, false
 }
 
 // DetailKeyPOToken is the tasks.detail JSON object key for POTStatus.
@@ -28,10 +80,11 @@ const DetailKeyPOToken = "po-token"
 type potIssueKey struct{}
 
 type potTracker struct {
-	mu     sync.Mutex
-	status POTStatus
-	onFail func(detail string)
-	failed sync.Once
+	mu       sync.Mutex
+	status   POTStatus   // current yt-dlp pass
+	attempts []POTStatus // completed passes (TakePOTAttempt)
+	onFail   func(detail string)
+	failed   sync.Once
 	onUpdate func(POTStatus) // optional: persist mid-task
 }
 
@@ -58,7 +111,31 @@ func potTrackerFrom(ctx context.Context) *potTracker {
 	return t
 }
 
-// POTStatusFromContext returns the latest classified POT status (may be empty).
+func stripPOTAttempts(st POTStatus) POTStatus {
+	st.Attempts = nil
+	return st
+}
+
+func (t *potTracker) aggregateLocked() POTStatus {
+	if len(t.attempts) == 0 {
+		return t.status
+	}
+	atts := make([]POTStatus, len(t.attempts), len(t.attempts)+1)
+	copy(atts, t.attempts)
+	cur := stripPOTAttempts(t.status)
+	if cur.State != "" {
+		atts = append(atts, cur)
+	}
+	last := atts[len(atts)-1]
+	return POTStatus{
+		State:    last.State,
+		Detail:   last.Detail,
+		Fetch:    last.Fetch,
+		Attempts: atts,
+	}
+}
+
+// POTStatusFromContext returns the latest classified POT status (may include Attempts).
 func POTStatusFromContext(ctx context.Context) POTStatus {
 	t := potTrackerFrom(ctx)
 	if t == nil {
@@ -66,7 +143,7 @@ func POTStatusFromContext(ctx context.Context) POTStatus {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.status
+	return t.aggregateLocked()
 }
 
 func (t *potTracker) apply(next POTStatus) {
@@ -86,18 +163,19 @@ func (t *potTracker) apply(next POTStatus) {
 	if next.Detail == "" && next.State == prev.State {
 		next.Detail = prev.Detail
 	}
+	next.Attempts = nil
 	t.status = next
-	st := t.status
-	changed := st.State != prev.State || st.Detail != prev.Detail
+	agg := t.aggregateLocked()
+	changed := next.State != prev.State || next.Detail != prev.Detail
 	failFn := t.onFail
 	updFn := t.onUpdate
 	t.mu.Unlock()
 
-	if st.State == POTFailed && failFn != nil {
-		t.failed.Do(func() { failFn(st.Detail) })
+	if next.State == POTFailed && failFn != nil {
+		t.failed.Do(func() { failFn(next.Detail) })
 	}
 	if changed && updFn != nil {
-		updFn(st)
+		updFn(agg)
 	}
 }
 
@@ -128,6 +206,7 @@ func ObservePOT(ctx context.Context, st POTStatus) {
 }
 
 // ClassifyPOT derives PO token outcome from yt-dlp output and fetch settings.
+// Complete output never stays at generating: mint-start without Retrieved → skipped.
 func ClassifyPOT(output, fetch, providerURL string) POTStatus {
 	fetch = strings.TrimSpace(fetch)
 	if fetch == "" {
@@ -148,7 +227,11 @@ func ClassifyPOT(output, fetch, providerURL string) POTStatus {
 		return POTStatus{State: POTIssued, Fetch: fetch, Detail: detail}
 	}
 	if generating, detail := detectPOTGenerating(output); generating {
-		return POTStatus{State: POTGenerating, Fetch: fetch, Detail: detail}
+		d := "PO token mint started but not retrieved"
+		if detail != "" {
+			d = detail
+		}
+		return POTStatus{State: POTSkipped, Fetch: fetch, Detail: d}
 	}
 	// auto/always with no mint attempt: extractor skipped attestation.
 	detail := "No PO token requested for this extract"
@@ -156,6 +239,70 @@ func ClassifyPOT(output, fetch, providerURL string) POTStatus {
 		detail = "No PO token minted (extractor did not request one)"
 	}
 	return POTStatus{State: POTSkipped, Fetch: fetch, Detail: detail}
+}
+
+// FinalizePOT resolves mid-flight generating to a terminal skipped state when the
+// task/yt-dlp invoke ends without Issued/Failed. Live ObservePOT may leave
+// generating; rank would otherwise block ClassifyPOT skipped from winning.
+// When Attempts are present, the returned status includes them (State = latest).
+func FinalizePOT(ctx context.Context) POTStatus {
+	t := potTrackerFrom(ctx)
+	if t == nil {
+		return POTStatus{}
+	}
+	t.mu.Lock()
+	st := t.status
+	updFn := t.onUpdate
+	if st.State == POTGenerating {
+		next := POTStatus{
+			State:  POTSkipped,
+			Fetch:  st.Fetch,
+			Detail: "PO token mint started but not retrieved",
+		}
+		if st.Detail != "" {
+			next.Detail = st.Detail
+		}
+		t.status = next
+	}
+	agg := t.aggregateLocked()
+	t.mu.Unlock()
+	if agg.State != "" && updFn != nil {
+		updFn(agg)
+	}
+	return agg
+}
+
+// TakePOTAttempt finalizes the current yt-dlp pass, appends it to Attempts, and
+// clears live status so the next download invoke (cookie retry) starts clean.
+func TakePOTAttempt(ctx context.Context) POTStatus {
+	t := potTrackerFrom(ctx)
+	if t == nil {
+		return POTStatus{}
+	}
+	t.mu.Lock()
+	st := t.status
+	if st.State == POTGenerating {
+		st = POTStatus{
+			State:  POTSkipped,
+			Fetch:  st.Fetch,
+			Detail: "PO token mint started but not retrieved",
+		}
+		if t.status.Detail != "" {
+			st.Detail = t.status.Detail
+		}
+	}
+	st = stripPOTAttempts(st)
+	if st.State != "" {
+		t.attempts = append(t.attempts, st)
+	}
+	t.status = POTStatus{}
+	agg := t.aggregateLocked()
+	updFn := t.onUpdate
+	t.mu.Unlock()
+	if agg.State != "" && updFn != nil {
+		updFn(agg)
+	}
+	return st
 }
 
 // DetectPOTIssue scans yt-dlp output for PO token provider failures.
