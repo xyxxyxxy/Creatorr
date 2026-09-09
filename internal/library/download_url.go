@@ -20,6 +20,15 @@ func DownloadURL(sourceURL, remoteID string) string {
 	return sourceURL
 }
 
+// DownloadTaskURL is the yt-dlp URL for a download task.
+// archiveFallback true → ytarchive:{remoteID}; else DownloadURL(sourceURL, remoteID).
+func DownloadTaskURL(sourceURL, remoteID string, archiveFallback bool) string {
+	if archiveFallback {
+		return YtArchiveURL(remoteID)
+	}
+	return DownloadURL(sourceURL, remoteID)
+}
+
 func archiveOrgDownloadURL(sourceURL, remoteID string) string {
 	if remoteID == "" || !strings.Contains(remoteID, "/") {
 		return ""

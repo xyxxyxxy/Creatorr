@@ -43,11 +43,12 @@ func TaskPayloadArchive(payload string) bool {
 		strings.Contains(p, `"archive_fallback": true`)
 }
 
-// IsArchiveDownloadTask reports archive.org lane download (domain and/or payload).
+// IsArchiveDownloadTask reports a YouTube→Web Archive fallback download
+// (payload archive_fallback). Domain is unused: native archive.org series also
+// queue on ArchiveOrgDomain but must keep https://archive.org/download/... URLs,
+// not ytarchive:{id}.
 func IsArchiveDownloadTask(domain, payload string) bool {
-	if strings.EqualFold(strings.TrimSpace(domain), ArchiveOrgDomain) {
-		return true
-	}
+	_ = domain
 	return TaskPayloadArchive(payload)
 }
 

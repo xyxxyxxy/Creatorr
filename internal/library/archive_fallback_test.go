@@ -265,3 +265,50 @@ func TestIsYouTubeSourceURL(t *testing.T) {
 		t.Fatal("expected example false")
 	}
 }
+
+func TestIsArchiveDownloadTask(t *testing.T) {
+	cases := []struct {
+		name    string
+		domain  string
+		payload string
+		want    bool
+	}{
+		{
+			name:    "native IA download_now",
+			domain:  library.ArchiveOrgDomain,
+			payload: `{"download_now":true,"video_id":1572}`,
+			want:    false,
+		},
+		{
+			name:    "archive.org with archive_fallback",
+			domain:  library.ArchiveOrgDomain,
+			payload: `{"archive_fallback":true,"video_id":1}`,
+			want:    true,
+		},
+		{
+			name:    "youtube domain with archive_fallback",
+			domain:  "youtube.com",
+			payload: `{"archive_fallback":true,"video_id":1}`,
+			want:    true,
+		},
+		{
+			name:    "archive.org empty payload",
+			domain:  library.ArchiveOrgDomain,
+			payload: "",
+			want:    false,
+		},
+		{
+			name:    "spaced archive_fallback true",
+			domain:  library.ArchiveOrgDomain,
+			payload: `{"archive_fallback": true,"video_id":1}`,
+			want:    true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := library.IsArchiveDownloadTask(tc.domain, tc.payload); got != tc.want {
+				t.Fatalf("IsArchiveDownloadTask(%q, %s) = %v, want %v", tc.domain, tc.payload, got, tc.want)
+			}
+		})
+	}
+}

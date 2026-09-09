@@ -39,3 +39,22 @@ func TestDownloadURLBareArchiveIdentifier(t *testing.T) {
 		t.Fatalf("DownloadURL = %q, want unchanged %q", got, u)
 	}
 }
+
+func TestDownloadTaskURL(t *testing.T) {
+	const details = "https://archive.org/details/example-item"
+	const remote = "example-item/episode.mp4"
+	wantHTTP := "https://archive.org/download/" + remote
+	if got := DownloadTaskURL(details, remote, false); got != wantHTTP {
+		t.Fatalf("native IA = %q, want %q", got, wantHTTP)
+	}
+	const yt = "https://www.youtube.com/watch?v=abc123XYZ01"
+	if got := DownloadTaskURL(yt, "abc123XYZ01", true); got != "ytarchive:abc123XYZ01" {
+		t.Fatalf("fallback = %q, want ytarchive:abc123XYZ01", got)
+	}
+	if got := DownloadTaskURL(yt, "", true); got != "" {
+		t.Fatalf("fallback empty remote = %q, want empty", got)
+	}
+	if got := DownloadTaskURL(yt, "abc123XYZ01", false); got != yt {
+		t.Fatalf("non-IA no fallback = %q, want %q", got, yt)
+	}
+}

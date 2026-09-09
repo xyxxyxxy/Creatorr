@@ -56,9 +56,8 @@ func DownloadHandler(d Deps) TaskHandler {
 		}
 
 		archiveLane := library.IsArchiveDownloadTask(t.Domain, t.Payload)
-		downloadURL := dlctx.URL
+		downloadURL := library.DownloadTaskURL(dlctx.URL, dlctx.Video.RemoteID, archiveLane)
 		if archiveLane {
-			downloadURL = library.YtArchiveURL(dlctx.Video.RemoteID)
 			if downloadURL == "" {
 				return apperrors.New(apperrors.CodeDownloadFailed, "archive download missing remote_id")
 			}
