@@ -825,7 +825,7 @@
     tip.setAttribute("data-tip", "Running");
     tip.setAttribute("aria-label", "Running");
     const i = document.createElement("i");
-    i.setAttribute("data-lucide", "play");
+    i.setAttribute("data-lucide", "activity");
     i.className = "size-5";
     tip.appendChild(i);
     posEl.appendChild(tip);
