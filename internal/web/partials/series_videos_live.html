@@ -5,7 +5,18 @@
      data-bulk-busy="{{if .BulkEditBusy}}1{{else}}0{{end}}"
      data-bulk-mode="0">
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Videos" "icon" "square-play" "help" "Indexed from scans. Open a video for details.")}}
+{{template "list_header" (dict
+  "level" "section"
+  "title" "Videos"
+  "icon" "square-play"
+  "help" "Indexed from scans. Open a video for details."
+  "ShowProgress" true
+  "ProgressTotal" .ProgressTotal
+  "DownloadedCount" .DownloadedCount
+  "ErrorCount" .ErrorCount
+  "WantedCount" .WantedCount
+  "Monitored" .Monitored
+)}}
 {{template "list_filters" (dict
   "Query" .VideoFilter.Query
   "QueryPlaceholder" .VideoFilter.QueryPlaceholder
