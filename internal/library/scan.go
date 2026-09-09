@@ -49,9 +49,9 @@ func enqueueDownloadParams(videoID, seriesID int64, domain, origin string) queue
 
 func enqueueDownloadNowParams(videoID, seriesID int64, domain string) queue.EnqueueParams {
 	p := enqueueDownloadParams(videoID, seriesID, domain, queue.OriginManual)
-	p.Message = "Queue download"
-	p.Priority = queue.PriorityDownloadNow
+	p.Message = "Download now"
 	p.BypassDownloadCap = true
+	p.Immediate = true
 	return p
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -102,11 +103,13 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 	if video.SourceURL.Valid {
 		resolvedSourceURL = library.DownloadURL(video.SourceURL.String, video.RemoteID)
 	}
+	hasSourceURL := video.SourceURL.Valid && strings.TrimSpace(video.SourceURL.String) != ""
 	render(w, "video_detail", struct {
 		pageBase
 		Series              *library.Series
 		Video               *library.Video
 		ResolvedSourceURL   string
+		HasSourceURL        bool
 		ThumbURL            string
 		MediaRawHref        string
 		MediaIsAudio        bool
@@ -131,6 +134,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		Series:              ser,
 		Video:               video,
 		ResolvedSourceURL:   resolvedSourceURL,
+		HasSourceURL:        hasSourceURL,
 		ThumbURL:            thumbURL,
 		MediaRawHref:        mediaRaw,
 		MediaIsAudio:        mediaAudio,

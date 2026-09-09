@@ -30,12 +30,24 @@
       <progress data-task-progress class="progress progress-secondary w-full" max="100" aria-label="In progress"></progress>
       {{end}}
     </div>
-    <form method="post" action="/actions/cancel-task" class="inline shrink-0">
-      <input type="hidden" name="id" value="{{.ID}}" />
-      <button type="submit" class="btn btn-soft btn-error btn-xs btn-square tooltip tooltip-top" data-tip="Cancel" aria-label="Cancel">
-        <i data-lucide="x" class="size-3.5"></i>
-      </button>
-    </form>
+    <span class="join shrink-0">
+      {{if eq .Status "pending"}}
+      <form method="post" action="/actions/task-to-front" class="contents">
+        <input type="hidden" name="id" value="{{.ID}}" />
+        <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
+        <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="To top of queue" aria-label="To top of queue">
+          <i data-lucide="arrow-up-to-line" class="size-3.5"></i>
+        </button>
+      </form>
+      {{end}}
+      <form method="post" action="/actions/cancel-task" class="contents">
+        <input type="hidden" name="id" value="{{.ID}}" />
+        <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
+        <button type="submit" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Cancel" aria-label="Cancel">
+          <i data-lucide="x" class="size-3.5"></i>
+        </button>
+      </form>
+    </span>
   </div>
 </li>
 {{end}}

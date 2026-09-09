@@ -1179,31 +1179,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/videos/bulk-download:
-    post:
-      tags: [library]
-      operationId: bulkDownloadVideos
-      summary: Queue download for many videos (Queue download semantics)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BulkVideoIdsRequest"
-      responses:
-        "200":
-          description: Enqueued counts
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BulkVideoActionResponse"
-        "400":
-          description: Invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /api/videos/bulk-refresh-sidecars:
     post:
       tags: [library]
@@ -1610,8 +1585,6 @@ components:
           format: int64
         message:
           type: string
-        priority:
-          type: integer
 
     EnqueueTaskResponse:
       type: object

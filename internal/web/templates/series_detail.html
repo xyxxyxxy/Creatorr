@@ -377,23 +377,6 @@
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
 
-<input type="checkbox" id="modal-bulk-download-videos" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2" data-video-bulk-download-title>Queue download</h3>
-    <p class="text-sm mb-4">Enqueue Queue download for the selected videos. Ineligible or already-queued videos are skipped.</p>
-    <form method="post" action="/actions/bulk-download-videos" id="form-bulk-download-videos">
-      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <div data-bulk-video-ids></div>
-      <div class="modal-action">
-        <label for="modal-bulk-download-videos" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary">Queue download</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-
 <input type="checkbox" id="modal-bulk-refresh-sidecars-videos" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box">

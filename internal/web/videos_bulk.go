@@ -102,25 +102,6 @@ func (h *Handler) actionBulkIgnoreVideos(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, seriesVideosRedirect(sid, r, "bulk_ignore", msg, ""), http.StatusSeeOther)
 }
 
-func (h *Handler) actionBulkDownloadVideos(w http.ResponseWriter, r *http.Request) {
-	ids := parseVideoIDList(r)
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if len(ids) == 0 || sid <= 0 {
-		http.Redirect(w, r, "/series?err="+urlQuery("select at least one video"), http.StatusSeeOther)
-		return
-	}
-	queued, skipped, err := h.Library.EnqueueDownloadVideosBulk(ids)
-	if err != nil {
-		http.Redirect(w, r, seriesVideosRedirect(sid, r, "", "", err.Error()), http.StatusSeeOther)
-		return
-	}
-	msg := "queued=" + strconv.Itoa(queued)
-	if skipped > 0 {
-		msg += " skipped=" + strconv.Itoa(skipped)
-	}
-	http.Redirect(w, r, seriesVideosRedirect(sid, r, "bulk_download", msg, ""), http.StatusSeeOther)
-}
-
 func (h *Handler) actionBulkRefreshSidecarsVideos(w http.ResponseWriter, r *http.Request) {
 	ids := parseVideoIDList(r)
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)

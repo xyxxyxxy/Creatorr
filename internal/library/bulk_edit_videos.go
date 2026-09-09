@@ -274,7 +274,7 @@ func (s *Store) IgnoreVideosBulk(ids []int64) (updated, skipped int, err error) 
 	return updated, skipped, nil
 }
 
-// EnqueueDownloadVideosBulk queues Queue-download for each id. Skips conflicts / invalid.
+// EnqueueDownloadVideosBulk queues Download-now for each id. Skips conflicts / invalid.
 func (s *Store) EnqueueDownloadVideosBulk(ids []int64) (queued, skipped int, err error) {
 	for _, id := range uniqPositive(ids) {
 		if _, err := s.EnqueueDownloadNow(id); err != nil {

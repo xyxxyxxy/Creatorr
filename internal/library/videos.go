@@ -503,8 +503,10 @@ func (s *Store) EnqueueDownload(videoID int64) (int64, error) {
 	return s.enqueueDownload(videoID, false)
 }
 
-// EnqueueDownloadNow (Queue download UI action) queues at the front of the domain lane, bypasses max_download_queue,
+// EnqueueDownloadNow (Download now UI action on the video page) enqueues an immediate download
+// (ClaimImmediate: skip queue / parallel / cooldown / soft pause), bypasses max_download_queue,
 // and allows enqueue when the series is unmonitored. Domain must still be active.
+// If a pending download already exists, marks it immediate instead of erroring.
 func (s *Store) EnqueueDownloadNow(videoID int64) (int64, error) {
 	return s.enqueueDownload(videoID, true)
 }
@@ -526,13 +528,6 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 			return 0, fmt.Errorf("%w: series unmonitored - turn on series monitored first", ErrInvalid)
 		}
 	}
-	busy, err := s.hasPendingDownload(videoID)
-	if err != nil {
-		return 0, err
-	}
-	if busy {
-		return 0, fmt.Errorf("%w: download already queued", ErrConflict)
-	}
 	domain := "unknown"
 	if cur.SourceURL.Valid && strings.TrimSpace(cur.SourceURL.String) != "" {
 		domain = queueDomain(cur.SourceURL.String)
@@ -551,6 +546,34 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 		}
 		if !ok {
 			return 0, fmt.Errorf("%w: domain inactive - activate under Settings → Domains", ErrInvalid)
+		}
+		var pendingID int64
+		var st string
+		err = s.DB.SQL.QueryRow(`
+			SELECT id, status FROM tasks
+			WHERE kind = ? AND video_id = ? AND status IN (?, ?)
+			ORDER BY CASE status WHEN ? THEN 0 ELSE 1 END, id ASC
+			LIMIT 1
+		`, queue.KindDownload, videoID, queue.StatusPending, queue.StatusRunning, queue.StatusRunning).Scan(&pendingID, &st)
+		if err == nil {
+			if st == queue.StatusRunning {
+				return 0, fmt.Errorf("%w: download already running", ErrConflict)
+			}
+			if err := s.Queue.MarkDownloadNowImmediate(pendingID); err != nil {
+				return 0, err
+			}
+			return pendingID, nil
+		}
+		if err != sql.ErrNoRows {
+			return 0, err
+		}
+	} else {
+		busy, err := s.hasPendingDownload(videoID)
+		if err != nil {
+			return 0, err
+		}
+		if busy {
+			return 0, fmt.Errorf("%w: download already queued", ErrConflict)
 		}
 	}
 	switch cur.Status {
@@ -750,7 +773,7 @@ func (s *Store) ListVideoHistoryByTaskID(taskID int64) ([]VideoHistoryEvent, err
 }
 
 // WantVideo sets status to wanted from ignored, deleted, missing, or integrity_check_failed.
-// Does not enqueue a download - download_wanted_cron or Queue download picks it up.
+// Does not enqueue a download - download_wanted_cron or Download now picks it up.
 func (s *Store) WantVideo(id int64) (*Video, error) {
 	cur, err := s.GetVideo(id)
 	if err != nil {

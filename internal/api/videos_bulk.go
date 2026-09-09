@@ -128,20 +128,6 @@ func (s *Server) BulkIgnoreVideos(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, gen.BulkVideoActionResponse{Updated: updated, Skipped: skipped})
 }
 
-func (s *Server) BulkDownloadVideos(w http.ResponseWriter, r *http.Request) {
-	var body gen.BulkVideoIdsRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, http.StatusBadRequest, apperrors.CodeInternal, "invalid JSON", err.Error())
-		return
-	}
-	queued, skipped, err := s.Library.EnqueueDownloadVideosBulk(body.VideoIds)
-	if err != nil {
-		writeLibraryErr(w, err, "bulk download videos failed")
-		return
-	}
-	writeJSON(w, http.StatusOK, gen.BulkVideoActionResponse{Updated: queued, Skipped: skipped})
-}
-
 func (s *Server) BulkRefreshSidecarsVideos(w http.ResponseWriter, r *http.Request) {
 	var body gen.BulkVideoIdsRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

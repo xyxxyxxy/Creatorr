@@ -78,9 +78,6 @@ func (s *Server) EnqueueTask(w http.ResponseWriter, r *http.Request) {
 	if body.Message != nil {
 		p.Message = *body.Message
 	}
-	if body.Priority != nil {
-		p.Priority = *body.Priority
-	}
 	id, err := s.Queue.Enqueue(p)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, apperrors.CodeInternal, "enqueue failed", err.Error())

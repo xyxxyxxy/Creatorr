@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   logs TEXT NOT NULL DEFAULT '[]',
   progress REAL,
   domain TEXT NOT NULL DEFAULT 'unknown',
-  priority INTEGER NOT NULL DEFAULT 0,
+  queue_seq INTEGER NOT NULL DEFAULT 0,
   origin TEXT NOT NULL,
   parent_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL,
