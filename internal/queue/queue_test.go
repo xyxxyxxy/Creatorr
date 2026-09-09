@@ -276,8 +276,8 @@ func TestListActivePositions(t *testing.T) {
 	s := openStore(t)
 	v1 := seedVideo(t, s, "a1")
 	v2 := seedVideo(t, s, "a2")
-	_, _ = s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "a.example", VideoID: v1, Priority: 0})
-	_, _ = s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "a.example", VideoID: v2, Priority: 10})
+	_, _ = s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "a.example", VideoID: v1})
+	_, _ = s.Enqueue(queue.EnqueueParams{Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "a.example", VideoID: v2})
 	list, err := s.ListActive()
 	if err != nil {
 		t.Fatal(err)
@@ -285,11 +285,11 @@ func TestListActivePositions(t *testing.T) {
 	if len(list) != 2 {
 		t.Fatalf("len=%d", len(list))
 	}
-	// higher priority first -> position 1
-	if list[0].Priority != 10 || list[0].QueuePos != 1 {
+	// FIFO by queue_seq -> first enqueued is position 1
+	if list[0].VideoID.Int64 != v1 || list[0].QueuePos != 1 {
 		t.Fatalf("first=%+v", list[0])
 	}
-	if list[1].QueuePos != 2 {
+	if list[1].VideoID.Int64 != v2 || list[1].QueuePos != 2 {
 		t.Fatalf("second=%+v", list[1])
 	}
 }

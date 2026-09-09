@@ -11,7 +11,7 @@ var HistoryStatuses = []string{StatusDone, StatusFailed, StatusCancelled}
 
 const historySelectCols = `id, kind, status, series_id, video_id, payload,
 	COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-	COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+	COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
 	origin, parent_task_id`
 
 // HistoryFilter selects finished tasks for the History list / API.

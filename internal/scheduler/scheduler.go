@@ -104,7 +104,7 @@ func (s *Scheduler) TickOnce(_ context.Context, log *slog.Logger) {
 	}
 
 	if cronDue(database, settings.KeySyncFilesCron, s.lastSyncFiles, now, log, "file sync") {
-		id, err := s.Library.EnqueueSyncFiles(queue.PrioritySyncFilesDue, queue.OriginScheduled)
+		id, err := s.Library.EnqueueSyncFiles(queue.OriginScheduled)
 		if err != nil {
 			log.Debug("schedule file sync enqueue", "err", err)
 		} else if id > 0 {
@@ -124,7 +124,7 @@ func (s *Scheduler) TickOnce(_ context.Context, log *slog.Logger) {
 	}
 
 	if cronDue(database, settings.KeyRetentionDeleteCron, s.lastRetentionDelete, now, log, "retention purge") {
-		id, err := s.Library.EnqueueRetentionDelete(queue.PriorityRetentionDeleteDue, queue.OriginScheduled)
+		id, err := s.Library.EnqueueRetentionDelete(queue.OriginScheduled)
 		if err != nil {
 			log.Debug("schedule retention purge enqueue", "err", err)
 		} else if id > 0 {
@@ -136,7 +136,7 @@ func (s *Scheduler) TickOnce(_ context.Context, log *slog.Logger) {
 	if enabled, err := settings.YtDlpUpdatesEnabled(database); err != nil {
 		log.Error("yt-dlp updates enabled check", "err", err)
 	} else if enabled && cronDue(database, settings.KeyYtDlpUpdateCron, s.lastYtDlpUpdate, now, log, "yt-dlp update") {
-		id, err := s.Library.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, queue.OriginScheduled)
+		id, err := s.Library.EnqueueYtDlpUpdate(queue.OriginScheduled)
 		if err != nil {
 			log.Debug("schedule yt-dlp update enqueue", "err", err)
 		} else if id > 0 {

@@ -129,8 +129,8 @@ func TestSeriesHasBusyMediaTasks(t *testing.T) {
 
 	// Video-linked download with null series_id still locks via join.
 	_, err = s.DB.SQL.Exec(`
-		INSERT INTO tasks (kind, status, series_id, video_id, payload, domain, priority, origin, created_at)
-		VALUES (?, 'pending', NULL, ?, '{}', 'example.com', 0, 'manual', datetime('now'))
+		INSERT INTO tasks (kind, status, series_id, video_id, payload, domain, queue_seq, origin, created_at)
+		VALUES (?, 'pending', NULL, ?, '{}', 'example.com', 1, 'manual', datetime('now'))
 	`, queue.KindDownload, resA.VideoID)
 	if err != nil {
 		t.Fatal(err)

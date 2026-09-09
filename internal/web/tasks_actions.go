@@ -31,11 +31,7 @@ func (h *Handler) actionCancelTask(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
 	_, _ = h.Queue.CancelWithReason(id, queue.CancelReasonManual)
-	redir := strings.TrimSpace(r.FormValue("redirect"))
-	if redir == "" || !strings.HasPrefix(redir, "/") || strings.HasPrefix(redir, "//") {
-		redir = "/tasks"
-	}
-	http.Redirect(w, r, redir, http.StatusSeeOther)
+	http.Redirect(w, r, safeTasksRedirect(r, ""), http.StatusSeeOther)
 }
 
 func (h *Handler) actionCancelDomainTasks(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +40,25 @@ func (h *Handler) actionCancelDomainTasks(w http.ResponseWriter, r *http.Request
 	if domain != "" {
 		_, _ = h.Queue.CancelPendingDomain(domain)
 	}
-	http.Redirect(w, r, "/tasks", http.StatusSeeOther)
+	http.Redirect(w, r, safeTasksRedirect(r, ""), http.StatusSeeOther)
+}
+
+func (h *Handler) actionSkipDomainCooldown(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	domain := settings.NormalizeDomain(r.FormValue("domain"))
+	if domain != "" && domain != queue.SystemDomain {
+		_ = h.Queue.ClearCooldown(domain)
+	}
+	http.Redirect(w, r, safeTasksRedirect(r, "ok=cooldown-skipped"), http.StatusSeeOther)
+}
+
+func (h *Handler) actionTaskToFront(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	if id > 0 {
+		_ = h.Queue.MoveToFront(id)
+	}
+	http.Redirect(w, r, safeTasksRedirect(r, "ok=task-to-front"), http.StatusSeeOther)
 }
 
 func (h *Handler) actionSetDomainPaused(w http.ResponseWriter, r *http.Request) {
@@ -52,16 +66,29 @@ func (h *Handler) actionSetDomainPaused(w http.ResponseWriter, r *http.Request) 
 	domain := formDomain(r)
 	paused := r.FormValue("paused") == "1"
 	if err := domains.SetPaused(h.Queue.DB, domain, paused); err != nil {
-		redir := r.FormValue("redirect")
-		if redir == "" {
-			redir = "/tasks"
-		}
-		http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, safeTasksRedirect(r, "err="+urlQuery(err.Error())), http.StatusSeeOther)
 		return
 	}
-	redir := r.FormValue("redirect")
-	if redir == "" {
+	http.Redirect(w, r, safeTasksRedirect(r, ""), http.StatusSeeOther)
+}
+
+// safeTasksRedirect returns form redirect when it is a same-origin /tasks path; else /tasks.
+// optionalQuery is appended (e.g. ok=…).
+func safeTasksRedirect(r *http.Request, optionalQuery string) string {
+	redir := strings.TrimSpace(r.FormValue("redirect"))
+	if redir == "" || !strings.HasPrefix(redir, "/") || strings.HasPrefix(redir, "//") {
 		redir = "/tasks"
+	} else {
+		path := redir
+		if i := strings.IndexByte(redir, '?'); i >= 0 {
+			path = redir[:i]
+		}
+		if path != "/tasks" {
+			redir = "/tasks"
+		}
 	}
-	http.Redirect(w, r, redir, http.StatusSeeOther)
+	if optionalQuery == "" {
+		return redir
+	}
+	return appendQuery(redir, optionalQuery)
 }

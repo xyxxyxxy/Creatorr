@@ -68,9 +68,9 @@ func taskIDs(t *queue.Task) (seriesID, videoID int64) {
 }
 
 func (r *Runner) tick(ctx context.Context, log *slog.Logger) {
-	// Interactive first - never waits behind ClaimNext work.
-	if task, err := r.Queue.ClaimInteractive(); err != nil {
-		log.Error("claim interactive", "err", err)
+	// Immediate first - never waits behind ClaimNext work.
+	if task, err := r.Queue.ClaimImmediate(); err != nil {
+		log.Error("claim immediate", "err", err)
 	} else if task != nil {
 		go r.execute(ctx, log, task)
 	}

@@ -53,11 +53,11 @@
       "VideoID" .Video.ID
       "SeriesID" .Series.ID
       "Status" .Video.Status
+      "HasSourceURL" .HasSourceURL
       "DomainActive" .DomainActive
       "DomainDisabledTitle" .DomainDisabledTitle
-      "DeliveryQueued" .DeliveryQueued
+      "DownloadRunning" .DownloadRunning
       "Redirect" (printf "/series/%d/videos/%d" .Series.ID .Video.ID)
-      "BtnClass" "btn btn-outline"
       "PrimaryClass" "btn btn-primary"
     }}
     {{$wantIgnore := dict

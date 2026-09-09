@@ -42,20 +42,6 @@
     <span class="text-xs opacity-60">Queued for deletion</span>
     {{else}}
     <div class="join justify-end" data-video-row-primary-actions>
-      {{$delivery := dict
-        "VideoID" .ID
-        "SeriesID" .SeriesID
-        "Status" .Status
-        "DomainActive" .DomainActive
-        "DomainDisabledTitle" .DomainDisabledTitle
-        "DeliveryQueued" .DeliveryQueued
-        "Redirect" .Redirect
-        "FormClass" "contents"
-        "LiveSwap" .LiveSwap
-        "Icons" true
-        "BtnClass" "btn btn-ghost btn-square join-item"
-        "PrimaryClass" "btn btn-primary btn-square join-item"
-      }}
       {{$wantIgnore := dict
         "VideoID" .ID
         "SeriesID" .SeriesID
@@ -72,7 +58,6 @@
         "Class" "btn btn-square join-item"
         "DeleteClass" "btn btn-soft btn-error btn-square"
       }}
-      {{template "video_delivery_actions" $delivery}}
       {{if ne .Status "downloaded"}}
       {{template "want_ignore_button" $wantIgnore}}
       {{end}}

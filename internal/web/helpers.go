@@ -161,8 +161,6 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Want updated.")
 	case "bulk_ignore":
 		return flashOK("Ignore updated.")
-	case "bulk_download":
-		return flashOK("Queue download enqueued.")
 	case "bulk_refresh_sidecars":
 		return flashOK("Sidecar refresh enqueued.")
 	case "source":
@@ -184,7 +182,11 @@ func flashFromQuery(r *http.Request) *flash {
 	case "video-metadata-busy":
 		return flashOK("Episode metadata saved. Rename skipped while a download or pack task is busy - run Apply episode format later.")
 	case "download":
-		return flashOK("Queue download enqueued.")
+		return flashOK("Download now enqueued.")
+	case "cooldown-skipped":
+		return flashOK("Domain cooldown skipped.")
+	case "task-to-front":
+		return flashOK("Task moved to top of queue.")
 	case "video-deleted":
 		return flashOK("Video delete queued - files remove in the background.")
 	case "sidecar-deleted":

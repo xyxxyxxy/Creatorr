@@ -67,9 +67,6 @@ func TestStageAndEnqueueSponsorblockCut(t *testing.T) {
 	if task.Kind != queue.KindSponsorblockCut || task.Domain != queue.SystemDomain {
 		t.Fatalf("%#v", task)
 	}
-	if task.Priority != queue.PrioritySponsorblockCut {
-		t.Fatalf("priority=%d", task.Priority)
-	}
 
 	s.RemoveSponsorblockCutStaging(vid)
 	if _, err := os.Stat(s.SponsorblockCutStageDir(vid)); !os.IsNotExist(err) {

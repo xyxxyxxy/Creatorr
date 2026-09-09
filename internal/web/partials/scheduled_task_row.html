@@ -14,7 +14,7 @@
     {{if .Busy}}{{$tip = "Already queued"}}{{end}}
     <form method="post" action="/actions/run-scheduled" class="inline shrink-0">
       <input type="hidden" name="key" value="{{.Key}}" />
-      <input type="hidden" name="redirect" value="/tasks" />
+      <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
       <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square tooltip tooltip-top" data-tip="{{$tip}}" aria-label="Queue now"{{if .Busy}} disabled{{end}}>
         <i data-lucide="list-plus" class="size-3.5"></i>
       </button>

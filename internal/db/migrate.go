@@ -72,6 +72,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo14(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 15:
+			if err := d.migrateTo15(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -438,6 +442,37 @@ func (d *DB) migrateTo14() error {
 	}
 	if _, err := d.SQL.Exec(`ALTER TABLE domains ADD COLUMN cookies_after_fail INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return fmt.Errorf("add domains.cookies_after_fail: %w", err)
+	}
+	return nil
+}
+
+// migrateTo15 replaces tasks.priority with per-domain queue_seq (FIFO append / MoveToFront).
+// Open tasks get queue_seq = id (claim order matches historical id order; priority ignored).
+func (d *DB) migrateTo15() error {
+	hasSeq, err := d.tableHasColumn("tasks", "queue_seq")
+	if err != nil {
+		return err
+	}
+	if !hasSeq {
+		if _, err := d.SQL.Exec(`ALTER TABLE tasks ADD COLUMN queue_seq INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("add tasks.queue_seq: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`
+		UPDATE tasks
+		SET queue_seq = id
+		WHERE status IN ('pending', 'running')
+	`); err != nil {
+		return fmt.Errorf("backfill tasks.queue_seq from id: %w", err)
+	}
+	hasPri, err := d.tableHasColumn("tasks", "priority")
+	if err != nil {
+		return err
+	}
+	if hasPri {
+		if _, err := d.SQL.Exec(`ALTER TABLE tasks DROP COLUMN priority`); err != nil {
+			return fmt.Errorf("drop tasks.priority: %w", err)
+		}
 	}
 	return nil
 }

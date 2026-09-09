@@ -26,7 +26,7 @@ func TestSystemLaneAlwaysSerial(t *testing.T) {
 	_, err = s.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
 		Kind: queue.KindSponsorblockCut, Domain: queue.SystemDomain, VideoID: vid, SeriesID: seriesID,
-		Message: "cut", Priority: queue.PrioritySponsorblockCut,
+		Message: "cut",
 		Payload: map[string]any{"video_id": vid, "media_path": "/x"},
 	})
 	if err != nil {
@@ -41,14 +41,14 @@ func TestSystemLaneAlwaysSerial(t *testing.T) {
 	}
 }
 
-func TestSponsorblockCutPriorityBehindFileSync(t *testing.T) {
+func TestSponsorblockCutFIFOAfterEarlierEnqueue(t *testing.T) {
 	s := openStore(t)
 	vid := seedVideo(t, s, "sys2")
 
 	_, err := s.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
 		Kind: queue.KindSponsorblockCut, Domain: queue.SystemDomain, VideoID: vid,
-		Message: "cut", Priority: queue.PrioritySponsorblockCut,
+		Message: "cut",
 		Payload: map[string]any{"video_id": vid, "media_path": "/x"},
 	})
 	if err != nil {
@@ -57,7 +57,6 @@ func TestSponsorblockCutPriorityBehindFileSync(t *testing.T) {
 	_, err = s.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
 		Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "sync",
-		Priority: queue.PrioritySyncFilesDue,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -66,8 +65,8 @@ func TestSponsorblockCutPriorityBehindFileSync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got == nil || got.Kind != queue.KindSyncFiles {
-		t.Fatalf("want sync_files first, got %#v", got)
+	if got == nil || got.Kind != queue.KindSponsorblockCut {
+		t.Fatalf("want sponsorblock_cut first (FIFO), got %#v", got)
 	}
 }
 
@@ -107,7 +106,6 @@ func TestSponsorblockCutDupPerVideo(t *testing.T) {
 	_, err := s.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
 		Kind: queue.KindSponsorblockCut, Domain: queue.SystemDomain, VideoID: vid,
-		Priority: queue.PrioritySponsorblockCut,
 		Payload:  map[string]any{"video_id": vid, "media_path": "/x"},
 	})
 	if err != nil {
@@ -116,7 +114,6 @@ func TestSponsorblockCutDupPerVideo(t *testing.T) {
 	_, err = s.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
 		Kind: queue.KindSponsorblockCut, Domain: queue.SystemDomain, VideoID: vid,
-		Priority: queue.PrioritySponsorblockCut,
 		Payload:  map[string]any{"video_id": vid, "media_path": "/x"},
 	})
 	if err == nil {

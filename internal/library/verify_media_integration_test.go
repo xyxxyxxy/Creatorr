@@ -110,7 +110,7 @@ func TestEnqueueMediaVerifyDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.Kind != queue.KindIntegrityCheckInitial || task.Priority != 0 {
+	if task.Kind != queue.KindIntegrityCheckInitial {
 		t.Fatalf("%#v", task)
 	}
 }

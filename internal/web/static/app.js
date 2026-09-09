@@ -308,6 +308,52 @@
     window.htmx.ajax("GET", "/tasks" + q, { target: "#tasks-live", select: "#tasks-live", swap: "outerHTML" });
   }
 
+  /**
+   * Fingerprint lane tip hosts (skip cooldown / cancel / History / Pause-Resume).
+   * Used to reattach unchanged nodes after #tasks-live outerHTML so daisyUI
+   * data-tip does not flicker while hovered during soft refresh.
+   */
+  function laneStableActionsFingerprint(el) {
+    if (!el || !el.querySelectorAll) return "";
+    return [...el.querySelectorAll("button, label.btn, a.btn, [data-tip]")].map((n) =>
+      [
+        n.tagName,
+        n.getAttribute("data-tip") || "",
+        n.getAttribute("aria-label") || "",
+        n.disabled || n.classList.contains("pointer-events-none") ? "1" : "0",
+        n.getAttribute("href") || "",
+        n.getAttribute("for") || "",
+        n.getAttribute("type") || "",
+        [...n.classList].filter((c) => c.startsWith("btn") || c === "tooltip").join("."),
+      ].join("~")
+    ).join("|");
+  }
+
+  let stashedLaneStableActions = null;
+
+  function stashLaneStableActions(panel) {
+    const map = new Map();
+    if (!panel || !panel.querySelectorAll) return map;
+    panel.querySelectorAll("[data-lane-stable-actions]").forEach((el) => {
+      const key = el.getAttribute("data-lane-stable-actions");
+      if (!key) return;
+      map.set(key, { el, fp: laneStableActionsFingerprint(el) });
+    });
+    return map;
+  }
+
+  function restoreLaneStableActions(panel, stashed) {
+    if (!panel || !stashed || stashed.size === 0) return;
+    panel.querySelectorAll("[data-lane-stable-actions]").forEach((el) => {
+      const key = el.getAttribute("data-lane-stable-actions");
+      const prev = stashed.get(key);
+      if (!prev) return;
+      if (prev.fp === laneStableActionsFingerprint(el)) {
+        el.replaceWith(prev.el);
+      }
+    });
+  }
+
   function clearCooldownBusyTip(wrap) {
     wrap.classList.remove("tooltip", "tooltip-top");
     wrap.removeAttribute("data-tip");
@@ -718,8 +764,8 @@
     const tips = {
       wanted_download_error: "Last download failed",
       wanted_archive: "Live source gone; waiting for Web Archive download",
-      verify_failed: "Integrity check failed - file kept; Want or Queue download",
-      integrity_check_failed: "Integrity check failed - file kept; Want or Queue download",
+      verify_failed: "Integrity check failed - file kept; Want or Download now",
+      integrity_check_failed: "Integrity check failed - file kept; Want or Download now",
       missing: "File path recorded but media not on disk - file sync may restore",
     };
     const icons = {
@@ -1753,7 +1799,8 @@
     if (!data || data.path !== location.pathname) return;
     const top = Number(data.y);
     if (!Number.isFinite(top)) return;
-    requestAnimationFrame(() => window.scrollTo(0, top));
+    const go = () => window.scrollTo(0, top);
+    requestAnimationFrame(() => requestAnimationFrame(go));
   }
 
   function formRedirectPathname(form) {
@@ -1768,6 +1815,22 @@
     }
   }
 
+  /** Path+search for Tasks action redirects; drop flash ok/err so they do not stack. */
+  function currentKeepScrollRedirect() {
+    const u = new URL(location.href);
+    u.searchParams.delete("ok");
+    u.searchParams.delete("err");
+    const q = u.searchParams.toString();
+    return u.pathname + (q ? "?" + q : "");
+  }
+
+  function syncKeepScrollRedirect(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    form.querySelectorAll("input[name='redirect'][data-keep-scroll-redirect]").forEach((el) => {
+      el.value = currentKeepScrollRedirect();
+    });
+  }
+
   function shouldKeepScrollForm(form) {
     if (!(form instanceof HTMLFormElement)) return false;
     if (form.classList.contains("js-no-keep-scroll")) return false;
@@ -1775,7 +1838,13 @@
     if (form.classList.contains("js-keep-scroll")) return true;
     // Creatorr actions: hidden redirect back to this page → restore after reload.
     const dest = formRedirectPathname(form);
-    return dest !== "" && dest === location.pathname;
+    if (dest !== "" && dest === location.pathname) return true;
+    // Tasks page: POST /actions/* always returns to /tasks (full reload).
+    if (document.getElementById("tasks-live") && String(form.method || "").toLowerCase() === "post") {
+      const action = form.getAttribute("action") || "";
+      if (action.startsWith("/actions/")) return true;
+    }
+    return false;
   }
 
   function saveSeriesScroll() {
@@ -2278,6 +2347,9 @@
     document.querySelectorAll("[data-notify-redirect]").forEach((el) => {
       el.value = location.pathname + location.search + location.hash;
     });
+    document.querySelectorAll("input[name='redirect'][data-keep-scroll-redirect]").forEach((el) => {
+      el.value = currentKeepScrollRedirect();
+    });
     connectEvents();
     initFlashToasts();
     initRangeOutputs();
@@ -2308,11 +2380,30 @@
     }
   });
 
+  // Soft #tasks-live refresh: keep tip hosts that did not change so hover tips do not flicker.
+  document.body.addEventListener("htmx:beforeSwap", (ev) => {
+    const target = ev.detail && ev.detail.target;
+    if (!target || target.id !== "tasks-live") {
+      stashedLaneStableActions = null;
+      return;
+    }
+    stashedLaneStableActions = stashLaneStableActions(target);
+  });
+
   document.body.addEventListener("htmx:afterSwap", (ev) => {
     const root = htmxSwapRoot(ev);
     createLucideIcons(root);
     formatLocalTimes(root);
     scrollTaskLogsToBottom(root);
+    if (root && root.id === "tasks-live" && stashedLaneStableActions) {
+      restoreLaneStableActions(root, stashedLaneStableActions);
+      stashedLaneStableActions = null;
+    }
+    if (root && root.id === "tasks-live") {
+      root.querySelectorAll("input[name='redirect'][data-keep-scroll-redirect]").forEach((el) => {
+        el.value = currentKeepScrollRedirect();
+      });
+    }
     if (root && (root.id === "maintenance-live" || root.querySelector?.("#maintenance-live"))) {
       wireMaintenanceScope();
     }
@@ -2338,7 +2429,9 @@
   });
   document.body.addEventListener("submit", (ev) => {
     const form = ev.target.closest("form");
-    if (!form || !shouldKeepScrollForm(form)) return;
+    if (!form) return;
+    syncKeepScrollRedirect(form);
+    if (!shouldKeepScrollForm(form)) return;
     saveKeepScroll();
   });
   function openAddSeriesModal() {
@@ -4822,7 +4915,7 @@
       const busy = videoBulkBusy();
       bar
         .querySelectorAll(
-          "[data-video-bulk-want], [data-video-bulk-ignore], [data-video-bulk-download], [data-video-bulk-refresh], [data-video-bulk-metadata], [data-video-bulk-delete]"
+          "[data-video-bulk-want], [data-video-bulk-ignore], [data-video-bulk-refresh], [data-video-bulk-metadata], [data-video-bulk-delete]"
         )
         .forEach((btn) => {
           btn.disabled = busy || n === 0;
@@ -4920,11 +5013,6 @@
     if (action === "ignore") {
       setTitle("[data-video-bulk-ignore-title]", "Ignore " + n + "/" + m + " videos");
       openVideoBulkModal("modal-bulk-ignore-videos");
-      return;
-    }
-    if (action === "download") {
-      setTitle("[data-video-bulk-download-title]", "Queue download (" + n + "/" + m + ")");
-      openVideoBulkModal("modal-bulk-download-videos");
       return;
     }
     if (action === "refresh") {
@@ -5031,12 +5119,6 @@
     if (ignore) {
       ev.preventDefault();
       runVideoBulkAction("ignore");
-      return;
-    }
-    const download = ev.target.closest("[data-video-bulk-download]");
-    if (download) {
-      ev.preventDefault();
-      runVideoBulkAction("download");
       return;
     }
     const refresh = ev.target.closest("[data-video-bulk-refresh]");

@@ -35,7 +35,7 @@
     <option value="1"{{if and (not $bulk) .Monitored}} selected{{end}}>Yes</option>
     <option value="0"{{if and (not $bulk) (not .Monitored)}} selected{{end}}>No</option>
   </select>
-  <p class="label whitespace-normal">When on, scheduled tip scans and download-wanted include this series. Manual scan and Queue download always run.</p>
+  <p class="label whitespace-normal">When on, scheduled tip scans and download-wanted include this series. Manual scan and Download now always run.</p>
 </fieldset>
 {{if and (not $bulk) .RootDisabled}}
 <input type="hidden" name="root_id" value="{{.RootID}}" />

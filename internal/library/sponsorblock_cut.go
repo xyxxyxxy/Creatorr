@@ -132,7 +132,7 @@ func (s *Store) StageSponsorblockCut(videoID int64, media string, info, thumb st
 	}, nil
 }
 
-// EnqueueSponsorblockCut queues a low-priority system-lane cut/pack task.
+// EnqueueSponsorblockCut queues a system-lane cut/pack task.
 func (s *Store) EnqueueSponsorblockCut(p SponsorblockCutPayload) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
@@ -172,7 +172,6 @@ func (s *Store) EnqueueSponsorblockCut(p SponsorblockCutPayload) (int64, error) 
 		Domain:       queue.SystemDomain,
 		SeriesID:     p.SeriesID,
 		VideoID:      p.VideoID,
-		Priority:     queue.PrioritySponsorblockCut,
 		Message:      "SponsorBlock cut",
 		Payload:      payload,
 	})

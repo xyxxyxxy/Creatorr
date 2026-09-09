@@ -56,7 +56,7 @@ const (
 	SystemDomain = "system"
 )
 
-// IsPrefetchKind is true for ClaimInteractive metadata prefetch / probe tasks.
+// IsPrefetchKind is true for ClaimImmediate metadata prefetch / probe tasks.
 // These do not occupy max_parallel_tasks slots.
 func IsPrefetchKind(kind string) bool {
 	return kind == KindPrefetchSeriesMeta || kind == KindPrefetchVideoMeta ||
@@ -65,29 +65,51 @@ func IsPrefetchKind(kind string) bool {
 }
 
 // IsInteractiveKind is true for tasks that must not wait behind other work
-// (prefetch ClaimInteractive). Finish does not start domain cooldown.
+// (prefetch ClaimImmediate). Finish does not start domain cooldown.
 // Prefetch kinds do not occupy parallel slots.
 func IsInteractiveKind(kind string) bool {
 	return IsPrefetchKind(kind)
 }
 
-// PrioritySyncFilesDue bumps cron sync_files ahead of pending apply naming.
-const PrioritySyncFilesDue = 50
+// PayloadKeyDownloadNow marks a download for ClaimImmediate (skip queue / parallel / cooldown).
+const PayloadKeyDownloadNow = "download_now"
 
-// PriorityRetentionDeleteDue bumps cron retention_delete ahead of pending apply naming.
-const PriorityRetentionDeleteDue = 50
+// IsDownloadNowPayload reports payload.download_now truthy.
+func IsDownloadNowPayload(payload string) bool {
+	payload = strings.TrimSpace(payload)
+	if payload == "" || payload == "{}" {
+		return false
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(payload), &m); err != nil {
+		return false
+	}
+	v, ok := m[PayloadKeyDownloadNow]
+	if !ok || v == nil {
+		return false
+	}
+	switch t := v.(type) {
+	case bool:
+		return t
+	case float64:
+		return t != 0
+	case string:
+		return t == "1" || strings.EqualFold(t, "true")
+	default:
+		return false
+	}
+}
 
-// PriorityDownloadNow places a Queue download at the front of the domain lane.
-const PriorityDownloadNow = 100
+// IsImmediateKind reports tasks claimed via ClaimImmediate (prefetch or download-now).
+func IsImmediateKind(kind, payload string) bool {
+	if IsInteractiveKind(kind) {
+		return true
+	}
+	return kind == KindDownload && IsDownloadNowPayload(payload)
+}
 
-// PrioritySponsorblockCut keeps SponsorBlock cut/encode behind other system work.
-const PrioritySponsorblockCut = -10
-
-// PriorityYtDlpUpdateBoot enqueues boot yt-dlp update ahead of default system work.
-const PriorityYtDlpUpdateBoot = 40
-
-// PriorityYtDlpUpdateDue is cron/manual yt-dlp update priority.
-const PriorityYtDlpUpdateDue = 50
+// sqlDownloadNowTrue is the SQLite predicate for tasks.payload.download_now (alias t).
+const sqlDownloadNowTrue = `CAST(COALESCE(json_extract(t.payload, '$.` + PayloadKeyDownloadNow + `'), 0) AS INTEGER) != 0`
 
 // Task origin: kick source (writable values only).
 const (
@@ -138,7 +160,7 @@ type Task struct {
 	Logs         []string // progress lines (live buffer or persisted on failed)
 	Progress     sql.NullFloat64
 	Domain       string
-	Priority     int
+	QueueSeq     int64
 	Origin       string
 	ParentTaskID sql.NullInt64
 	CreatedAt    string
@@ -154,11 +176,11 @@ type EnqueueParams struct {
 	SeriesID          int64
 	VideoID           int64
 	Payload           map[string]any
-	Priority          int
 	Message           string
 	Origin            string // required: manual|scheduled|boot|task
 	ParentTaskID      int64  // required when Origin=task; forces OriginTask when >0
-	BypassDownloadCap bool   // Queue download: skip max_download_queue
+	BypassDownloadCap bool   // Download now: skip max_download_queue
+	Immediate         bool   // Download now: ClaimImmediate (sets payload.download_now)
 }
 
 // Store wraps queue operations.
@@ -258,6 +280,12 @@ func (s *Store) Enqueue(p EnqueueParams) (int64, error) {
 	} else if domain != "unknown" && domain != SystemDomain {
 		domain = settings.NormalizeDomain(domain)
 	}
+	if p.Immediate {
+		if p.Payload == nil {
+			p.Payload = map[string]any{}
+		}
+		p.Payload[PayloadKeyDownloadNow] = true
+	}
 	payload := "{}"
 	if p.Payload != nil {
 		b, err := json.Marshal(p.Payload)
@@ -287,10 +315,17 @@ func (s *Store) Enqueue(p EnqueueParams) (int64, error) {
 	if p.ParentTaskID > 0 {
 		parent = p.ParentTaskID
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	seq, err := s.nextQueueSeqLocked(domain)
+	if err != nil {
+		return 0, err
+	}
 	res, err := s.DB.SQL.Exec(`
-		INSERT INTO tasks (kind, status, series_id, video_id, payload, message, domain, priority, origin, parent_task_id, created_at)
+		INSERT INTO tasks (kind, status, series_id, video_id, payload, message, domain, queue_seq, origin, parent_task_id, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.Kind, StatusPending, series, video, payload, nullStr(p.Message), domain, p.Priority, p.Origin, parent, now)
+	`, p.Kind, StatusPending, series, video, payload, nullStr(p.Message), domain, seq, p.Origin, parent, now)
 	if err != nil {
 		return 0, err
 	}
@@ -313,6 +348,12 @@ func (s *Store) InsertRunning(p EnqueueParams) (int64, error) {
 	} else if domain != "unknown" && domain != SystemDomain {
 		domain = settings.NormalizeDomain(domain)
 	}
+	if p.Immediate {
+		if p.Payload == nil {
+			p.Payload = map[string]any{}
+		}
+		p.Payload[PayloadKeyDownloadNow] = true
+	}
 	payload := "{}"
 	if p.Payload != nil {
 		b, err := json.Marshal(p.Payload)
@@ -334,14 +375,128 @@ func (s *Store) InsertRunning(p EnqueueParams) (int64, error) {
 	if p.ParentTaskID > 0 {
 		parent = p.ParentTaskID
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	seq, err := s.nextQueueSeqLocked(domain)
+	if err != nil {
+		return 0, err
+	}
 	res, err := s.DB.SQL.Exec(`
-		INSERT INTO tasks (kind, status, series_id, video_id, payload, message, domain, priority, origin, parent_task_id, created_at, started_at)
+		INSERT INTO tasks (kind, status, series_id, video_id, payload, message, domain, queue_seq, origin, parent_task_id, created_at, started_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.Kind, StatusRunning, series, video, payload, nullStr(p.Message), domain, p.Priority, p.Origin, parent, now, now)
+	`, p.Kind, StatusRunning, series, video, payload, nullStr(p.Message), domain, seq, p.Origin, parent, now, now)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+func (s *Store) nextQueueSeqLocked(domain string) (int64, error) {
+	var seq int64
+	err := s.DB.SQL.QueryRow(`
+		SELECT COALESCE(MAX(queue_seq), 0) + 1 FROM tasks
+		WHERE domain = ? AND status IN (?, ?)
+	`, domain, StatusPending, StatusRunning).Scan(&seq)
+	if err != nil {
+		return 0, err
+	}
+	return seq, nil
+}
+
+// MoveToFront sets a pending task's queue_seq ahead of all open tasks on its domain.
+func (s *Store) MoveToFront(id int64) error {
+	if id <= 0 {
+		return fmt.Errorf("task id required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var domain, status string
+	err := s.DB.SQL.QueryRow(`SELECT domain, status FROM tasks WHERE id = ?`, id).Scan(&domain, &status)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("task not found")
+	}
+	if err != nil {
+		return err
+	}
+	if status != StatusPending {
+		return fmt.Errorf("only pending tasks can move to front")
+	}
+	var minSeq sql.NullInt64
+	if err := s.DB.SQL.QueryRow(`
+		SELECT MIN(queue_seq) FROM tasks
+		WHERE domain = ? AND status IN (?, ?)
+	`, domain, StatusPending, StatusRunning).Scan(&minSeq); err != nil {
+		return err
+	}
+	front := int64(1)
+	if minSeq.Valid {
+		front = minSeq.Int64 - 1
+	}
+	res, err := s.DB.SQL.Exec(`UPDATE tasks SET queue_seq = ? WHERE id = ? AND status = ?`, front, id, StatusPending)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n != 1 {
+		return fmt.Errorf("task not pending")
+	}
+	return nil
+}
+
+// ClearCooldown clears an in-memory domain cooldown. Returns true when an active cooldown was cleared.
+func (s *Store) ClearCooldown(domain string) bool {
+	domain = settings.NormalizeDomain(strings.TrimSpace(domain))
+	if domain == "" || domain == SystemDomain || domain == "unknown" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	until, ok := s.cooldown[domain]
+	if !ok || !time.Now().Before(until) {
+		delete(s.cooldown, domain)
+		return false
+	}
+	delete(s.cooldown, domain)
+	return true
+}
+
+// MarkDownloadNowImmediate sets payload.download_now on a pending download task.
+func (s *Store) MarkDownloadNowImmediate(id int64) error {
+	if id <= 0 {
+		return fmt.Errorf("task id required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var kind, status, payload string
+	err := s.DB.SQL.QueryRow(`SELECT kind, status, payload FROM tasks WHERE id = ?`, id).Scan(&kind, &status, &payload)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("task not found")
+	}
+	if err != nil {
+		return err
+	}
+	if kind != KindDownload || status != StatusPending {
+		return fmt.Errorf("only pending download tasks can be marked download-now")
+	}
+	var m map[string]any
+	if strings.TrimSpace(payload) == "" {
+		m = map[string]any{}
+	} else if err := json.Unmarshal([]byte(payload), &m); err != nil {
+		m = map[string]any{}
+	}
+	if m == nil {
+		m = map[string]any{}
+	}
+	m[PayloadKeyDownloadNow] = true
+	b, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	_, err = s.DB.SQL.Exec(`UPDATE tasks SET payload = ?, message = COALESCE(NULLIF(message,''), ?) WHERE id = ? AND status = ?`,
+		string(b), "Download now", id, StatusPending)
+	return err
 }
 
 func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
@@ -482,7 +637,7 @@ func (s *Store) rejectDownloadQueueFull(domain string) error {
 }
 
 // ClaimNext picks the next runnable pending task respecting inactive/paused domains,
-// per-domain max_parallel_tasks, and cooldown. Interactive kinds are excluded (see ClaimInteractive).
+// per-domain max_parallel_tasks, and cooldown. Immediate kinds are excluded (see ClaimImmediate).
 func (s *Store) ClaimNext() (*Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -491,28 +646,29 @@ func (s *Store) ClaimNext() (*Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT t.id, t.kind, t.status, t.series_id, t.video_id, t.payload,
 		       COALESCE(t.error_code,''), COALESCE(t.error_message,''), COALESCE(t.message,''),
-		       COALESCE(t.detail,''), t.progress, t.domain, t.priority, t.created_at, t.started_at, t.finished_at,
+		       COALESCE(t.detail,''), t.progress, t.domain, t.queue_seq, t.created_at, t.started_at, t.finished_at,
 		       t.origin, t.parent_task_id
 		FROM tasks t
 		WHERE t.status = ?
 		  AND t.kind NOT IN (?, ?, ?, ?, ?)
+		  AND NOT (t.kind = ? AND `+sqlDownloadNowTrue+`)
 		  AND NOT EXISTS (
 		    SELECT 1 FROM domains d WHERE d.domain = t.domain AND d.active = 0
 		  )
 		  AND NOT EXISTS (
 		    SELECT 1 FROM domain_runtime r WHERE r.domain = t.domain AND r.paused != 0
 		  )
-		ORDER BY t.priority DESC, t.id ASC
-	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo, KindProbeSourceTitle)
+		ORDER BY t.queue_seq ASC, t.id ASC
+	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo, KindProbeSourceTitle, KindDownload)
 	if err != nil {
 		return nil, err
 	}
 	return s.claimFromRows(rows, now, true)
 }
 
-// ClaimInteractive claims a pending interactive task (e.g. prefetch_series_meta),
+// ClaimImmediate claims a pending immediate task (prefetch / probe / download-now),
 // ignoring per-domain running tasks, cooldown, and soft pause. Still requires domain active.
-func (s *Store) ClaimInteractive() (*Task, error) {
+func (s *Store) ClaimImmediate() (*Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -520,20 +676,28 @@ func (s *Store) ClaimInteractive() (*Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT t.id, t.kind, t.status, t.series_id, t.video_id, t.payload,
 		       COALESCE(t.error_code,''), COALESCE(t.error_message,''), COALESCE(t.message,''),
-		       COALESCE(t.detail,''), t.progress, t.domain, t.priority, t.created_at, t.started_at, t.finished_at,
+		       COALESCE(t.detail,''), t.progress, t.domain, t.queue_seq, t.created_at, t.started_at, t.finished_at,
 		       t.origin, t.parent_task_id
 		FROM tasks t
 		WHERE t.status = ?
-		  AND t.kind IN (?, ?, ?, ?, ?)
+		  AND (
+		    t.kind IN (?, ?, ?, ?, ?)
+		    OR (t.kind = ? AND `+sqlDownloadNowTrue+`)
+		  )
 		  AND NOT EXISTS (
 		    SELECT 1 FROM domains d WHERE d.domain = t.domain AND d.active = 0
 		  )
-		ORDER BY t.priority DESC, t.id ASC
-	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo, KindProbeSourceTitle)
+		ORDER BY t.queue_seq ASC, t.id ASC
+	`, StatusPending, KindPrefetchSeriesMeta, KindPrefetchVideoMeta, KindPrefetchAddSeries, KindPrefetchAddVideo, KindProbeSourceTitle, KindDownload)
 	if err != nil {
 		return nil, err
 	}
 	return s.claimFromRows(rows, now, false)
+}
+
+// ClaimInteractive is an alias for ClaimImmediate (prefetch path).
+func (s *Store) ClaimInteractive() (*Task, error) {
+	return s.ClaimImmediate()
 }
 
 func (s *Store) claimFromRows(rows *sql.Rows, now time.Time, respectCooldown bool) (*Task, error) {
@@ -545,6 +709,9 @@ func (s *Store) claimFromRows(rows *sql.Rows, now time.Time, respectCooldown boo
 			return nil, err
 		}
 		if respectCooldown {
+			if IsDownloadNowPayload(t.Payload) && t.Kind == KindDownload {
+				continue
+			}
 			if t.Domain != SystemDomain {
 				if until, ok := s.cooldown[t.Domain]; ok && now.Before(until) {
 					continue
@@ -943,7 +1110,7 @@ func (s *Store) CancelDownloadsForVideo(videoID int64, reason string) ([]Task, e
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
 		       origin, parent_task_id
 		FROM tasks
 		WHERE kind IN (?, ?, ?) AND video_id = ? AND status IN (?, ?)
@@ -996,7 +1163,7 @@ func (s *Store) ListByParentTaskID(parentID int64) ([]Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
 		       origin, parent_task_id
 		FROM tasks WHERE parent_task_id = ?
 		ORDER BY created_at ASC, id ASC
@@ -1021,7 +1188,7 @@ func (s *Store) GetTask(id int64) (*Task, error) {
 	row := s.DB.SQL.QueryRow(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
 		       origin, parent_task_id,
 		       COALESCE(NULLIF(commands, ''), '[]'),
 		       COALESCE(NULLIF(logs, ''), '[]')
@@ -1056,7 +1223,7 @@ func (s *Store) CancelAll() ([]Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
 		       origin, parent_task_id
 		FROM tasks WHERE status = ?
 	`, StatusPending)
@@ -1131,7 +1298,7 @@ func (s *Store) cancelDomain(domain, reason string, statuses ...string) ([]Task,
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
 		       origin, parent_task_id
 		FROM tasks WHERE domain = ? AND status IN (`+string(ph)+`)
 	`, args...)
@@ -1224,7 +1391,7 @@ func (s *Store) cancelPendingScans(where, reason string, args ...any) (int64, er
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
 		       origin, parent_task_id
 		FROM tasks WHERE `+where, args...)
 	if err != nil {
@@ -1270,11 +1437,11 @@ func (s *Store) ListActive() ([]Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
 		       origin, parent_task_id
 		FROM tasks
 		WHERE status IN (?, ?)
-		ORDER BY domain ASC, CASE status WHEN ? THEN 0 ELSE 1 END, priority DESC, id ASC
+		ORDER BY domain ASC, CASE status WHEN ? THEN 0 ELSE 1 END, queue_seq ASC, id ASC
 	`, StatusRunning, StatusPending, StatusRunning)
 	if err != nil {
 		return nil, err
@@ -1299,7 +1466,7 @@ func (s *Store) ListActiveFileDelete() ([]Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
 		       origin, parent_task_id
 		FROM tasks
 		WHERE kind = ? AND status IN (?, ?)
@@ -1325,7 +1492,7 @@ func (s *Store) ListActiveForSeries(seriesID int64) ([]Task, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
 		       origin, parent_task_id
 		FROM tasks
 		WHERE series_id = ? AND status IN (?, ?)
@@ -1352,7 +1519,7 @@ func (s *Store) ActiveTaskForVideo(videoID int64) (*Task, error) {
 	row := s.DB.SQL.QueryRow(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
 		       origin, parent_task_id
 		FROM tasks
 		WHERE video_id = ? AND status IN (?, ?)
@@ -1456,7 +1623,7 @@ func (s *Store) ActiveScanForSeries(seriesID int64) (*Task, error) {
 	row := s.DB.SQL.QueryRow(`
 		SELECT id, kind, status, series_id, video_id, payload,
 		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
-		       COALESCE(detail,''), progress, domain, priority, created_at, started_at, finished_at,
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
 		       origin, parent_task_id
 		FROM tasks
 		WHERE kind = ? AND series_id = ? AND status IN (?, ?)
@@ -1480,7 +1647,7 @@ func (s *Store) scanTask(scanner interface {
 	err := scanner.Scan(
 		&t.ID, &t.Kind, &t.Status, &t.SeriesID, &t.VideoID, &t.Payload,
 		&t.ErrorCode, &t.ErrorMessage, &t.Message, &t.Detail,
-		&t.Progress, &t.Domain, &t.Priority, &t.CreatedAt, &t.StartedAt, &t.FinishedAt,
+		&t.Progress, &t.Domain, &t.QueueSeq, &t.CreatedAt, &t.StartedAt, &t.FinishedAt,
 		&t.Origin, &t.ParentTaskID,
 	)
 	if err != nil {
@@ -1498,7 +1665,7 @@ func (s *Store) scanTaskWithExtras(scanner interface {
 	err := scanner.Scan(
 		&t.ID, &t.Kind, &t.Status, &t.SeriesID, &t.VideoID, &t.Payload,
 		&t.ErrorCode, &t.ErrorMessage, &t.Message, &t.Detail,
-		&t.Progress, &t.Domain, &t.Priority, &t.CreatedAt, &t.StartedAt, &t.FinishedAt,
+		&t.Progress, &t.Domain, &t.QueueSeq, &t.CreatedAt, &t.StartedAt, &t.FinishedAt,
 		&t.Origin, &t.ParentTaskID,
 		&commandsJSON, &logsJSON,
 	)

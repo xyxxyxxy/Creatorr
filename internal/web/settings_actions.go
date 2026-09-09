@@ -756,7 +756,7 @@ func (h *Handler) actionMaintenanceRun(w http.ResponseWriter, r *http.Request) {
 				skipMsgs = append(skipMsgs, "'File sync' already queued")
 				continue
 			}
-			id, err := h.Library.EnqueueSyncFiles(queue.PrioritySyncFilesDue, queue.OriginManual)
+			id, err := h.Library.EnqueueSyncFiles(queue.OriginManual)
 			if err != nil {
 				if firstErr == "" {
 					firstErr = err.Error()
@@ -901,7 +901,7 @@ func (h *Handler) actionYtDlpUpdate(w http.ResponseWriter, r *http.Request) {
 		redirectSettings(w, r, "/settings/connect", "err="+urlQuery("yt-dlp update already queued or running"))
 		return
 	}
-	id, err := h.Library.EnqueueYtDlpUpdate(queue.PriorityYtDlpUpdateDue, queue.OriginManual)
+	id, err := h.Library.EnqueueYtDlpUpdate(queue.OriginManual)
 	if err != nil {
 		redirectSettings(w, r, "/settings/connect", "err="+urlQuery(err.Error()))
 		return

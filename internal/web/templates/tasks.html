@@ -55,19 +55,36 @@
               <progress data-cd-bar class="progress progress-primary w-24 sm:w-32 h-2 shrink-0" value="0" max="100" aria-hidden="true"></progress>
               {{end}}
             </span>
+            <span class="join shrink-0" data-lane-stable-actions="{{.Domain}}:queue">
+            {{if .ShowCooldown}}
+            <form method="post" action="/actions/skip-domain-cooldown" class="contents">
+              <input type="hidden" name="domain" value="{{.Domain}}" />
+              <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
+              <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Skip cooldown" aria-label="Skip cooldown">
+                <i data-lucide="fast-forward" class="size-3.5"></i>
+              </button>
+            </form>
+            {{else}}
+            <span class="tooltip tooltip-top inline-flex" data-tip="No active cooldown">
+              <button type="button" class="btn btn-soft btn-primary btn-xs btn-square join-item pointer-events-none" disabled aria-label="Skip cooldown">
+                <i data-lucide="fast-forward" class="size-3.5"></i>
+              </button>
+            </span>
+            {{end}}
             {{if .ShowCancelPending}}
-            <label for="modal-cancel-domain-{{.Domain}}" class="btn btn-soft btn-error btn-xs btn-square tooltip tooltip-top shrink-0" data-tip="Cancel all pending" aria-label="Cancel all pending">
+            <label for="modal-cancel-domain-{{.Domain}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Cancel all pending" aria-label="Cancel all pending">
               <i data-lucide="list-x" class="size-3.5"></i>
             </label>
             {{else}}
-            <span class="tooltip tooltip-top shrink-0 inline-flex" data-tip="No pending tasks">
-              <button type="button" class="btn btn-soft btn-error btn-xs btn-square pointer-events-none" disabled aria-label="Cancel all pending">
+            <span class="tooltip tooltip-top inline-flex" data-tip="No pending tasks">
+              <button type="button" class="btn btn-soft btn-error btn-xs btn-square join-item pointer-events-none" disabled aria-label="Cancel all pending">
                 <i data-lucide="list-x" class="size-3.5"></i>
               </button>
             </span>
             {{end}}
             </span>
-            <div class="join shrink-0">
+            </span>
+            <div class="join shrink-0" data-lane-stable-actions="{{.Domain}}:history">
               <a class="btn btn-square join-item tooltip tooltip-top" href="/history?domain={{urlquery .Domain}}#tasks" data-tip="History" aria-label="History">
                 <i data-lucide="history" class="size-4"></i>
               </a>
@@ -75,7 +92,7 @@
               <form method="post" action="/actions/set-domain-paused" class="contents">
                 <input type="hidden" name="domain" value="{{.Domain}}" />
                 <input type="hidden" name="paused" value="1" />
-                <input type="hidden" name="redirect" value="/tasks" />
+                <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
                 <button type="submit" class="btn btn-warning btn-square join-item tooltip tooltip-top" data-tip="Pause" aria-label="Pause">
                   <i data-lucide="pause" class="size-4"></i>
                 </button>
@@ -84,7 +101,7 @@
               <form method="post" action="/actions/set-domain-paused" class="contents">
                 <input type="hidden" name="domain" value="{{.Domain}}" />
                 <input type="hidden" name="paused" value="0" />
-                <input type="hidden" name="redirect" value="/tasks" />
+                <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
                 <button type="submit" class="btn btn-primary btn-square join-item tooltip tooltip-top" data-tip="Resume" aria-label="Resume">
                   <i data-lucide="play" class="size-4"></i>
                 </button>
@@ -93,6 +110,7 @@
             </div>
             {{end}}
             {{if eq .Domain "system"}}
+            <span class="inline-flex" data-lane-stable-actions="{{.Domain}}:queue">
             {{if .ShowCancelPending}}
             <label for="modal-cancel-domain-{{.Domain}}" class="btn btn-soft btn-error btn-square tooltip tooltip-top" data-tip="Cancel all pending" aria-label="Cancel all pending">
               <i data-lucide="list-x" class="size-4"></i>
@@ -104,6 +122,7 @@
               </button>
             </span>
             {{end}}
+            </span>
             {{end}}
           </span>
         </span>
@@ -178,6 +197,7 @@
     <p class="text-sm mb-4">Cancels pending tasks for this domain only. Running tasks keep going.</p>
     <form method="post" action="/actions/cancel-domain-tasks">
       <input type="hidden" name="domain" value="{{.Domain}}" />
+      <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
       <div class="modal-action">
         <label for="modal-cancel-domain-{{.Domain}}" class="btn modal-cancel">Keep</label>
         <button type="submit" class="btn btn-error">Cancel pending</button>
