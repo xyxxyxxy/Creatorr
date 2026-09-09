@@ -11,8 +11,51 @@
 
 {{/* list_header: title, help?, help2?, icon?, level ("page"|"section"), id?,
      add_href?, add_label?, add_modal?, add_icon?,
-     add_modal2?, add_label2?, add_icon2? */}}
+     add_modal2?, add_label2?, add_icon2?,
+     ShowProgress? (+ ProgressTotal, DownloadedCount, ErrorCount, WantedCount, Monitored for series_progress;
+     progress is w-1/4 on the title row, vertically centered with the title) */}}
 {{define "list_header"}}
+{{if .ShowProgress}}
+<div class="list-header"{{with .id}} id="{{.}}"{{end}}>
+  <div class="flex items-center justify-between gap-3">
+    {{if eq .level "page"}}
+    <h1 class="text-2xl font-semibold inline-flex items-center gap-2 min-w-0 flex-1">
+      {{with .icon}}<i data-lucide="{{.}}" class="size-6 shrink-0"></i>{{end}}
+      <span class="truncate">{{.title}}</span>
+    </h1>
+    {{else}}
+    <h2 class="text-lg font-semibold inline-flex items-center gap-2 min-w-0 flex-1">
+      {{with .icon}}<i data-lucide="{{.}}" class="size-5 shrink-0"></i>{{end}}
+      <span class="truncate">{{.title}}</span>
+    </h2>
+    {{end}}
+    <div class="w-1/4 shrink-0 min-w-0">{{template "series_progress" .}}</div>
+    {{if or .add_modal2 .add_href .add_modal}}
+    <div class="list-actions flex flex-wrap gap-2 shrink-0 items-center">
+      {{if .add_modal2}}
+      <label for="{{.add_modal2}}" class="btn btn-outline">
+        {{with .add_icon2}}<i data-lucide="{{.}}" class="size-4"></i>{{end}}
+        {{if .add_label2}}{{.add_label2}}{{else}}Add{{end}}
+      </label>
+      {{end}}
+      {{if .add_href}}
+      <a href="{{.add_href}}" class="btn btn-primary">
+        {{with .add_icon}}<i data-lucide="{{.}}" class="size-4"></i>{{end}}
+        {{if .add_label}}{{.add_label}}{{else}}Add{{end}}
+      </a>
+      {{else if .add_modal}}
+      <label for="{{.add_modal}}" class="btn btn-primary">
+        {{with .add_icon}}<i data-lucide="{{.}}" class="size-4"></i>{{end}}
+        {{if .add_label}}{{.add_label}}{{else}}Add{{end}}
+      </label>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+  {{with .help}}<p class="text-sm opacity-60 mt-0.5">{{.}}</p>{{end}}
+  {{with .help2}}<p class="text-sm opacity-60 mt-0.5">{{.}}</p>{{end}}
+</div>
+{{else}}
 <div class="list-header flex flex-wrap items-start justify-between gap-3"{{with .id}} id="{{.}}"{{end}}>
   <div class="min-w-0 flex-1">
     {{if eq .level "page"}}
@@ -29,6 +72,7 @@
     {{with .help}}<p class="text-sm opacity-60 mt-0.5">{{.}}</p>{{end}}
     {{with .help2}}<p class="text-sm opacity-60 mt-0.5">{{.}}</p>{{end}}
   </div>
+  {{if or .add_modal2 .add_href .add_modal}}
   <div class="list-actions flex flex-wrap gap-2 shrink-0 items-center">
     {{if .add_modal2}}
     <label for="{{.add_modal2}}" class="btn btn-outline">
@@ -48,7 +92,9 @@
     </label>
     {{end}}
   </div>
+  {{end}}
 </div>
+{{end}}
 {{end}}
 
 {{define "list_empty"}}
