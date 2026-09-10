@@ -1,0 +1,13 @@
+{
+  "id": "vid1",
+  "title": "First Video",
+  "webpage_url": "https://example.com/watch?v=vid1",
+  "upload_date": "20240101",
+  "description": "Local fixture video",
+  "duration": 120,
+  "thumbnails": [
+    {
+      "url": "https://example.com/thumb.jpg"
+    }
+  ]
+}
