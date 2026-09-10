@@ -73,7 +73,8 @@ New domain term → matching docs file (domain-model by default).
 
 - **Not mandatory TDD.** Red-green test-first is optional where the design is stable (domain, settings, queue, yt-dlp parsers, handlers after the OpenAPI contract is drafted). Skip strict TDD for exploratory UI, remux/ffmpeg paths.
 - **Required on behavior change:** ship a test or updated fixture/golden that would catch the bug. Outcome matters more than red-green order.
-- **Layers:** unit (domain/settings/parsers); yt-dlp via fake binary + goldens under `internal/ytdlp/testdata/` (see `fake-yt-dlp`); integration (temp SQLite + worker/queue); API httptest. Prefer golden fixtures. Hermetic externals only: FlareSolverr / POT / Apprise / GitHub via `httptest` or test swaps - never live (Hard rule **Local-only tests**).
+- **Layers:** unit (domain/settings/parsers); yt-dlp via fake binary + goldens under `internal/ytdlp/testdata/` (see `fake-yt-dlp`); integration (temp SQLite + worker/queue); API httptest for regression-critical paths. Prefer **narrow** goldens (yt-dlp List/Resolve JSON dumps; not NFO/HTML). Hermetic externals only: FlareSolverr / POT / Apprise / GitHub via `httptest` or test swaps - never live (Hard rule **Local-only tests**). OpenAPI contract drift stays CI `make openapi-check` (not a `go test` schema suite).
+- **Fake media tools:** PATH-gated ffmpeg/ffprobe tests use `internal/testutil/fakemedia` (local scripts; never require host ffmpeg for those cases).
 - **Preferred test-first zones:** domain/queue/parsers; then handlers; UI tests after markup settles.
 
 ## Ship

@@ -2,6 +2,7 @@ package ytdlp
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -61,6 +62,24 @@ func TestClientResolveFakeYtdlp(t *testing.T) {
 	}
 	if e.UploadDate != "2024-01-01T00:00:00Z" {
 		t.Fatalf("upload_date = %q", e.UploadDate)
+	}
+}
+
+func TestClientDownloadFakeYtdlp(t *testing.T) {
+	c := &Client{Bin: testdataFakeYtdlp(t)}
+	out := t.TempDir()
+	path, err := c.Download(context.Background(), DownloadOpts{
+		URL:    "https://example.com/watch?v=vid1",
+		OutDir: out,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path == "" {
+		t.Fatal("empty media path")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
 	}
 }
 

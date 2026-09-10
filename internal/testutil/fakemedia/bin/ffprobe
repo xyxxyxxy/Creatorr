@@ -1,0 +1,6 @@
+#!/bin/sh
+# Local-only fake ffprobe for Creatorr tests. Never contacts the network.
+DUR="${FAKE_FFPROBE_DURATION:-10}"
+cat <<JSON
+{"format":{"duration":"$DUR","bit_rate":"1000000","size":"100000"},"streams":[{"codec_type":"video","codec_name":"h264","width":320,"height":240,"pix_fmt":"yuv420p","avg_frame_rate":"25/1","r_frame_rate":"25/1","bit_rate":"800000"},{"codec_type":"audio","codec_name":"aac","sample_rate":"48000","channels":2,"bit_rate":"128000"}]}
+JSON

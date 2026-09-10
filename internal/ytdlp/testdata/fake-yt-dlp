@@ -1,6 +1,7 @@
 #!/bin/sh
 # Local-only fake yt-dlp for Creatorr tests. Never contacts the network.
 # Serves checked-in goldens next to this script for -J / --flat-playlist.
+# For downloads (no -J), writes a dummy media file into the working directory.
 set -eu
 DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 
@@ -35,5 +36,9 @@ if [ "$dump" = 1 ]; then
 	exit 0
 fi
 
-echo "fake-yt-dlp: unsupported args: $*" >&2
-exit 1
+# Download / sidecar path: write placeholder media (+ optional info.json).
+printf 'fake-ytdlp-media\n' > "First Video [vid1].mp4"
+if echo "$*" | grep -q -- '--write-info-json'; then
+	printf '{"id":"vid1","title":"First Video","ext":"mp4"}\n' > "First Video [vid1].info.json"
+fi
+exit 0
