@@ -17,6 +17,7 @@ Mandatory reading for AI agents. Creatorr is a Sonarr-shaped Go daemon for creat
 - **daisyUI first** - stock daisyUI + Tailwind in markup; minimal `input.css` only for small glue (document why). Do not add another UI kit. UI work: read [`docs/ui.md`](docs/ui.md).
 - Keep files small; no god modules. New endpoint → small handler file or package method.
 - **Portable examples only** - no real hostnames/IPs/home paths; use `example.com` and env placeholders. Tests: `t.TempDir()`, fixtures - never infer paths from this machine. Operator-facing UI/docs copy: do not name real video sites (generic DASH/CDN language only).
+- **Local-only tests:** never trigger requests to external sites or the public internet from tests (`go test` / `make test`). Doubles stay on-machine: `httptest` / loopback, fake yt-dlp scripts, `t.TempDir()`, in-process swaps (e.g. `SetSendFnForTest`), checked-in fixtures/goldens. `example.com`-style URLs must resolve only via mocks (never leave the process). Forbidden: live FlareSolverr / POT / Apprise / GitHub / CDN / site extractors, or any "just this once" live smoke inside unit/integration tests. Agents must not add, enable, or suggest live-net test paths.
 
 ## Architecture
 
@@ -68,10 +69,18 @@ New domain term → matching docs file (domain-model by default).
 4. Branch: never commit on `main`. Before push: `make test vet lint openapi-check` (and `make css` if UI classes/vendors changed). After clone, `make hooks` enables `.githooks/pre-commit` (lint + test on each commit; skip with `SKIP_GITHOOKS=1`).
 5. Prompt on uncertainty; do not guess.
 
+## Testing
+
+- **Not mandatory TDD.** Red-green test-first is optional where the design is stable (domain, settings, queue, yt-dlp parsers, handlers after the OpenAPI contract is drafted). Skip strict TDD for exploratory UI, remux/ffmpeg paths.
+- **Required on behavior change:** ship a test or updated fixture/golden that would catch the bug. Outcome matters more than red-green order.
+- **Layers:** unit (domain/settings/parsers); yt-dlp via fake binary + goldens under `internal/ytdlp/testdata/` (see `fake-yt-dlp`); integration (temp SQLite + worker/queue); API httptest for regression-critical paths. Prefer **narrow** goldens (yt-dlp List/Resolve JSON dumps; not NFO/HTML). Hermetic externals only: FlareSolverr / POT / Apprise / GitHub via `httptest` or test swaps - never live (Hard rule **Local-only tests**). OpenAPI contract drift stays CI `make openapi-check` (not a `go test` schema suite).
+- **Fake media tools:** PATH-gated ffmpeg/ffprobe tests use `internal/testutil/fakemedia` (local scripts; never require host ffmpeg for those cases).
+- **Preferred test-first zones:** domain/queue/parsers; then handlers; UI tests after markup settles.
+
 ## Ship
 
 - **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker` (in-process heartbeat, not SQLite), `ytdlp`, `disk`, `flaresolverr`, `pot_provider` (last two skipped if URL unset). Compose healthcheck should use it.
 - **Images:** `ghcr.io/xyxxyxxy/creatorr:latest`, `:X.Y.Z`, and `:X.Y` from git tags `v*` on `main` (docker/metadata strips the `v` prefix); `:dev` tracks tip of `main` (and `workflow_dispatch` rebuilds); `:sha-<short>` on every `main` push for pins and pre-release testing. Compose: [`docker-compose.yml`](docker-compose.yml).
-- **Tests:** unit (domain/settings), yt-dlp fixtures (no live net), integration (temp SQLite + worker/queue), API httptest + schema. Prefer golden fixtures; add tests for behavior changes.
+- **Tests:** see **Testing** above. Before push: `make test` (and the rest of the pre-push checklist in Workflow).
 - **Branching:** GitHub Flow - `main` is the only long-lived branch. Never commit on `main`. Short-lived branch, then a pull request into `main`.
 - **Commits:** Conventional Commits; one logical step each; subject ≤72 chars; body explains why when not obvious.

@@ -3,12 +3,12 @@ package library_test
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/testutil/fakemedia"
 )
 
 func TestParseEpisodeNFOFile(t *testing.T) {
@@ -163,12 +163,8 @@ func TestApplyImportNFOUpdatesDBAndRegenerates(t *testing.T) {
 }
 
 func TestSoftFillDurationFromMedia(t *testing.T) {
-	if _, err := exec.LookPath("ffprobe"); err != nil {
-		t.Skip("ffprobe not in PATH")
-	}
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not in PATH")
-	}
+	fakemedia.PrependPATH(t)
+	t.Setenv("FAKE_FFPROBE_DURATION", "2")
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	root, err := s.GetRoot(rootID)
@@ -194,13 +190,7 @@ func TestSoftFillDurationFromMedia(t *testing.T) {
 	dir := filepath.Join(root.Path, "Probe Show")
 	_ = os.MkdirAll(dir, 0o755)
 	media := filepath.Join(dir, "Ep.mkv")
-	cmd := exec.Command("ffmpeg", "-hide_banner", "-nostdin", "-y",
-		"-f", "lavfi", "-i", "testsrc=size=64x64:rate=25",
-		"-f", "lavfi", "-i", "sine=f=440",
-		"-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", media)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Skipf("ffmpeg unavailable: %v (%s)", err, out)
-	}
+	fakemedia.WriteDummyMedia(t, media)
 	if err := s.CompleteImport(videoID, media, "", "", "", nil, library.MediaCompleteMeta{}, seedTaskID(t, s)); err != nil {
 		t.Fatal(err)
 	}
@@ -211,8 +201,8 @@ func TestSoftFillDurationFromMedia(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.DurationSeconds.Valid || v.DurationSeconds.Int64 < 1 || v.DurationSeconds.Int64 > 3 {
-		t.Fatalf("duration=%v want ~2s", v.DurationSeconds)
+	if !v.DurationSeconds.Valid || v.DurationSeconds.Int64 != 2 {
+		t.Fatalf("duration=%v want 2s (fake ffprobe)", v.DurationSeconds)
 	}
 	// Second call must not overwrite.
 	if err := s.SetDurationSeconds(videoID, 99); err != nil {

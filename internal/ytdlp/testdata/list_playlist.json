@@ -1,0 +1,22 @@
+{
+  "_type": "playlist",
+  "id": "PL_example",
+  "title": "Example Playlist",
+  "webpage_url": "https://example.com/playlist/PL_example",
+  "entries": [
+    {
+      "id": "vid1",
+      "title": "First Video",
+      "webpage_url": "https://example.com/watch?v=vid1",
+      "url": "https://example.com/watch?v=vid1",
+      "upload_date": "20240101"
+    },
+    {
+      "id": "vid2",
+      "title": "Second Video",
+      "webpage_url": "https://example.com/watch?v=vid2",
+      "url": "https://example.com/watch?v=vid2",
+      "upload_date": "20240201"
+    }
+  ]
+}

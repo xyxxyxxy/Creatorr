@@ -9,6 +9,7 @@ import (
 
 	"github.com/xyxxyxxy/Creatorr/internal/exectrace"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/testutil/fakemedia"
 )
 
 func TestRemuxIfNeededSameExt(t *testing.T) {
@@ -23,7 +24,28 @@ func TestRemuxIfNeededSameExt(t *testing.T) {
 	}
 }
 
+func TestRemuxIfNeededMp4WithFakeFFmpeg(t *testing.T) {
+	fakemedia.PrependPATH(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.mp4")
+	fakemedia.WriteDummyMedia(t, path)
+	got, remuxed, err := library.RemuxIfNeeded(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !remuxed {
+		t.Fatal("want remuxed")
+	}
+	if filepath.Ext(got) != ".mkv" {
+		t.Fatalf("got=%q", got)
+	}
+	if _, err := os.Stat(got); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRemuxIfNeededRecordsCommand(t *testing.T) {
+	fakemedia.PrependPATH(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.mp4")
 	if err := os.WriteFile(path, []byte("not-media"), 0o644); err != nil {
@@ -44,3 +66,4 @@ func TestRemuxIfNeededRecordsCommand(t *testing.T) {
 		t.Fatalf("want video/audio map and -dn, got %q", lines[0])
 	}
 }
+

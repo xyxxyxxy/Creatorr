@@ -1,0 +1,61 @@
+#!/bin/sh
+# Local-only fake ffmpeg for Creatorr tests. Never contacts the network.
+set -eu
+progress=0
+in=""
+out=""
+prev=""
+for a in "$@"; do
+	case "$a" in
+	pipe:1) progress=1 ;;
+	esac
+	case "$a" in
+	-*)
+		prev=$a
+		;;
+	*)
+		case "$prev" in
+		-i) in=$a; prev= ;;
+		-progress|-loglevel|-f|-c|-c:v|-c:a|-map|-filter_complex|-ss|-t|-frames:v|-pix_fmt|-shortest|-an|-dn|-safe|-avoid_negative_ts)
+			prev=
+			;;
+		*)
+			out=$a
+			prev=
+			;;
+		esac
+		;;
+	esac
+done
+
+if [ "$progress" = 1 ]; then
+	# Mid ticks so ScanFFmpegProgressPipe can report (0,1).
+	printf 'out_time_ms=500000\n'
+	printf 'out_time_ms=2500000\n'
+	printf 'progress=end\n'
+fi
+
+if [ -z "${out:-}" ]; then
+	exit 0
+fi
+
+# PNG extract: write a tiny valid 2x3 RGB PNG (solid + gap + solid rows via Go tests use larger; write fixture path)
+case "$out" in
+*.png)
+	# Minimal 1x1 PNG is not two-band; tests that need bands use a pre-made file via FAKE_FFMPEG_PNG.
+	if [ -n "${FAKE_FFMPEG_PNG:-}" ] && [ -f "$FAKE_FFMPEG_PNG" ]; then
+		cp "$FAKE_FFMPEG_PNG" "$out"
+	else
+		# 1x1 transparent PNG
+		printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82' > "$out"
+	fi
+	exit 0
+	;;
+esac
+
+if [ -n "${in:-}" ] && [ -f "$in" ]; then
+	cp "$in" "$out" 2>/dev/null || printf 'fake-media\n' > "$out"
+else
+	printf 'fake-media\n' > "$out"
+fi
+exit 0
