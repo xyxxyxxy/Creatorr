@@ -53,7 +53,7 @@ func TestEnqueueClaimFinish(t *testing.T) {
 	vid := seedVideo(t, s, "v1")
 	id, err := s.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindDownload, Domain: "example.com", VideoID: vid,
+		Kind:   queue.KindDownload, Domain: "example.com", VideoID: vid,
 		Payload: map[string]any{"url": "https://example.com/watch?v=1"},
 	})
 	if err != nil {
@@ -117,7 +117,7 @@ func TestCooldownUntil(t *testing.T) {
 	vid := seedVideo(t, s, "cd1")
 	id, err := s.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindDownload, Domain: "example.com", VideoID: vid,
+		Kind:   queue.KindDownload, Domain: "example.com", VideoID: vid,
 		Payload: map[string]any{"url": "https://example.com/watch?v=cd1"},
 	})
 	if err != nil {
@@ -150,7 +150,7 @@ func TestStartCooldownForDomainsBlocksClaim(t *testing.T) {
 	vid := seedVideo(t, s, "boot-cd")
 	if _, err := s.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindDownload, Domain: "example.com", VideoID: vid,
+		Kind:   queue.KindDownload, Domain: "example.com", VideoID: vid,
 		Payload: map[string]any{"url": "https://example.com/watch?v=boot-cd"},
 	}); err != nil {
 		t.Fatal(err)
@@ -177,7 +177,7 @@ func TestSystemLaneNoCooldown(t *testing.T) {
 	_ = settings.SetDomainDefault(s.DB, 30, 8, 1, "10M", "1", false)
 	id, err := s.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "sync",
+		Kind:   queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "sync",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -196,7 +196,7 @@ func TestSystemLaneNoCooldown(t *testing.T) {
 	}
 	id2, err := s.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "sync2",
+		Kind:   queue.KindSyncFiles, Domain: queue.SystemDomain, Message: "sync2",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -498,5 +498,31 @@ func TestListByParentTaskID(t *testing.T) {
 		if c.Origin != queue.OriginTask || !c.ParentTaskID.Valid || c.ParentTaskID.Int64 != parent {
 			t.Fatalf("child provenance: %+v", c)
 		}
+	}
+}
+
+func TestActiveIntegrityAndNonIntegrityTaskForVideo(t *testing.T) {
+	s := openStore(t)
+	vid := seedVideo(t, s, "split")
+	dlID, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual, Kind: queue.KindDownload, Domain: "example.com", VideoID: vid,
+		Payload: map[string]any{"url": "https://example.com/1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verID, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual, Kind: queue.KindIntegrityCheckInitial, Domain: queue.SystemDomain, VideoID: vid,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	non, err := s.ActiveNonIntegrityTaskForVideo(vid)
+	if err != nil || non == nil || non.ID != dlID {
+		t.Fatalf("non-integrity got %+v err=%v want id=%d", non, err, dlID)
+	}
+	integ, err := s.ActiveIntegrityTaskForVideo(vid)
+	if err != nil || integ == nil || integ.ID != verID {
+		t.Fatalf("integrity got %+v err=%v want id=%d", integ, err, verID)
 	}
 }
