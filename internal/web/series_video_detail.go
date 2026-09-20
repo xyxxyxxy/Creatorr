@@ -46,7 +46,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 	histTimeline := videoHistoryGroupsToTimeline(groupVideoHistoryByTask(histViews))
 	t, _ := h.Queue.ActiveTaskForVideo(vid)
 	statusTask, _ := h.Queue.ActiveNonIntegrityTaskForVideo(vid)
-	integrityTask, _ := h.Queue.ActiveIntegrityTaskForVideo(vid)
+	integrityTask, _ := h.Queue.IntegrityTaskLinkForVideo(vid)
 	dlRunning := deliveryTaskActive(t) && t.Status == queue.StatusRunning
 	deliveryQueued := deliveryTaskActive(t)
 	deleting := taskIsFileDelete(t)
