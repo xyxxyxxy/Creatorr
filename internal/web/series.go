@@ -60,6 +60,14 @@ func deliveryTaskActive(t *queue.Task) bool {
 	return t != nil && (t.Kind == queue.KindDownload || t.Kind == queue.KindSponsorblockCut || t.Kind == queue.KindIntegrityCheckInitial)
 }
 
+// activeTaskLinkPrefix is the muted label before a video-detail task kind link.
+func activeTaskLinkPrefix(status string) string {
+	if status == queue.StatusRunning {
+		return "Running"
+	}
+	return "Queued"
+}
+
 func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
 	live, err := h.loadSeriesListLive(r)
 	if err != nil {
