@@ -29,28 +29,28 @@ const (
 	StatusFailed    = "failed"
 	StatusCancelled = "cancelled"
 
-	KindScan               = "scan"
-	KindDownload           = "download"
-	KindRescanMetadata     = "rescan_metadata"
-	KindRefreshSidecars    = "refresh_sidecars"
-	KindImport             = "import"
-	KindPrefetchSeriesMeta = "prefetch_series_meta"
-	KindPrefetchVideoMeta  = "prefetch_video_meta"
-	KindPrefetchAddSeries  = "prefetch_add_series"
-	KindPrefetchAddVideo   = "prefetch_add_video"
-	KindProbeSourceTitle   = "probe_source_title"
-	KindSyncFiles          = "sync_files"
-	KindRetentionDelete    = "retention_delete"
-	KindRenameEpisodes     = "rename_episodes"
-	KindRegenerateNFO      = "regenerate_nfo"
+	KindScan                  = "scan"
+	KindDownload              = "download"
+	KindRescanMetadata        = "rescan_metadata"
+	KindRefreshSidecars       = "refresh_sidecars"
+	KindImport                = "import"
+	KindPrefetchSeriesMeta    = "prefetch_series_meta"
+	KindPrefetchVideoMeta     = "prefetch_video_meta"
+	KindPrefetchAddSeries     = "prefetch_add_series"
+	KindPrefetchAddVideo      = "prefetch_add_video"
+	KindProbeSourceTitle      = "probe_source_title"
+	KindSyncFiles             = "sync_files"
+	KindRetentionDelete       = "retention_delete"
+	KindRenameEpisodes        = "rename_episodes"
+	KindRegenerateNFO         = "regenerate_nfo"
 	KindIntegrityCheck        = "integrity_check"
 	KindDeleteFiles           = "delete_files"
 	KindDeleteSidecar         = "delete_sidecar"
 	KindSponsorblockCut       = "sponsorblock_cut"
 	KindIntegrityCheckInitial = "integrity_check_initial"
 	KindYtDlpUpdate           = "ytdlp_update"
-	KindBulkEditSeries     = "bulk_edit_series"
-	KindBulkEditVideos     = "bulk_edit_videos"
+	KindBulkEditSeries        = "bulk_edit_series"
+	KindBulkEditVideos        = "bulk_edit_videos"
 
 	// SystemDomain is the queue lane for maintenance tasks.
 	SystemDomain = "system"
@@ -507,7 +507,7 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE domain = ? AND kind = ? AND status IN (?, ?) LIMIT 1
 			`, SystemDomain, p.Kind, StatusPending, StatusRunning)
-		// KindRenameEpisodes: full vs scoped dedup is handled in library enqueue helpers.
+			// KindRenameEpisodes: full vs scoped dedup is handled in library enqueue helpers.
 		}
 	}
 	switch p.Kind {
@@ -1528,6 +1528,48 @@ func (s *Store) ActiveTaskForVideo(videoID int64) (*Task, error) {
 		ORDER BY CASE status WHEN ? THEN 0 ELSE 1 END, id DESC
 		LIMIT 1
 	`, videoID, StatusRunning, StatusPending, StatusRunning)
+	t, err := s.scanTask(row)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	if err == nil && t != nil {
+		return t, nil
+	}
+	return s.activeFileDeleteTaskForVideo(videoID)
+}
+
+// ActiveIntegrityTaskForVideo returns pending/running integrity_check(_initial) for a video.
+func (s *Store) ActiveIntegrityTaskForVideo(videoID int64) (*Task, error) {
+	row := s.DB.SQL.QueryRow(`
+		SELECT id, kind, status, series_id, video_id, payload,
+		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
+		       origin, parent_task_id
+		FROM tasks
+		WHERE video_id = ? AND kind IN (?, ?) AND status IN (?, ?)
+		ORDER BY CASE status WHEN ? THEN 0 ELSE 1 END, id DESC
+		LIMIT 1
+	`, videoID, KindIntegrityCheck, KindIntegrityCheckInitial, StatusRunning, StatusPending, StatusRunning)
+	t, err := s.scanTask(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return t, err
+}
+
+// ActiveNonIntegrityTaskForVideo returns the best pending/running non-integrity task for a video
+// (download, SponsorBlock cut, sidecars, …). Falls back to delete_files covering this video.
+func (s *Store) ActiveNonIntegrityTaskForVideo(videoID int64) (*Task, error) {
+	row := s.DB.SQL.QueryRow(`
+		SELECT id, kind, status, series_id, video_id, payload,
+		       COALESCE(error_code,''), COALESCE(error_message,''), COALESCE(message,''),
+		       COALESCE(detail,''), progress, domain, queue_seq, created_at, started_at, finished_at,
+		       origin, parent_task_id
+		FROM tasks
+		WHERE video_id = ? AND kind NOT IN (?, ?) AND status IN (?, ?)
+		ORDER BY CASE status WHEN ? THEN 0 ELSE 1 END, id DESC
+		LIMIT 1
+	`, videoID, KindIntegrityCheck, KindIntegrityCheckInitial, StatusRunning, StatusPending, StatusRunning)
 	t, err := s.scanTask(row)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err

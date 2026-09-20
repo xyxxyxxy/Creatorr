@@ -124,9 +124,13 @@
 {{else}}
 {{template "list_empty" "No video"}}
 {{end}}
-{{if or .MediaResolution .MediaDuration}}
+{{if or .MediaResolution .MediaFPS .MediaRemux .MediaDuration}}
 <div class="flex items-baseline justify-between gap-3 text-sm tabular-nums">
-  <span>{{.MediaResolution}}</span>
+  <span class="inline-flex items-baseline gap-2">
+    {{if .MediaResolution}}<span>{{.MediaResolution}}</span>{{end}}
+    {{if .MediaFPS}}<span>{{.MediaFPS}} fps</span>{{end}}
+    {{if .MediaRemux}}<span>{{.MediaRemux}}</span>{{end}}
+  </span>
   <span>{{.MediaDuration}}</span>
 </div>
 {{end}}
@@ -150,15 +154,33 @@
   {{else}}
   <tr><th class="w-40">Upload date</th><td class="opacity-60">none</td></tr>
   {{end}}
+  {{if .Video.MediaType}}
+  <tr><th class="w-40">Media type</th><td>{{.Video.MediaType}}</td></tr>
+  {{else}}
+  <tr><th class="w-40">Media type</th><td class="opacity-60">none</td></tr>
+  {{end}}
   <tr>
     <th class="w-40">Status</th>
     <td>
-      <div class="inline-flex items-center gap-2 flex-wrap">
+      <div class="inline-flex items-center gap-2 flex-nowrap whitespace-nowrap">
         {{template "task_indicator" .TaskInd}}
-        {{if or (eq .Video.Status "wanted_download_error") (eq .Video.Status "wanted_archive") (eq .Video.Status "integrity_check_failed")}}
+        {{if .StatusTaskID}}
+        <a class="link link-hover text-xs" href="/task/{{.StatusTaskID}}">{{.StatusTaskKind}}</a>
+        {{else if or (eq .Video.Status "wanted_download_error") (eq .Video.Status "wanted_archive") (eq .Video.Status "integrity_check_failed")}}
         {{if .ErrorHistoryID}}
         <a class="link link-hover text-error text-xs" href="/task/{{.ErrorHistoryID}}">Open task for details</a>
         {{end}}
+        {{end}}
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <th class="w-40">File integrity</th>
+    <td>
+      <div class="inline-flex items-center gap-2 flex-nowrap whitespace-nowrap">
+        {{template "integrity_indicator" .IntegrityInd}}
+        {{if .IntegrityTaskID}}
+        <a class="link link-hover text-xs" href="/task/{{.IntegrityTaskID}}">{{.IntegrityTaskKind}}</a>
         {{end}}
       </div>
     </td>
@@ -172,11 +194,6 @@
       {{end}}
     </td>
   </tr>
-  {{if .Video.MediaType}}
-  <tr><th class="w-40">Media type</th><td>{{.Video.MediaType}}</td></tr>
-  {{else}}
-  <tr><th class="w-40">Media type</th><td class="opacity-60">none</td></tr>
-  {{end}}
   {{range .DetailRows}}
   <tr>
     <th class="w-40">{{.Label}}</th>
