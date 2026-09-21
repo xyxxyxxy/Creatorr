@@ -6,6 +6,8 @@ Index: [README.md](README.md). Agent contract: [`AGENTS.md`](../AGENTS.md).
 
 **Dev UI reload:** `CREATORR_WEB_DEV=1` (+ optional `CREATORR_WEB_DIR`, default `internal/web`) reloads templates/partials/static from disk each request. Compose mounts `./internal/web` at `/web`. CSS still needs `make css`.
 
+**Document title:** browser tab is always `Creatorr` (`partials/head.html`, setup/login in `templates/auth.html`). In-page headers still use `pageBase.Title`.
+
 **CSS priority (daisyUI first).** Fix UI with **stock daisyUI + Tailwind** in templates/partials, or daisy **theme tokens** via `@plugin "daisyui/theme"`. Prefer changing the HTML pattern over CSS.
 
 When stock daisyUI is almost right but needs a small glue fix (overflow, stacking, clip): **prefer a minimal rule in `input.css`** over JS portals, third-party tooltip/popover libs, or other UI kits. Document each override with a one-line why. Do **not** add another CSS/UI library for chrome daisyUI already covers. If the fix is large or unclear → **stop and ask**.
