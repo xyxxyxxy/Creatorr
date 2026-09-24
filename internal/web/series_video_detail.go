@@ -46,19 +46,21 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 	histTimeline := videoHistoryGroupsToTimeline(groupVideoHistoryByTask(histViews))
 	t, _ := h.Queue.ActiveTaskForVideo(vid)
 	statusTask, _ := h.Queue.ActiveNonIntegrityTaskForVideo(vid)
-	integrityTask, _ := h.Queue.ActiveIntegrityTaskForVideo(vid)
+	integrityTask, _ := h.Queue.IntegrityTaskLinkForVideo(vid)
 	dlRunning := deliveryTaskActive(t) && t.Status == queue.StatusRunning
 	deliveryQueued := deliveryTaskActive(t)
 	deleting := taskIsFileDelete(t)
-	statusTaskID, statusTaskKind := int64(0), ""
+	statusTaskID, statusTaskKind, statusTaskPrefix := int64(0), "", ""
 	if statusTask != nil {
 		statusTaskID = statusTask.ID
 		statusTaskKind = statusTask.Kind
+		statusTaskPrefix = activeTaskLinkPrefix(statusTask.Status)
 	}
-	integrityTaskID, integrityTaskKind := int64(0), ""
+	integrityTaskID, integrityTaskKind, integrityTaskPrefix := int64(0), "", ""
 	if integrityTask != nil {
 		integrityTaskID = integrityTask.ID
 		integrityTaskKind = integrityTask.Kind
+		integrityTaskPrefix = activeTaskLinkPrefix(integrityTask.Status)
 	}
 	detailRows := videoDetailRows(h.Library, video)
 	mediaResolution := ""
@@ -149,8 +151,10 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		IntegrityInd        integrityIndicatorView
 		StatusTaskID        int64
 		StatusTaskKind      string
+		StatusTaskPrefix    string
 		IntegrityTaskID     int64
 		IntegrityTaskKind   string
+		IntegrityTaskPrefix string
 		DownloadRunning     bool
 		DeliveryQueued      bool
 		DomainActive        bool
@@ -181,8 +185,10 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		IntegrityInd:        integrityInd,
 		StatusTaskID:        statusTaskID,
 		StatusTaskKind:      statusTaskKind,
+		StatusTaskPrefix:    statusTaskPrefix,
 		IntegrityTaskID:     integrityTaskID,
 		IntegrityTaskKind:   integrityTaskKind,
+		IntegrityTaskPrefix: integrityTaskPrefix,
 		DownloadRunning:     dlRunning,
 		DeliveryQueued:      deliveryQueued,
 		DomainActive:        dAct,

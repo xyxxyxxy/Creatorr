@@ -165,6 +165,7 @@
       <div class="inline-flex items-center gap-2 flex-nowrap whitespace-nowrap">
         {{template "task_indicator" .TaskInd}}
         {{if .StatusTaskID}}
+        <span class="text-xs opacity-60">{{.StatusTaskPrefix}}</span>
         <a class="link link-hover text-xs" href="/task/{{.StatusTaskID}}">{{.StatusTaskKind}}</a>
         {{else if or (eq .Video.Status "wanted_download_error") (eq .Video.Status "wanted_archive") (eq .Video.Status "integrity_check_failed")}}
         {{if .ErrorHistoryID}}
@@ -180,6 +181,7 @@
       <div class="inline-flex items-center gap-2 flex-nowrap whitespace-nowrap">
         {{template "integrity_indicator" .IntegrityInd}}
         {{if .IntegrityTaskID}}
+        <span class="text-xs opacity-60">{{.IntegrityTaskPrefix}}</span>
         <a class="link link-hover text-xs" href="/task/{{.IntegrityTaskID}}">{{.IntegrityTaskKind}}</a>
         {{end}}
       </div>

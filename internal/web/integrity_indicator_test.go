@@ -62,9 +62,13 @@ func TestIntegrityIndicatorTipLastChecked(t *testing.T) {
 	if offWanted != "No packed media" {
 		t.Fatalf("offWanted=%q", offWanted)
 	}
-	// Off ignores stale last-checked history.
+	// Off / eligible ignore stale last-checked history (no current media hash).
 	offStale := integrityIndicatorTip(integrityIndOff, "downloaded", false, last, now)
 	if offStale != offPacked {
 		t.Fatalf("off must omit last-checked, got %q", offStale)
+	}
+	eligibleStale := integrityIndicatorTip(integrityIndEligible, "downloaded", true, last, now)
+	if eligibleStale != "'File integrity' eligible; no hash yet" {
+		t.Fatalf("eligible must omit last-checked, got %q", eligibleStale)
 	}
 }

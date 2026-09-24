@@ -525,4 +525,46 @@ func TestActiveIntegrityAndNonIntegrityTaskForVideo(t *testing.T) {
 	if err != nil || integ == nil || integ.ID != verID {
 		t.Fatalf("integrity got %+v err=%v want id=%d", integ, err, verID)
 	}
+	link, err := s.IntegrityTaskLinkForVideo(vid)
+	if err != nil || link == nil || link.ID != verID {
+		t.Fatalf("link prefers video task %+v err=%v", link, err)
+	}
+}
+
+func TestIntegrityTaskLinkFallsBackToLibraryCheck(t *testing.T) {
+	s := openStore(t)
+	vid := seedVideo(t, s, "libcheck")
+	bulkID, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual, Kind: queue.KindIntegrityCheck, Domain: queue.SystemDomain,
+		Message: "Integrity check",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tsk, err := s.ActiveIntegrityTaskForVideo(vid); err != nil || tsk != nil {
+		t.Fatalf("no video-scoped task expected, got %+v err=%v", tsk, err)
+	}
+	link, err := s.IntegrityTaskLinkForVideo(vid)
+	if err != nil || link == nil || link.ID != bulkID {
+		t.Fatalf("link=%+v err=%v want %d", link, err, bulkID)
+	}
+	_, _ = s.DB.SQL.Exec(`UPDATE tasks SET status = ? WHERE id = ?`, queue.StatusCancelled, bulkID)
+
+	other := seedVideo(t, s, "scoped-out")
+	scopedID, err := s.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual, Kind: queue.KindIntegrityCheck, Domain: queue.SystemDomain,
+		Payload: map[string]any{"video_ids": []int64{vid}},
+		Message: "Integrity check (selected)",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err = s.IntegrityTaskLinkForVideo(vid)
+	if err != nil || link == nil || link.ID != scopedID {
+		t.Fatalf("scoped-in link=%+v err=%v want %d", link, err, scopedID)
+	}
+	out, err := s.IntegrityTaskLinkForVideo(other)
+	if err != nil || out != nil {
+		t.Fatalf("scoped-out should be nil, got %+v err=%v", out, err)
+	}
 }

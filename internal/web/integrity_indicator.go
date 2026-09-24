@@ -49,10 +49,11 @@ func integrityScheduleOn(cron string) bool {
 
 // integrityIndicatorTip builds data-tip / aria-label text.
 // lastCheckedAt empty string means omit the last-checked clause.
-// Off never shows last-checked (stale history while profile/feature off).
+// Off and eligible never show last-checked: off = feature unused; eligible = no
+// current media hash (history may be from an older pack/check).
 func integrityIndicatorTip(state, videoStatus string, verifyMedia bool, lastCheckedAt string, now time.Time) string {
 	base := integrityIndicatorBaseTip(state, videoStatus, verifyMedia)
-	if state == integrityIndOff || lastCheckedAt == "" {
+	if state == integrityIndOff || state == integrityIndEligible || lastCheckedAt == "" {
 		return base
 	}
 	_, ago := createdAgoPairShort(lastCheckedAt, now)
