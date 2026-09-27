@@ -85,7 +85,7 @@ Flat listing only (newest-first). No full metadata extract during scan. YouTube 
 | Mode | When | Behavior |
 |---|---|---|
 | **Full scan** (`mode=full`) | Source `full_scan_done` is false | One task lists the feed (newest-first; optional `full_scan_limit` → yt-dlp `--playlist-end`), upserts title-filtered entries, then sets `full_scan_done`. Domain must be active; series monitored **not** required. Status: **scanning** / **queued** while a task runs; **pending** if domain inactive with no task; **incomplete** if domain active but no task queued. |
-| **Scan** (`mode=scan`) | Source `full_scan_done` is true **and** `kind=feed` | One task walks newest → **stop at first already-known** `remote_id` (uncapped list). Status shows how many **new** videos found. **`kind=single` never tip Scan.** Idle Status label: last-scan summary or **indexed**. |
+| **Scan** (`mode=scan`) | Source `full_scan_done` is true **and** `kind=feed` | One task walks newest → **stop at first already-known** `remote_id` (uncapped list). Status shows how many **new** videos found. **`kind=single` never tip Scan.** Idle Status label: last-scan summary or **indexed** when a schedule is set; **disabled** when the scan schedule is off. |
 | **Full scan** (restart) | Series or source action; feed and single | Keep indexed videos/files. Clear `full_scan_done`. Next full scan walks again and **adds** newly found videos only. |
 
 **Kick (series / per-source Scan button):** enqueue tip **Scan** for feed sources with full scan done when domain active (series monitored **not** required; same idea as **Download now**). Manual Scan is allowed even if the source interval is `never`. **Scheduled Scan cron** (`EnqueueScansDue`): monitored series only; same due check for scheduled feeds; enqueues tip Scan when full scan done, else full scan (`EnqueueScanSource` mode switch). **Add source / Full scan / API full scan:** always enqueue full scan when domain active (series monitored not required). Domain queue + per-domain delay spaces execution. Interrupted full scans resume via `RequeueStaleRunning` (re-list + idempotent upserts), **Full scan**, or the next due schedule tick.
@@ -127,7 +127,7 @@ Global defaults live on `domains` row **`default`** (non-NULL limit columns). Pe
 | Latest list-pass error | error | truncated error (links to task) |
 | Full scan incomplete, has schedule, no task | calendar-x-2 (warning) | `incomplete` (or `pending` if domain inactive); tip: `Full scan incomplete` + next-scan line |
 | Full scan incomplete, no schedule | calendar-off (error/red) | `incomplete` / `pending`; tip: `Full scan incomplete` + `No scan scheduled`; escalates to series status |
-| Full scan done | calendar-clock / calendar-check-2 (single) | last-scan summary (`9 h 54 min ago (1 new)`) for feeds; singles `complete` |
+| Full scan done | calendar-clock / calendar-off (schedule off) / calendar-check-2 (single) | last-scan summary (`9 h 54 min ago (1 new)`) for scheduled feeds; **disabled** when the scan schedule is off; singles `complete` |
 | Else | calendar-off | `no schedule` / `scanning` |
 
 Tooltip for indexed feeds: optional **Full scan limited to N entries** (when `full_scan_limit` set), then **Regexp filters apply** when title include/exclude is set, then **Next scan in …** (`tooltip-content` + newlines). Missed schedule slots use the next cron after now (not “due now”). Last-scan detail only when schedule is off. Full-scan wording appears only while full scan is incomplete. Live OOB swaps the Status cell.
