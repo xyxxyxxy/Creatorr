@@ -93,7 +93,8 @@ func ImportHandler(d Deps) TaskHandler {
 			if err := d.Library.CompleteImport(t.VideoID.Int64, abs, "", infoBeside, thumbBeside, subBeside, meta, t.ID); err != nil {
 				return err
 			}
-			if nfoBeside != "" {
+			nfoPresent := nfoBeside != ""
+			if nfoPresent {
 				if err := d.Library.ApplyImportNFO(t.VideoID.Int64, nfoBeside, t.ID); err != nil {
 					return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "apply nfo failed"), err.Error())
 				}
@@ -110,7 +111,7 @@ func ImportHandler(d Deps) TaskHandler {
 					progress("Integrity check skipped (File integrity off)", nil)
 				}
 			}
-			softEnqueueImportSidecarGapFill(d, t.VideoID.Int64, progress)
+			softEnqueueImportSidecarGapFill(d, t.VideoID.Int64, nfoPresent, progress)
 			progress("Done", ptrFloat(1))
 			return nil
 		}
@@ -246,17 +247,17 @@ func ImportHandler(d Deps) TaskHandler {
 				progress("Integrity check skipped (File integrity off)", nil)
 			}
 		}
-		softEnqueueImportSidecarGapFill(d, t.VideoID.Int64, progress)
+		softEnqueueImportSidecarGapFill(d, t.VideoID.Int64, srcNFO != "", progress)
 		progress("Done", ptrFloat(1))
 		return nil
 	}
 }
 
-func softEnqueueImportSidecarGapFill(d Deps, videoID int64, progress func(msg string, pct *float64)) {
+func softEnqueueImportSidecarGapFill(d Deps, videoID int64, nfoPresent bool, progress func(msg string, pct *float64)) {
 	if d.Library == nil {
 		return
 	}
-	id, enqueued, err := d.Library.MaybeEnqueueImportSidecarGapFill(videoID)
+	id, enqueued, err := d.Library.MaybeEnqueueImportSidecarGapFill(videoID, nfoPresent)
 	if err != nil {
 		if progress != nil {
 			progress("Sidecar gap-fill enqueue skipped: "+err.Error(), nil)

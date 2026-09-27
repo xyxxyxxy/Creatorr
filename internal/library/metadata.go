@@ -378,8 +378,12 @@ func (s *Store) CountPackedVideos(seriesIDs, videoIDs []int64) (int, error) {
 // MaybeEnqueueImportSidecarGapFill soft-enqueues a gap-fill metadata rescan when the video
 // has a source_url after import. Fills empty episode metadata (plot/NFO fields) and missing
 // thumb/subs; never clobbers present files except rewriting episode NFO from the filled DB row.
+// When nfoPresent is true, skips entirely: sibling episode NFO is operator truth for catalog fields.
 // Import still succeeds if enqueue fails: returns (0, false, nil) when skipped.
-func (s *Store) MaybeEnqueueImportSidecarGapFill(videoID int64) (taskID int64, enqueued bool, err error) {
+func (s *Store) MaybeEnqueueImportSidecarGapFill(videoID int64, nfoPresent bool) (taskID int64, enqueued bool, err error) {
+	if nfoPresent {
+		return 0, false, nil
+	}
 	v, err := s.GetVideo(videoID)
 	if err != nil {
 		return 0, false, err
