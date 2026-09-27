@@ -611,6 +611,7 @@ func readImportMeta(path string, hints []ImportIDHint) importMeta {
 			m.HandlerID = hints[0].HandlerID
 		}
 	}
+	// info.json: provenance URL / handler / interim title-desc-date (NFO overrides editable below).
 	for _, cand := range []string{
 		strings.TrimSuffix(path, filepath.Ext(path)) + ".info.json",
 		path + ".info.json",
@@ -648,20 +649,17 @@ func readImportMeta(path string, hints []ImportIDHint) importMeta {
 		}
 		break
 	}
+	// Episode NFO is operator-editable catalog: non-empty title / plot / aired win over info.json.
 	nfo := strings.TrimSuffix(path, filepath.Ext(path)) + ".nfo"
-	if b, err := os.ReadFile(nfo); err == nil {
-		text := string(b)
-		if m.Title == "" || m.Title == cleanStem(stem) {
-			if tm := regexp.MustCompile(`(?i)<title>([^<]+)</title>`).FindStringSubmatch(text); len(tm) == 2 {
-				if t := strings.TrimSpace(tm[1]); t != "" {
-					m.Title = t
-				}
-			}
+	if p, aired, _, err := ParseEpisodeNFOFile(nfo); err == nil {
+		if t := strings.TrimSpace(p.Title); t != "" {
+			m.Title = t
 		}
-		if m.UploadDate == "" {
-			if dm := regexp.MustCompile(`(?i)<aired>([^<]+)</aired>`).FindStringSubmatch(text); len(dm) == 2 {
-				m.UploadDate = sidecarUploadTime(strings.TrimSpace(dm[1]))
-			}
+		if plot := strings.TrimSpace(p.Plot); plot != "" {
+			m.Description = plot
+		}
+		if t := sidecarUploadTime(aired); t != "" {
+			m.UploadDate = t
 		}
 	}
 	return m
@@ -1281,8 +1279,18 @@ func seriesSuggestionsFrom(series []SeriesSuggestion, mediaPath string, limit in
 }
 
 func extractImportIDs(path string) []ImportIDHint {
-	// Priority for ID match: filename [id], then info.json, then NFO uniqueid.
+	// Priority for ID match: NFO uniqueid, then filename [id], then info.json id.
 	var found []ImportIDHint
+	nfo := strings.TrimSuffix(path, filepath.Ext(path)) + ".nfo"
+	if b, err := os.ReadFile(nfo); err == nil {
+		text := string(b)
+		for _, m := range uniqueIDTyped.FindAllStringSubmatch(text, -1) {
+			found = append(found, ImportIDHint{HandlerID: strings.ToLower(m[1]), RemoteID: strings.TrimSpace(m[2])})
+		}
+		for _, m := range uniqueIDAny.FindAllStringSubmatch(text, -1) {
+			found = append(found, ImportIDHint{HandlerID: "unknown", RemoteID: strings.TrimSpace(m[1])})
+		}
+	}
 	for _, m := range bracketID.FindAllStringSubmatch(filepath.Base(path), -1) {
 		found = append(found, ImportIDHint{HandlerID: "yt-dlp", RemoteID: strings.TrimSpace(m[1])})
 	}
@@ -1320,16 +1328,6 @@ func extractImportIDs(path string) []ImportIDHint {
 			handler = "yt-dlp"
 		}
 		found = append(found, ImportIDHint{HandlerID: handler, RemoteID: id})
-	}
-	nfo := strings.TrimSuffix(path, filepath.Ext(path)) + ".nfo"
-	if b, err := os.ReadFile(nfo); err == nil {
-		text := string(b)
-		for _, m := range uniqueIDTyped.FindAllStringSubmatch(text, -1) {
-			found = append(found, ImportIDHint{HandlerID: strings.ToLower(m[1]), RemoteID: strings.TrimSpace(m[2])})
-		}
-		for _, m := range uniqueIDAny.FindAllStringSubmatch(text, -1) {
-			found = append(found, ImportIDHint{HandlerID: "unknown", RemoteID: strings.TrimSpace(m[1])})
-		}
 	}
 	seen := map[string]bool{}
 	var out []ImportIDHint

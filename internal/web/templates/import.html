@@ -14,12 +14,12 @@
       <li>
         Media auto-match.
         <ol class="list-[lower-alpha] pl-5 space-y-0.5 mt-1">
-          <li>Remote ID: <code class="text-xs">[id]</code> in filename, then <code class="text-xs">info.json</code> <code class="text-xs">id</code>, then sibling <code class="text-xs">.nfo</code> <code class="text-xs">&lt;uniqueid&gt;</code>.</li>
+          <li>Remote ID: sibling <code class="text-xs">.nfo</code> <code class="text-xs">&lt;uniqueid&gt;</code>, then <code class="text-xs">[id]</code> in filename, then <code class="text-xs">info.json</code> <code class="text-xs">id</code>.</li>
           <li>Title similarity on cleaned filename basename.</li>
           <li>Series suggestion from parent folder / basename (series only; pick a video in 'Match').</li>
         </ol>
       </li>
-      <li>Sidecars: <code class="text-xs">.nfo</code> / thumb need a same-basename video beside them. Subs match by directory + basename to packed media. <code class="text-xs">info.json</code> helps ID lookup only.</li>
+      <li>Sidecars: <code class="text-xs">.nfo</code> is first for editable episode metadata and identity (<code class="text-xs">&lt;uniqueid&gt;</code>); thumb needs a same-basename video beside it. Subs match by directory + basename to packed media. <code class="text-xs">info.json</code> is provenance (URL / tech); ID fallback only.</li>
     </ol>
     <div role="alert" class="alert alert-info text-sm">
       <i data-lucide="info" class="size-5 shrink-0" aria-hidden="true"></i>
@@ -1849,7 +1849,7 @@ function summaryFileRow(c) {
   const path = escapeHtml(c.path || c.filename || '');
   const label = escapeHtml(roleLabel(role));
   const nfoNote = role === 'nfo'
-    ? `<span class="opacity-60 shrink-0">used for metadata; re-generated on import</span>`
+    ? `<span class="opacity-60 shrink-0">editable metadata + identity; re-generated on import</span>`
     : '';
   return `<li class="flex items-center gap-1.5 text-xs min-w-0 py-0.5">
     <span class="inline-flex shrink-0" aria-label="${label}">

@@ -115,6 +115,22 @@ func ImportHandler(d Deps) TaskHandler {
 			return nil
 		}
 
+		infoSrc, thumbCompanion, subSrcs := library.FindDownloadSidecars(abs)
+		srcNFO := strings.TrimSuffix(abs, filepath.Ext(abs)) + ".nfo"
+		if _, err := os.Stat(srcNFO); err != nil {
+			srcNFO = ""
+		}
+		// NFO before season assign so operator <aired> drives pack path / episode numbers.
+		if srcNFO != "" {
+			if err := d.Library.ApplyImportNFOMetadata(t.VideoID.Int64, srcNFO); err != nil {
+				return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "apply nfo failed"), err.Error())
+			}
+			if err := d.Library.AddVideoHistory(t.VideoID.Int64, "nfo_applied", "Episode metadata applied from NFO; library NFO regenerated", map[string]any{
+				"source": srcNFO,
+			}, t.ID); err != nil {
+				return err
+			}
+		}
 		dlctx, err := d.Library.PrepareDownload(t.VideoID.Int64)
 		if err != nil {
 			return err
@@ -136,21 +152,6 @@ func ImportHandler(d Deps) TaskHandler {
 				return aerr
 			}
 			season, episode = sNum, eNum
-		}
-		infoSrc, thumbCompanion, subSrcs := library.FindDownloadSidecars(abs)
-		srcNFO := strings.TrimSuffix(abs, filepath.Ext(abs)) + ".nfo"
-		if _, err := os.Stat(srcNFO); err != nil {
-			srcNFO = ""
-		}
-		if srcNFO != "" {
-			if err := d.Library.ApplyImportNFOMetadata(t.VideoID.Int64, srcNFO); err != nil {
-				return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "apply nfo failed"), err.Error())
-			}
-			if err := d.Library.AddVideoHistory(t.VideoID.Int64, "nfo_applied", "Episode metadata applied from NFO; library NFO regenerated", map[string]any{
-				"source": srcNFO,
-			}, t.ID); err != nil {
-				return err
-			}
 		}
 		progress("Installing to library…", ptrFloat(0.5))
 		dlctx, err = d.Library.PrepareDownload(t.VideoID.Int64)

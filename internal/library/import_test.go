@@ -73,7 +73,7 @@ func TestScanImportMatchesRemoteID(t *testing.T) {
 	}
 }
 
-func TestScanImportPrefersBracketIDOverSidecars(t *testing.T) {
+func TestScanImportPrefersNFOUniqueIDOverBracketAndInfoJSON(t *testing.T) {
 	s := openLib(t)
 	inbox := filepath.Join(t.TempDir(), "import")
 	if err := os.MkdirAll(inbox, 0o755); err != nil {
@@ -94,16 +94,14 @@ func TestScanImportPrefersBracketIDOverSidecars(t *testing.T) {
 	_, err = s.DB.SQL.Exec(`
 		INSERT INTO videos (series_id, remote_id, title, status)
 		VALUES (?, 'bracket1', 'Bracket Hit', 'wanted'),
-		       (?, 'sidecar1', 'Sidecar Hit', 'wanted')
-	`, ser.ID, ser.ID)
+		       (?, 'nfo1', 'NFO Hit', 'wanted'),
+		       (?, 'info1', 'Info Hit', 'wanted')
+	`, ser.ID, ser.ID, ser.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var bracketVID, sidecarVID int64
-	if err := s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'bracket1'`).Scan(&bracketVID); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'sidecar1'`).Scan(&sidecarVID); err != nil {
+	var nfoVID int64
+	if err := s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'nfo1'`).Scan(&nfoVID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -112,11 +110,16 @@ func TestScanImportPrefersBracketIDOverSidecars(t *testing.T) {
 		t.Fatal(err)
 	}
 	info := filepath.Join(inbox, "Ep [bracket1].info.json")
-	if err := os.WriteFile(info, []byte(`{"id":"sidecar1","title":"Sidecar Hit"}`), 0o644); err != nil {
+	if err := os.WriteFile(info, []byte(`{"id":"info1","title":"Info Title","description":"Info plot","upload_date":"20200101"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	nfo := filepath.Join(inbox, "Ep [bracket1].nfo")
-	if err := os.WriteFile(nfo, []byte(`<episodedetails><uniqueid type="yt-dlp">sidecar1</uniqueid></episodedetails>`), 0o644); err != nil {
+	if err := os.WriteFile(nfo, []byte(`<?xml version="1.0"?><episodedetails>
+  <title>NFO Title</title>
+  <plot>NFO plot</plot>
+  <aired>2024-06-15</aired>
+  <uniqueid type="yt-dlp" default="true">nfo1</uniqueid>
+</episodedetails>`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -134,11 +137,149 @@ func TestScanImportPrefersBracketIDOverSidecars(t *testing.T) {
 	if c == nil {
 		t.Fatal("media candidate missing")
 	}
-	if c.MatchType != "id" || c.SuggestedVideoID == nil || *c.SuggestedVideoID != bracketVID {
-		t.Fatalf("match=%+v want bracket video %d (not sidecar %d)", c, bracketVID, sidecarVID)
+	if c.MatchType != "id" || c.SuggestedVideoID == nil || *c.SuggestedVideoID != nfoVID {
+		t.Fatalf("match=%+v want NFO video %d", c, nfoVID)
 	}
-	if len(c.IDs) < 2 || c.IDs[0].RemoteID != "bracket1" {
-		t.Fatalf("IDs order=%+v want bracket1 first", c.IDs)
+	if len(c.IDs) < 1 || c.IDs[0].RemoteID != "nfo1" {
+		t.Fatalf("IDs order=%+v want nfo1 first", c.IDs)
+	}
+	if c.SuggestedTitle != "NFO Title" {
+		t.Fatalf("SuggestedTitle=%q want NFO Title", c.SuggestedTitle)
+	}
+	if c.SuggestedUploadDateFromMtime || !strings.HasPrefix(c.SuggestedUploadDate, "2024-06-15") {
+		t.Fatalf("upload=%q fromMtime=%v want NFO aired", c.SuggestedUploadDate, c.SuggestedUploadDateFromMtime)
+	}
+}
+
+func TestScanImportPrefersNFOTitlePlotOverInfoJSON(t *testing.T) {
+	s := openLib(t)
+	inbox := filepath.Join(t.TempDir(), "import")
+	if err := os.MkdirAll(inbox, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s.ImportRoot = inbox
+	rootID, profileID := seedRootProfile(t, s)
+
+	media := filepath.Join(inbox, "Loose Ep.mkv")
+	if err := os.WriteFile(media, []byte("fake"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info := filepath.Join(inbox, "Loose Ep.info.json")
+	if err := os.WriteFile(info, []byte(`{"id":"loose1","title":"JSON Title","description":"JSON plot","upload_date":"20200101","webpage_url":"https://example.com/v/loose1"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	nfo := filepath.Join(inbox, "Loose Ep.nfo")
+	if err := os.WriteFile(nfo, []byte(`<?xml version="1.0"?><episodedetails>
+  <title>NFO Title</title>
+  <plot>NFO plot text</plot>
+  <aired>2023-12-01</aired>
+  <uniqueid type="yt-dlp" default="true">loose1</uniqueid>
+</episodedetails>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := s.ScanImportInbox()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c *library.ImportCandidate
+	for i := range res.Candidates {
+		if res.Candidates[i].Path == media {
+			c = &res.Candidates[i]
+			break
+		}
+	}
+	if c == nil {
+		t.Fatal("media candidate missing")
+	}
+	if c.SuggestedTitle != "NFO Title" {
+		t.Fatalf("SuggestedTitle=%q", c.SuggestedTitle)
+	}
+	if !strings.HasPrefix(c.SuggestedUploadDate, "2023-12-01") {
+		t.Fatalf("SuggestedUploadDate=%q", c.SuggestedUploadDate)
+	}
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Loose Show", SourceURL: "https://example.com/loose", RootID: rootID, QualityProfileID: profileID, Monitored: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, videoID, err := s.EnqueueImportCreate(c.Path, library.CreateImportVideoParams{
+		SeriesID: ser.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.GetVideo(videoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Title != "NFO Title" || v.Description != "NFO plot text" {
+		t.Fatalf("title=%q desc=%q", v.Title, v.Description)
+	}
+	if !v.UploadDate.Valid || !strings.HasPrefix(v.UploadDate.String, "2023-12-01") {
+		t.Fatalf("upload_date=%v", v.UploadDate)
+	}
+}
+
+func TestScanImportBracketBeatsInfoJSONWhenNoNFOUniqueID(t *testing.T) {
+	s := openLib(t)
+	inbox := filepath.Join(t.TempDir(), "import")
+	if err := os.MkdirAll(inbox, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s.ImportRoot = inbox
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo Show", SourceURL: "https://www.example.com/@demo", RootID: rootID, QualityProfileID: profileID, Monitored: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.DB.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, status)
+		VALUES (?, 'bracket1', 'Bracket Hit', 'wanted'),
+		       (?, 'info1', 'Info Hit', 'wanted')
+	`, ser.ID, ser.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bracketVID int64
+	if err := s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'bracket1'`).Scan(&bracketVID); err != nil {
+		t.Fatal(err)
+	}
+	media := filepath.Join(inbox, "Ep [bracket1].mkv")
+	if err := os.WriteFile(media, []byte("fake"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info := filepath.Join(inbox, "Ep [bracket1].info.json")
+	if err := os.WriteFile(info, []byte(`{"id":"info1","title":"Info"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// NFO without uniqueid (title only).
+	nfo := filepath.Join(inbox, "Ep [bracket1].nfo")
+	if err := os.WriteFile(nfo, []byte(`<?xml version="1.0"?><episodedetails><title>T</title></episodedetails>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.ScanImportInbox()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c *library.ImportCandidate
+	for i := range res.Candidates {
+		if res.Candidates[i].Path == media {
+			c = &res.Candidates[i]
+			break
+		}
+	}
+	if c == nil {
+		t.Fatal("media candidate missing")
+	}
+	if c.SuggestedVideoID == nil || *c.SuggestedVideoID != bracketVID {
+		t.Fatalf("match=%+v want bracket %d", c, bracketVID)
+	}
+	if len(c.IDs) < 1 || c.IDs[0].RemoteID != "bracket1" {
+		t.Fatalf("IDs=%+v want bracket1 first", c.IDs)
 	}
 }
 
