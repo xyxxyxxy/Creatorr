@@ -1789,9 +1789,6 @@
     maybeRefreshSeriesList(ev);
     maybeRefreshMaintenance(ev);
     maybeRefreshYtDlpConnect(ev);
-    if (typeof window.refreshImportFullScanNote === "function") {
-      window.refreshImportFullScanNote(ev);
-    }
     if (typeof window.refreshImportTasksBusy === "function") {
       window.refreshImportTasksBusy(ev);
     }

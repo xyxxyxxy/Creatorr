@@ -85,7 +85,6 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/preview-apply-episode-naming", h.actionPreviewApplyEpisodeNaming)
 	r.Get("/settings/domains", h.settingsDomains)
 	r.Get("/import", h.importPage)
-	r.Get("/actions/import-full-scan-status", h.importFullScanStatus)
 	r.Get("/actions/import-busy-status", h.importBusyStatus)
 	r.Get("/actions/probe-source-title", h.actionProbeSourceTitle)
 	r.Get("/actions/add-series-prefetch/{tid}", h.addSeriesPrefetchStatus)

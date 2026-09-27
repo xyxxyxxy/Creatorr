@@ -60,14 +60,14 @@ func TestScanImportMatchesRemoteID(t *testing.T) {
 	if c.MatchType != "id" || c.SuggestedVideoID == nil || *c.SuggestedVideoID != videoID {
 		t.Fatalf("match=%+v want video %d", c, videoID)
 	}
-	taskID, err := s.EnqueueImport(c.Path, *c.SuggestedVideoID, false, false)
+	taskID, err := s.EnqueueImport(c.Path, *c.SuggestedVideoID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if taskID <= 0 {
 		t.Fatal("task id")
 	}
-	_, err = s.EnqueueImport(c.Path, *c.SuggestedVideoID, false, false)
+	_, err = s.EnqueueImport(c.Path, *c.SuggestedVideoID, false)
 	if !errors.Is(err, library.ErrConflict) {
 		t.Fatalf("want conflict, got %v", err)
 	}
@@ -458,7 +458,7 @@ func TestEnqueueImportRejectsOutsideRoot(t *testing.T) {
 	_ = s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'r1'`).Scan(&vid)
 	outside := filepath.Join(t.TempDir(), "escape.mkv")
 	_ = os.WriteFile(outside, []byte("x"), 0o644)
-	_, err = s.EnqueueImport(outside, vid, false, false)
+	_, err = s.EnqueueImport(outside, vid, false)
 	if !errors.Is(err, library.ErrInvalid) {
 		t.Fatalf("want invalid, got %v", err)
 	}
@@ -529,7 +529,7 @@ func TestScanImportLibraryOrphanBindInPlace(t *testing.T) {
 		t.Fatalf("want video %d, got %+v", videoID, orphan)
 	}
 
-	taskID, err := s.EnqueueImport(orphan.Path, videoID, false, false)
+	taskID, err := s.EnqueueImport(orphan.Path, videoID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -652,6 +652,10 @@ func TestClassifyImportFile(t *testing.T) {
 		{"Show S01E01.info.json", library.ImportRoleJSON, "Show S01E01"},
 		{"Show S01E01-thumb.jpg", library.ImportRoleThumb, "Show S01E01"},
 		{"Show S01E01.srt", library.ImportRoleSub, "Show S01E01"},
+		{"Show S01E01.en.srt", library.ImportRoleSub, "Show S01E01"},
+		{"Show S01E01.eng.srt", library.ImportRoleSub, "Show S01E01"},
+		{"Show S01E01.en-US.vtt", library.ImportRoleSub, "Show S01E01"},
+		{"Show S01E01.en.auto.srt", library.ImportRoleSub, "Show S01E01"},
 		{"readme.txt", library.ImportRoleOther, "readme"},
 	}
 	for _, tc := range cases {
@@ -915,10 +919,10 @@ func TestEnqueueImportReplaceExistingMedia(t *testing.T) {
 	if err := os.WriteFile(media, []byte("new"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.EnqueueImport(media, videoID, false, false); !errors.Is(err, library.ErrConflict) {
+	if _, err := s.EnqueueImport(media, videoID, false); !errors.Is(err, library.ErrConflict) {
 		t.Fatalf("want conflict without replace, got %v", err)
 	}
-	taskID, err := s.EnqueueImport(media, videoID, false, true)
+	taskID, err := s.EnqueueImport(media, videoID, true)
 	if err != nil {
 		t.Fatal(err)
 	}
