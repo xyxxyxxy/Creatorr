@@ -12,14 +12,14 @@ In Creatorr, a series holds one or many sources, usually a channel, playlist, or
 Creatorr
 ├── series A
 │   └── source 1 (channel)
-│       ├── episode 1 (released 2024-03-12)
-│       └── episode 2 (released 2024-08-01)
+│       ├── episode 1 (external ID jK4mN8pQ2xL, released 2024)
+│       └── episode 2 (external ID Rt7wB3cV9aH, released 2024)
 └── series B
     ├── source 1 (channel)
-    │   ├── episode 1 (released 2025-01-04)
-    │   └── episode 2 (released 2025-06-18)
+    │   ├── episode 1 (external ID Ys2nF6dM1qE, released 2025)
+    │   └── episode 2 (external ID Uc9hL5gT4zP, released 2025)
     └── source 2 (single video)
-        └── episode (released 2024-09-15)
+        └── episode (external ID Wa8eK1bX7mD, released 2024)
 ```
 
 After a video is downloaded, it is packed as an episode and the following default file structure emerges:
