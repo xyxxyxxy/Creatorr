@@ -62,23 +62,18 @@ A media server can read it as-is, with full metadata and images for each series 
 
 ## Features
 
-- **Multiple source URLs** - merge channels, playlists, and single-video URLs into one Creatorr series
-- **Index first** - scan sources into a video catalog before any download
 - **Metadata fetching & management** - fetch and edit series/video metadata; pack NFO and sidecars for Emby, Jellyfin, and similar
 - **Quality profiles** - format selectors and optional maturity media/sidecar refresh
-- **Integrity check** - optional per-profile file integrity (null-decode + checksums)
-- **Year-season episodes** - season = UTC calendar year; episode index within the year; per-root `episode_format` tokens
-- **Bulk edit** - multi-select series and videos (settings, metadata, monitor, delete, and related actions)
 - **Domains & queues** - per-host rate limits, credentials (Access cookies), and soft pause
 - **Web Archive fallback** - when an indexed YouTube video is deleted or unavailable, queue a [Web Archive](https://archive.org/) download
 - **Import existing downloads** - bring in files already on disk with automated matching
+- **Integrity check** - optional per-profile file integrity (null-decode + checksums)
 - **Audio-only series** - per-series bestaudio remux to MKA as TV-style episodes
-- **Video retention** - delete media after a configured number of days
 - **SponsorBlock** - chapters, cut-out, and cut-out with an inserted info card
 - **FlareSolverr & PO tokens** - Compose sidecars out of the box for challenge pre-solve and proof-of-origin minting
+- **Video retention** - delete media after a configured number of days
 - **Automatic yt-dlp updates** - scheduled GitHub checks when cron is set; Connect **Update now** always works (even with empty schedule)
 - **Notifications** - in-app alerts plus Apprise channels for digests and warnings
-- **Web UI & API** - library overview and stats in the browser; public OpenAPI REST for automation
 
 Product behavior: [`docs/`](docs/README.md). REST contract: [`api/openapi.yaml`](api/openapi.yaml). Agent/contributor contract: [`AGENTS.md`](AGENTS.md).
 
