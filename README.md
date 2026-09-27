@@ -22,7 +22,7 @@ Creatorr
         └── episode (external ID Wa8eK1bX7mD, released 2024)
 ```
 
-After a video is downloaded, it is packed as an episode and the following default file structure emerges:
+After a video is downloaded, it is packed as an episode and the following file structure emerges:
 
 ```text
 file system
