@@ -507,6 +507,7 @@ func (s *Store) EnqueueDownload(videoID int64) (int64, error) {
 // (ClaimImmediate: skip queue / parallel / cooldown / soft pause), bypasses max_download_queue,
 // and allows enqueue when the series is unmonitored. Domain must still be active.
 // If a pending download already exists, marks it immediate instead of erroring.
+// Refuses status downloaded: media is already present (import, source, or archive).
 func (s *Store) EnqueueDownloadNow(videoID int64) (int64, error) {
 	return s.enqueueDownload(videoID, true)
 }
@@ -518,6 +519,9 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 	cur, err := s.GetVideo(videoID)
 	if err != nil {
 		return 0, err
+	}
+	if cur.Status == "downloaded" {
+		return 0, fmt.Errorf("%w: video already present", ErrInvalid)
 	}
 	if !downloadNow {
 		ok, err := s.SeriesIsMonitored(cur.SeriesID)

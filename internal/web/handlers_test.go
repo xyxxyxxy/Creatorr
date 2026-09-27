@@ -1396,6 +1396,87 @@ func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
 	}
 }
 
+func TestSeriesSourceScanButtons(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcs, err := lib.ListSources(ser.ID)
+	if err != nil || len(srcs) != 1 {
+		t.Fatalf("sources: %v len %d", err, len(srcs))
+	}
+	src := srcs[0]
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+	seriesPath := "/series/" + itoa(ser.ID)
+	get := func(path string) string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("%s status %d: %s", path, rec.Code, truncate(rec.Body.String(), 400))
+		}
+		return rec.Body.String()
+	}
+	assertQueued := func(body string) {
+		t.Helper()
+		if !strings.Contains(body, `aria-label="Scan for new videos" aria-disabled="true"`) {
+			t.Fatalf("scan button should stay disabled while a scan is queued: %s", truncate(body, 600))
+		}
+		if !strings.Contains(body, `aria-label="Start full scan" aria-disabled="true"`) {
+			t.Fatalf("full scan button should stay disabled while a scan is queued: %s", truncate(body, 600))
+		}
+	}
+	assertQueued(get(seriesPath))
+
+	if _, err := d.SQL.Exec(`DELETE FROM tasks WHERE kind = 'scan'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.MarkFullScanDone(src.ID); err != nil {
+		t.Fatal(err)
+	}
+	idle := get(seriesPath)
+	wantBtn := `class="btn btn-xs btn-square join-item tooltip tooltip-top"`
+	if strings.Count(idle, wantBtn) < 2 || strings.Contains(idle, `aria-label="Scan for new videos" aria-disabled="true"`) {
+		t.Fatalf("idle scan buttons should be secondary and enabled: %s", truncate(idle, 600))
+	}
+	wantEdit := `class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit"`
+	if !strings.Contains(idle, wantEdit) {
+		t.Fatalf("edit button should be a plain button: %s", truncate(idle, 800))
+	}
+
+	if _, err := lib.FullRescanSource(src.ID); err != nil {
+		t.Fatal(err)
+	}
+	assertQueued(get(seriesPath))
+	detail := get(seriesPath + "/sources/" + itoa(src.ID))
+	if strings.Count(detail, `class="btn btn-outline" disabled`) < 2 || !strings.Contains(detail, `for="modal-edit-source" class="btn btn-outline"`) {
+		t.Fatalf("source detail should keep Scan and Full scan disabled: %s", truncate(detail, 800))
+	}
+	settingsAt := strings.Index(detail, ">Settings</span>")
+	statusAt := strings.Index(detail, ">Status</span>")
+	urlAt := strings.Index(detail, ">URL</th>")
+	domainAt := strings.Index(detail, ">Domain</th>")
+	if settingsAt < 0 || statusAt < settingsAt || urlAt < settingsAt || urlAt > statusAt || domainAt < statusAt || strings.Contains(detail, "Source settings") || !strings.Contains(detail, "md:grid-cols-2") {
+		t.Fatalf("source detail should split Settings and Status: settings=%d status=%d url=%d domain=%d", settingsAt, statusAt, urlAt, domainAt)
+	}
+}
+
 func TestSaveDomainDefaultHTMX(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {

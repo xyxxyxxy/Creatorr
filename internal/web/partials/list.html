@@ -33,7 +33,7 @@
     {{if or .add_modal2 .add_href .add_modal}}
     <div class="list-actions flex flex-wrap gap-2 shrink-0 items-center">
       {{if .add_modal2}}
-      <label for="{{.add_modal2}}" class="btn btn-outline">
+      <label for="{{.add_modal2}}" class="btn btn-secondary">
         {{with .add_icon2}}<i data-lucide="{{.}}" class="size-4"></i>{{end}}
         {{if .add_label2}}{{.add_label2}}{{else}}Add{{end}}
       </label>
@@ -75,7 +75,7 @@
   {{if or .add_modal2 .add_href .add_modal}}
   <div class="list-actions flex flex-wrap gap-2 shrink-0 items-center">
     {{if .add_modal2}}
-    <label for="{{.add_modal2}}" class="btn btn-outline">
+    <label for="{{.add_modal2}}" class="btn btn-secondary">
       {{with .add_icon2}}<i data-lucide="{{.}}" class="size-4"></i>{{end}}
       {{if .add_label2}}{{.add_label2}}{{else}}Add{{end}}
     </label>

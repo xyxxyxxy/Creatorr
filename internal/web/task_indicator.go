@@ -510,13 +510,14 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 		}
 		if src.ScanCronNever() {
 			v.Kind = "unscheduled"
+			v.Label = "disabled"
 		} else {
 			v.Kind = "scheduled"
-		}
-		if p.HasScanned && p.Summary != "" && p.Summary != "never" {
-			v.Label = p.Summary
-		} else {
-			v.Label = "indexed"
+			if p.HasScanned && p.Summary != "" && p.Summary != "never" {
+				v.Label = p.Summary
+			} else {
+				v.Label = "indexed"
+			}
 		}
 		// Full scan complete: optional limit tip + next scan.
 		untilTip := ""

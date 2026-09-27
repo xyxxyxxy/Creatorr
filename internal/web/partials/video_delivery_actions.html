@@ -1,7 +1,9 @@
 {{define "video_delivery_actions"}}
 {{/* Video detail only. Expects VideoID, SeriesID, Status, HasSourceURL, DomainActive, DomainDisabledTitle,
      optional DownloadRunning, Redirect, PrimaryClass.
-     Enabled when source URL set, domain active, and download not already running (pending OK: promotes). */}}
+     Hidden when status is downloaded (media already present; acquired_via ignored).
+     Otherwise enabled when source URL set, domain active, and download not already running (pending OK: promotes). */}}
+{{if ne .Status "downloaded"}}
 {{$primary := "btn btn-primary"}}{{if .PrimaryClass}}{{$primary = .PrimaryClass}}{{end}}
 {{$off := or (not .HasSourceURL) (not .DomainActive) .DownloadRunning}}
 {{$tip := ""}}
@@ -25,4 +27,5 @@
   </button>
   {{end}}
 </form>
+{{end}}
 {{end}}
