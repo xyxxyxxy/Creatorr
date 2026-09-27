@@ -1549,6 +1549,33 @@ func TestEnqueueDownloadNowAllowsUnmonitoredSeries(t *testing.T) {
 	}
 }
 
+func TestEnqueueDownloadNowRejectsPresent(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "NowPresent", SourceURL: "https://www.example.com/@nowpresent", RootID: rootID,
+		QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, via := range []string{"import", "source", "archive"} {
+		res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+			RemoteID: via, Title: via, WebpageURL: "https://www.example.com/watch?v=" + via,
+			SourceID: ser.Sources[0].ID,
+		}, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'downloaded', acquired_via = ? WHERE id = ?`, via, res.VideoID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.EnqueueDownloadNow(res.VideoID); !errors.Is(err, library.ErrInvalid) {
+			t.Fatalf("via %s: want already present, got %v", via, err)
+		}
+	}
+}
+
 func TestEnqueueDownloadNowRejectsInactiveDomain(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
