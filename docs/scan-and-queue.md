@@ -115,7 +115,7 @@ Global defaults live on `domains` row **`default`** (non-NULL limit columns). Pe
 
 **Enqueue guards (all task kinds):** `queue.Enqueue` rejects duplicates - equivalent pending/running task already exists (download by `video_id`, scan by `source_id` in payload, metadata rescan by video or series, import by video, video removal one global). Scan enqueue also pre-checks pending+running via `HasActiveScanForSource` and returns `conflict: scan already queued or running` (UI flash strips the `conflict: ` prefix). Download also rejects when that domain’s `max_download_queue` is full (pending+running download tasks on that hostname).
 
-**Scan / Full scan buttons:** disabled while that source already has a pending or running scan (series source row actions + source detail); tip shows `Scan already queued or running`.
+**Scan / Full scan buttons:** both stay visible and disabled while that source already has a pending or running scan (series source row actions + source detail), including after Full scan clears `full_scan_done`. Tip shows the queued or running scan. A feed that has never finished full scan shows only Full scan until a scan is queued.
 
 **Claim:** up to `max_parallel_tasks` non-interactive tasks may run per domain; cooldown spaces starts.
 

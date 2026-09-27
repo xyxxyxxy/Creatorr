@@ -18,7 +18,7 @@
     </p>
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
-    {{if and (ne .Source.Kind "single") .Source.FullScanDone}}
+    {{if and (ne .Source.Kind "single") (or .Source.FullScanDone .ScanActive)}}
     {{$scanOff := or .ScanActive (not .DomainActive)}}
     {{$tipScan := "Scan for new videos"}}
     {{if .ScanActive}}{{$tipScan = "'Scan' already queued or running"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{end}}
@@ -35,7 +35,7 @@
     </form>
     {{end}}
     {{if .HasRetryable}}
-    <label for="modal-retry-source" class="btn btn-outline tooltip tooltip-top" data-tip="Clear download errors on this source and put videos back to wanted">
+    <label for="modal-retry-source" class="btn btn-primary tooltip tooltip-top" data-tip="Clear download errors on this source and put videos back to wanted">
       <i data-lucide="rotate-ccw" class="size-4"></i>
       Retry
     </label>
@@ -58,16 +58,17 @@
       <i data-lucide="pencil" class="size-4"></i>
       Edit
     </label>
-    <label for="modal-delete-source" class="btn btn-soft btn-error">
+    <label for="modal-delete-source" class="btn btn-soft btn-error btn-square tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
       <i data-lucide="trash-2" class="size-4"></i>
-      Delete
     </label>
   </div>
 </div>
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 
-{{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Source settings" "help" "URL, domain, Scan schedule, title filter / media-type exclude / mark-new-as-ignored (feeds), full-scan limit, and last scan outcome.")}}
+<div class="grid gap-4 md:grid-cols-2 mb-4 items-stretch">
+<section class="list-panel card bg-base-100 border border-base-300 h-full">
+  <div class="card-body gap-3">
+{{template "list_header" (dict "level" "section" "title" "Settings")}}
 {{template "list_table"}}
 <tbody>
   <tr><th class="w-40">URL</th><td class="text-xs break-all"><a class="link" href="{{.Source.URL}}" target="_blank" rel="noopener">{{.Source.URL}}</a></td></tr>
@@ -76,9 +77,6 @@
   {{else}}
   {{template "detail_row" (dict "Label" "Name")}}
   {{end}}
-  <tr><th class="w-40">Kind</th><td>{{if eq .Source.Kind "single"}}single{{else}}feed{{end}}</td></tr>
-  <tr><th class="w-40">Tool</th><td class="font-mono text-xs">yt-dlp</td></tr>
-  <tr><th class="w-40">Domain</th><td class="font-mono text-xs">{{.DomainHost}}{{if not .DomainActive}} <span class="badge badge-warning badge-sm">inactive</span>{{end}}</td></tr>
   {{if ne .Source.Kind "single"}}
   <tr><th class="w-40">Scan</th><td class="text-sm">{{.ScanCronLabel}}</td></tr>
   {{if gt .Source.FullScanLimit 0}}
@@ -98,6 +96,19 @@
   {{end}}
   <tr><th class="w-40">Discovered video status</th><td>{{if .Source.IndexAsIgnored}}Ignored - new videos stay ignored until manually set to wanted{{else}}Wanted{{end}}</td></tr>
   {{end}}
+</tbody>
+{{template "list_table_end"}}
+  </div>
+</section>
+
+<section class="list-panel card bg-base-100 border border-base-300 h-full">
+  <div class="card-body gap-3">
+{{template "list_header" (dict "level" "section" "title" "Status")}}
+{{template "list_table"}}
+<tbody>
+  <tr><th class="w-40">Kind</th><td>{{if eq .Source.Kind "single"}}single{{else}}feed{{end}}</td></tr>
+  <tr><th class="w-40">Tool</th><td class="font-mono text-xs">yt-dlp</td></tr>
+  <tr><th class="w-40">Domain</th><td class="font-mono text-xs">{{.DomainHost}}{{if not .DomainActive}} <span class="badge badge-warning badge-sm">inactive</span>{{end}}</td></tr>
   {{if .HasScanned}}
   <tr><th class="w-40">Last scanned</th><td class="text-xs">{{if .LastHistoryID}}<a class="link link-hover tooltip tooltip-top" href="/task/{{.LastHistoryID}}" data-tip="{{.LastScannedAt}}">{{.StatusSummary}}</a>{{else}}<span class="tooltip tooltip-top" data-tip="{{.LastScannedAt}}">{{.StatusSummary}}</span>{{end}}</td></tr>
   {{else}}
@@ -110,7 +121,9 @@
   {{end}}
 </tbody>
 {{template "list_table_end"}}
-{{template "list_panel_end"}}
+  </div>
+</section>
+</div>
 
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "History" "help" "List-pass timeline for this source (scans and metadata rescan). Linked rows open the related task in History.")}}
