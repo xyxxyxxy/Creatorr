@@ -272,7 +272,7 @@
     <form method="post" action="/actions/delete-source" class="space-y-3 js-confirm-submit">
       <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.ID}}" />
-      {{template "checkbox_field" (dict "Name" "confirm_delete" "Label" "Yes, I want to delete this source, including all related video files" "InputClass" "js-confirm-submit-check")}}
+      {{template "checkbox_field" (dict "Name" "confirm_delete" "Label" "Delete all videos related to this source" "InputClass" "js-confirm-submit-check")}}
       <div class="modal-action">
         <label for="modal-delete-source-{{.ID}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-error" disabled>Delete source and videos</button>

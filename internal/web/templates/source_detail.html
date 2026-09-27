@@ -27,12 +27,18 @@
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
       <span class="tooltip tooltip-top inline-flex" data-tip="{{$tipScan}}">
-        <button type="submit" class="btn btn-outline" {{if $scanOff}}disabled{{end}}>Scan</button>
+        <button type="submit" class="btn btn-outline" {{if $scanOff}}disabled{{end}}>
+          <i data-lucide="scan-line" class="size-4"></i>
+          Scan
+        </button>
       </span>
     </form>
     {{end}}
     {{if .HasRetryable}}
-    <label for="modal-retry-source" class="btn btn-outline tooltip tooltip-top" data-tip="Clear download errors on this source and put videos back to wanted">Retry</label>
+    <label for="modal-retry-source" class="btn btn-outline tooltip tooltip-top" data-tip="Clear download errors on this source and put videos back to wanted">
+      <i data-lucide="rotate-ccw" class="size-4"></i>
+      Retry
+    </label>
     {{end}}
     {{$fullOff := or .ScanActive (not .DomainActive)}}
     {{$tipFull := "Start 'Full scan'"}}
@@ -42,11 +48,20 @@
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
       <span class="tooltip tooltip-top inline-flex" data-tip="{{$tipFull}}">
-        <button type="submit" class="btn btn-outline" {{if $fullOff}}disabled{{end}}>Full scan</button>
+        <button type="submit" class="btn btn-outline" {{if $fullOff}}disabled{{end}}>
+          <i data-lucide="scan-text" class="size-4"></i>
+          Full scan
+        </button>
       </span>
     </form>
-    <label for="modal-edit-source" class="btn btn-outline">Edit</label>
-    <label for="modal-delete-source" class="btn btn-soft btn-error">Delete</label>
+    <label for="modal-edit-source" class="btn btn-outline">
+      <i data-lucide="pencil" class="size-4"></i>
+      Edit
+    </label>
+    <label for="modal-delete-source" class="btn btn-soft btn-error">
+      <i data-lucide="trash-2" class="size-4"></i>
+      Delete
+    </label>
   </div>
 </div>
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
@@ -173,7 +188,7 @@
     <form method="post" action="/actions/delete-source" class="space-y-3 js-confirm-submit">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
-      {{template "checkbox_field" (dict "Name" "confirm_delete" "Label" "Yes, I want to delete this source, including all related video files" "InputClass" "js-confirm-submit-check")}}
+      {{template "checkbox_field" (dict "Name" "confirm_delete" "Label" "Delete all videos related to this source" "InputClass" "js-confirm-submit-check")}}
       <div class="modal-action">
         <label for="modal-delete-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-error" disabled>Delete source and videos</button>
