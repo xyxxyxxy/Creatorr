@@ -4,6 +4,62 @@ Sonarr for creator VOD: manage creators as TV-style series. Merge multiple sourc
 
 ![Creatorr Overview](screenshot.png)
 
+## Concept
+
+In Creatorr, a series holds one or many sources, usually a channel, playlist, or single-video URL. Sources are indexed and episode entries created before anything is downloaded.
+
+```text
+Creatorr
+├── series A
+│   └── source 1 (channel)
+│       ├── episode 1 (released 2024-03-12)
+│       └── episode 2 (released 2024-08-01)
+└── series B
+    ├── source 1 (channel)
+    │   ├── episode 1 (released 2025-01-04)
+    │   └── episode 2 (released 2025-06-18)
+    └── source 2 (single video)
+        └── episode (released 2024-09-15)
+```
+
+After a video is downloaded, it is packed as an episode and the following default file structure emerges:
+
+```text
+file system
+└── /library/
+    ├── Series A/
+    │   ├── tvshow.nfo
+    │   ├── poster.jpg
+    │   └── S2024/
+    │       ├── S2024E0001 [jK4mN8pQ2xL].mkv
+    │       ├── S2024E0001 [jK4mN8pQ2xL].nfo
+    │       ├── S2024E0001 [jK4mN8pQ2xL].info.json
+    │       ├── S2024E0001 [jK4mN8pQ2xL]-thumb.jpg
+    │       ├── S2024E0002 [Rt7wB3cV9aH].mkv
+    │       ├── S2024E0002 [Rt7wB3cV9aH].nfo
+    │       ├── S2024E0002 [Rt7wB3cV9aH].info.json
+    │       └── S2024E0002 [Rt7wB3cV9aH]-thumb.jpg
+    └── Series B/
+        ├── tvshow.nfo
+        ├── poster.jpg
+        ├── S2024/
+        │   ├── S2024E0001 [Wa8eK1bX7mD].mkv
+        │   ├── S2024E0001 [Wa8eK1bX7mD].nfo
+        │   ├── S2024E0001 [Wa8eK1bX7mD].info.json
+        │   └── S2024E0001 [Wa8eK1bX7mD]-thumb.jpg
+        └── S2025/
+            ├── S2025E0001 [Ys2nF6dM1qE].mkv
+            ├── S2025E0001 [Ys2nF6dM1qE].nfo
+            ├── S2025E0001 [Ys2nF6dM1qE].info.json
+            ├── S2025E0001 [Ys2nF6dM1qE]-thumb.jpg
+            ├── S2025E0002 [Uc9hL5gT4zP].mkv
+            ├── S2025E0002 [Uc9hL5gT4zP].nfo
+            ├── S2025E0002 [Uc9hL5gT4zP].info.json
+            └── S2025E0002 [Uc9hL5gT4zP]-thumb.jpg
+```
+
+A media server can read it as-is, with full metadata and images for each series and its episodes.
+
 ## Features
 
 - **Multiple source URLs** - merge channels, playlists, and single-video URLs into one Creatorr series
