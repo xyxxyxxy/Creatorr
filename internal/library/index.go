@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
@@ -174,10 +173,10 @@ func (s *Store) insertListedVideo(seriesID int64, src any, li ListedVideo, uploa
 	return s.DB.SQL.Exec(`
 		INSERT INTO videos (
 		  series_id, source_id, remote_id, title, upload_date,
-		  source_url, status, season, episode, description, thumbnail_url, media_type
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		  source_url, status, season, episode, description, thumbnail_url, media_type, pack_role
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, seriesID, src, li.RemoteID, li.Title, uploadVal, nullEmpty(li.WebpageURL),
-		status, season, episode, li.Description, thumb, mt)
+		status, season, episode, li.Description, thumb, mt, PackRoleRegular)
 }
 
 func nullEmpty(s string) any {
@@ -246,6 +245,7 @@ type DownloadContext struct {
 	RootPath       string
 	RootID         int64
 	EpisodeFormat  string
+	Naming         NamingConfig
 	FormatSelector string
 	URL            string
 	Profile        QualityProfile
@@ -258,14 +258,14 @@ func (s *Store) PrepareDownload(videoID int64) (*DownloadContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	var title, rootPath, episodeFormat, deliveryMode string
+	var title, rootPath, deliveryMode string
 	var profileID, rootID int64
 	err = s.DB.SQL.QueryRow(`
-		SELECT s.title, r.id, r.path, r.episode_format, s.quality_profile_id, s.delivery_mode
+		SELECT s.title, r.id, r.path, s.quality_profile_id, s.delivery_mode
 		FROM series s
 		JOIN root_folders r ON r.id = s.root_id
 		WHERE s.id = ?
-	`, v.SeriesID).Scan(&title, &rootID, &rootPath, &episodeFormat, &profileID, &deliveryMode)
+	`, v.SeriesID).Scan(&title, &rootID, &rootPath, &profileID, &deliveryMode)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -282,12 +282,14 @@ func (s *Store) PrepareDownload(videoID int64) (*DownloadContext, error) {
 	}
 	url = DownloadURL(url, v.RemoteID)
 	_ = s.EnsureSeriesDirCapped(rootPath, title)
+	naming := s.LoadNamingConfigForRoot(rootID)
 	return &DownloadContext{
 		Video:          *v,
 		SeriesTitle:    title,
 		RootPath:       rootPath,
 		RootID:         rootID,
-		EpisodeFormat:  settings.NormalizeEpisodeFormat(episodeFormat),
+		EpisodeFormat:  naming.EpisodeFormat,
+		Naming:         naming,
 		FormatSelector: prof.FormatSelector,
 		URL:            url,
 		Profile:        *prof,

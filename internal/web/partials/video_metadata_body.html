@@ -38,6 +38,14 @@
         <p class="label whitespace-normal">UTC. Date is essential for episode numbering. Time helps order episodes released on the same day.</p>
       </fieldset>
     </div>
+    {{template "field_input" (dict
+      "Type" "select"
+      "Name" "pack_role"
+      "Label" "Pack role"
+      "Value" .Video.PackRole
+      "Options" .PackRoleOptions
+      "Hint" "None packs with the root 'Episode format'. Special episode packs under series-level 'Specials/' as Season 00 (S00E…). Title/plot from episode NFO; usual media servers insert it in play order by upload date (displayseason/displayepisode). Feature kinds use series-level extras folders (e.g. 'trailers/'); display title is the filename. Role change renames packed files after reindex."
+    )}}
     {{template "form_row" (dict "Type" "textarea" "Name" "plot" "Label" "Plot" "Value" .Video.Description)}}
     <div class="grid gap-3 sm:grid-cols-2">
       {{template "form_row" (dict "Name" "sorttitle" "Label" "Sort title" "Value" .Video.SortTitle)}}

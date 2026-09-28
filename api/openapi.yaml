@@ -2146,7 +2146,7 @@ components:
 
     RootFolder:
       type: object
-      required: [id, name, path, episode_format]
+      required: [id, name, path, episode_format, special_episode_format, special_feature_format]
       properties:
         id:
           type: integer
@@ -2157,7 +2157,13 @@ components:
           type: string
         episode_format:
           type: string
-          description: Relative path under the series folder for packed episodes (no extension).
+          description: Relative path under the series folder for packed regular episodes (no extension).
+        special_episode_format:
+          type: string
+          description: Stem after locked S00E{episode:04} under series-level Specials/ (no path separators).
+        special_feature_format:
+          type: string
+          description: Stem under series-level extras kind folders (no path separators).
         retention_ttl_seconds:
           type: integer
           format: int64
@@ -2176,7 +2182,13 @@ components:
           description: Absolute path on disk (relative paths are rejected).
         episode_format:
           type: string
-          description: Relative path under the series folder for packed episodes (no extension). Empty uses the default.
+          description: Relative path under the series folder for packed regular episodes (no extension). Empty uses the default.
+        special_episode_format:
+          type: string
+          description: Stem after locked S00E under Specials/. Empty uses the default.
+        special_feature_format:
+          type: string
+          description: Stem under extras kind folders. Empty uses the default.
         retention_ttl_seconds:
           type: integer
           format: int64
@@ -2191,7 +2203,13 @@ components:
           type: string
         episode_format:
           type: string
-          description: Relative path under the series folder for packed episodes (no extension).
+          description: Relative path under the series folder for packed regular episodes (no extension).
+        special_episode_format:
+          type: string
+          description: Stem after locked S00E under Specials/.
+        special_feature_format:
+          type: string
+          description: Stem under extras kind folders.
         retention_ttl_seconds:
           type: integer
           format: int64

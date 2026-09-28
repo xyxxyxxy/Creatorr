@@ -28,22 +28,22 @@ func (p QualityProfile) MaturitySidecarDays() int {
 	return MaturitySidecarHoursToDays(p.MaturitySidecarHours)
 }
 
-// MaturityMediaPreset returns the nearest media slider index.
+// MaturityMediaPreset returns the nearest legacy media preset index.
 func (p QualityProfile) MaturityMediaPreset() int {
 	return MaturityMediaPresetIndex(p.MaturityRedownloadHours)
 }
 
-// MaturityMediaLabel returns the nearest media preset label for the table/UI.
+// MaturityMediaLabel returns a short label for the table/UI.
 func (p QualityProfile) MaturityMediaLabel() string {
 	return MaturityMediaLabel(p.MaturityRedownloadHours)
 }
 
-// MaturitySidecarPreset returns the nearest sidecar slider index.
+// MaturitySidecarPreset returns the nearest legacy sidecar preset index.
 func (p QualityProfile) MaturitySidecarPreset() int {
 	return MaturitySidecarPresetIndex(p.MaturitySidecarDays())
 }
 
-// MaturitySidecarLabel returns the nearest preset label for the table/UI.
+// MaturitySidecarLabel returns a short label for the table/UI.
 func (p QualityProfile) MaturitySidecarLabel() string {
 	return MaturitySidecarLabel(p.MaturitySidecarDays())
 }

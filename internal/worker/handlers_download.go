@@ -375,20 +375,6 @@ func finishArchivePack(
 		}
 	}
 
-	season, episode := 0, 0
-	if dlctx.Video.Season.Valid {
-		season = int(dlctx.Video.Season.Int64)
-	}
-	if dlctx.Video.Episode.Valid {
-		episode = int(dlctx.Video.Episode.Int64)
-	}
-	if upload != "" {
-		sNum, eNum, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, t.VideoID.Int64)
-		if aerr != nil {
-			return aerr
-		}
-		season, episode = sNum, eNum
-	}
 	aired := upload
 	if aired == "" && dlctx.Video.UploadDate.Valid {
 		aired = dlctx.Video.UploadDate.String
@@ -411,14 +397,26 @@ func finishArchivePack(
 	if fresh, gerr := d.Library.GetVideo(t.VideoID.Int64); gerr == nil {
 		v = fresh
 	}
+	season, episode, aerr := d.Library.AssignPackNumbers(v, aired, t.ID)
+	if aerr != nil {
+		return aerr
+	}
 	runtime := 0
 	if v.DurationSeconds.Valid && v.DurationSeconds.Int64 > 0 {
 		runtime = int(v.DurationSeconds.Int64)
 	}
 	epMeta := library.EpisodeMetaFromVideo(v, dlctx.SeriesTitle, season, episode, aired, runtime)
+	if library.IsSpecialFeature(epMeta.PackRole) {
+		if y := library.SeasonYearFromUpload(aired); y > 0 {
+			epMeta.Season = y
+		}
+	}
+	if err := d.Library.ApplySpecialDisplay(&epMeta, v.SeriesID, v.ID, aired); err != nil {
+		return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "pack failed"), err.Error())
+	}
 	mediaPath, nfoPath, infoPath, thumbPath, subPaths, pathSuffix, err := library.PackMedia(
 		media, dlctx.RootPath, epMeta,
-		library.NamingConfig{EpisodeFormat: dlctx.EpisodeFormat}, infoSrc, thumbSrc, subSrcs,
+		dlctx.Naming, infoSrc, thumbSrc, subSrcs,
 	)
 	if err != nil {
 		return apperrors.WithDetail(apperrors.New(apperrors.CodePackFailed, "pack failed"), err.Error())

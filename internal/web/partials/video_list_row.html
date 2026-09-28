@@ -27,6 +27,7 @@
     <div class="flex items-center gap-2 min-w-0">
       {{if not .NoActions}}{{template "task_indicator" .TaskInd}}{{end}}
       <a class="link link-hover font-medium truncate{{if eq .Status "ignored"}} opacity-40{{end}}" href="/series/{{.SeriesID}}/videos/{{.ID}}">{{.Title}}</a>
+      {{if .PackRoleBadge}}<span class="badge badge-ghost badge-sm shrink-0">{{.PackRoleBadge}}</span>{{end}}
     </div>
     <div class="text-xs opacity-60 flex flex-wrap gap-x-2">
       {{if .SeriesTitle}}<a class="link link-hover" href="/series/{{.SeriesID}}">{{.SeriesTitle}}</a>{{end}}

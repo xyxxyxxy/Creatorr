@@ -46,8 +46,10 @@ type ImportCandidate struct {
 	SuggestedUploadDateFromMtime bool               `json:"suggested_upload_date_from_mtime,omitempty"`
 	SuggestedHandler             string             `json:"suggested_handler_id,omitempty"`
 	SuggestedWebpageURL          string             `json:"suggested_webpage_url,omitempty"`
-	MatchType                    string             `json:"match_type,omitempty"`
-	MatchLabel                   string             `json:"match_label,omitempty"`
+	// SuggestedPackRole is path-detected Specials/extras role when a series folder is known.
+	SuggestedPackRole string `json:"suggested_pack_role,omitempty"`
+	MatchType         string `json:"match_type,omitempty"`
+	MatchLabel        string `json:"match_label,omitempty"`
 	VideoSuggestions             []VideoSuggestion  `json:"video_suggestions"`
 	SeriesSuggestions            []SeriesSuggestion `json:"series_suggestions"`
 	// SeriesFolderDraftKey locks this candidate to an unknown tvshow.nfo tree (create on confirm).
@@ -411,6 +413,7 @@ func (s *Store) buildImportCandidate(path, source string, known map[string]struc
 	}
 	// ID match is enough for auto-match; skip O(videos) title scans.
 	if c.SuggestedVideoID != nil {
+		c.SuggestedPackRole = s.suggestPackRoleForPath(abs, *c.SuggestedSeriesID)
 		return &c, nil
 	}
 	c.VideoSuggestions = titleSuggestionsFrom(catalog.videos, stemBase, 8)
@@ -426,6 +429,9 @@ func (s *Store) buildImportCandidate(path, source string, known map[string]struc
 		c.SuggestedSeriesID = &top.SeriesID
 		c.MatchType = "series_title"
 		c.MatchLabel = fmt.Sprintf("Series match (%.0f%%): %s - pick a video", top.Score*100, top.Title)
+	}
+	if c.SuggestedSeriesID != nil {
+		c.SuggestedPackRole = s.suggestPackRoleForPath(abs, *c.SuggestedSeriesID)
 	}
 	return &c, nil
 }
@@ -504,6 +510,7 @@ type CreateImportVideoParams struct {
 	WebpageURL  string
 	UploadDate  string // required after merge (RFC3339 UTC; sidecars / UI date-only adapted)
 	Description string
+	PackRole    string // optional; empty → detect from path under series folder
 }
 
 // CreateImportVideo inserts a wanted video under seriesID from path metadata (no enqueue).
@@ -522,6 +529,18 @@ func (s *Store) CreateImportVideo(path string, p CreateImportVideoParams) (video
 	abs, _, err = s.ValidateImportSourcePath(path)
 	if err != nil {
 		return 0, "", meta, err
+	}
+	rawRole := strings.TrimSpace(p.PackRole)
+	packRole := NormalizePackRole(rawRole)
+	if rawRole == "" {
+		if ser, serr := s.GetSeries(p.SeriesID, false); serr == nil {
+			if root, rerr := s.GetRoot(ser.RootID); rerr == nil {
+				packRole = DetectPackRoleFromPath(SeriesDir(root.Path, ser.Title), abs)
+			}
+		}
+	}
+	if err := ValidatePackRole(packRole); err != nil {
+		return 0, "", meta, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	hints := extractImportIDs(abs)
 	meta = readImportMeta(abs, hints)
@@ -563,18 +582,24 @@ func (s *Store) CreateImportVideo(path string, p CreateImportVideoParams) (video
 	if meta.HandlerID == "" {
 		meta.HandlerID = "yt-dlp"
 	}
-	season, episode, err := s.AssignSeasonEpisode(p.SeriesID, meta.UploadDate, 0, 0)
-	if err != nil {
-		return 0, "", meta, err
+	var season, episode int
+	var seasonVal, episodeVal any
+	if IsSpecialEpisode(packRole) || IsSpecialFeature(packRole) {
+		// Numbers assigned by pack-role reindex after insert.
+	} else {
+		var aerr error
+		season, episode, aerr = s.AssignSeasonEpisode(p.SeriesID, meta.UploadDate, 0, 0)
+		if aerr != nil {
+			return 0, "", meta, aerr
+		}
+		if meta.UploadDate != "" {
+			seasonVal = season
+			episodeVal = episode
+		}
 	}
-	var uploadVal, webpage, seasonVal, episodeVal any
+	var uploadVal, webpage any
 	if meta.UploadDate != "" {
 		uploadVal = meta.UploadDate
-	}
-	// Pre-insert assign only seeds when dated; reindex after insert for correct day-index.
-	if meta.UploadDate != "" {
-		seasonVal = season
-		episodeVal = episode
 	}
 	if meta.WebpageURL != "" {
 		webpage = meta.WebpageURL
@@ -583,9 +608,9 @@ func (s *Store) CreateImportVideo(path string, p CreateImportVideoParams) (video
 	res, err = s.DB.SQL.Exec(`
 		INSERT INTO videos (
 		  series_id, source_id, remote_id, title, upload_date,
-		  source_url, status, season, episode, description, thumbnail_url
-		) VALUES (?, NULL, ?, ?, ?, ?, 'wanted', ?, ?, ?, NULL)
-	`, p.SeriesID, meta.RemoteID, meta.Title, uploadVal, webpage, seasonVal, episodeVal, meta.Description)
+		  source_url, status, season, episode, description, thumbnail_url, pack_role
+		) VALUES (?, NULL, ?, ?, ?, ?, 'wanted', ?, ?, ?, NULL, ?)
+	`, p.SeriesID, meta.RemoteID, meta.Title, uploadVal, webpage, seasonVal, episodeVal, meta.Description, packRole)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return 0, "", meta, fmt.Errorf("%w: video with this remote_id already exists in series", ErrConflict)
@@ -600,7 +625,14 @@ func (s *Store) CreateImportVideo(path string, p CreateImportVideoParams) (video
 		}
 		meta.RemoteID = strconv.FormatInt(videoID, 10)
 	}
-	if meta.UploadDate != "" {
+	if IsSpecialEpisode(packRole) || IsSpecialFeature(packRole) {
+		changed, rerr := s.ReindexPackRoleBucket(p.SeriesID, packRole)
+		if rerr != nil {
+			_, _ = s.DB.SQL.Exec(`DELETE FROM videos WHERE id = ?`, videoID)
+			return 0, "", meta, rerr
+		}
+		_ = s.repackEpisodeNumberChanges(changed, 0)
+	} else if meta.UploadDate != "" {
 		changed, rerr := s.ReindexSeriesUTCYear(p.SeriesID, SeasonYearFromUpload(meta.UploadDate))
 		if rerr != nil {
 			_, _ = s.DB.SQL.Exec(`DELETE FROM videos WHERE id = ?`, videoID)
@@ -858,6 +890,7 @@ func (s *Store) EnqueueImport(path string, videoID int64, replace bool) (int64, 
 	if err != nil {
 		return 0, err
 	}
+	_ = s.applyDetectedPackRole(v, abs)
 	hasMedia := false
 	if _, ok, err := s.HasVideoFile(videoID); err != nil {
 		return 0, err
@@ -1402,6 +1435,45 @@ func cleanStem(stem string) string {
 	clean := stripBracket.ReplaceAllString(stem, "")
 	clean = stripSE.ReplaceAllString(clean, "")
 	return strings.TrimSpace(clean)
+}
+
+// applyDetectedPackRole sets pack_role from series-relative path when a Specials/extras layout is detected.
+func (s *Store) applyDetectedPackRole(v *Video, mediaPath string) error {
+	if v == nil {
+		return nil
+	}
+	ser, err := s.GetSeries(v.SeriesID, false)
+	if err != nil {
+		return err
+	}
+	root, err := s.GetRoot(ser.RootID)
+	if err != nil {
+		return err
+	}
+	role := DetectPackRoleFromPath(SeriesDir(root.Path, ser.Title), mediaPath)
+	if role == PackRoleRegular {
+		return nil
+	}
+	if NormalizePackRole(v.PackRole) == role {
+		return nil
+	}
+	return s.SetVideoPackRole(v.ID, role)
+}
+
+// suggestPackRoleForPath returns DetectPackRoleFromPath under the series folder when seriesID is known.
+func (s *Store) suggestPackRoleForPath(mediaPath string, seriesID int64) string {
+	if seriesID <= 0 {
+		return PackRoleRegular
+	}
+	ser, err := s.GetSeries(seriesID, false)
+	if err != nil {
+		return PackRoleRegular
+	}
+	root, err := s.GetRoot(ser.RootID)
+	if err != nil {
+		return PackRoleRegular
+	}
+	return DetectPackRoleFromPath(SeriesDir(root.Path, ser.Title), mediaPath)
 }
 
 func seqRatio(a, b string) float64 {

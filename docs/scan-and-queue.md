@@ -59,7 +59,7 @@ There is **no** global Settings `scan_cron`.
 | `import_plan` | `system` | One pending/running; Import confirm when unknown `tvshow.nfo` trees need series create + video jobs |
 | `sync_files` | `system` | One pending/running; `sync_files_cron` or Scheduler Run now; appends end of system lane |
 | `retention_delete` | `system` | One pending/running; cron enqueues at end of system lane |
-| `rename_episodes` | `system` | Full Apply: one pending/running library-wide. Scoped (`series_id` / `series_ids` / `video_ids`) may coexist with full Apply; pending video-scoped tasks merge `video_ids`. Maintenance Run (optional shared picker scope) or Metadata title/date and Edit series |
+| `rename_episodes` | `system` | Full Apply: one pending/running library-wide. Scoped (`series_id` / `series_ids` / `video_ids`) may coexist with full Apply; pending video-scoped tasks merge `video_ids`. Maintenance Run (optional shared picker scope) or Metadata title/date/pack-role and Edit series. Reindexes year + Special/feature buckets; rewrites Special NFOs in-task; prunes empty `Specials`/kind folders |
 | `regenerate_nfo` | `system` | One pending/running; Settings → Maintenance Run → Regenerate NFO; optional payload `series_ids` / `video_ids`; resumable cursors |
 | `integrity_check` | `system` | One pending/running; Settings → Maintenance Run → Integrity check; optional payload `series_ids` / `video_ids`; resumable cursor |
 | `bulk_edit_series` | `system` | One pending/running; bulk settings and/or metadata override for selected series (UI + `POST /api/series/bulk-edit` / `bulk-metadata`) |

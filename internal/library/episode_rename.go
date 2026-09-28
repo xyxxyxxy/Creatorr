@@ -263,10 +263,7 @@ func (s *Store) twoPhaseRepackEpisodeNumbers(videoIDs []int64, taskID int64) (re
 				continue
 			}
 		}
-		meta := EpisodeNFO{
-			SeriesTitle: ser.Title, Title: v.Title, Season: season, Episode: episode,
-			Aired: aired, UniqueID: v.RemoteID, Domain: domain,
-		}
+		meta := pathEpisodeNFO(v, ser.Title, season, episode, aired, domain)
 		_ = s.EnsureSeriesDirCapped(root.Path, ser.Title)
 		dest, err := BuildEpisodePaths(root.Path, meta, cfg)
 		if err != nil {
@@ -392,8 +389,71 @@ func (s *Store) twoPhaseRepackEpisodeNumbers(videoIDs []int64, taskID int64) (re
 				_, _ = s.writeEpisodeNFOBeside(v, mp)
 			}
 		}
+		_ = PruneEmptyReservedFolder(SeriesDir(it.root, it.seriesTitle), filepath.Dir(it.oldBase))
+	}
+	// Rewrite Special episode NFOs for every series touched (display* after renumber).
+	seriesSeen := map[int64]struct{}{}
+	for _, it := range items {
+		v, err := s.GetVideo(it.videoID)
+		if err != nil || v == nil {
+			continue
+		}
+		if _, ok := seriesSeen[v.SeriesID]; ok {
+			continue
+		}
+		seriesSeen[v.SeriesID] = struct{}{}
+		_ = s.rewriteSpecialEpisodeNFOs(v.SeriesID)
 	}
 	return renamed, uniqInt64(leftovers)
+}
+
+// pathEpisodeNFO builds EpisodeNFO for BuildEpisodePaths (pack role + feature year token).
+func pathEpisodeNFO(v *Video, seriesTitle string, season, episode int, aired, domain string) EpisodeNFO {
+	meta := EpisodeNFO{
+		SeriesTitle: seriesTitle,
+		Title:       v.Title,
+		Season:      season,
+		Episode:     episode,
+		Aired:       aired,
+		UniqueID:    v.RemoteID,
+		Domain:      domain,
+		PackRole:    NormalizePackRole(v.PackRole),
+	}
+	if IsSpecialFeature(meta.PackRole) {
+		if y := SeasonYearFromUpload(aired); y > 0 {
+			meta.Season = y
+		}
+	}
+	return meta
+}
+
+// rewriteSpecialEpisodeNFOs regenerates NFO for all Special episodes in a series.
+func (s *Store) rewriteSpecialEpisodeNFOs(seriesID int64) error {
+	rows, err := s.DB.SQL.Query(`
+		SELECT id FROM videos
+		WHERE series_id = ? AND pack_role = ? AND status IN ('downloaded', 'integrity_check_failed')
+	`, seriesID, PackRoleSpecialEpisode)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		v, err := s.GetVideo(id)
+		if err != nil || v == nil {
+			continue
+		}
+		var mp string
+		_ = s.DB.SQL.QueryRow(`SELECT path FROM files WHERE video_id = ? AND kind = 'video' ORDER BY id LIMIT 1`, id).Scan(&mp)
+		if mp == "" {
+			continue
+		}
+		_, _ = s.writeEpisodeNFOBeside(v, mp)
+	}
+	return rows.Err()
 }
 
 // renameTriggerVideo returns the task's video_id and title when the rename was driven
@@ -478,10 +538,7 @@ func (s *Store) healMissingEpisodePath(v *Video, seriesTitle string, season, epi
 			return cand
 		}
 	}
-	meta := EpisodeNFO{
-		SeriesTitle: seriesTitle, Title: v.Title, Season: season, Episode: episode,
-		Aired: aired, UniqueID: v.RemoteID, Domain: domain,
-	}
+	meta := pathEpisodeNFO(v, seriesTitle, season, episode, aired, domain)
 	dest, err := BuildEpisodePaths(root, meta, cfg)
 	if err != nil {
 		return ""

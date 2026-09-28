@@ -27,6 +27,7 @@ type seriesVideoRow struct {
 	ThumbURL            string
 	DomainActive        bool
 	DomainDisabledTitle string
+	PackRoleBadge       string
 }
 
 // buildSeriesVideoRows enriches videos for video_list_row (series, source, history).
@@ -108,6 +109,7 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 			ThumbURL:            thumbURL,
 			DomainActive:        dAct,
 			DomainDisabledTitle: disTitle,
+			PackRoleBadge:       library.PackRoleBadgeLabel(v.PackRole),
 		})
 	}
 	return videos

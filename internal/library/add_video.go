@@ -67,9 +67,9 @@ func (s *Store) CreateIndexedVideo(p CreateIndexedVideoParams) (*Video, error) {
 	res, err := s.DB.SQL.Exec(`
 		INSERT INTO videos (
 		  series_id, source_id, remote_id, title, upload_date,
-		  source_url, status, season, episode, description, thumbnail_url
-		) VALUES (?, NULL, ?, ?, ?, ?, 'ignored', ?, ?, ?, NULL)
-	`, p.SeriesID, remoteID, title, upload, webpage, season, episode, desc)
+		  source_url, status, season, episode, description, thumbnail_url, pack_role
+		) VALUES (?, NULL, ?, ?, ?, ?, 'ignored', ?, ?, ?, NULL, ?)
+	`, p.SeriesID, remoteID, title, upload, webpage, season, episode, desc, PackRoleRegular)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return nil, fmt.Errorf("%w: video with this remote_id already exists in series", ErrConflict)

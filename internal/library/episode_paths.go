@@ -16,16 +16,24 @@ const DefaultEpisodeFormat = settings.DefaultEpisodeFormat
 
 // NamingConfig holds pack path templates.
 type NamingConfig struct {
-	EpisodeFormat string // relative path under series folder (may include /); required non-empty after Load
+	EpisodeFormat        string // relative path under series folder (may include /)
+	SpecialEpisodeFormat string // stem after locked S00E{episode:04} under Specials/
+	SpecialFeatureFormat string // stem under series-level <kind>/
 }
 
 // NamingConfigFromRoot builds NamingConfig from a root folder row.
 func NamingConfigFromRoot(root *RootFolder) NamingConfig {
-	cfg := NamingConfig{EpisodeFormat: DefaultEpisodeFormat}
+	cfg := NamingConfig{
+		EpisodeFormat:        DefaultEpisodeFormat,
+		SpecialEpisodeFormat: settings.DefaultSpecialEpisodeFormat,
+		SpecialFeatureFormat: settings.DefaultSpecialFeatureFormat,
+	}
 	if root == nil {
 		return cfg
 	}
 	cfg.EpisodeFormat = settings.NormalizeEpisodeFormat(root.EpisodeFormat)
+	cfg.SpecialEpisodeFormat = settings.NormalizeSpecialEpisodeFormat(root.SpecialEpisodeFormat)
+	cfg.SpecialFeatureFormat = settings.NormalizeSpecialFeatureFormat(root.SpecialFeatureFormat)
 	return cfg
 }
 
@@ -33,7 +41,7 @@ func NamingConfigFromRoot(root *RootFolder) NamingConfig {
 func (s *Store) LoadNamingConfigForRoot(rootID int64) NamingConfig {
 	root, err := s.GetRoot(rootID)
 	if err != nil {
-		return NamingConfig{EpisodeFormat: DefaultEpisodeFormat}
+		return NamingConfigFromRoot(nil)
 	}
 	return NamingConfigFromRoot(root)
 }
@@ -48,16 +56,81 @@ type EpisodePaths struct {
 }
 
 // BuildEpisodePaths computes pack destinations under root for meta.
-// EpisodeFormat is a relative path under the series folder (each segment expanded/sanitized).
+// PackRole selects regular episode_format, Specials/, or series-level <kind>/.
 func BuildEpisodePaths(root string, meta EpisodeNFO, cfg NamingConfig) (EpisodePaths, error) {
-	epFmt := strings.TrimSpace(cfg.EpisodeFormat)
-	if epFmt == "" {
-		epFmt = DefaultEpisodeFormat
-	}
-	if err := nametemplate.Validate(epFmt); err != nil {
-		return EpisodePaths{}, err
-	}
+	vals := namingValues(meta)
+	seriesDir := SeriesDir(root, meta.SeriesTitle)
 
+	role := NormalizePackRole(meta.PackRole)
+	switch {
+	case role == PackRoleSpecialEpisode:
+		stemFmt := settings.NormalizeSpecialEpisodeFormat(cfg.SpecialEpisodeFormat)
+		if err := settings.ValidateSpecialEpisodeFormat(stemFmt); err != nil {
+			return EpisodePaths{}, err
+		}
+		prefix, err := nametemplate.ExpandAndSanitize(settings.LockedSpecialEpisodePrefix, vals)
+		if err != nil {
+			return EpisodePaths{}, err
+		}
+		suffix, err := nametemplate.ExpandAndSanitize(stemFmt, vals)
+		if err != nil {
+			return EpisodePaths{}, err
+		}
+		stem := prefix
+		if suffix != "" {
+			stem = prefix + " " + suffix
+		}
+		kindFolder := PackRoleKindFolder(role)
+		if kindFolder == "" {
+			return EpisodePaths{}, fmt.Errorf("special episode missing kind folder")
+		}
+		episodeDir := filepath.Join(seriesDir, kindFolder)
+		return EpisodePaths{
+			SeriesDir:   seriesDir,
+			SeasonDir:   episodeDir,
+			Stem:        stem,
+			EpisodeDir:  episodeDir,
+			PrimaryBase: filepath.Join(episodeDir, stem),
+		}, nil
+
+	case IsSpecialFeature(role):
+		kind := PackRoleKindFolder(role)
+		stemFmt := settings.NormalizeSpecialFeatureFormat(cfg.SpecialFeatureFormat)
+		if err := settings.ValidateSpecialFeatureFormat(stemFmt); err != nil {
+			return EpisodePaths{}, err
+		}
+		stem, err := nametemplate.ExpandAndSanitize(stemFmt, vals)
+		if err != nil {
+			return EpisodePaths{}, err
+		}
+		if stem == "" || stem == "." || stem == ".." {
+			return EpisodePaths{}, fmt.Errorf("invalid path segment in special feature format")
+		}
+		if kind == "" {
+			return EpisodePaths{}, fmt.Errorf("special feature missing kind folder")
+		}
+		episodeDir := filepath.Join(seriesDir, kind)
+		return EpisodePaths{
+			SeriesDir:   seriesDir,
+			SeasonDir:   episodeDir,
+			Stem:        stem,
+			EpisodeDir:  episodeDir,
+			PrimaryBase: filepath.Join(episodeDir, stem),
+		}, nil
+
+	default:
+		epFmt := strings.TrimSpace(cfg.EpisodeFormat)
+		if epFmt == "" {
+			epFmt = DefaultEpisodeFormat
+		}
+		if err := settings.ValidateEpisodeFormat(epFmt); err != nil {
+			return EpisodePaths{}, err
+		}
+		return buildEpisodePathsRel(seriesDir, epFmt, vals)
+	}
+}
+
+func namingValues(meta EpisodeNFO) nametemplate.Values {
 	vals := nametemplate.Values{
 		Series:  meta.SeriesTitle,
 		Year:    meta.Season,
@@ -66,6 +139,7 @@ func BuildEpisodePaths(root string, meta EpisodeNFO, cfg NamingConfig) (EpisodeP
 		ID:      meta.UniqueID,
 		Date:    UploadCalendarDate(meta.Aired),
 		Domain:  namingDomain(meta.Domain),
+		Kind:    PackRoleKindFolder(meta.PackRole),
 	}
 	if t, ok := ParseUploadTime(meta.Aired); ok {
 		t = t.UTC()
@@ -75,9 +149,7 @@ func BuildEpisodePaths(root string, meta EpisodeNFO, cfg NamingConfig) (EpisodeP
 		vals.Minute = t.Minute()
 		vals.HasClock = true
 	}
-
-	seriesDir := SeriesDir(root, meta.SeriesTitle)
-	return buildEpisodePathsRel(seriesDir, epFmt, vals)
+	return vals
 }
 
 func buildEpisodePathsRel(seriesDir, epFmt string, vals nametemplate.Values) (EpisodePaths, error) {
@@ -93,7 +165,11 @@ func buildEpisodePathsRel(seriesDir, epFmt string, vals nametemplate.Values) (Ep
 		if err != nil {
 			return EpisodePaths{}, err
 		}
-		if seg == "" || seg == "." || seg == ".." {
+		if seg == "" {
+			// Empty token expansion (e.g. {pack-role} on regulars) drops the segment.
+			continue
+		}
+		if seg == "." || seg == ".." {
 			return EpisodePaths{}, fmt.Errorf("invalid path segment in episode format")
 		}
 		parts = append(parts, seg)
@@ -131,6 +207,24 @@ func PruneEmptyDir(path string) bool {
 		return false
 	}
 	return true
+}
+
+// PruneEmptyReservedFolder removes path when it is an empty Specials or feature-kind folder under seriesDir.
+func PruneEmptyReservedFolder(seriesDir, dir string) bool {
+	seriesDir = filepath.Clean(seriesDir)
+	dir = filepath.Clean(dir)
+	if seriesDir == "" || dir == "" || !strings.HasPrefix(dir, seriesDir+string(filepath.Separator)) {
+		return false
+	}
+	base := filepath.Base(dir)
+	if !IsReservedSeriesFolder(base) {
+		return false
+	}
+	// Only direct children of series (series-level Specials/kind).
+	if filepath.Dir(dir) != seriesDir {
+		return false
+	}
+	return PruneEmptyDir(dir)
 }
 
 // DestinationOccupied reports whether dst exists and is not one of the video's current paths.

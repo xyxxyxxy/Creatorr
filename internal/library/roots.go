@@ -28,18 +28,37 @@ func RetentionSecondsFromDays(days int64) int64 {
 	return days * RetentionSecondsPerDay
 }
 
-// RootFolder is a named download root with optional retention TTL and per-root episode format.
+const rootSelectCols = `id, name, path, retention_ttl_seconds, episode_format, special_episode_format, special_feature_format`
+
+// RootFolder is a named download root with optional retention TTL and per-root episode formats.
 type RootFolder struct {
-	ID                  int64
-	Name                string
-	Path                string
-	RetentionTTLSeconds sql.NullInt64
-	EpisodeFormat       string
+	ID                    int64
+	Name                  string
+	Path                  string
+	RetentionTTLSeconds   sql.NullInt64
+	EpisodeFormat         string
+	SpecialEpisodeFormat  string
+	SpecialFeatureFormat  string
+}
+
+func scanRoot(scanner interface {
+	Scan(dest ...any) error
+}) (RootFolder, error) {
+	var r RootFolder
+	err := scanner.Scan(&r.ID, &r.Name, &r.Path, &r.RetentionTTLSeconds,
+		&r.EpisodeFormat, &r.SpecialEpisodeFormat, &r.SpecialFeatureFormat)
+	if err != nil {
+		return r, err
+	}
+	r.EpisodeFormat = settings.NormalizeEpisodeFormat(r.EpisodeFormat)
+	r.SpecialEpisodeFormat = settings.NormalizeSpecialEpisodeFormat(r.SpecialEpisodeFormat)
+	r.SpecialFeatureFormat = settings.NormalizeSpecialFeatureFormat(r.SpecialFeatureFormat)
+	return r, nil
 }
 
 func (s *Store) ListRoots() ([]RootFolder, error) {
 	rows, err := s.DB.SQL.Query(`
-		SELECT id, name, path, retention_ttl_seconds, episode_format FROM root_folders ORDER BY id
+		SELECT ` + rootSelectCols + ` FROM root_folders ORDER BY id
 	`)
 	if err != nil {
 		return nil, err
@@ -47,11 +66,10 @@ func (s *Store) ListRoots() ([]RootFolder, error) {
 	defer func() { _ = rows.Close() }()
 	var out []RootFolder
 	for rows.Next() {
-		var r RootFolder
-		if err := rows.Scan(&r.ID, &r.Name, &r.Path, &r.RetentionTTLSeconds, &r.EpisodeFormat); err != nil {
+		r, err := scanRoot(rows)
+		if err != nil {
 			return nil, err
 		}
-		r.EpisodeFormat = settings.NormalizeEpisodeFormat(r.EpisodeFormat)
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -68,21 +86,24 @@ func (s *Store) AnyRootRetentionTTL() (bool, error) {
 }
 
 func (s *Store) GetRoot(id int64) (*RootFolder, error) {
-	var r RootFolder
-	err := s.DB.SQL.QueryRow(`
-		SELECT id, name, path, retention_ttl_seconds, episode_format FROM root_folders WHERE id = ?
-	`, id).Scan(&r.ID, &r.Name, &r.Path, &r.RetentionTTLSeconds, &r.EpisodeFormat)
+	r, err := scanRoot(s.DB.SQL.QueryRow(`
+		SELECT `+rootSelectCols+` FROM root_folders WHERE id = ?
+	`, id))
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	r.EpisodeFormat = settings.NormalizeEpisodeFormat(r.EpisodeFormat)
 	return &r, nil
 }
 
 func (s *Store) CreateRoot(name, path, episodeFormat string, retention *int64) (*RootFolder, error) {
+	return s.CreateRootWithFormats(name, path, episodeFormat, "", "", retention)
+}
+
+// CreateRootWithFormats creates a root with optional special format overrides (empty = default).
+func (s *Store) CreateRootWithFormats(name, path, episodeFormat, specialEpisodeFormat, specialFeatureFormat string, retention *int64) (*RootFolder, error) {
 	path = strings.TrimSpace(path)
 	if err := requireAbsoluteRootPath(path); err != nil {
 		return nil, err
@@ -92,13 +113,22 @@ func (s *Store) CreateRoot(name, path, episodeFormat string, retention *int64) (
 	if err := settings.ValidateEpisodeFormat(episodeFormat); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
+	specialEpisodeFormat = settings.NormalizeSpecialEpisodeFormat(specialEpisodeFormat)
+	if err := settings.ValidateSpecialEpisodeFormat(specialEpisodeFormat); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	specialFeatureFormat = settings.NormalizeSpecialFeatureFormat(specialFeatureFormat)
+	if err := settings.ValidateSpecialFeatureFormat(specialFeatureFormat); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
 	var ttl any
 	if retention != nil {
 		ttl = *retention
 	}
 	res, err := s.DB.SQL.Exec(`
-		INSERT INTO root_folders (name, path, retention_ttl_seconds, episode_format) VALUES (?, ?, ?, ?)
-	`, name, path, ttl, episodeFormat)
+		INSERT INTO root_folders (name, path, retention_ttl_seconds, episode_format, special_episode_format, special_feature_format)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, name, path, ttl, episodeFormat, specialEpisodeFormat, specialFeatureFormat)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
@@ -107,11 +137,17 @@ func (s *Store) CreateRoot(name, path, episodeFormat string, retention *int64) (
 }
 
 func (s *Store) UpdateRoot(id int64, name, path, episodeFormat *string, retention *int64, clearRetention bool) (*RootFolder, error) {
+	return s.UpdateRootFormats(id, name, path, episodeFormat, nil, nil, retention, clearRetention)
+}
+
+// UpdateRootFormats updates a root including optional special format fields.
+func (s *Store) UpdateRootFormats(id int64, name, path, episodeFormat, specialEpisodeFormat, specialFeatureFormat *string, retention *int64, clearRetention bool) (*RootFolder, error) {
 	cur, err := s.GetRoot(id)
 	if err != nil {
 		return nil, err
 	}
 	n, p, ep := cur.Name, cur.Path, cur.EpisodeFormat
+	seFmt, sfFmt := cur.SpecialEpisodeFormat, cur.SpecialFeatureFormat
 	ttl := cur.RetentionTTLSeconds
 	if path != nil {
 		cleaned := strings.TrimSpace(*path)
@@ -129,6 +165,18 @@ func (s *Store) UpdateRoot(id int64, name, path, episodeFormat *string, retentio
 			return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 		}
 	}
+	if specialEpisodeFormat != nil {
+		seFmt = settings.NormalizeSpecialEpisodeFormat(*specialEpisodeFormat)
+		if err := settings.ValidateSpecialEpisodeFormat(seFmt); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+		}
+	}
+	if specialFeatureFormat != nil {
+		sfFmt = settings.NormalizeSpecialFeatureFormat(*specialFeatureFormat)
+		if err := settings.ValidateSpecialFeatureFormat(sfFmt); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+		}
+	}
 	if clearRetention {
 		ttl = sql.NullInt64{}
 	} else if retention != nil {
@@ -139,8 +187,10 @@ func (s *Store) UpdateRoot(id int64, name, path, episodeFormat *string, retentio
 		ttlVal = ttl.Int64
 	}
 	_, err = s.DB.SQL.Exec(`
-		UPDATE root_folders SET name = ?, path = ?, retention_ttl_seconds = ?, episode_format = ? WHERE id = ?
-	`, n, p, ttlVal, ep, id)
+		UPDATE root_folders SET name = ?, path = ?, retention_ttl_seconds = ?,
+			episode_format = ?, special_episode_format = ?, special_feature_format = ?
+		WHERE id = ?
+	`, n, p, ttlVal, ep, seFmt, sfFmt, id)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}

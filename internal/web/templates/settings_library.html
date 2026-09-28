@@ -3,17 +3,13 @@
 {{template "settings_nav" .}}
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 
-<div role="alert" class="alert alert-info text-sm mb-4">
-  <span>Changing library settings does not update already downloaded videos. Use maintenance tasks under 'Settings → Maintenance' to apply episode format, file sync, or NFO changes to the existing library.</span>
-</div>
-
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Root folders" "help" "Named disk paths where series store files. Each root has its own episode format." "add_modal" "modal-add-root" "add_label" "Add root")}}
 {{if not .Roots}}
 {{template "list_empty" "No roots yet."}}
 {{else}}
 {{template "list_table"}}
-<thead><tr><th>Name</th><th>Path</th><th>Episode format</th><th>Retention</th><th></th></tr></thead>
+<thead><tr><th>Name</th><th>Path</th><th>Episode</th><th>Retention</th><th></th></tr></thead>
 <tbody>
   {{range .Roots}}
   <tr>
@@ -58,8 +54,8 @@
   {{range .Profiles}}
   <tr>
     <td><span class="tooltip tooltip-top tooltip-nowrap inline-flex" data-tip="{{.FormatSelector}}" aria-label="{{.Name}}: {{.FormatSelector}}">{{.Name}}</span></td>
-    <td>{{if eq .MaturityMediaPreset 0}}{{template "empty_value"}}{{else}}{{.MaturityMediaLabel}}{{end}}</td>
-    <td>{{if eq .MaturitySidecarPreset 0}}{{template "empty_value"}}{{else}}{{.MaturitySidecarLabel}}{{end}}</td>
+    <td>{{if eq .MaturityRedownloadHours 0}}{{template "empty_value"}}{{else}}{{.MaturityMediaLabel}}{{end}}</td>
+    <td>{{if eq .MaturitySidecarHours 0}}{{template "empty_value"}}{{else}}{{.MaturitySidecarLabel}}{{end}}</td>
     <td>
       <span class="inline-flex tooltip tooltip-top" data-tip="{{.SponsorBlockIconTip}}">
         <i data-lucide="{{.SponsorBlockLucideIcon}}" class="size-4 {{if .SponsorBlockEnabled}}text-primary{{else}}opacity-40{{end}}" aria-label="{{.SponsorBlockIconTip}}"></i>
@@ -181,7 +177,27 @@
         "JoinSuffix" ".ext"
         "Validator" true
         "ValidatorHint" "Episode format is required"
-        "Hint" "Relative path under the series folder for packed episodes (no extension). Apply to existing files with 'Apply episode format' under 'Settings → Maintenance'. Including '[{id}]' is highly recommended so Import can match the site id from the filename later."
+        "Hint" "Relative path under the series folder for packed regular episodes."
+      )}}
+      {{template "field_input" (dict
+        "Name" "special_episode_format"
+        "ID" "add-root-special-episode-format"
+        "Label" "Special episode format"
+        "Value" $.DefaultSpecialEpisodeFormat
+        "Mono" true
+		"JoinPrefix" "{series:100}/Specials/S00E{episode:04} "
+        "JoinSuffix" ".ext"
+        "Hint" "Locked under series-level Specials/ with S00E{episode:04}: media servers need that layout to read NFO for Specials. You only set the rest of the filename. Title/plot come from NFO."
+      )}}
+      {{template "field_input" (dict
+        "Name" "special_feature_format"
+        "ID" "add-root-special-feature-format"
+        "Label" "Special feature format"
+        "Value" $.DefaultSpecialFeatureFormat
+        "Mono" true
+        "JoinPrefix" "{series:100}/{pack-role}/"
+        "JoinSuffix" ".ext"
+        "Hint" "Filename under a series-level special feature kind folder ({pack-role} is that folder name; {episode} is 1-based per kind): media servers do not read NFO for special features and use the filename as the display title and sort order, so keep it user-friendly (optional [{id}] still helps Import)."
       )}}
       {{template "episode_format_tokens"}}
       {{template "field_input" (dict
@@ -239,7 +255,29 @@
         "DisabledTitle" "'Episode format' is locked while 'Apply episode format' is pending or running."
         "Validator" true
         "ValidatorHint" "Episode format is required"
-        "Hint" "Relative path under the series folder for packed episodes (no extension). Apply to existing files with 'Apply episode format' under 'Settings → Maintenance'. Including '[{id}]' is highly recommended so Import can match the site id from the filename later."
+        "Hint" "Relative path under the series folder for packed regular episodes."
+      )}}
+      {{template "field_input" (dict
+        "Name" "special_episode_format"
+        "Label" "Special episode format"
+        "Value" .SpecialEpisodeFormat
+        "Mono" true
+        "JoinPrefix" "{series:100}/Specials/S00E{episode:04} "
+        "JoinSuffix" ".ext"
+        "Disabled" $.NamingLocked
+        "DisabledTitle" "Formats are locked while 'Apply episode format' is pending or running."
+        "Hint" "Locked under series-level Specials/ with S00E{episode:04}: media servers need that layout to read NFO for Specials. You only set the rest of the filename."
+      )}}
+      {{template "field_input" (dict
+        "Name" "special_feature_format"
+        "Label" "Special feature format"
+        "Value" .SpecialFeatureFormat
+        "Mono" true
+        "JoinPrefix" "{series:100}/{pack-role}/"
+        "JoinSuffix" ".ext"
+        "Disabled" $.NamingLocked
+        "DisabledTitle" "Formats are locked while 'Apply episode format' is pending or running."
+        "Hint" "Filename under a series-level special feature kind folder: media servers do not read NFO for special features and use the filename as the display title and sort order, so keep it user-friendly."
       )}}
       {{template "episode_format_tokens"}}
       {{template "field_input" (dict
@@ -254,6 +292,9 @@
         "ValidatorHint" "Invalid retention"
         "Hint" "Days after pack before retention delete may remove artifacts."
       )}}
+      <div role="alert" class="alert alert-info text-sm">
+        <span>Changing library settings does not update already downloaded videos. Use maintenance tasks under 'Settings → Maintenance' to apply episode format, file sync, or NFO changes to the existing library.</span>
+      </div>
       <div class="modal-action">
         <label for="modal-edit-root-{{.ID}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary">Save</button>
@@ -292,13 +333,13 @@
       {{template "profile_format_selector_field" (dict "Value" "bv*+ba/b")}}
       {{template "checkbox_field" (dict
         "Name" "verify_media"
-        "Label" "File integrity"
+        "Label" "Check file integrity"
         "Checked" false
-        "Hint" "When enabled: Integrity check runs null-decode + SHA-256 for media and non-NFO sidecars, and structural/value XML compare for episode NFO. Scheduled/Maintenance Integrity check only covers series on profiles with this option. Post-pack and Import 'Integrity check' also require this option (post-pack still uses the maturity gate). File sync (sync_files) is independent of this option: it still runs presence checks and size checks for video and non-NFO sidecars on its own schedule."
+        "Hint" "Integrity check runs null-decode + SHA-256 for media and non-NFO sidecars, and structural/value XML compare for episode NFO, after pack and on schedule. When maturity is used, only mature downloads are checked."
       )}}
       {{template "profile_maturity_fields" (dict
-        "MediaPreset" 0
-        "SidecarPreset" 0
+        "MediaHours" 0
+        "SidecarDays" 0
         "MediaOutID" "maturity-media-out-add"
         "SidecarOutID" "maturity-sidecar-out-add"
       )}}
@@ -315,7 +356,7 @@
 {{range .Profiles}}
 <input type="checkbox" id="modal-edit-profile-{{.ID}}" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box max-w-xl">
+  <div class="modal-box max-w-2xl">
     <h1 class="font-bold text-lg mb-2">Edit quality profile - {{.Name}}</h1>
         <form method="post" action="/actions/update-profile" class="space-y-2">
       <input type="hidden" name="id" value="{{.ID}}" />
@@ -324,13 +365,13 @@
       {{template "profile_format_selector_field" (dict "Value" .FormatSelector)}}
       {{template "checkbox_field" (dict
         "Name" "verify_media"
-        "Label" "File integrity"
+        "Label" "Check file integrity"
         "Checked" .VerifyMedia
-        "Hint" "When enabled: Integrity check runs null-decode + SHA-256 for media and non-NFO sidecars, and structural/value XML compare for episode NFO. Scheduled/Maintenance Integrity check only covers series on profiles with this option. Post-pack and Import 'Integrity check' also require this option (post-pack still uses the maturity gate). File sync (sync_files) is independent of this option: it still runs presence checks and size checks for video and non-NFO sidecars on its own schedule."
+        "Hint" "Integrity check runs null-decode + SHA-256 for media and non-NFO sidecars, and structural/value XML compare for episode NFO, after pack and on schedule. When maturity is used, only mature downloads are checked."
       )}}
       {{template "profile_maturity_fields" (dict
-        "MediaPreset" .MaturityMediaPreset
-        "SidecarPreset" .MaturitySidecarPreset
+        "MediaHours" .MaturityRedownloadHours
+        "SidecarDays" .MaturitySidecarDays
         "MediaOutID" (printf "maturity-media-out-%d" .ID)
         "SidecarOutID" (printf "maturity-sidecar-out-%d" .ID)
       )}}

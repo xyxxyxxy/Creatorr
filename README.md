@@ -60,9 +60,28 @@ file system
 
 A media server can read it as-is, with full metadata and images for each series and its episodes.
 
+Special episodes pack under series-level `Specials/` (Season 00). Special features (trailers, interviews, …) pack under series-level kind folders next to seasons, never inside `S{year}/`.
+
+```text
+file system
+└── /library/
+    └── Series A/
+        ├── tvshow.nfo
+        ├── poster.jpg
+        ├── S2024/
+        │   ├── S2024E0001 [jK4mN8pQ2xL].mkv
+        │   └── …
+        ├── Specials/
+        │   ├── S00E0001 [bonusId].mkv
+        │   └── S00E0001 [bonusId].nfo
+        └── trailers/
+            └── 01 My Trailer.mkv
+```
+
 ## Features
 
 - **Metadata fetching & management** - fetch and edit series/video metadata; pack NFO and sidecars for Emby, Jellyfin, and similar
+- **Special episodes & extras** - pack as Season 00 Specials (NFO for Emby/Jellyfin) or extras folders (trailers, interviews, …) with separate naming formats
 - **Quality profiles** - format selectors and optional maturity media/sidecar refresh
 - **Domains & queues** - per-host rate limits, credentials (Access cookies), and soft pause
 - **Web Archive fallback** - when an indexed YouTube video is deleted or unavailable, queue a [Web Archive](https://archive.org/) download

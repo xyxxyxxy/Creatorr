@@ -2,6 +2,7 @@ package library
 
 import (
 	"database/sql"
+	"fmt"
 	"sync"
 
 	epyear "github.com/xyxxyxxy/Creatorr/internal/library/episode"
@@ -73,64 +74,51 @@ func (s *Store) AssignSeasonEpisode(seriesID int64, upload string, _ int, videoI
 	return season, episode, nil
 }
 
+// AssignPackNumbers returns season/episode for pack using the video's pack_role bucket.
+// Regulars use year reindex; Specials/features reindex their role bucket.
+func (s *Store) AssignPackNumbers(v *Video, upload string, _ int64) (season, episode int, err error) {
+	if v == nil {
+		return 0, 0, fmt.Errorf("video required")
+	}
+	role := NormalizePackRole(v.PackRole)
+	upload = NormalizeUploadTime(upload)
+	if upload == "" && v.UploadDate.Valid {
+		upload = NormalizeUploadTime(v.UploadDate.String)
+	}
+	if IsSpecialEpisode(role) || IsSpecialFeature(role) {
+		if _, err := s.ReindexPackRoleBucket(v.SeriesID, role); err != nil {
+			return 0, 0, err
+		}
+		fresh, gerr := s.GetVideo(v.ID)
+		if gerr != nil {
+			return 0, 0, gerr
+		}
+		if fresh.Season.Valid {
+			season = int(fresh.Season.Int64)
+		}
+		if fresh.Episode.Valid {
+			episode = int(fresh.Episode.Int64)
+		}
+		return season, episode, nil
+	}
+	if upload == "" {
+		if v.Season.Valid {
+			season = int(v.Season.Int64)
+		}
+		if v.Episode.Valid {
+			episode = int(v.Episode.Int64)
+		}
+		return season, episode, nil
+	}
+	return s.AssignSeasonEpisode(v.SeriesID, upload, 0, v.ID)
+}
+
 type yearPeer struct {
 	ID         int64
 	UploadDate string
 	Season     sql.NullInt64
 	Episode    sql.NullInt64
 	Status     string
-}
-
-// ReindexSeriesUTCYear sets season/episode for all dated series videos in the UTC year.
-// Order: upload_date ASC, id ASC. Episode is 1-based. Returns video IDs whose numbers changed.
-func (s *Store) ReindexSeriesUTCYear(seriesID int64, year int) (changed []int64, err error) {
-	if seriesID == 0 || year <= 0 {
-		return nil, nil
-	}
-
-	rows, err := s.DB.SQL.Query(`
-		SELECT id, upload_date, season, episode, status
-		FROM videos
-		WHERE series_id = ?
-		  AND upload_date IS NOT NULL AND trim(upload_date) != ''
-		  AND CAST(strftime('%Y', upload_date) AS INTEGER) = ?
-		ORDER BY upload_date ASC, id ASC
-	`, seriesID, year)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var peers []yearPeer
-	for rows.Next() {
-		var p yearPeer
-		if err := rows.Scan(&p.ID, &p.UploadDate, &p.Season, &p.Episode, &p.Status); err != nil {
-			return nil, err
-		}
-		peers = append(peers, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	for i, p := range peers {
-		wantEp := i + 1
-		curSe, curEp := 0, 0
-		if p.Season.Valid {
-			curSe = int(p.Season.Int64)
-		}
-		if p.Episode.Valid {
-			curEp = int(p.Episode.Int64)
-		}
-		if curSe == year && curEp == wantEp {
-			continue
-		}
-		if _, err := s.DB.SQL.Exec(`UPDATE videos SET season = ?, episode = ? WHERE id = ?`, year, wantEp, p.ID); err != nil {
-			return changed, err
-		}
-		changed = append(changed, p.ID)
-	}
-	return changed, nil
 }
 
 // packedVideoIDs filters video IDs to those with packed media (downloaded / integrity_check_failed).

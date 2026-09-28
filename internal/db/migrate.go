@@ -76,6 +76,14 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo15(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 16:
+			if err := d.migrateTo16(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
+		case 17:
+			if err := d.migrateTo17(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -473,6 +481,49 @@ func (d *DB) migrateTo15() error {
 		if _, err := d.SQL.Exec(`ALTER TABLE tasks DROP COLUMN priority`); err != nil {
 			return fmt.Errorf("drop tasks.priority: %w", err)
 		}
+	}
+	return nil
+}
+
+// migrateTo16 adds pack_role and special episode/feature format columns.
+func (d *DB) migrateTo16() error {
+	has, err := d.tableHasColumn("videos", "pack_role")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err := d.SQL.Exec(`ALTER TABLE videos ADD COLUMN pack_role TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("add videos.pack_role: %w", err)
+		}
+	}
+	has, err = d.tableHasColumn("root_folders", "special_episode_format")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err := d.SQL.Exec(`ALTER TABLE root_folders ADD COLUMN special_episode_format TEXT NOT NULL DEFAULT '[{id}]'`); err != nil {
+			return fmt.Errorf("add root_folders.special_episode_format: %w", err)
+		}
+	}
+	has, err = d.tableHasColumn("root_folders", "special_feature_format")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err := d.SQL.Exec(`ALTER TABLE root_folders ADD COLUMN special_feature_format TEXT NOT NULL DEFAULT '{episode:02} {title:100}'`); err != nil {
+			return fmt.Errorf("add root_folders.special_feature_format: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateTo17 sets pack_role default/value to episode for regular videos (empty → episode).
+func (d *DB) migrateTo17() error {
+	if _, err := d.SQL.Exec(`
+		UPDATE videos SET pack_role = 'episode'
+		WHERE pack_role IS NULL OR trim(pack_role) = ''
+	`); err != nil {
+		return fmt.Errorf("backfill videos.pack_role episode: %w", err)
 	}
 	return nil
 }

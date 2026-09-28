@@ -2379,6 +2379,7 @@
     initQualityProfileGate();
     syncAllRateLimitJoins();
     syncAllScanCronJoins();
+    syncAllMaturityJoins();
     snapshotStringListEditors(document);
     document.querySelectorAll("form.js-add-series-form").forEach(syncAddSeriesForm);
     openAddSeriesModal();
@@ -3353,6 +3354,56 @@
     });
   }
 
+  function syncMaturityJoin(join) {
+    if (!join) return;
+    const input = join.querySelector("[data-maturity-input]");
+    const enable = join.querySelector("[data-maturity-enable]");
+    if (!(input instanceof HTMLInputElement) || !(enable instanceof HTMLInputElement)) return;
+    const fieldName = input.dataset.maturityName || "";
+    const activePh = input.dataset.maturityPlaceholder || input.dataset.maturityDefault || "";
+    let hidden = join.querySelector("[data-maturity-submit]");
+    if (!enable.checked) {
+      const cur = input.value.trim();
+      if (cur) input.dataset.prevMaturity = input.value;
+      input.value = "";
+      input.disabled = true;
+      input.removeAttribute("name");
+      input.removeAttribute("required");
+      input.placeholder = "none";
+      input.classList.add("opacity-60");
+      if (!hidden) {
+        hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.setAttribute("data-maturity-submit", "");
+        join.insertBefore(hidden, input);
+      }
+      hidden.name = fieldName;
+      hidden.value = "0";
+    } else {
+      input.disabled = false;
+      input.name = fieldName;
+      input.placeholder = activePh;
+      input.classList.remove("opacity-60");
+      if (hidden) hidden.remove();
+      if (!input.value.trim()) {
+        const fill = (input.dataset.prevMaturity || input.dataset.maturityDefault || "").trim();
+        input.value = fill;
+      }
+    }
+  }
+
+  function syncAllMaturityJoins(root) {
+    (root || document).querySelectorAll("[data-maturity-join]").forEach((join) => {
+      const input = join.querySelector("[data-maturity-input]");
+      const enable = join.querySelector("[data-maturity-enable]");
+      if (!(input instanceof HTMLInputElement) || !(enable instanceof HTMLInputElement)) return;
+      // After form.reset(), derive enable from whether a non-zero value is present.
+      const v = input.value.trim();
+      enable.checked = !!v && v !== "0";
+      syncMaturityJoin(join);
+    });
+  }
+
   function syncRateLimitJoin(join) {
     if (!join) return;
     const unit = join.querySelector("[data-rate-unit]");
@@ -3530,6 +3581,14 @@
         syncScanCronJoin(join);
       }
     }
+    if (el instanceof HTMLInputElement && el.hasAttribute("data-maturity-input")) {
+      const join = el.closest("[data-maturity-join]");
+      const enable = join && join.querySelector("[data-maturity-enable]");
+      if (enable instanceof HTMLInputElement && el.value.trim() && el.value.trim() !== "0") {
+        enable.checked = true;
+        syncMaturityJoin(join);
+      }
+    }
     const rateJoin = el.closest("[data-rate-limit-join]");
     if (rateJoin && el.hasAttribute("data-rate-value")) {
       rateJoin.classList.remove("opacity-70");
@@ -3550,6 +3609,11 @@
         syncScanCronJoin(join);
         queueCronAutosave(join, true);
       }
+      return;
+    }
+    if (el instanceof HTMLInputElement && el.hasAttribute("data-maturity-enable")) {
+      const join = el.closest("[data-maturity-join]");
+      if (join) syncMaturityJoin(join);
       return;
     }
     if (!(el instanceof HTMLSelectElement) || !el.hasAttribute("data-rate-unit")) {
