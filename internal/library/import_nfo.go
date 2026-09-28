@@ -61,7 +61,7 @@ func durationSecondsFromEpisodeNFO(doc episodeNFOXML) int {
 
 // ParseEpisodeNFOFile reads editable episode metadata from an on-disk .nfo.
 // Season / episode / remote_id are not returned (index identity stays operator/scan owned).
-// aired is YYYY-MM-DD or empty (soft-fill upload_date only when the video has none).
+// aired is YYYY-MM-DD or empty (import sets upload_date from it when present).
 // durationSec is soft-fill only (NULL/0 duration_seconds); 0 when unknown.
 func ParseEpisodeNFOFile(path string) (p SaveVideoMetadataParams, aired string, durationSec int, err error) {
 	b, err := os.ReadFile(path)
@@ -118,21 +118,24 @@ func ParseEpisodeNFOFile(path string) (p SaveVideoMetadataParams, aired string, 
 }
 
 // ApplyImportNFOMetadata writes editable video columns from an episode NFO (no on-disk rewrite).
-// Soft-fills upload_date from <aired> only when the video has no upload_date yet.
+// When <aired> is present, sets upload_date from it (operator intent; overrides info.json / prior row).
+// Calendar-day changes reindex season/episode for that series year.
 func (s *Store) ApplyImportNFOMetadata(videoID int64, nfoPath string) error {
-	return s.applyImportNFOMetadata(videoID, nfoPath)
+	_, err := s.applyImportNFOMetadata(videoID, nfoPath)
+	return err
 }
 
 // applyImportNFOMetadata writes editable video columns from an episode NFO (no on-disk rewrite).
-// Soft-fills upload_date from <aired> only when the video has no upload_date yet.
-func (s *Store) applyImportNFOMetadata(videoID int64, nfoPath string) error {
+// When <aired> is present, sets upload_date from it (operator intent; overrides info.json / prior row).
+// Returns video IDs whose season/episode numbers changed (caller may enqueue rename when packed).
+func (s *Store) applyImportNFOMetadata(videoID int64, nfoPath string) (renameIDs []int64, err error) {
 	v, err := s.GetVideo(videoID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	p, aired, durationSec, err := ParseEpisodeNFOFile(nfoPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	title := strings.TrimSpace(p.Title)
 	if title == "" {
@@ -155,34 +158,58 @@ func (s *Store) applyImportNFOMetadata(videoID int64, nfoPath string) error {
 		encodeActors(p.Actors), strings.TrimSpace(p.Tagline), strings.TrimSpace(p.Country),
 		strings.TrimSpace(p.MPAA), videoID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := s.SetDurationSecondsIfEmpty(videoID, durationSec); err != nil {
-		return err
+		return nil, err
 	}
 	if aired == "" {
-		return nil
-	}
-	needDate := !v.UploadDate.Valid || strings.TrimSpace(v.UploadDate.String) == ""
-	if !needDate {
-		return nil
+		return nil, nil
 	}
 	stored := sidecarUploadTime(aired)
 	if stored == "" {
-		return nil
+		return nil, nil
 	}
-	_, err = s.DB.SQL.Exec(`UPDATE videos SET upload_date = ? WHERE id = ?`, stored, videoID)
-	return err
+	oldDay := ""
+	if v.UploadDate.Valid {
+		oldDay = UploadCalendarDate(v.UploadDate.String)
+	}
+	newDay := UploadCalendarDate(stored)
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET upload_date = ? WHERE id = ?`, stored, videoID); err != nil {
+		return nil, err
+	}
+	if newDay == oldDay {
+		return nil, nil
+	}
+	years := map[int]bool{}
+	if y := SeasonYearFromCalendarDay(newDay); y > 0 {
+		years[y] = true
+	}
+	if oldDay != "" {
+		if y := SeasonYearFromCalendarDay(oldDay); y > 0 {
+			years[y] = true
+		}
+	}
+	for y := range years {
+		c, rerr := s.ReindexSeriesUTCYear(v.SeriesID, y)
+		if rerr != nil {
+			return nil, rerr
+		}
+		renameIDs = append(renameIDs, c...)
+	}
+	return uniqInt64(renameIDs), nil
 }
 
 // ApplyImportNFO applies episode NFO metadata to the video row, then regenerates the
 // on-disk episode .nfo from DB (never keeps the source XML bytes as library provenance).
+// When <aired> changes the calendar day and media is packed, enqueues scoped Apply rename.
 func (s *Store) ApplyImportNFO(videoID int64, nfoPath string, taskID int64) error {
 	nfoPath = strings.TrimSpace(nfoPath)
 	if nfoPath == "" {
 		return fmt.Errorf("%w: nfo path required", ErrInvalid)
 	}
-	if err := s.applyImportNFOMetadata(videoID, nfoPath); err != nil {
+	renameIDs, err := s.applyImportNFOMetadata(videoID, nfoPath)
+	if err != nil {
 		return err
 	}
 	mediaPath, ok, err := s.HasPackAnchor(videoID)
@@ -212,6 +239,11 @@ func (s *Store) ApplyImportNFO(videoID int64, nfoPath string, taskID int64) erro
 		// Ensure files row even when RewriteVideoNFO skipped write (bytes already matched).
 		if err := s.RegisterFileKind(videoID, libNFO, "nfo"); err != nil {
 			return err
+		}
+		if len(renameIDs) > 0 {
+			if _, qerr := s.EnqueueRenameEpisodesVideos(renameIDs); qerr != nil {
+				return qerr
+			}
 		}
 	}
 	if taskID > 0 {

@@ -27,6 +27,7 @@ func DefaultHandlers(d Deps) map[string]TaskHandler {
 	out[queue.KindRescanMetadata] = RescanMetadataHandler(d)
 	out[queue.KindRefreshSidecars] = RefreshSidecarsHandler(d)
 	out[queue.KindImport] = ImportHandler(d)
+	out[queue.KindImportPlan] = ImportPlanHandler(d)
 	out[queue.KindPrefetchSeriesMeta] = PrefetchSeriesMetaHandler(d)
 	out[queue.KindPrefetchVideoMeta] = PrefetchVideoMetaHandler(d)
 	out[queue.KindPrefetchAddSeries] = PrefetchAddSeriesHandler(d)

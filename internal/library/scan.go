@@ -349,16 +349,6 @@ func (s *Store) MarkFullScanDone(sourceID int64) error {
 	return err
 }
 
-// HasIncompleteFullScan reports whether any source still needs archive indexing
-// (full_scan_done = 0). True while a full scan is pending, running, or stalled.
-func (s *Store) HasIncompleteFullScan() (bool, error) {
-	var n int
-	err := s.DB.SQL.QueryRow(`
-		SELECT COUNT(*) FROM sources WHERE full_scan_done = 0
-	`).Scan(&n)
-	return n > 0, err
-}
-
 // VideoExistsByRemote reports whether series already has this remote id.
 func (s *Store) VideoExistsByRemote(seriesID int64, remoteID string) (bool, error) {
 	var n int

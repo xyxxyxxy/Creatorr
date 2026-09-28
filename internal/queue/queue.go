@@ -34,6 +34,7 @@ const (
 	KindRescanMetadata        = "rescan_metadata"
 	KindRefreshSidecars       = "refresh_sidecars"
 	KindImport                = "import"
+	KindImportPlan            = "import_plan"
 	KindPrefetchSeriesMeta    = "prefetch_series_meta"
 	KindPrefetchVideoMeta     = "prefetch_video_meta"
 	KindPrefetchAddSeries     = "prefetch_add_series"
@@ -564,6 +565,10 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 				SELECT 1 FROM tasks WHERE kind = ? AND video_id = ? AND status IN (?, ?) LIMIT 1
 			`, KindImport, p.VideoID, StatusPending, StatusRunning)
 		}
+	case KindImportPlan:
+		return s.rejectIfExists(`
+			SELECT 1 FROM tasks WHERE kind = ? AND status IN (?, ?) LIMIT 1
+		`, KindImportPlan, StatusPending, StatusRunning)
 	case KindSponsorblockCut:
 		if p.VideoID > 0 {
 			return s.rejectIfExists(`
