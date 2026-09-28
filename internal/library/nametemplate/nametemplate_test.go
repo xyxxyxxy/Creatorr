@@ -59,14 +59,18 @@ func TestSanitizeFilename(t *testing.T) {
 	}
 }
 
-func TestExpandPackRole(t *testing.T) {
-	got, err := ExpandAndSanitize("{pack-role}", Values{Kind: "Specials"})
+func TestExpandKind(t *testing.T) {
+	got, err := ExpandAndSanitize("{kind}", Values{Kind: "Specials"})
 	if err != nil || got != "Specials" {
 		t.Fatalf("got %q err %v", got, err)
 	}
-	empty, err := ExpandAndSanitize("X{pack-role}Y", Values{})
+	ep, err := ExpandAndSanitize("{kind}", Values{Kind: "Episode"})
+	if err != nil || ep != "Episode" {
+		t.Fatalf("Episode kind: %q err %v", ep, err)
+	}
+	empty, err := ExpandAndSanitize("X{kind}Y", Values{})
 	if err != nil || empty != "XY" {
-		t.Fatalf("empty pack-role: %q err %v", empty, err)
+		t.Fatalf("empty kind: %q err %v", empty, err)
 	}
 }
 

@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS videos (
   tagline TEXT NOT NULL DEFAULT '',
   country TEXT NOT NULL DEFAULT '',
   mpaa TEXT NOT NULL DEFAULT '',
-  pack_role TEXT NOT NULL DEFAULT 'episode',
+  special_feature TEXT NOT NULL DEFAULT 'episode',
   UNIQUE(series_id, remote_id)
 );
 

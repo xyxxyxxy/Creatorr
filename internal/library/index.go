@@ -173,7 +173,7 @@ func (s *Store) insertListedVideo(seriesID int64, src any, li ListedVideo, uploa
 	return s.DB.SQL.Exec(`
 		INSERT INTO videos (
 		  series_id, source_id, remote_id, title, upload_date,
-		  source_url, status, season, episode, description, thumbnail_url, media_type, pack_role
+		  source_url, status, season, episode, description, thumbnail_url, media_type, special_feature
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, seriesID, src, li.RemoteID, li.Title, uploadVal, nullEmpty(li.WebpageURL),
 		status, season, episode, li.Description, thumb, mt, PackRoleRegular)

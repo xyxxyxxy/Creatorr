@@ -74,7 +74,7 @@ func (s *Store) AssignSeasonEpisode(seriesID int64, upload string, _ int, videoI
 	return season, episode, nil
 }
 
-// AssignPackNumbers returns season/episode for pack using the video's pack_role bucket.
+// AssignPackNumbers returns season/episode for pack using the video's special_feature bucket.
 // Regulars use year reindex; Specials/features reindex their role bucket.
 func (s *Store) AssignPackNumbers(v *Video, upload string, _ int64) (season, episode int, err error) {
 	if v == nil {

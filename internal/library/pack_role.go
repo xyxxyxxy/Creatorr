@@ -5,7 +5,8 @@ import (
 	"strings"
 )
 
-// Pack role values stored in videos.pack_role.
+// Pack role values stored in videos.special_feature.
+// Capitalized Episode/Specials layouts are NFO-parsed; other values are special-feature kinds.
 const (
 	PackRoleRegular        = "episode"
 	PackRoleSpecialEpisode = "special_episode"
@@ -59,7 +60,7 @@ func ValidatePackRole(raw string) error {
 	if _, ok := featureKindSet[r]; ok {
 		return nil
 	}
-	return fmt.Errorf("invalid pack_role %q", raw)
+	return fmt.Errorf("invalid special_feature %q", raw)
 }
 
 // IsSpecialEpisode reports Season 00 Special packing.
@@ -86,17 +87,20 @@ func FeatureKind(packRole string) string {
 	return ""
 }
 
-// PackRoleKindFolder is the series-level folder name for {pack-role} / pack layout.
-// episode → empty; special_episode → Specials; feature → kind folder name.
+// PackRoleKindFolder is the {kind} / pack folder name.
+// Capitalized Episode and Specials are NFO-parsed layouts; lowercase feature kinds are special features.
+// episode → "Episode"; special_episode → "Specials"; feature → kind folder name.
 func PackRoleKindFolder(packRole string) string {
 	r := NormalizePackRole(packRole)
 	switch {
+	case r == PackRoleRegular:
+		return "Episode"
 	case r == PackRoleSpecialEpisode:
 		return "Specials"
 	case IsSpecialFeature(r):
 		return r
 	default:
-		return ""
+		return "Episode"
 	}
 }
 
@@ -122,16 +126,20 @@ func IsReservedSeriesFolder(name string) bool {
 	return ok
 }
 
-// PackRoleSelectOptions returns Metadata dropdown options (value, label).
+// PackRoleSelectOptions returns Metadata dropdown options for non-regular roles.
 func PackRoleSelectOptions() []struct{ Value, Label string } {
 	out := []struct{ Value, Label string }{
-		{PackRoleRegular, "None (regular episode)"},
 		{PackRoleSpecialEpisode, "Special episode"},
 	}
 	for _, k := range FeatureKindFolders {
 		out = append(out, struct{ Value, Label string }{k, "Feature: " + k})
 	}
 	return out
+}
+
+// IsSpecialPackRole reports Special episode or a feature kind (not regular episode).
+func IsSpecialPackRole(packRole string) bool {
+	return NormalizePackRole(packRole) != PackRoleRegular
 }
 
 // PackRoleBadgeLabel is a short UI badge for a video row.
@@ -160,5 +168,5 @@ func FirstPathSegment(format string) string {
 }
 
 // SQLPackRoleRegularPred is an SQL fragment matching regular (episode) videos.
-// Accepts legacy empty pack_role until all writers use episode.
-const SQLPackRoleRegularPred = `(COALESCE(pack_role,'') = '' OR pack_role = 'episode')`
+// Accepts legacy empty special_feature until all writers use episode.
+const SQLPackRoleRegularPred = `(COALESCE(special_feature,'') = '' OR special_feature = 'episode')`

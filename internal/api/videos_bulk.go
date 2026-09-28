@@ -92,6 +92,9 @@ func (s *Server) BulkEditVideosMetadata(w http.ResponseWriter, r *http.Request) 
 		}
 		p.Actors = &actors
 	}
+	if body.SpecialFeature != nil {
+		p.SpecialFeature = body.SpecialFeature
+	}
 	tid, err := s.Library.EnqueueBulkEditVideos(p)
 	if err != nil {
 		writeLibraryErr(w, err, "bulk edit videos metadata failed")

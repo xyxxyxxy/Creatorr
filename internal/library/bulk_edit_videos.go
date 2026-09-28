@@ -13,18 +13,19 @@ import (
 // BulkEditVideosParams patches selected videos' catalog metadata.
 // Nil field pointers mean unchanged. Metadata pointers (including empty string / empty slice) mean set.
 type BulkEditVideosParams struct {
-	VideoIDs []int64
-	Studio   *string
-	Country  *string
-	MPAA     *string
-	Genres   *[]string
-	Tags     *[]string
-	Actors   *[]SeriesActor
+	VideoIDs       []int64
+	Studio         *string
+	Country        *string
+	MPAA           *string
+	Genres         *[]string
+	Tags           *[]string
+	Actors         *[]SeriesActor
+	SpecialFeature *string // episode | special_episode | feature kind
 }
 
 func (p BulkEditVideosParams) hasMetadata() bool {
 	return p.Studio != nil || p.Country != nil || p.MPAA != nil ||
-		p.Genres != nil || p.Tags != nil || p.Actors != nil
+		p.Genres != nil || p.Tags != nil || p.Actors != nil || p.SpecialFeature != nil
 }
 
 // BulkEditVideosBusy reports whether a bulk_edit_videos task is pending or running.
@@ -80,6 +81,14 @@ func (s *Store) EnqueueBulkEditVideos(p BulkEditVideosParams) (int64, error) {
 		payload["set_actors"] = true
 		payload["actors"] = *p.Actors
 	}
+	if p.SpecialFeature != nil {
+		role := NormalizePackRole(*p.SpecialFeature)
+		if err := ValidatePackRole(role); err != nil {
+			return 0, fmt.Errorf("%w: %v", ErrInvalid, err)
+		}
+		payload["set_special_feature"] = true
+		payload["special_feature"] = role
+	}
 	id, err := s.Queue.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
 		Kind:    queue.KindBulkEditVideos,
@@ -120,20 +129,22 @@ func (s *Store) ListVideoIDsFiltered(seriesID int64, filter VideoListFilter) ([]
 }
 
 type bulkEditVideosPayload struct {
-	VideoIDs  []int64       `json:"video_ids"`
-	Index     int           `json:"index"`
-	SetStudio bool          `json:"set_studio"`
-	Studio    string        `json:"studio"`
-	SetCountry bool         `json:"set_country"`
-	Country   string        `json:"country"`
-	SetMPAA   bool          `json:"set_mpaa"`
-	MPAA      string        `json:"mpaa"`
-	SetGenres bool          `json:"set_genres"`
-	Genres    []string      `json:"genres"`
-	SetTags   bool          `json:"set_tags"`
-	Tags      []string      `json:"tags"`
-	SetActors bool          `json:"set_actors"`
-	Actors    []SeriesActor `json:"actors"`
+	VideoIDs           []int64       `json:"video_ids"`
+	Index              int           `json:"index"`
+	SetStudio          bool          `json:"set_studio"`
+	Studio             string        `json:"studio"`
+	SetCountry         bool          `json:"set_country"`
+	Country            string        `json:"country"`
+	SetMPAA            bool          `json:"set_mpaa"`
+	MPAA               string        `json:"mpaa"`
+	SetGenres          bool          `json:"set_genres"`
+	Genres             []string      `json:"genres"`
+	SetTags            bool          `json:"set_tags"`
+	Tags               []string      `json:"tags"`
+	SetActors          bool          `json:"set_actors"`
+	Actors             []SeriesActor `json:"actors"`
+	SetSpecialFeature  bool          `json:"set_special_feature"`
+	SpecialFeature     string        `json:"special_feature"`
 }
 
 // BulkEditVideosPass applies queued bulk video metadata; resumable via payload index.
@@ -181,7 +192,7 @@ func (s *Store) BulkEditVideosPass(ctx context.Context, task *queue.Task, progre
 }
 
 func (s *Store) applyBulkEditVideoOne(videoID int64, p bulkEditVideosPayload) error {
-	if !p.SetStudio && !p.SetCountry && !p.SetMPAA && !p.SetGenres && !p.SetTags && !p.SetActors {
+	if !p.SetStudio && !p.SetCountry && !p.SetMPAA && !p.SetGenres && !p.SetTags && !p.SetActors && !p.SetSpecialFeature {
 		return nil
 	}
 	v, err := s.GetVideo(videoID)
@@ -202,6 +213,7 @@ func (s *Store) applyBulkEditVideoOne(videoID int64, p bulkEditVideosPayload) er
 		Tagline:       v.Tagline,
 		Country:       v.Country,
 		MPAA:          v.MPAA,
+		PackRole:      v.PackRole,
 	}
 	if v.UploadDate.Valid {
 		meta.UploadDate = v.UploadDate.String
@@ -223,6 +235,9 @@ func (s *Store) applyBulkEditVideoOne(videoID int64, p bulkEditVideosPayload) er
 	}
 	if p.SetActors {
 		meta.Actors = normalizeActorsList(p.Actors)
+	}
+	if p.SetSpecialFeature {
+		meta.PackRole = p.SpecialFeature
 	}
 	_, err = s.SaveVideoMetadata(v.ID, meta)
 	return err
@@ -349,16 +364,17 @@ func (s *Store) CommonVideoMetadata(ids []int64) (CommonSeriesMetadata, error) {
 		return CommonSeriesMetadata{}, fmt.Errorf("%w: video_ids required", ErrInvalid)
 	}
 	var (
-		studio, country, mpaa string
-		genres, tags          []string
-		actors                []SeriesActor
-		studioSame            = true
-		countrySame           = true
-		mpaaSame              = true
-		genresSame            = true
-		tagsSame              = true
-		actorsSame            = true
-		n                     int
+		studio, country, mpaa, specialFeature string
+		genres, tags                          []string
+		actors                                []SeriesActor
+		studioSame                            = true
+		countrySame                           = true
+		mpaaSame                              = true
+		genresSame                            = true
+		tagsSame                              = true
+		actorsSame                            = true
+		specialFeatureSame                    = true
+		n                                     int
 	)
 	for _, id := range ids {
 		v, err := s.GetVideo(id)
@@ -369,10 +385,12 @@ func (s *Store) CommonVideoMetadata(ids []int64) (CommonSeriesMetadata, error) {
 			return CommonSeriesMetadata{}, err
 		}
 		n++
+		role := NormalizePackRole(v.PackRole)
 		if n == 1 {
 			studio = v.Studio
 			country = v.Country
 			mpaa = v.MPAA
+			specialFeature = role
 			genres = cloneStrings(v.Genres)
 			tags = cloneStrings(v.Tags)
 			actors = cloneActors(v.Actors)
@@ -386,6 +404,9 @@ func (s *Store) CommonVideoMetadata(ids []int64) (CommonSeriesMetadata, error) {
 		}
 		if mpaaSame && mpaa != v.MPAA {
 			mpaaSame = false
+		}
+		if specialFeatureSame && specialFeature != role {
+			specialFeatureSame = false
 		}
 		if genresSame && !stringSliceEqualOrdered(genres, v.Genres) {
 			genresSame = false
@@ -401,12 +422,13 @@ func (s *Store) CommonVideoMetadata(ids []int64) (CommonSeriesMetadata, error) {
 		return CommonSeriesMetadata{}, fmt.Errorf("%w: no videos found", ErrNotFound)
 	}
 	out := CommonSeriesMetadata{
-		Studio:  CommonMetaString{Same: studioSame},
-		Country: CommonMetaString{Same: countrySame},
-		MPAA:    CommonMetaString{Same: mpaaSame},
-		Genres:  CommonMetaStrings{Same: genresSame},
-		Tags:    CommonMetaStrings{Same: tagsSame},
-		Actors:  CommonMetaActors{Same: actorsSame},
+		Studio:         CommonMetaString{Same: studioSame},
+		Country:        CommonMetaString{Same: countrySame},
+		MPAA:           CommonMetaString{Same: mpaaSame},
+		SpecialFeature: CommonMetaString{Same: specialFeatureSame},
+		Genres:         CommonMetaStrings{Same: genresSame},
+		Tags:           CommonMetaStrings{Same: tagsSame},
+		Actors:         CommonMetaActors{Same: actorsSame},
 	}
 	if studioSame {
 		out.Studio.Value = studio
@@ -416,6 +438,9 @@ func (s *Store) CommonVideoMetadata(ids []int64) (CommonSeriesMetadata, error) {
 	}
 	if mpaaSame {
 		out.MPAA.Value = mpaa
+	}
+	if specialFeatureSame {
+		out.SpecialFeature.Value = specialFeature
 	}
 	if genresSame {
 		out.Genres.Value = genres

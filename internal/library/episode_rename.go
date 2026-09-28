@@ -431,7 +431,7 @@ func pathEpisodeNFO(v *Video, seriesTitle string, season, episode int, aired, do
 func (s *Store) rewriteSpecialEpisodeNFOs(seriesID int64) error {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id FROM videos
-		WHERE series_id = ? AND pack_role = ? AND status IN ('downloaded', 'integrity_check_failed')
+		WHERE series_id = ? AND special_feature = ? AND status IN ('downloaded', 'integrity_check_failed')
 	`, seriesID, PackRoleSpecialEpisode)
 	if err != nil {
 		return err

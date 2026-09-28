@@ -323,6 +323,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		FolderRenameBusy    bool
 		EditSettings        map[string]any
 		MetaForm            seriesMetadataView
+		PackRoleOptions     []struct{ Value, Label string }
 		Deleting            bool
 	}{
 		pageBase:            newPage(ser.Title, "series", flashFromQuery(r)),
@@ -344,6 +345,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		FolderRenameBusy:    folderRenameBusy,
 		EditSettings:        editSettings,
 		MetaForm:            metaForm,
+		PackRoleOptions:     library.PackRoleSelectOptions(),
 		Deleting:            seriesDeleting,
 	})
 }

@@ -147,6 +147,9 @@ func (h *Handler) actionBulkEditVideosMetadata(w http.ResponseWriter, r *http.Re
 	if a := library.ParseActorsFromFields(r.Form["actor_name"], r.Form["actor_role"]); len(a) > 0 {
 		p.Actors = &a
 	}
+	if v := strings.TrimSpace(r.FormValue("special_feature")); v != "" {
+		p.SpecialFeature = &v
+	}
 	tid, err := h.Library.EnqueueBulkEditVideos(p)
 	if err != nil {
 		http.Redirect(w, r, seriesVideosRedirect(sid, r, "", "", err.Error()), http.StatusSeeOther)

@@ -8,7 +8,7 @@ import (
 
 var s00eStemRE = regexp.MustCompile(`(?i)S00E\d+`)
 
-// DetectPackRoleFromPath infers pack_role from a media path relative to the series folder.
+// DetectPackRoleFromPath infers special_feature from a media path relative to the series folder.
 // seriesDir and mediaPath should be absolute or share the same base.
 // Returns empty for regular episodes. Season-nested kind folders are ignored.
 func DetectPackRoleFromPath(seriesDir, mediaPath string) string {

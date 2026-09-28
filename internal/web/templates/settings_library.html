@@ -187,7 +187,7 @@
         "Mono" true
 		"JoinPrefix" "{series:100}/Specials/S00E{episode:04} "
         "JoinSuffix" ".ext"
-        "Hint" "Locked under series-level Specials/ with S00E{episode:04}: media servers need that layout to read NFO for Specials. You only set the rest of the filename. Title/plot come from NFO."
+        "Hint" "Locked under series-level Specials/ with S00E{episode:04}: media servers need that layout to read NFO for Specials. Title/plot come from NFO."
       )}}
       {{template "field_input" (dict
         "Name" "special_feature_format"
@@ -195,9 +195,9 @@
         "Label" "Special feature format"
         "Value" $.DefaultSpecialFeatureFormat
         "Mono" true
-        "JoinPrefix" "{series:100}/{pack-role}/"
+        "JoinPrefix" "{series:100}/{kind}/"
         "JoinSuffix" ".ext"
-        "Hint" "Filename under a series-level special feature kind folder ({pack-role} is that folder name; {episode} is 1-based per kind): media servers do not read NFO for special features and use the filename as the display title and sort order, so keep it user-friendly (optional [{id}] still helps Import)."
+        "Hint" "Filename under a series-level special feature kind folder ({kind} is that folder name; {episode} is 1-based per kind): media servers do not read NFO for special features and use the filename as the display title and sort order, so keep it user-friendly (optional [{id}] still helps Import)."
       )}}
       {{template "episode_format_tokens"}}
       {{template "field_input" (dict
@@ -266,14 +266,14 @@
         "JoinSuffix" ".ext"
         "Disabled" $.NamingLocked
         "DisabledTitle" "Formats are locked while 'Apply episode format' is pending or running."
-        "Hint" "Locked under series-level Specials/ with S00E{episode:04}: media servers need that layout to read NFO for Specials. You only set the rest of the filename."
+        "Hint" "Locked under series-level Specials/ with S00E{episode:04}: media servers need that layout to read NFO for Specials."
       )}}
       {{template "field_input" (dict
         "Name" "special_feature_format"
         "Label" "Special feature format"
         "Value" .SpecialFeatureFormat
         "Mono" true
-        "JoinPrefix" "{series:100}/{pack-role}/"
+        "JoinPrefix" "{series:100}/{kind}/"
         "JoinSuffix" ".ext"
         "Disabled" $.NamingLocked
         "DisabledTitle" "Formats are locked while 'Apply episode format' is pending or running."

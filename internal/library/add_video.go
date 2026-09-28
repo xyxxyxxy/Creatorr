@@ -67,7 +67,7 @@ func (s *Store) CreateIndexedVideo(p CreateIndexedVideoParams) (*Video, error) {
 	res, err := s.DB.SQL.Exec(`
 		INSERT INTO videos (
 		  series_id, source_id, remote_id, title, upload_date,
-		  source_url, status, season, episode, description, thumbnail_url, pack_role
+		  source_url, status, season, episode, description, thumbnail_url, special_feature
 		) VALUES (?, NULL, ?, ?, ?, ?, 'ignored', ?, ?, ?, NULL, ?)
 	`, p.SeriesID, remoteID, title, upload, webpage, season, episode, desc, PackRoleRegular)
 	if err != nil {

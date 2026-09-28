@@ -47,7 +47,7 @@ type ImportCandidate struct {
 	SuggestedHandler             string             `json:"suggested_handler_id,omitempty"`
 	SuggestedWebpageURL          string             `json:"suggested_webpage_url,omitempty"`
 	// SuggestedPackRole is path-detected Specials/extras role when a series folder is known.
-	SuggestedPackRole string `json:"suggested_pack_role,omitempty"`
+	SuggestedPackRole string `json:"suggested_special_feature,omitempty"`
 	MatchType         string `json:"match_type,omitempty"`
 	MatchLabel        string `json:"match_label,omitempty"`
 	VideoSuggestions             []VideoSuggestion  `json:"video_suggestions"`
@@ -608,7 +608,7 @@ func (s *Store) CreateImportVideo(path string, p CreateImportVideoParams) (video
 	res, err = s.DB.SQL.Exec(`
 		INSERT INTO videos (
 		  series_id, source_id, remote_id, title, upload_date,
-		  source_url, status, season, episode, description, thumbnail_url, pack_role
+		  source_url, status, season, episode, description, thumbnail_url, special_feature
 		) VALUES (?, NULL, ?, ?, ?, ?, 'wanted', ?, ?, ?, NULL, ?)
 	`, p.SeriesID, meta.RemoteID, meta.Title, uploadVal, webpage, seasonVal, episodeVal, meta.Description, packRole)
 	if err != nil {
@@ -1437,7 +1437,7 @@ func cleanStem(stem string) string {
 	return strings.TrimSpace(clean)
 }
 
-// applyDetectedPackRole sets pack_role from series-relative path when a Specials/extras layout is detected.
+// applyDetectedPackRole sets special_feature from series-relative path when a Specials/extras layout is detected.
 func (s *Store) applyDetectedPackRole(v *Video, mediaPath string) error {
 	if v == nil {
 		return nil

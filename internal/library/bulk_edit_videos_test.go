@@ -1,6 +1,7 @@
 package library_test
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -80,6 +81,9 @@ func TestCommonVideoMetadata(t *testing.T) {
 	}
 	setMeta(a, "Studio X", "US", "TV-MA", []string{"Comedy", "Talk"}, []string{"live"}, actorsSame)
 	setMeta(b, "Studio X", "UK", "TV-MA", []string{"Comedy", "Talk"}, []string{"live"}, actorsSame)
+	if _, err := d.SQL.Exec(`UPDATE videos SET special_feature = ? WHERE id IN (?, ?)`, library.PackRoleSpecialEpisode, a, b); err != nil {
+		t.Fatal(err)
+	}
 
 	got, err := lib.CommonVideoMetadata([]int64{a, b})
 	if err != nil {
@@ -94,6 +98,9 @@ func TestCommonVideoMetadata(t *testing.T) {
 	if !got.MPAA.Same || got.MPAA.Value != "TV-MA" {
 		t.Fatalf("mpaa=%+v", got.MPAA)
 	}
+	if !got.SpecialFeature.Same || got.SpecialFeature.Value != library.PackRoleSpecialEpisode {
+		t.Fatalf("special_feature=%+v", got.SpecialFeature)
+	}
 	if !got.Genres.Same || len(got.Genres.Value) != 2 || got.Genres.Value[0] != "Comedy" {
 		t.Fatalf("genres=%+v", got.Genres)
 	}
@@ -105,11 +112,85 @@ func TestCommonVideoMetadata(t *testing.T) {
 	}
 
 	setMeta(b, "Studio X", "UK", "TV-MA", []string{"Comedy", "Talk"}, []string{"live"}, actorsReordered)
+	if _, err := d.SQL.Exec(`UPDATE videos SET special_feature = ? WHERE id = ?`, "trailers", b); err != nil {
+		t.Fatal(err)
+	}
 	got, err = lib.CommonVideoMetadata([]int64{a, b})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Actors.Same {
 		t.Fatalf("reordered actors must not be same: %+v", got.Actors)
+	}
+	if got.SpecialFeature.Same {
+		t.Fatalf("mixed special_feature must not be same: %+v", got.SpecialFeature)
+	}
+}
+
+func TestEnqueueBulkEditVideosSpecialFeature(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "bulk-sf.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	root, err := lib.CreateRoot("r", t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := lib.CreateProfile("best", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "S", RootID: root.ID, QualityProfileID: profile.ID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := d.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, status, special_feature, genres, tags, actors)
+		VALUES (?, 'r1', 'T', 'wanted', 'episode', '[]', '[]', '[]')
+	`, ser.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vid, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	role := library.PackRoleSpecialEpisode
+	tid, err := lib.EnqueueBulkEditVideos(library.BulkEditVideosParams{
+		VideoIDs:       []int64{vid},
+		SpecialFeature: &role,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := q.GetTask(tid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(task.Payload), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["set_special_feature"] != true {
+		t.Fatalf("payload set_special_feature=%v", payload["set_special_feature"])
+	}
+	if payload["special_feature"] != library.PackRoleSpecialEpisode {
+		t.Fatalf("payload special_feature=%v", payload["special_feature"])
+	}
+	updated, skipped, failed, err := lib.BulkEditVideosPass(context.Background(), task, nil)
+	if err != nil || updated != 1 || skipped != 0 || failed != 0 {
+		t.Fatalf("pass updated=%d skipped=%d failed=%d err=%v", updated, skipped, failed, err)
+	}
+	v, err := lib.GetVideo(vid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if library.NormalizePackRole(v.PackRole) != library.PackRoleSpecialEpisode {
+		t.Fatalf("PackRole=%q", v.PackRole)
 	}
 }

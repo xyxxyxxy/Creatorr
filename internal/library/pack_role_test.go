@@ -90,16 +90,16 @@ func TestBuildEpisodePathsSpecialAndFeature(t *testing.T) {
 	if !strings.Contains(ft.Stem, "My Trailer") {
 		t.Fatalf("feature stem: %s", ft.Stem)
 	}
-	// {pack-role} in regular format is dropped when empty.
+	// {kind} for regular expands to Episode.
 	reg, err := library.BuildEpisodePaths(root, library.EpisodeNFO{
 		SeriesTitle: "Show", Title: "Ep", Season: 2026, Episode: 3,
 		UniqueID: "id", PackRole: library.PackRoleRegular,
-	}, library.NamingConfig{EpisodeFormat: "{pack-role}/S{year}/E{episode:02}"})
+	}, library.NamingConfig{EpisodeFormat: "{kind}/S{year}/E{episode:02}"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(reg.EpisodeDir, "Specials") || strings.Contains(reg.PrimaryBase, "//") {
-		t.Fatalf("regular with empty pack-role: %s", reg.PrimaryBase)
+	if !strings.Contains(reg.EpisodeDir, "Episode") || strings.Contains(reg.EpisodeDir, "Specials") {
+		t.Fatalf("regular kind folder: %s", reg.EpisodeDir)
 	}
 	if !strings.Contains(reg.PrimaryBase, "S2026") {
 		t.Fatalf("regular path: %s", reg.PrimaryBase)
@@ -107,10 +107,10 @@ func TestBuildEpisodePathsSpecialAndFeature(t *testing.T) {
 }
 
 func TestPackRoleKindFolder(t *testing.T) {
-	if got := library.PackRoleKindFolder(""); got != "" {
+	if got := library.PackRoleKindFolder(""); got != "Episode" {
 		t.Fatalf("empty legacy: %q", got)
 	}
-	if got := library.PackRoleKindFolder(library.PackRoleRegular); got != "" {
+	if got := library.PackRoleKindFolder(library.PackRoleRegular); got != "Episode" {
 		t.Fatalf("episode: %q", got)
 	}
 	if got := library.PackRoleKindFolder(library.PackRoleSpecialEpisode); got != "Specials" {

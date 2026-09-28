@@ -105,7 +105,7 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (Sav
 		  sorttitle = ?, originaltitle = ?, studio = ?,
 		  genres = ?, tags = ?, uniqueid_type = ?, uniqueid_value = ?,
 		  actors = ?, tagline = ?, country = ?, mpaa = ?,
-		  upload_date = ?, pack_role = ?
+		  upload_date = ?, special_feature = ?
 		WHERE id = ?
 	`, title, strings.TrimSpace(p.Plot),
 		sortTitle, origTitle, strings.TrimSpace(p.Studio),

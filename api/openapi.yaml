@@ -2766,6 +2766,12 @@ components:
           nullable: true
           items:
             $ref: "#/components/schemas/SeriesActor"
+        special_feature:
+          type: string
+          nullable: true
+          description: >
+            Pack role for all selected videos: episode (regular), special_episode, or a feature kind
+            folder name (extras, trailers, …). Omitted = unchanged.
 
     CreateSeriesRequest:
       type: object

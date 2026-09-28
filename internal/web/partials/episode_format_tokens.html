@@ -28,8 +28,8 @@
             <td>video title; <code class="text-xs">:N</code> caps runes</td>
           </tr>
           <tr>
-            <td><code class="text-xs">{pack-role}</code></td>
-            <td>empty for regular episode; <code class="text-xs">Specials</code> for Special episode; special feature name (e.g. <code class="text-xs">trailers</code>) for features.</td>
+            <td><code class="text-xs">{kind}</code></td>
+            <td><code class="text-xs">Episode</code> for regular Episode; <code class="text-xs">Specials</code> for Special episode; special feature kind name (e.g. <code class="text-xs">trailers</code>) for features.</td>
           </tr>
           <tr>
             <td><code class="text-xs">{episode}</code> / <code class="text-xs">{episode:04}</code></td>
@@ -62,7 +62,7 @@
         </tbody>
       </table>
     </div>
-    <p>Date tokens (<code class="text-xs">{date}</code>, <code class="text-xs">{year}</code>, <code class="text-xs">{month}</code>, <code class="text-xs">{day}</code>, <code class="text-xs">{hour}</code>, <code class="text-xs">{minute}</code>) need a known upload date. <code class="text-xs">{episode}</code> follows the pack-role bucket (regulars need a dated year; Specials and features still number undated videos by id).</p>
+    <p>Date tokens (<code class="text-xs">{date}</code>, <code class="text-xs">{year}</code>, <code class="text-xs">{month}</code>, <code class="text-xs">{day}</code>, <code class="text-xs">{hour}</code>, <code class="text-xs">{minute}</code>) need a known upload date. <code class="text-xs">{episode}</code> follows the kind bucket (regulars need a dated year; Specials and features still number undated videos by id).</p>
   </div>
 </details>
 {{end}}

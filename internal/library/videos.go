@@ -26,7 +26,7 @@ const videoSelectCols = `id, series_id, source_id, remote_id, title, upload_date
 		       COALESCE(genres,'[]'), COALESCE(tags,'[]'),
 		       COALESCE(uniqueid_type,''), COALESCE(uniqueid_value,''), COALESCE(actors,'[]'),
 		       COALESCE(tagline,''), COALESCE(country,''), COALESCE(mpaa,''),
-		       COALESCE(pack_role,'')`
+		       COALESCE(special_feature,'')`
 
 // Video is an indexed instance within a series.
 type Video struct {

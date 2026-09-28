@@ -38,18 +38,32 @@
         <p class="label whitespace-normal">UTC. Date is essential for episode numbering. Time helps order episodes released on the same day.</p>
       </fieldset>
     </div>
-    {{template "field_input" (dict
-      "Type" "select"
-      "Name" "pack_role"
-      "Label" "Pack role"
-      "Value" .Video.PackRole
-      "Options" .PackRoleOptions
-      "Hint" "None packs with the root 'Episode format'. Special episode packs under series-level 'Specials/' as Season 00 (S00E…). Title/plot from episode NFO; usual media servers insert it in play order by upload date (displayseason/displayepisode). Feature kinds use series-level extras folders (e.g. 'trailers/'); display title is the filename. Role change renames packed files after reindex."
-    )}}
-    {{template "form_row" (dict "Type" "textarea" "Name" "plot" "Label" "Plot" "Value" .Video.Description)}}
+    {{$packRole := .Video.PackRole}}
+    {{$packSpecial := .PackRoleIsSpecial}}
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend">Special feature</legend>
+      <div class="join w-full" data-pack-role-join>
+        {{if not $packSpecial}}<input type="hidden" name="special_feature" value="episode" data-pack-role-submit />{{end}}
+        <select name="special_feature" class="select join-item grow min-w-0{{if not $packSpecial}} opacity-60{{end}}"
+                data-pack-role-select
+                data-pack-role-default="special_episode"
+                {{if not $packSpecial}}disabled{{end}}>
+          <option value="" disabled {{if not $packSpecial}}selected{{end}}>regular episode</option>
+          {{range .PackRoleOptions}}
+          <option value="{{.Value}}" {{if and $packSpecial (eq .Value $packRole)}}selected{{end}}>{{.Label}}</option>
+          {{end}}
+        </select>
+        <label class="btn join-item gap-2 no-animation shrink-0">
+          <input type="checkbox" class="checkbox checkbox-sm" data-pack-role-enable {{if $packSpecial}}checked{{end}} />
+          <span class="whitespace-nowrap font-normal">is special feature</span>
+        </label>
+      </div>
+      <p class="label whitespace-normal">Controls how packed files are stored. See the library root formats for details.</p>
+    </fieldset>
+    {{template "form_row" (dict "Type" "textarea" "Name" "plot" "Label" "Plot" "Value" .Video.Description "Placeholder" "none")}}
     <div class="grid gap-3 sm:grid-cols-2">
-      {{template "form_row" (dict "Name" "sorttitle" "Label" "Sort title" "Value" .Video.SortTitle)}}
-      {{template "form_row" (dict "Name" "originaltitle" "Label" "Original title" "Value" .Video.OriginalTitle)}}
+      {{template "form_row" (dict "Name" "sorttitle" "Label" "Sort title" "Value" .Video.SortTitle "Placeholder" "none")}}
+      {{template "form_row" (dict "Name" "originaltitle" "Label" "Original title" "Value" .Video.OriginalTitle "Placeholder" "none")}}
     </div>
     <div class="grid gap-3 sm:grid-cols-2">
       {{template "metadata_suggest_row" (dict "Name" "tagline" "Label" "Tagline" "Value" .Video.Tagline)}}

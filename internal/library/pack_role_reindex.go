@@ -157,7 +157,7 @@ func (s *Store) ReindexSpecialEpisodes(seriesID int64) (changed []int64, err err
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, upload_date, season, episode
 		FROM videos
-		WHERE series_id = ? AND pack_role = ?
+		WHERE series_id = ? AND special_feature = ?
 		ORDER BY
 		  (upload_date IS NULL OR trim(upload_date) = '') ASC,
 		  upload_date ASC, id ASC
@@ -175,7 +175,7 @@ func (s *Store) ReindexSpecialEpisodes(seriesID int64) (changed []int64, err err
 	var peers []peer
 	for rows.Next() {
 		var p peer
-		var upload string
+		var upload sql.NullString
 		if err := rows.Scan(&p.ID, &upload, &p.Season, &p.Episode); err != nil {
 			return nil, err
 		}
@@ -213,7 +213,7 @@ func (s *Store) ReindexSpecialFeatures(seriesID int64, kind string) (changed []i
 	rows, err := s.DB.SQL.Query(`
 		SELECT id, upload_date, season, episode
 		FROM videos
-		WHERE series_id = ? AND pack_role = ?
+		WHERE series_id = ? AND special_feature = ?
 		ORDER BY
 		  (upload_date IS NULL OR trim(upload_date) = '') ASC,
 		  upload_date ASC, id ASC
@@ -231,7 +231,7 @@ func (s *Store) ReindexSpecialFeatures(seriesID int64, kind string) (changed []i
 	var peers []peer
 	for rows.Next() {
 		var p peer
-		var upload string
+		var upload sql.NullString
 		if err := rows.Scan(&p.ID, &upload, &p.Season, &p.Episode); err != nil {
 			return nil, err
 		}
@@ -258,7 +258,7 @@ func (s *Store) ReindexSpecialFeatures(seriesID int64, kind string) (changed []i
 	return changed, nil
 }
 
-// ReindexPackRoleBucket reindexes the bucket for a video's current pack_role.
+// ReindexPackRoleBucket reindexes the bucket for a video's current special_feature.
 func (s *Store) ReindexPackRoleBucket(seriesID int64, packRole string) (changed []int64, err error) {
 	role := NormalizePackRole(packRole)
 	switch {
@@ -273,8 +273,8 @@ func (s *Store) ReindexPackRoleBucket(seriesID int64, packRole string) (changed 
 
 func (s *Store) listFeatureKindsInSeries(seriesID int64) ([]string, error) {
 	rows, err := s.DB.SQL.Query(`
-		SELECT DISTINCT pack_role FROM videos
-		WHERE series_id = ? AND pack_role != '' AND pack_role != ? AND pack_role != ?
+		SELECT DISTINCT special_feature FROM videos
+		WHERE series_id = ? AND special_feature != '' AND special_feature != ? AND special_feature != ?
 	`, seriesID, PackRoleRegular, PackRoleSpecialEpisode)
 	if err != nil {
 		return nil, err
@@ -293,7 +293,7 @@ func (s *Store) listFeatureKindsInSeries(seriesID int64) ([]string, error) {
 	return out, rows.Err()
 }
 
-// SetVideoPackRole updates pack_role and reindexes old+new buckets.
+// SetVideoPackRole updates special_feature and reindexes old+new buckets.
 func (s *Store) SetVideoPackRole(videoID int64, packRole string) error {
 	role := NormalizePackRole(packRole)
 	if err := ValidatePackRole(role); err != nil {
@@ -307,7 +307,7 @@ func (s *Store) SetVideoPackRole(videoID int64, packRole string) error {
 	if old == role {
 		return nil
 	}
-	if _, err := s.DB.SQL.Exec(`UPDATE videos SET pack_role = ? WHERE id = ?`, role, videoID); err != nil {
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET special_feature = ? WHERE id = ?`, role, videoID); err != nil {
 		return err
 	}
 	if _, err := s.ReindexPackRoleBucket(v.SeriesID, old); err != nil {

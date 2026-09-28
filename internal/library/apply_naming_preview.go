@@ -56,7 +56,7 @@ func (s *Store) PreviewApplyEpisodeNaming(seriesIDs, videoIDs []int64) (*ApplyRe
 		if err := rows.Scan(&r.ID, &r.Title, &r.RemoteID, &r.Season, &r.Episode, &r.SeriesTitle, &r.RootID, &r.RootPath, &r.UploadDate, &r.SourceURL); err != nil {
 			return nil, err
 		}
-		_ = s.DB.SQL.QueryRow(`SELECT series_id, COALESCE(pack_role,'') FROM videos WHERE id = ?`, r.ID).Scan(&r.SeriesID, &r.PackRole)
+		_ = s.DB.SQL.QueryRow(`SELECT series_id, COALESCE(special_feature,'') FROM videos WHERE id = ?`, r.ID).Scan(&r.SeriesID, &r.PackRole)
 		list = append(list, r)
 		if r.UploadDate.Valid {
 			if y := SeasonYearFromUpload(r.UploadDate.String); y > 0 && r.SeriesID > 0 {

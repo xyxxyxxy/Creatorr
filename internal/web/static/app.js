@@ -2380,6 +2380,7 @@
     syncAllRateLimitJoins();
     syncAllScanCronJoins();
     syncAllMaturityJoins();
+    syncAllPackRoleJoins();
     snapshotStringListEditors(document);
     document.querySelectorAll("form.js-add-series-form").forEach(syncAddSeriesForm);
     openAddSeriesModal();
@@ -2428,6 +2429,9 @@
     }
     if (root && (root.id === "maintenance-live" || root.querySelector?.("#maintenance-live"))) {
       wireMaintenanceScope();
+    }
+    if (root && (root.id === "video-metadata-body" || root.querySelector?.("[data-pack-role-join]"))) {
+      syncAllPackRoleJoins(root);
     }
     const y = document.body.dataset.listLiveScrollY;
     if (y != null && root && (root.id === "series-videos-live" || root.id === "series-list-live")) {
@@ -3404,6 +3408,56 @@
     });
   }
 
+  function syncPackRoleJoin(join) {
+    if (!join) return;
+    const sel = join.querySelector("[data-pack-role-select]");
+    const enable = join.querySelector("[data-pack-role-enable]");
+    if (!(sel instanceof HTMLSelectElement) || !(enable instanceof HTMLInputElement)) return;
+    let hidden = join.querySelector("[data-pack-role-submit]");
+    const placeholder = sel.querySelector('option[value=""]');
+    if (!enable.checked) {
+      const cur = sel.value;
+      if (cur) sel.dataset.prevPackRole = cur;
+      sel.value = "";
+      if (placeholder) placeholder.selected = true;
+      sel.disabled = true;
+      sel.removeAttribute("name");
+      sel.classList.add("opacity-60");
+      if (!hidden) {
+        hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.setAttribute("data-pack-role-submit", "");
+        join.insertBefore(hidden, sel);
+      }
+      hidden.name = "special_feature";
+      hidden.value = "episode";
+    } else {
+      sel.disabled = false;
+      sel.name = "special_feature";
+      sel.classList.remove("opacity-60");
+      if (hidden) hidden.remove();
+      const cur = sel.value.trim();
+      if (!cur) {
+        let fill = (sel.dataset.prevPackRole || "").trim();
+        if (!fill || fill === "episode") {
+          fill = sel.dataset.packRoleDefault || "special_episode";
+        }
+        sel.value = fill;
+        if (!sel.value) {
+          sel.value = sel.dataset.packRoleDefault || "special_episode";
+        }
+      }
+    }
+  }
+
+  function syncAllPackRoleJoins(root) {
+    (root || document).querySelectorAll("[data-pack-role-join]").forEach((join) => {
+      const enable = join.querySelector("[data-pack-role-enable]");
+      if (!(enable instanceof HTMLInputElement)) return;
+      syncPackRoleJoin(join);
+    });
+  }
+
   function syncRateLimitJoin(join) {
     if (!join) return;
     const unit = join.querySelector("[data-rate-unit]");
@@ -3614,6 +3668,11 @@
     if (el instanceof HTMLInputElement && el.hasAttribute("data-maturity-enable")) {
       const join = el.closest("[data-maturity-join]");
       if (join) syncMaturityJoin(join);
+      return;
+    }
+    if (el instanceof HTMLInputElement && el.hasAttribute("data-pack-role-enable")) {
+      const join = el.closest("[data-pack-role-join]");
+      if (join) syncPackRoleJoin(join);
       return;
     }
     if (!(el instanceof HTMLSelectElement) || !el.hasAttribute("data-rate-unit")) {
@@ -4583,6 +4642,9 @@
     form.querySelectorAll('input[name="studio"], input[name="country"], input[name="mpaa"]').forEach((el) => {
       el.value = "";
     });
+    form.querySelectorAll('select[name="special_feature"], [data-bulk-special-feature]').forEach((el) => {
+      el.value = "";
+    });
     form.querySelectorAll("[data-string-list-editor]").forEach((editor) => {
       const list = editor.querySelector("[data-string-list]");
       if (!list) return;
@@ -5065,6 +5127,11 @@
       setIfSame("studio", data.studio);
       setIfSame("country", data.country);
       setIfSame("mpaa", data.mpaa);
+      if (data.special_feature && data.special_feature.same) {
+        const role = String(data.special_feature.value || "").trim();
+        const sel = form.querySelector('select[name="special_feature"]');
+        if (sel && role) sel.value = role;
+      }
       if (data.genres && data.genres.same && Array.isArray(data.genres.value) && data.genres.value.length) {
         form.querySelectorAll("[data-string-list-editor]").forEach((ed) => {
           if (ed.getAttribute("data-item-name") === "genre") fillBulkStringList(ed, data.genres.value);

@@ -166,7 +166,7 @@ func buildEpisodePathsRel(seriesDir, epFmt string, vals nametemplate.Values) (Ep
 			return EpisodePaths{}, err
 		}
 		if seg == "" {
-			// Empty token expansion (e.g. {pack-role} on regulars) drops the segment.
+			// Empty token expansion drops the segment.
 			continue
 		}
 		if seg == "." || seg == ".." {
