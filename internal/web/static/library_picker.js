@@ -44,11 +44,23 @@
   }
 
   function videoThumbURL(v) {
-    return v && v.thumb_url ? v.thumb_url : "";
+    if (!v || !v.has_thumb) return "";
+    return "/series/" + v.series_id + "/videos/" + v.id + "/thumb";
+  }
+
+  function mergeVideos(rows) {
+    if (!Array.isArray(rows)) return;
+    rows.forEach((row) => {
+      if (!row || row.id == null) return;
+      const id = Number(row.id);
+      const idx = catalog.videos.findIndex((x) => Number(x.id) === id);
+      if (idx >= 0) catalog.videos[idx] = Object.assign({}, catalog.videos[idx], row);
+      else catalog.videos.push(row);
+    });
   }
 
   async function ensureCatalog() {
-    if (catalog.series.length || catalog.videos.length) return catalog;
+    if (catalog.series.length) return catalog;
     if (catalogPromise) return catalogPromise;
     catalogPromise = fetch("/api/import/picker", {
       headers: { Accept: "application/json" },
@@ -61,7 +73,7 @@
       .then((data) => {
         catalog = {
           series: Array.isArray(data.series) ? data.series : [],
-          videos: Array.isArray(data.videos) ? data.videos : [],
+          videos: Array.isArray(catalog.videos) ? catalog.videos : [],
         };
         return catalog;
       })
@@ -74,8 +86,33 @@
   function setCatalog(series, videos) {
     catalog = {
       series: Array.isArray(series) ? series : [],
-      videos: Array.isArray(videos) ? videos : [],
+      videos: Array.isArray(videos) ? videos : catalog.videos || [],
     };
+  }
+
+  async function fetchPickerVideos(opts) {
+    opts = opts || {};
+    const params = new URLSearchParams();
+    if (opts.seriesId) params.set("series_id", String(opts.seriesId));
+    if (opts.q) params.set("q", String(opts.q));
+    if (opts.hasMedia) params.set("has_media", "true");
+    if (opts.limit) params.set("limit", String(opts.limit));
+    if (Array.isArray(opts.ids)) {
+      opts.ids.forEach((id) => {
+        const n = Number(id);
+        if (n > 0) params.append("ids", String(n));
+      });
+    }
+    if (![...params.keys()].length) return [];
+    const res = await fetch("/api/import/picker/videos?" + params.toString(), {
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+    if (!res.ok) throw new Error("picker videos " + res.status);
+    const data = await res.json();
+    const videos = Array.isArray(data.videos) ? data.videos : [];
+    mergeVideos(videos);
+    return videos;
   }
 
   function filterSeries(q) {
@@ -85,27 +122,6 @@
     const list = ctx && ctx.series ? ctx.series : catalog.series;
     if (!needle) return list.slice();
     return list.filter((s) => String(s.title || "").toLowerCase().includes(needle));
-  }
-
-  function filterVideos(seriesId, q, packedOnly) {
-    const needle = String(q || "")
-      .trim()
-      .toLowerCase();
-    let list = ctx && ctx.videos ? ctx.videos : catalog.videos;
-    if (packedOnly) list = list.filter((v) => !!v.has_media);
-    if (seriesId) list = list.filter((v) => Number(v.series_id) === Number(seriesId));
-    if (needle) {
-      list = list.filter(
-        (v) =>
-          String(v.title || "")
-            .toLowerCase()
-            .includes(needle) ||
-          String(v.series_title || "")
-            .toLowerCase()
-            .includes(needle)
-      );
-    }
-    return list;
   }
 
   function closePicker() {
@@ -225,7 +241,7 @@
     lucideRefresh(seriesList);
   }
 
-  function renderMultiVideosList() {
+  async function renderMultiVideosList() {
     if (!ctx || ctx.mode !== "multi") return;
     const qEl = $("library-picker-q");
     const q = qEl ? qEl.value : "";
@@ -240,7 +256,22 @@
     const listVideos = !multiSeries;
 
     if (listVideos) {
-      const videos = filterVideos(lockedSeriesId || null, q, ctx.packedOnly !== false);
+      videoList.innerHTML =
+        '<li class="list-row"><span class="opacity-60 text-sm px-2">Loading…</span></li>';
+      const needle = String(q || "").trim();
+      let videos = [];
+      try {
+        const opts = { limit: 50, q: needle, hasMedia: ctx.packedOnly !== false };
+        if (lockedSeriesId) opts.seriesId = lockedSeriesId;
+        // No series + no search: still list packed media (Maintenance browse).
+        if (!lockedSeriesId && !needle) opts.hasMedia = true;
+        videos = await fetchPickerVideos(opts);
+      } catch (_) {
+        videoList.innerHTML =
+          '<li class="list-row"><span class="opacity-60 text-sm px-2">Failed to load videos</span></li>';
+        return;
+      }
+      if (!ctx || ctx.mode !== "multi") return;
       let html = "";
       if (!videos.length) {
         html =
@@ -328,6 +359,9 @@
     };
     // Video scope implies locking that series.
     if (ctx.videoIds.size) {
+      try {
+        await fetchPickerVideos({ ids: Array.from(ctx.videoIds) });
+      } catch (_) {}
       const first = catalog.videos.find((v) => ctx.videoIds.has(Number(v.id)));
       if (first) {
         ctx.seriesIds = new Set([Number(first.series_id)]);
@@ -383,11 +417,14 @@
   window.libraryPickerCREATE = CREATE;
 
   function wire() {
+    let qTimer = 0;
     const qEl = $("library-picker-q");
     if (qEl && !qEl.dataset.lpWired) {
       qEl.dataset.lpWired = "1";
       qEl.addEventListener("input", () => {
-        if (ctx && ctx.mode === "multi") renderMulti();
+        if (!(ctx && ctx.mode === "multi")) return;
+        clearTimeout(qTimer);
+        qTimer = setTimeout(() => renderMulti(), 200);
       });
     }
     // Document delegation so HTMX/page swaps keep working.
@@ -453,11 +490,6 @@
             ctx.videoIds.add(id);
           }
         }
-        renderMulti();
-      }
-    });
-    document.addEventListener("input", (ev) => {
-      if (ev.target && ev.target.id === "library-picker-q" && ctx && ctx.mode === "multi") {
         renderMulti();
       }
     });

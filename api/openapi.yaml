@@ -1308,20 +1308,87 @@ paths:
     get:
       tags: [library]
       operationId: getImportPicker
-      summary: Series and video catalog for Import Match UI
+      summary: Series catalog for Import Match UI
       description: >
-        Returns every series (id, title, poster_url) and every indexed video row used by
-        the Import Match modal. Loaded asynchronously after the Import page shell paints;
-        poster_url is always set to the series art path (no disk check).
+        Returns every series (id, title, poster_url) for Import inline dropdowns and the
+        Maintenance library picker. Videos are loaded on demand via GET /api/import/picker/videos.
+        Loaded asynchronously after the Import page shell paints; poster_url is always set to
+        the series art path (no disk check).
       responses:
         "200":
-          description: Picker catalog
+          description: Series catalog
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ImportPickerResponse"
         "500":
           description: Catalog load failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/import/picker/videos:
+    get:
+      tags: [library]
+      operationId: getImportPickerVideos
+      summary: Video rows for Import / Maintenance pickers
+      description: >
+        Returns a capped list of indexed videos for Import inline dropdowns and the Maintenance
+        library picker. Pass series_id and/or q to search; ids to hydrate known picks; has_media
+        to restrict to packed library media (sidecar attach / Maintenance). With no series_id,
+        q, ids, or has_media filter the response is an empty videos array.
+      parameters:
+        - name: series_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Restrict to one series
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Title / series title substring (case-insensitive)
+        - name: has_media
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: When true, only videos with a packed kind=video files row
+        - name: ids
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: integer
+              format: int64
+            maxItems: 200
+          style: form
+          explode: true
+          description: Hydrate specific video ids (ignores series_id / q; still honors has_media)
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+          description: Max rows (ignored when ids is set; ids are capped at 200)
+      responses:
+        "200":
+          description: Video rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportPickerVideosResponse"
+        "500":
+          description: Query failed
           content:
             application/json:
               schema:
@@ -1982,12 +2049,17 @@ components:
 
     ImportPickerResponse:
       type: object
-      required: [series, videos]
+      required: [series]
       properties:
         series:
           type: array
           items:
             $ref: "#/components/schemas/ImportPickerSeries"
+
+    ImportPickerVideosResponse:
+      type: object
+      required: [videos]
+      properties:
         videos:
           type: array
           items:

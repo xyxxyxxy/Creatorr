@@ -206,8 +206,8 @@ func TestImportPageWithoutSeries(t *testing.T) {
 	if !strings.Contains(body, `id="btn-import"`) || !strings.Contains(body, "File matching") {
 		t.Fatalf("import UI should render with no series: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, "modal-add-series") || !strings.Contains(body, "Create new series") {
-		t.Fatalf("expected add-series modal + Match create row with no series: %s", truncate(body, 400))
+	if !strings.Contains(body, "modal-add-series") || !strings.Contains(body, "js-import-create-series") {
+		t.Fatalf("expected add-series modal + inline create join with no series: %s", truncate(body, 400))
 	}
 	if !strings.Contains(body, "modal-add-video") || !strings.Contains(body, "js-add-video-form") {
 		t.Fatalf("expected add-video modal with no series: %s", truncate(body, 400))
@@ -256,8 +256,8 @@ func TestImportPageWithoutSeries(t *testing.T) {
 	if strings.Contains(body2, "Create a series first") {
 		t.Fatalf("empty-series gate should be gone: %s", truncate(body2, 400))
 	}
-	if !strings.Contains(body2, "modal-add-series") || !strings.Contains(body2, "Create new series") {
-		t.Fatalf("expected add-series modal + Match create row when series exist: %s", truncate(body2, 400))
+	if !strings.Contains(body2, "modal-add-series") || !strings.Contains(body2, "js-import-create-series") {
+		t.Fatalf("expected add-series modal + inline create join when series exist: %s", truncate(body2, 400))
 	}
 	if !strings.Contains(body2, "modal-add-video") || !strings.Contains(body2, "js-add-video-form") {
 		t.Fatalf("expected add-video modal when series exist: %s", truncate(body2, 400))

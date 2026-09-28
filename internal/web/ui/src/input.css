@@ -66,6 +66,8 @@
   panels above the next row so search + rich options stay clickable.
   details[open] is the click-toggle path (focus-based div.dropdown needed
   two clicks here: open + pick).
+  Fixed summary widths live here: Tailwind does not emit utilities that only
+  appear inside <script> template strings in import.html.
 */
 #import-list .dropdown:focus-within,
 #import-list .dropdown:has(:focus),
@@ -74,6 +76,13 @@
 }
 #import-list .dropdown .dropdown-content {
   z-index: 50;
+}
+#import-list .js-import-series-dd > summary.btn,
+#import-list .js-import-video-dd > summary.btn {
+  width: 18rem;
+  min-width: 18rem;
+  max-width: 18rem;
+  flex-shrink: 0;
 }
 
 /*

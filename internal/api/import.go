@@ -42,14 +42,8 @@ func (s *Server) GetImportPicker(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "import picker series failed", err.Error())
 		return
 	}
-	videos, err := s.Library.ListImportPickerVideos()
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "import picker videos failed", err.Error())
-		return
-	}
 	out := gen.ImportPickerResponse{
 		Series: make([]gen.ImportPickerSeries, 0, len(series)),
-		Videos: make([]gen.ImportPickerVideo, 0, len(videos)),
 	}
 	for _, ser := range series {
 		poster := fmt.Sprintf("/series/%d/art/poster", ser.ID)
@@ -58,6 +52,36 @@ func (s *Server) GetImportPicker(w http.ResponseWriter, r *http.Request) {
 			Title:     ser.Title,
 			PosterUrl: &poster,
 		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) GetImportPickerVideos(w http.ResponseWriter, r *http.Request, params gen.GetImportPickerVideosParams) {
+	q := library.ImportPickerVideoQuery{Limit: 50}
+	if params.Limit != nil {
+		q.Limit = *params.Limit
+	}
+	if params.SeriesId != nil {
+		sid := *params.SeriesId
+		q.SeriesID = &sid
+	}
+	if params.Q != nil {
+		q.Q = *params.Q
+	}
+	if params.HasMedia != nil {
+		hm := *params.HasMedia
+		q.HasMedia = &hm
+	}
+	if params.Ids != nil {
+		q.IDs = *params.Ids
+	}
+	videos, err := s.Library.ListImportPickerVideos(q)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "import picker videos failed", err.Error())
+		return
+	}
+	out := gen.ImportPickerVideosResponse{
+		Videos: make([]gen.ImportPickerVideo, 0, len(videos)),
 	}
 	for _, v := range videos {
 		out.Videos = append(out.Videos, gen.ImportPickerVideo{

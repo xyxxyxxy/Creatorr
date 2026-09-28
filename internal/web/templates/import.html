@@ -105,11 +105,17 @@
 
 <script>
 let SERIES = [];
+/** Growing cache of videos fetched for dropdowns / labels (not a full-library dump). */
 let VIDEOS = [];
-/** False until GET /api/import/picker fills SERIES/VIDEOS. */
+/** False until GET /api/import/picker fills SERIES. */
 let importPickerReady = false;
 /** @type {Promise<void>|null} */
 let importPickerPromise = null;
+/** @type {AbortController|null} */
+let importPickerAbort = null;
+/** @type {AbortController|null} */
+let importVideoFetchAbort = null;
+let importVideoSearchTimer = 0;
 const CREATE = '__create__';
 const DRAFT_PREFIX = 'draft:';
 const PAGE_SIZE = 50;
@@ -141,8 +147,6 @@ let pendingImportJobs = [];
 let autoMatchStale = false;
 /** @type {AbortController|null} */
 let importScanAbort = null;
-/** @type {AbortController|null} */
-let importPickerAbort = null;
 let importTasksBusy = false;
 
 /** True while Import page DOM is still mounted (false after navigate-away). */
@@ -181,16 +185,21 @@ async function loadImportPicker() {
       const data = await res.json();
       if (!importPageAlive()) return;
       SERIES = Array.isArray(data.series) ? data.series : [];
-      VIDEOS = Array.isArray(data.videos) ? data.videos : [];
       importPickerReady = true;
       if (typeof window.setLibraryPickerCatalog === 'function') {
-        window.setLibraryPickerCatalog(SERIES, VIDEOS);
+        window.setLibraryPickerCatalog(SERIES);
       }
-      // Scrub picks that need has_media now that the catalog is known.
+      await hydratePickedVideos();
+      if (!importPageAlive()) return;
+      // Scrub picks that need has_media now that suggested rows are cached.
       importBundles.forEach((b) => {
         if (b.kind !== 'media') return;
         const key = bundleStateKey(b);
         scrubMediaVideoPick(getUIState(key), key);
+      });
+      importBundles.forEach((b) => {
+        if (b.kind !== 'sidecars') return;
+        scrubSidecarVideoPick(getUIState(bundleStateKey(b)));
       });
       if (importCandidates.length) renderImportPage();
     } catch (err) {
@@ -204,8 +213,80 @@ async function loadImportPicker() {
   return importPickerPromise;
 }
 
+function mergeVideosIntoCache(rows) {
+  if (!Array.isArray(rows) || !rows.length) return;
+  rows.forEach((row) => {
+    if (!row || row.id == null) return;
+    const id = Number(row.id);
+    const idx = VIDEOS.findIndex((x) => Number(x.id) === id);
+    if (idx >= 0) VIDEOS[idx] = { ...VIDEOS[idx], ...row };
+    else VIDEOS.push(row);
+  });
+}
+
+/** @returns {Promise<any[]>} */
+async function fetchImportPickerVideos(opts) {
+  const params = new URLSearchParams();
+  if (opts && opts.series_id) params.set('series_id', String(opts.series_id));
+  if (opts && opts.q) params.set('q', String(opts.q));
+  if (opts && opts.has_media) params.set('has_media', 'true');
+  if (opts && opts.limit) params.set('limit', String(opts.limit));
+  if (opts && Array.isArray(opts.ids)) {
+    opts.ids.forEach((id) => {
+      const n = Number(id);
+      if (n > 0) params.append('ids', String(n));
+    });
+  }
+  // No filter → empty (API also returns []).
+  if (![...params.keys()].length) return [];
+  const res = await fetch('/api/import/picker/videos?' + params.toString(), {
+    headers: { Accept: 'application/json' },
+    credentials: 'same-origin',
+    signal: opts && opts.signal,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  const videos = Array.isArray(data.videos) ? data.videos : [];
+  mergeVideosIntoCache(videos);
+  return videos;
+}
+
+function collectPickedVideoIds() {
+  const ids = [];
+  const seen = new Set();
+  const push = (raw) => {
+    const n = Number(raw);
+    if (!n || seen.has(n)) return;
+    seen.add(n);
+    ids.push(n);
+  };
+  importBundles.forEach((b) => {
+    const st = importUIState.get(bundleStateKey(b));
+    if (st && st.videoId && String(st.videoId) !== CREATE) push(st.videoId);
+    if (b.kind === 'media' && b.video && b.video.suggested_video_id) push(b.video.suggested_video_id);
+    if (b.kind === 'sidecars') {
+      (b.sidecars || []).forEach((s) => {
+        if (s.suggested_video_id) push(s.suggested_video_id);
+      });
+    }
+  });
+  return ids;
+}
+
+async function hydratePickedVideos() {
+  const missing = collectPickedVideoIds().filter((id) => !VIDEOS.some((v) => Number(v.id) === id));
+  if (!missing.length) return;
+  try {
+    await fetchImportPickerVideos({ ids: missing });
+  } catch (err) {
+    if (isImportFetchCanceled(err)) return;
+    // Labels fall back until the operator opens a dropdown.
+  }
+}
+
 window.addEventListener('pagehide', () => {
   if (importPickerAbort) importPickerAbort.abort();
+  if (importVideoFetchAbort) importVideoFetchAbort.abort();
   if (importScanAbort) importScanAbort.abort();
 });
 
@@ -282,36 +363,6 @@ function nameMatch(hay, q) {
   return String(hay || '').toLowerCase().includes(q);
 }
 
-function videosForSeries(seriesId, opts) {
-  // Unknown tvshow.nfo draft: create-only (no catalog videos under that series yet).
-  if (isDraftSeriesId(seriesId)) return [];
-  const forMedia = !!(opts && opts.forMedia);
-  const q = (opts && opts.q != null) ? String(opts.q).trim().toLowerCase() : '';
-  const exceptKey = opts && opts.exceptKey;
-  const sid = seriesId != null && seriesId !== '' ? Number(seriesId) : null;
-  // Number("draft:…") is NaN (falsy) - never treat as "all series".
-  if (seriesId && (sid == null || Number.isNaN(sid))) return [];
-  let list = VIDEOS.filter((v) => sid == null || v.series_id === sid);
-  if (forMedia) {
-    // One media import item per indexed video - always hide claims elsewhere.
-    // Packed library videos stay listed (match may replace; summary requires override ack).
-    list = list.filter((v) => !videoMatchedElsewhere(v.id, exceptKey));
-  } else {
-    // Sidecar Attach: only videos that already have library media.
-    list = list.filter((v) => !!v.has_media);
-  }
-  if (q) {
-    list = list.filter((v) => nameMatch(v.title, q) || nameMatch(v.series_title, q));
-  }
-  return list;
-}
-
-function seriesForQuery(q) {
-  const needle = String(q || '').trim().toLowerCase();
-  if (!needle) return SERIES.slice();
-  return SERIES.filter((s) => nameMatch(s.title, needle));
-}
-
 /** Drop illegal media picks: duplicate claims only (packed targets stay; replace ack at summary). */
 function scrubMediaVideoPick(st, exceptKey) {
   if (!st) return st;
@@ -325,9 +376,13 @@ function scrubMediaVideoPick(st, exceptKey) {
 /** Sidecar Attach needs a video that already has packed library media (not CREATE). */
 function scrubSidecarVideoPick(st) {
   if (!st) return st;
-  if (!st.videoId || String(st.videoId) === CREATE || !videoHasMedia(st.videoId)) {
+  if (!st.videoId || String(st.videoId) === CREATE) {
     if (st.videoId) st.videoId = '';
+    return st;
   }
+  const v = VIDEOS.find((x) => Number(x.id) === Number(st.videoId));
+  // Unknown until hydrated - keep the pick; hydratePickedVideos re-scrubs.
+  if (v && !v.has_media) st.videoId = '';
   return st;
 }
 
@@ -547,16 +602,28 @@ function matchStatusHTML(st, kind) {
   const ready = itemReady(kind, st);
   if (ready) {
     return `<span class="tooltip tooltip-top inline-flex shrink-0 text-success" data-tip="matched" aria-label="matched">
-        <i data-lucide="check" class="size-6" aria-hidden="true"></i>
+        <i data-lucide="check" class="size-4" aria-hidden="true"></i>
       </span>`;
   }
   return `<span class="tooltip tooltip-top inline-flex shrink-0 text-warning" data-tip="not matched" aria-label="not matched">
-        <i data-lucide="circle-dashed" class="size-6" aria-hidden="true"></i>
+        <i data-lucide="circle-help" class="size-4" aria-hidden="true"></i>
       </span>`;
 }
 
-function matchActionsHTML(st, kind) {
-  return `<div class="flex items-center gap-3 shrink-0 self-center">${matchStatusHTML(st, kind)}</div>`;
+function filesStack(primary, sidecars, leadIconHTML) {
+  let html = `<div class="flex flex-wrap items-center gap-1.5 text-xs min-w-0">
+    ${leadIconHTML || roleIconMark(primary)}
+    <span class="min-w-0">${fileCell(primary)}</span>`;
+  if (sidecars && sidecars.length) {
+    const n = sidecars.length;
+    html += `<span class="opacity-50 px-0.5" aria-hidden="true">+</span>`;
+    html += `<span class="opacity-60">${n} sidecar${n === 1 ? '' : 's'}</span>`;
+    sidecars.forEach((s) => {
+      html += roleIconMark(s);
+    });
+  }
+  html += `</div>`;
+  return html;
 }
 
 function seriesPickLabel(st) {
@@ -581,17 +648,17 @@ function videoPickLabel(st) {
 function seriesTriggerInnerHTML(st) {
   if (isDraftSeriesId(st.seriesId)) {
     return `<span class="inline-flex items-center gap-2 min-w-0">
-      <span class="bg-base-200 size-6 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-3.5 opacity-40"></i></span>
+      <span class="bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></span>
       <span class="truncate">${escapeHtml(seriesPickLabel(st))}</span>
     </span>`;
   }
   if (st.seriesId) {
     const s = SERIES.find((x) => Number(x.id) === Number(st.seriesId));
     const poster = seriesPosterHTML(s)
-      .replaceAll('size-10', 'size-6')
-      .replaceAll('size-5', 'size-3.5')
-      .replaceAll('width="40"', 'width="24"')
-      .replaceAll('height="40"', 'height="24"');
+      .replaceAll('size-10', 'size-8')
+      .replaceAll('size-5', 'size-4')
+      .replaceAll('width="40"', 'width="32"')
+      .replaceAll('height="40"', 'height="32"');
     return `<span class="inline-flex items-center gap-2 min-w-0">
       <span class="relative shrink-0">${poster}</span>
       <span class="truncate">${escapeHtml(seriesPickLabel(st))}</span>
@@ -603,7 +670,7 @@ function seriesTriggerInnerHTML(st) {
 function videoTriggerInnerHTML(st) {
   if (String(st.videoId) === CREATE) {
     return `<span class="inline-flex items-center gap-2 min-w-0">
-      <span class="bg-base-200 size-6 rounded flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="plus" class="size-3.5 opacity-40"></i></span>
+      <span class="bg-base-200 size-8 rounded flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="plus" class="size-4 opacity-40"></i></span>
       <span class="truncate">${escapeHtml(videoPickLabel(st))}</span>
     </span>`;
   }
@@ -611,8 +678,8 @@ function videoTriggerInnerHTML(st) {
     const v = VIDEOS.find((x) => Number(x.id) === Number(st.videoId));
     const thumb = v ? videoThumbURL(v) : '';
     const img = thumb
-      ? `<img class="size-6 rounded object-cover shrink-0" src="${escapeHtml(thumb)}" alt="" loading="lazy" />`
-      : `<span class="bg-base-200 size-6 rounded flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="square-play" class="size-3.5 opacity-40"></i></span>`;
+      ? `<img class="size-8 rounded object-cover shrink-0" src="${escapeHtml(thumb)}" alt="" loading="lazy" />`
+      : `<span class="bg-base-200 size-8 rounded flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="square-play" class="size-4 opacity-40"></i></span>`;
     const badge = v ? packRoleBadgeHTML(v.special_feature) : '';
     return `<span class="inline-flex items-center gap-2 min-w-0">
       ${img}
@@ -675,38 +742,38 @@ function matchPickersHTML(st, kind) {
   const seriesJoin = `
   <div class="join join-horizontal shrink-0 max-w-full">
     <details class="dropdown dropdown-bottom js-import-series-dd ${seriesDisabled ? 'pointer-events-none opacity-60' : ''}">
-      <summary class="btn btn-sm join-item border-base-300 bg-base-100 font-normal min-w-[10rem] max-w-[14rem] justify-start" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ''}>
+      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden shrink-0" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ''}>
         ${seriesTriggerInnerHTML(st)}
       </summary>
       <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-80">
-        <input type="search" class="input input-bordered input-sm w-full mb-2 js-import-series-q" placeholder="Filter series" aria-label="Filter series" autocomplete="off" />
+        <input type="search" class="input input-bordered input-sm w-full mb-2 js-import-series-q" placeholder="Filter" aria-label="Filter" autocomplete="off" />
         <ul class="list bg-base-100 max-h-64 overflow-y-auto js-import-series-list" role="listbox" aria-label="Series"></ul>
       </div>
     </details>
-    <button type="button" class="btn btn-sm btn-square join-item js-import-create-series tooltip tooltip-top" data-tip="Create new series" aria-label="Create new series" ${createSeriesDisabled ? 'disabled' : ''}>
-      <i data-lucide="plus" class="size-4" aria-hidden="true"></i>
+    <button type="button" class="btn btn-square join-item js-import-create-series tooltip tooltip-top" data-tip="Create new" aria-label="Create new" ${createSeriesDisabled ? 'disabled' : ''}>
+      <i data-lucide="plus" class="size-5" aria-hidden="true"></i>
     </button>
-    <button type="button" class="btn btn-sm btn-soft btn-error btn-square join-item js-import-reset-series tooltip tooltip-top" data-tip="Clear series" aria-label="Clear series" ${seriesResetDisabled ? 'disabled' : ''}>
-      <i data-lucide="x" class="size-4" aria-hidden="true"></i>
+    <button type="button" class="btn btn-soft btn-error btn-square join-item js-import-reset-series tooltip tooltip-top" data-tip="Clear" aria-label="Clear" ${seriesResetDisabled ? 'disabled' : ''}>
+      <i data-lucide="x" class="size-5" aria-hidden="true"></i>
     </button>
   </div>`;
 
   const videoJoin = `
   <div class="join join-horizontal shrink-0 max-w-full">
     <details class="dropdown dropdown-bottom js-import-video-dd ${videoDisabled ? 'pointer-events-none opacity-60' : ''}">
-      <summary class="btn btn-sm join-item border-base-300 bg-base-100 font-normal min-w-[10rem] max-w-[16rem] justify-start" aria-label="${escapeHtml(videoTip)}" ${videoDisabled ? 'aria-disabled="true"' : ''}>
+      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden shrink-0" aria-label="${escapeHtml(videoTip)}" ${videoDisabled ? 'aria-disabled="true"' : ''}>
         ${videoTriggerInnerHTML(st)}
       </summary>
       <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-96">
-        <input type="search" class="input input-bordered input-sm w-full mb-2 js-import-video-q" placeholder="Filter videos" aria-label="Filter videos" autocomplete="off" />
+        <input type="search" class="input input-bordered input-sm w-full mb-2 js-import-video-q" placeholder="Filter" aria-label="Filter" autocomplete="off" />
         <ul class="list bg-base-100 max-h-64 overflow-y-auto js-import-video-list" role="listbox" aria-label="Videos"></ul>
       </div>
     </details>
-    <button type="button" class="btn btn-sm btn-square join-item js-import-create-video tooltip tooltip-top" data-tip="Create new video" aria-label="Create new video" ${createVideoDisabled ? 'disabled' : ''}>
-      <i data-lucide="plus" class="size-4" aria-hidden="true"></i>
+    <button type="button" class="btn btn-square join-item js-import-create-video tooltip tooltip-top" data-tip="Create new" aria-label="Create new" ${createVideoDisabled ? 'disabled' : ''}>
+      <i data-lucide="plus" class="size-5" aria-hidden="true"></i>
     </button>
-    <button type="button" class="btn btn-sm btn-soft btn-error btn-square join-item js-import-reset-video tooltip tooltip-top" data-tip="Clear video" aria-label="Clear video" ${videoResetDisabled ? 'disabled' : ''}>
-      <i data-lucide="x" class="size-4" aria-hidden="true"></i>
+    <button type="button" class="btn btn-soft btn-error btn-square join-item js-import-reset-video tooltip tooltip-top" data-tip="Clear" aria-label="Clear" ${videoResetDisabled ? 'disabled' : ''}>
+      <i data-lucide="x" class="size-5" aria-hidden="true"></i>
     </button>
   </div>`;
 
@@ -728,24 +795,45 @@ function fillSeriesPickList(ul, st, q) {
   lucideRefresh(ul);
 }
 
-function fillVideoPickList(ul, st, kind, stateKey, q) {
+async function fillVideoPickList(ul, st, kind, stateKey, q) {
   if (!ul) return;
   const forMedia = kind === 'media';
   const needle = String(q || '').trim();
-  let videos = [];
+  fillVideoPickList._seq = (fillVideoPickList._seq || 0) + 1;
+  const token = String(fillVideoPickList._seq);
+  ul.dataset.fillToken = token;
   if (isDraftSeriesId(st.seriesId)) {
     ul.innerHTML = '<li class="list-row"><span class="opacity-60 text-sm px-2">Create new video under this series folder</span></li>';
     return;
   }
-  if (st.seriesId) {
-    videos = videosForSeries(st.seriesId, { forMedia, q: needle, exceptKey: stateKey });
-  } else if (needle) {
-    videos = videosForSeries(null, { forMedia, q: needle, exceptKey: stateKey });
+  if (!st.seriesId && !needle) {
+    ul.innerHTML = '<li class="list-row"><span class="opacity-60 text-sm px-2">Pick a series or search</span></li>';
+    return;
+  }
+  ul.innerHTML = '<li class="list-row"><span class="opacity-60 text-sm px-2">Loading…</span></li>';
+  if (importVideoFetchAbort) importVideoFetchAbort.abort();
+  const ac = new AbortController();
+  importVideoFetchAbort = ac;
+  const opts = { limit: 50, q: needle, signal: ac.signal };
+  if (st.seriesId && !isDraftSeriesId(st.seriesId)) opts.series_id = Number(st.seriesId);
+  if (!forMedia) opts.has_media = true;
+  let videos = [];
+  try {
+    videos = await fetchImportPickerVideos(opts);
+  } catch (err) {
+    if (ac.signal.aborted || isImportFetchCanceled(err)) return;
+    if (ul.dataset.fillToken !== token) return;
+    ul.innerHTML = '<li class="list-row"><span class="opacity-60 text-sm px-2">Failed to load videos</span></li>';
+    return;
+  } finally {
+    if (importVideoFetchAbort === ac) importVideoFetchAbort = null;
+  }
+  if (ul.dataset.fillToken !== token) return;
+  if (forMedia) {
+    videos = videos.filter((v) => !videoMatchedElsewhere(v.id, stateKey));
   }
   let html = '';
-  if (!st.seriesId && !needle) {
-    html = '<li class="list-row"><span class="opacity-60 text-sm px-2">Pick a series or search</span></li>';
-  } else if (!videos.length) {
+  if (!videos.length) {
     html = '<li class="list-row"><span class="opacity-60 text-sm px-2">No videos match</span></li>';
   } else {
     html = videos.map((v) => videoOptionRowHTML(v, st.videoId)).join('');
@@ -753,6 +841,7 @@ function fillVideoPickList(ul, st, kind, stateKey, q) {
   ul.innerHTML = html;
   lucideRefresh(ul);
 }
+fillVideoPickList._seq = 0;
 
 function hintsForStateKey(stateKey) {
   const b = importBundles.find((x) => bundleStateKey(x) === stateKey);
@@ -904,7 +993,7 @@ function addSeriesToImportPicker(ser) {
   else SERIES.push(row);
   SERIES.sort((a, b) => String(a.title).localeCompare(String(b.title)));
   if (typeof window.setLibraryPickerCatalog === 'function') {
-    window.setLibraryPickerCatalog(SERIES, VIDEOS);
+    window.setLibraryPickerCatalog(SERIES);
   }
 }
 
@@ -1346,22 +1435,6 @@ function roleIconMark(c) {
   </span>`;
 }
 
-function filesStack(primary, sidecars) {
-  let html = `<div class="flex flex-wrap items-center gap-1.5 text-xs min-w-0">
-    ${roleIconMark(primary)}
-    <span class="min-w-0">${fileCell(primary)}</span>`;
-  if (sidecars && sidecars.length) {
-    const n = sidecars.length;
-    html += `<span class="opacity-50 px-0.5" aria-hidden="true">+</span>`;
-    html += `<span class="opacity-60">${n} sidecar${n === 1 ? '' : 's'}</span>`;
-    sidecars.forEach((s) => {
-      html += roleIconMark(s);
-    });
-  }
-  html += `</div>`;
-  return html;
-}
-
 function matchNote(c, emptyText) {
   if (c && c.match_label) {
     return `<span class="opacity-60 text-xs">${escapeHtml(c.match_label)}</span>`;
@@ -1560,7 +1633,9 @@ function syncVisibleItemState() {
 function videoBelongsToSeries(videoId, seriesId) {
   if (!videoId || !seriesId || String(videoId) === CREATE) return false;
   const v = VIDEOS.find((x) => Number(x.id) === Number(videoId));
-  return !!(v && Number(v.series_id) === Number(seriesId));
+  // Unknown until hydrated - keep pick (scan hydrate / dropdown fetch fills cache).
+  if (!v) return true;
+  return Number(v.series_id) === Number(seriesId);
 }
 
 /** Apply one series to importable items that have no series yet. */
@@ -1901,12 +1976,9 @@ function buildSidecarBundleItem(b) {
   const rest = b.sidecars.slice(1);
   li.dataset.kind = 'sidecar';
   li.innerHTML = `
-    <div class="flex items-center gap-2">
-      <div class="min-w-0 flex-1 space-y-2">
-        ${filesStack(primary, rest)}
-        ${matchPickersHTML(st, 'sidecar')}
-      </div>
-      ${matchActionsHTML(st, 'sidecar')}
+    <div class="space-y-2">
+      ${filesStack(primary, rest, matchStatusHTML(st, 'sidecar'))}
+      ${matchPickersHTML(st, 'sidecar')}
     </div>`;
   return li;
 }
@@ -1919,12 +1991,9 @@ function buildMediaBundleItem(b) {
   li.dataset.stateKey = bundleStateKey(b);
   li.dataset.kind = 'media';
   li.innerHTML = `
-    <div class="flex items-center gap-2">
-      <div class="min-w-0 flex-1 space-y-2">
-        ${filesStack(c, b.sidecars)}
-        ${matchPickersHTML(st, 'media')}
-      </div>
-      ${matchActionsHTML(st, 'media')}
+    <div class="space-y-2">
+      ${filesStack(c, b.sidecars, matchStatusHTML(st, 'media'))}
+      ${matchPickersHTML(st, 'media')}
     </div>`;
   return li;
 }
@@ -1935,6 +2004,12 @@ function episodeTitleForJob(job) {
   }
   const v = VIDEOS.find((x) => Number(x.id) === Number(job.videoId));
   return v ? v.title : (job.videoLabel || 'Video');
+}
+
+function packRoleForJob(job) {
+  if (!job || String(job.videoId) === CREATE) return 'episode';
+  const v = VIDEOS.find((x) => Number(x.id) === Number(job.videoId));
+  return v ? (v.special_feature || 'episode') : 'episode';
 }
 
 function groupJobsForSummary(jobs) {
@@ -1955,6 +2030,7 @@ function groupJobsForSummary(jobs) {
     if (!ser.episodes.has(ek)) {
       ser.episodes.set(ek, {
         label: episodeTitleForJob(job),
+        specialFeature: packRoleForJob(job),
         stacks: [],
         replace: false,
       });
@@ -1979,7 +2055,7 @@ function buildSummaryTree(jobs) {
       const epWrap = ep.replace
         ? 'mt-2 rounded-box border border-warning/50 bg-warning/10 px-2 py-1.5'
         : 'mt-2';
-      const badge = ep.replace
+      const overrideBadge = ep.replace
         ? '<span class="badge badge-warning badge-sm shrink-0">override</span>'
         : '';
       const tone = ep.replace ? ' text-warning' : '';
@@ -1988,7 +2064,8 @@ function buildSummaryTree(jobs) {
           <div class="flex items-center gap-1.5 min-w-0 font-medium${tone}">
             <i data-lucide="square-play" class="size-4 opacity-70 shrink-0" aria-hidden="true"></i>
             <span class="truncate">${escapeHtml(ep.label)}</span>
-            ${badge}
+            ${packRoleBadgeHTML(ep.specialFeature)}
+            ${overrideBadge}
           </div>
           <div class="pl-5 mt-1 space-y-1${tone}">${stacks}</div>
         </li>`;
@@ -2161,7 +2238,8 @@ function importOverrideAcked() {
   return document.getElementById('import-summary-override-ack')?.checked === true;
 }
 
-function openImportSummary() {
+async function openImportSummary() {
+  await hydratePickedVideos();
   pendingImportJobs = collectReadyJobs();
   if (!pendingImportJobs.length) return;
   pendingSeriesDrafts = unknownSeriesDraftsForJobs(pendingImportJobs);
@@ -2372,6 +2450,14 @@ async function runImportScan(opts) {
       return;
     }
     if (!preserveMatches) autoMatchStale = false;
+    // Seed UI from scan suggestions, then hydrate video rows for labels / has_media.
+    importBundles = buildImportBundles(importCandidates);
+    importBundles.forEach((b) => defaultStateForBundle(b));
+    await hydratePickedVideos();
+    if (!importPageAlive() || ac.signal.aborted) return;
+    importBundles.forEach((b) => {
+      if (b.kind === 'sidecars') scrubSidecarVideoPick(getUIState(bundleStateKey(b)));
+    });
     renderImportPage();
     if (notifyAutoMatch) notifyAutoMatchCount(countSuggestedAutoMatches());
   } catch (err) {
@@ -2440,7 +2526,12 @@ if (importListRoot) {
       return;
     }
     if (ev.target.classList.contains('js-import-video-q')) {
-      fillVideoPickList(item.querySelector('.js-import-video-list'), st, kind, key, ev.target.value);
+      const ul = item.querySelector('.js-import-video-list');
+      const q = ev.target.value;
+      clearTimeout(importVideoSearchTimer);
+      importVideoSearchTimer = setTimeout(() => {
+        fillVideoPickList(ul, st, kind, key, q);
+      }, 200);
     }
   });
   // mousedown + preventDefault: pick before details blur/close; one gesture.

@@ -347,6 +347,15 @@ type ImportPickerSeries struct {
 	Title string `json:"title"`
 }
 
+// ImportPickerVideoQuery filters ListImportPickerVideos.
+type ImportPickerVideoQuery struct {
+	SeriesID *int64
+	Q        string
+	HasMedia *bool
+	IDs      []int64
+	Limit    int
+}
+
 // ListImportPickerSeries returns id/title for every series (no sources, no disk I/O).
 func (s *Store) ListImportPickerSeries() ([]ImportPickerSeries, error) {
 	rows, err := s.DB.SQL.Query(`
@@ -367,16 +376,77 @@ func (s *Store) ListImportPickerSeries() ([]ImportPickerSeries, error) {
 	return out, rows.Err()
 }
 
-// ListImportPickerVideos returns all indexed videos for Import dropdowns.
-func (s *Store) ListImportPickerVideos() ([]ImportPickerVideo, error) {
-	rows, err := s.DB.SQL.Query(`
+// ListImportPickerVideos returns a capped video list for Import / Maintenance pickers.
+// With no SeriesID, Q, IDs, or HasMedia filter, returns an empty slice (no full-library dump).
+func (s *Store) ListImportPickerVideos(q ImportPickerVideoQuery) ([]ImportPickerVideo, error) {
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	ids := make([]int64, 0, len(q.IDs))
+	seen := map[int64]struct{}{}
+	for _, id := range q.IDs {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+		if len(ids) >= 200 {
+			break
+		}
+	}
+
+	needle := strings.TrimSpace(q.Q)
+	hasFilter := q.SeriesID != nil || needle != "" || len(ids) > 0 || q.HasMedia != nil
+	if !hasFilter {
+		return nil, nil
+	}
+
+	var b strings.Builder
+	args := make([]any, 0, 8)
+	b.WriteString(`
 		SELECT v.id, v.series_id, v.title, s.title, v.status, v.special_feature,
 		  EXISTS(SELECT 1 FROM files f WHERE f.video_id = v.id AND f.kind = 'video') AS has_media,
 		  EXISTS(SELECT 1 FROM files f WHERE f.video_id = v.id AND f.kind = 'thumb') AS has_thumb
 		FROM videos v
 		JOIN series s ON s.id = v.series_id
-		ORDER BY s.title COLLATE NOCASE, v.title COLLATE NOCASE, v.id
-	`)
+		WHERE 1=1`)
+	if len(ids) > 0 {
+		b.WriteString(` AND v.id IN (`)
+		for i, id := range ids {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			b.WriteByte('?')
+			args = append(args, id)
+		}
+		b.WriteByte(')')
+		limit = len(ids)
+	} else {
+		if q.SeriesID != nil {
+			b.WriteString(` AND v.series_id = ?`)
+			args = append(args, *q.SeriesID)
+		}
+		if needle != "" {
+			b.WriteString(` AND (v.title LIKE ? COLLATE NOCASE OR s.title LIKE ? COLLATE NOCASE)`)
+			like := "%" + needle + "%"
+			args = append(args, like, like)
+		}
+	}
+	if q.HasMedia != nil && *q.HasMedia {
+		b.WriteString(` AND EXISTS(SELECT 1 FROM files f WHERE f.video_id = v.id AND f.kind = 'video')`)
+	}
+	b.WriteString(` ORDER BY s.title COLLATE NOCASE, v.title COLLATE NOCASE, v.id LIMIT ?`)
+	args = append(args, limit)
+
+	rows, err := s.DB.SQL.Query(b.String(), args...)
 	if err != nil {
 		return nil, err
 	}

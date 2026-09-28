@@ -791,7 +791,7 @@ func TestEnqueueImportReplaceExistingMedia(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	picker, err := s.ListImportPickerVideos()
+	picker, err := s.ListImportPickerVideos(library.ImportPickerVideoQuery{SeriesID: &ser.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
