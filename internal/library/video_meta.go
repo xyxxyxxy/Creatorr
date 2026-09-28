@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/sponsorblock"
@@ -16,8 +15,6 @@ type MediaCompleteMeta struct {
 	AcquiredVia            string // source | archive | import; empty until pack writes it
 	DownloadFormatSelector string // archive download only
 	DownloadRemuxContainer string // "mkv" only when remux ran; empty when skipped
-	ImportSrc              string // original path at import
-	InPlace                bool   // transient: history message only (not a column)
 	DurationSeconds        int    // optional; 0 → try info.json
 	Width                  int
 	Height                 int
@@ -224,37 +221,6 @@ func ResolutionLabelFromCols(width, height sql.NullInt64) string {
 		return ""
 	}
 	return ResolutionLabel(int(width.Int64), int(height.Int64))
-}
-
-// ImportInPlace reports whether import_src sits under a library root (bound in place).
-func (s *Store) ImportInPlace(importSrc string) bool {
-	src := strings.TrimSpace(importSrc)
-	if src == "" {
-		return false
-	}
-	roots, err := s.ListRoots()
-	if err != nil {
-		return false
-	}
-	for _, r := range roots {
-		root := strings.TrimSpace(r.Path)
-		if root == "" {
-			continue
-		}
-		if pathUnderRoot(src, root) {
-			return true
-		}
-	}
-	return false
-}
-
-func pathUnderRoot(path, root string) bool {
-	path = strings.TrimRight(filepath.Clean(path), string(filepath.Separator))
-	root = strings.TrimRight(filepath.Clean(root), string(filepath.Separator))
-	if root == "" || path == "" {
-		return false
-	}
-	return path == root || strings.HasPrefix(path, root+string(filepath.Separator))
 }
 
 // ResolutionLabel returns a rough bucket from pixel size: 240p, 360p, 480p,

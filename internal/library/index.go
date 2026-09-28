@@ -326,13 +326,9 @@ func (s *Store) CompleteDownload(videoID int64, mediaPath, nfoPath, infoPath, th
 	return s.completeMedia(videoID, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, taskID, "packed", "Packed to library")
 }
 
-// CompleteImport records files installed from the import folder or bound in place from the library.
+// CompleteImport records files installed from the import folder.
 func (s *Store) CompleteImport(videoID int64, mediaPath, nfoPath, infoPath, thumbPath string, subPaths []string, meta MediaCompleteMeta, taskID int64) error {
-	msg := "Imported from import folder"
-	if meta.InPlace || (meta.ImportSrc != "" && s.ImportInPlace(meta.ImportSrc)) {
-		msg = "Bound library file in place"
-	}
-	return s.completeMedia(videoID, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, taskID, "imported", msg)
+	return s.completeMedia(videoID, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, taskID, "imported", "Imported from import folder")
 }
 
 func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumbPath string, subPaths []string, meta MediaCompleteMeta, taskID int64, event, message string) error {
@@ -439,14 +435,7 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 	if strings.TrimSpace(meta.DownloadFormatSelector) != "" {
 		formatVal = strings.TrimSpace(meta.DownloadFormatSelector)
 	}
-	var importSrcVal any
-	if strings.TrimSpace(meta.ImportSrc) != "" {
-		importSrcVal = strings.TrimSpace(meta.ImportSrc)
-	}
 	acquiredVia := NormalizeAcquiredVia(meta.AcquiredVia)
-	if strings.TrimSpace(meta.ImportSrc) != "" && (acquiredVia == "" || acquiredVia == AcquiredViaSource) {
-		acquiredVia = AcquiredViaImport
-	}
 	if acquiredVia == "" {
 		acquiredVia = AcquiredViaSource
 	}
@@ -477,14 +466,13 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		  acquired_via = ?,
 		  download_format_selector = COALESCE(?, download_format_selector),
 		  download_remux_container = ?,
-		  import_src = COALESCE(?, import_src),
 		  duration_seconds = COALESCE(?, duration_seconds),
 		  width = COALESCE(?, width),
 		  height = COALESCE(?, height),
 		  fps = COALESCE(?, fps),
 		  media_type = CASE WHEN (media_type IS NULL OR media_type = '') AND ? != '' THEN ? ELSE media_type END,
 		  description = COALESCE(NULLIF(description, ''), ?)`
-	args := []any{acquired, acquired, acquiredVia, formatVal, remuxVal, importSrcVal, durVal, widthVal, heightVal, fpsVal, mediaType, mediaType, descVal}
+	args := []any{acquired, acquired, acquiredVia, formatVal, remuxVal, durVal, widthVal, heightVal, fpsVal, mediaType, mediaType, descVal}
 
 	if uploadFromInfo != "" && needDate {
 		var seriesID int64

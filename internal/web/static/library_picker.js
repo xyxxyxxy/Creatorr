@@ -5,8 +5,7 @@
  * window.openLibraryPicker(opts)
  *   mode: 'single' | 'multi'
  *   Single (Import-driven): kind, subtitle, draft, onPick, onCreateSeries, onCreateVideo,
- *     allowExisting, getAllowExisting, setAllowExisting, series, videos, videoFilter,
- *     createSeries, createVideo, seriesOnly
+ *     series, videos, videoFilter, createSeries, createVideo, seriesOnly
  *   Multi: initialSeriesIds, initialVideoIds, packedOnly (default true), onConfirm({seriesIds, videoIds})
  */
 (function () {
@@ -338,8 +337,6 @@
     if (title) title.textContent = "Select series/video";
     const sub = $("library-picker-subtitle");
     if (sub) sub.textContent = opts.subtitle || "Choose series or videos for Maintenance tasks.";
-    const allowWrap = $("library-picker-allow-existing-wrap");
-    if (allowWrap) allowWrap.classList.add("hidden");
     const confirmBtn = $("library-picker-confirm");
     if (confirmBtn) confirmBtn.classList.remove("hidden");
     const qEl = $("library-picker-q");
@@ -367,8 +364,6 @@
     if (title) title.textContent = "Select series/video";
     const sub = $("library-picker-subtitle");
     if (sub) sub.textContent = opts.subtitle || "";
-    const allowWrap = $("library-picker-allow-existing-wrap");
-    if (allowWrap) allowWrap.classList.toggle("hidden", !opts.showAllowExisting);
     const confirmBtn = $("library-picker-confirm");
     if (confirmBtn) confirmBtn.classList.add("hidden");
     const toggle = $("modal-library-picker");

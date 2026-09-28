@@ -27,12 +27,11 @@ var (
 	stripSE       = regexp.MustCompile(`(?i)S\d+E\d+-?\d*\s*`)
 )
 
-// ImportCandidate is one untracked file (inbox or library) with match suggestions.
+// ImportCandidate is one untracked inbox file with match suggestions.
 type ImportCandidate struct {
 	Path              string         `json:"path"`
 	Filename          string         `json:"filename"`
-	Source            string         `json:"source"` // inbox | library
-	Role              string         `json:"role"`   // video | nfo | json | thumb | sub | other
+	Role              string         `json:"role"` // video | nfo | json | thumb | sub | other
 	IDs               []ImportIDHint `json:"ids"`
 	SuggestedVideoID  *int64         `json:"suggested_video_id"`
 	SuggestedSeriesID *int64         `json:"suggested_series_id"`
@@ -88,21 +87,11 @@ type ImportScanResult struct {
 	SeriesFolders []ImportSeriesFolder `json:"series_folders"`
 }
 
-const (
-	ImportSourceInbox   = "inbox"
-	ImportSourceLibrary = "library"
-)
-
-// ScanImportInbox lists untracked files under ImportRoot only. Never binds.
-func (s *Store) ScanImportInbox() (*ImportScanResult, error) {
-	return s.ScanImport(0)
-}
-
-// ScanImport lists untracked files under the import inbox (rootID 0) or one
-// online library root (rootID > 0). Never binds. Skips series-folder metadata
-// (tvshow.nfo + poster/banner/fanart/clearlogo) under any discovered tvshow tree.
-// Trees lock descendant media to a known series_id or a draft_key for confirm.
-func (s *Store) ScanImport(rootID int64) (*ImportScanResult, error) {
+// ScanImport lists untracked files under ImportRoot only. Never binds.
+// Skips series-folder metadata (tvshow.nfo + poster/banner/fanart/clearlogo)
+// under any discovered tvshow tree. Trees lock descendant media to a known
+// series_id or a draft_key for confirm.
+func (s *Store) ScanImport() (*ImportScanResult, error) {
 	known, err := s.knownTrackedPaths()
 	if err != nil {
 		return nil, err
@@ -116,13 +105,6 @@ func (s *Store) ScanImport(rootID int64) (*ImportScanResult, error) {
 		return nil, err
 	}
 
-	if rootID > 0 {
-		return s.scanImportLibraryRoot(rootID, known, videoByStem, catalog)
-	}
-	return s.scanImportInboxOnly(known, videoByStem, catalog)
-}
-
-func (s *Store) scanImportInboxOnly(known map[string]struct{}, videoByStem map[string]videoStemRef, catalog *importSuggestCatalog) (*ImportScanResult, error) {
 	root := strings.TrimSpace(s.ImportRoot)
 	if root == "" {
 		return nil, fmt.Errorf("%w: import root not configured", ErrInvalid)
@@ -135,7 +117,7 @@ func (s *Store) scanImportInboxOnly(known map[string]struct{}, videoByStem map[s
 		return nil, err
 	}
 
-	folders, locks, err := s.discoverSeriesTrees(absRoot, 0)
+	folders, locks, err := s.discoverSeriesTrees(absRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +138,7 @@ func (s *Store) scanImportInboxOnly(known map[string]struct{}, videoByStem map[s
 		if isSeriesMetaUnderAnyTree(abs, locks) {
 			continue
 		}
-		c, err := s.buildImportCandidate(path, ImportSourceInbox, known, videoByStem, catalog)
+		c, err := s.buildImportCandidate(path, known, videoByStem, catalog)
 		if err != nil {
 			return nil, err
 		}
@@ -169,86 +151,6 @@ func (s *Store) scanImportInboxOnly(known map[string]struct{}, videoByStem map[s
 	}
 	countMediaUnderFolders(out.Candidates, out.SeriesFolders)
 	return out, nil
-}
-
-func (s *Store) scanImportLibraryRoot(rootID int64, known map[string]struct{}, videoByStem map[string]videoStemRef, catalog *importSuggestCatalog) (*ImportScanResult, error) {
-	root, err := s.GetRoot(rootID)
-	if err != nil {
-		return nil, err
-	}
-	absRoot, err := filepath.Abs(root.Path)
-	if err != nil {
-		return nil, fmt.Errorf("%w: library root path", ErrInvalid)
-	}
-	if !rootOnline(absRoot) {
-		return nil, fmt.Errorf("%w: library root offline", ErrInvalid)
-	}
-	importAbs := ""
-	if ir := strings.TrimSpace(s.ImportRoot); ir != "" {
-		importAbs, _ = filepath.Abs(ir)
-	}
-	if importAbs != "" && absRoot == importAbs {
-		return nil, fmt.Errorf("%w: use inbox scan for the import folder", ErrInvalid)
-	}
-
-	folders, locks, err := s.discoverSeriesTrees(absRoot, rootID)
-	if err != nil {
-		return nil, err
-	}
-	out := &ImportScanResult{
-		ImportPath:    absRoot,
-		Candidates:    []ImportCandidate{},
-		SeriesFolders: folders,
-	}
-	seriesDirs, err := s.seriesDirsForRoot(rootID, absRoot)
-	if err != nil {
-		return nil, err
-	}
-	found, err := listAllFilesUnder(absRoot)
-	if err != nil {
-		return nil, err
-	}
-	for _, path := range found {
-		abs, err := filepath.Abs(path)
-		if err != nil {
-			abs = path
-		}
-		if _, ok := known[abs]; ok {
-			continue
-		}
-		if isSeriesMetaUnderAnyTree(abs, locks) || isSeriesFolderMetaPath(abs, seriesDirs) {
-			continue
-		}
-		c, err := s.buildImportCandidate(abs, ImportSourceLibrary, known, videoByStem, catalog)
-		if err != nil {
-			return nil, err
-		}
-		if c != nil {
-			if lock, ok := owningSeriesTree(c.Path, locks); ok {
-				applySeriesTreeLock(c, lock)
-			}
-			out.Candidates = append(out.Candidates, *c)
-		}
-	}
-	countMediaUnderFolders(out.Candidates, out.SeriesFolders)
-	return out, nil
-}
-
-func (s *Store) seriesDirsForRoot(rootID int64, absRoot string) (map[string]struct{}, error) {
-	rows, err := s.DB.SQL.Query(`SELECT title FROM series WHERE root_id = ?`, rootID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	out := map[string]struct{}{}
-	for rows.Next() {
-		var title string
-		if err := rows.Scan(&title); err != nil {
-			return nil, err
-		}
-		out[filepath.Clean(SeriesDir(absRoot, title))] = struct{}{}
-	}
-	return out, rows.Err()
 }
 
 // isSeriesFolderMetaBasename reports Creatorr-managed show metadata basenames
@@ -267,14 +169,6 @@ func isSeriesFolderMetaBasename(name string) bool {
 		}
 	}
 	return false
-}
-
-func isSeriesFolderMetaPath(abs string, seriesDirs map[string]struct{}) bool {
-	if len(seriesDirs) == 0 || !isSeriesFolderMetaBasename(abs) {
-		return false
-	}
-	_, ok := seriesDirs[filepath.Clean(filepath.Dir(abs))]
-	return ok
 }
 
 func (s *Store) knownTrackedPaths() (map[string]struct{}, error) {
@@ -341,7 +235,7 @@ func (s *Store) videoStemIndex() (map[string]videoStemRef, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) buildImportCandidate(path, source string, known map[string]struct{}, videoByStem map[string]videoStemRef, catalog *importSuggestCatalog) (*ImportCandidate, error) {
+func (s *Store) buildImportCandidate(path string, known map[string]struct{}, videoByStem map[string]videoStemRef, catalog *importSuggestCatalog) (*ImportCandidate, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		abs = path
@@ -353,7 +247,6 @@ func (s *Store) buildImportCandidate(path, source string, known map[string]struc
 	c := ImportCandidate{
 		Path:              abs,
 		Filename:          filepath.Base(abs),
-		Source:            source,
 		Role:              role,
 		IDs:               []ImportIDHint{},
 		VideoSuggestions:  []VideoSuggestion{},
@@ -526,7 +419,7 @@ func (s *Store) CreateImportVideo(path string, p CreateImportVideoParams) (video
 	if _, err := s.GetSeries(p.SeriesID, false); err != nil {
 		return 0, "", meta, err
 	}
-	abs, _, err = s.ValidateImportSourcePath(path)
+	abs, err = s.ValidateImportMediaPath(path)
 	if err != nil {
 		return 0, "", meta, err
 	}
@@ -645,7 +538,7 @@ func (s *Store) CreateImportVideo(path string, p CreateImportVideoParams) (video
 
 // EnqueueImportCreate creates a new video under seriesID from path metadata, then enqueues import.
 func (s *Store) EnqueueImportCreate(path string, p CreateImportVideoParams) (taskID, videoID int64, err error) {
-	absCheck, _, err := s.ValidateImportSourcePath(path)
+	absCheck, err := s.ValidateImportMediaPath(path)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -850,13 +743,12 @@ func fileModTimeUploadDate(path string) string {
 	return st.ModTime().UTC().Format(time.RFC3339)
 }
 
-// EnqueueImport queues an import task that installs media into the series folder
-// (inbox) or binds a library orphan in place. Sidecar paths attach to a video that
-// already has media (in-place files row update). After a successful pack/bind the
-// worker enqueues integrity_check_initial when the series quality profile has File
-// integrity on (ignores mature-only timing). When replace is true and the video
-// already has packed media, existing library media (and companion sidecars) are
-// removed during the import task.
+// EnqueueImport queues an import task that packs media from the import inbox into
+// the series folder. Sidecar paths attach to a video that already has media.
+// After a successful pack the worker enqueues integrity_check_initial when the
+// series quality profile has File integrity on (ignores mature-only timing).
+// When replace is true and the video already has packed media, existing library
+// media (and companion sidecars) are removed during the import task.
 func (s *Store) EnqueueImport(path string, videoID int64, replace bool) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
@@ -865,7 +757,7 @@ func (s *Store) EnqueueImport(path string, videoID int64, replace bool) (int64, 
 	if path == "" {
 		return 0, fmt.Errorf("%w: path required", ErrInvalid)
 	}
-	abs, _, err := s.ValidateImportAnyPath(path)
+	abs, err := s.ValidateImportInboxPath(path)
 	if err != nil {
 		return 0, err
 	}
@@ -879,7 +771,7 @@ func (s *Store) EnqueueImport(path string, videoID int64, replace bool) (int64, 
 	if role != ImportRoleVideo {
 		return 0, fmt.Errorf("%w: only media or sidecar files can be imported", ErrInvalid)
 	}
-	abs, inPlace, err := s.ValidateImportSourcePath(path)
+	abs, err = s.ValidateImportMediaPath(path)
 	if err != nil {
 		return 0, err
 	}
@@ -908,9 +800,6 @@ func (s *Store) EnqueueImport(path string, videoID int64, replace bool) (int64, 
 		return 0, fmt.Errorf("%w: import already queued", ErrConflict)
 	}
 	msg := fmt.Sprintf("Import %s", filepath.Base(abs))
-	if inPlace {
-		msg = fmt.Sprintf("Bind library file %s", filepath.Base(abs))
-	}
 	if hasMedia {
 		msg = fmt.Sprintf("Replace %s", filepath.Base(abs))
 	}
@@ -921,16 +810,15 @@ func (s *Store) EnqueueImport(path string, videoID int64, replace bool) (int64, 
 		SeriesID: v.SeriesID,
 		VideoID:  videoID,
 		Payload: map[string]any{
-			"path": abs, "video_id": videoID, "in_place": inPlace,
+			"path": abs, "video_id": videoID,
 			"replace": hasMedia,
 		},
 		Message: msg,
 	})
 }
 
-// EnqueueAttachSidecars queues a task that attaches orphan sidecar paths to a
-// video that already has media. Inbox paths are moved beside the media on run;
-// library orphans must already sit beside the media file.
+// EnqueueAttachSidecars queues a task that attaches inbox sidecar paths to a
+// video that already has media. Paths are moved beside the media on run.
 func (s *Store) EnqueueAttachSidecars(videoID int64, paths []string) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
@@ -951,7 +839,7 @@ func (s *Store) EnqueueAttachSidecars(videoID int64, paths []string) (int64, err
 	absPaths := make([]string, 0, len(paths))
 	seen := map[string]struct{}{}
 	for _, p := range paths {
-		abs, _, err := s.ValidateImportAnyPath(p)
+		abs, err := s.ValidateImportInboxPath(p)
 		if err != nil {
 			return 0, err
 		}
@@ -995,18 +883,17 @@ func (s *Store) EnqueueAttachSidecars(videoID int64, paths []string) (int64, err
 		SeriesID: v.SeriesID,
 		VideoID:  videoID,
 		Payload: map[string]any{
-			"mode": "sidecars", "paths": absPaths, "video_id": videoID, "in_place": true,
+			"mode": "sidecars", "paths": absPaths, "video_id": videoID,
 		},
 		Message: msg,
 	})
 }
 
 // AttachSidecarFiles registers sidecar paths on a video that already has media.
-// Paths already beside the media file are registered in place. Inbox paths
-// (under ImportRoot) are moved beside the media first (subs keep language
-// suffix; thumbs become `{stem}-thumb{ext}`). Library orphans in another folder
-// are rejected. NFO is data import only (same-stem beside media); source XML is
-// not kept. Rejects info.json (provenance packs only with media).
+// Inbox paths (under ImportRoot) are moved beside the media first (subs keep
+// language suffix; thumbs become `{stem}-thumb{ext}`). Paths already beside the
+// media file are registered as-is. NFO is data import only (same-stem beside
+// media); source XML is not kept. Rejects info.json (provenance packs only with media).
 func (s *Store) AttachSidecarFiles(videoID int64, paths []string, taskID int64) error {
 	mediaPath, ok, err := s.HasVideoFile(videoID)
 	if err != nil {
@@ -1163,67 +1050,41 @@ func inboxSidecarLibraryDest(src, mediaDir, mediaStem, role string) (string, err
 	}
 }
 
-// ValidateImportPath ensures path is an existing media file under ImportRoot.
-func (s *Store) ValidateImportPath(path string) (string, error) {
-	abs, inPlace, err := s.ValidateImportSourcePath(path)
+// ValidateImportInboxPath ensures path is an existing file under ImportRoot.
+func (s *Store) ValidateImportInboxPath(path string) (abs string, err error) {
+	abs, err = filepath.Abs(path)
 	if err != nil {
 		return "", err
 	}
-	if inPlace {
+	st, err := os.Stat(abs)
+	if err != nil || st.IsDir() {
+		return "", fmt.Errorf("%w: file not found", ErrNotFound)
+	}
+	root := strings.TrimSpace(s.ImportRoot)
+	if root == "" {
+		return "", fmt.Errorf("%w: import root not configured", ErrInvalid)
+	}
+	absRoot, rerr := filepath.Abs(root)
+	if rerr != nil {
+		return "", fmt.Errorf("%w: import root not configured", ErrInvalid)
+	}
+	rel, rerr := filepath.Rel(absRoot, abs)
+	if rerr != nil || strings.HasPrefix(rel, "..") {
 		return "", fmt.Errorf("%w: path must be under import root", ErrInvalid)
 	}
 	return abs, nil
 }
 
-// ValidateImportAnyPath accepts any file under the import inbox or an online library root.
-func (s *Store) ValidateImportAnyPath(path string) (abs string, inPlace bool, err error) {
-	abs, err = filepath.Abs(path)
+// ValidateImportMediaPath ensures path is an existing media file under ImportRoot.
+func (s *Store) ValidateImportMediaPath(path string) (string, error) {
+	abs, err := s.ValidateImportInboxPath(path)
 	if err != nil {
-		return "", false, err
-	}
-	st, err := os.Stat(abs)
-	if err != nil || st.IsDir() {
-		return "", false, fmt.Errorf("%w: file not found", ErrNotFound)
-	}
-
-	if root := strings.TrimSpace(s.ImportRoot); root != "" {
-		absRoot, rerr := filepath.Abs(root)
-		if rerr == nil {
-			rel, rerr := filepath.Rel(absRoot, abs)
-			if rerr == nil && !strings.HasPrefix(rel, "..") {
-				return abs, false, nil
-			}
-		}
-	}
-
-	roots, err := s.ListRoots()
-	if err != nil {
-		return "", false, err
-	}
-	for _, r := range roots {
-		absRoot, rerr := filepath.Abs(r.Path)
-		if rerr != nil || !rootOnline(absRoot) {
-			continue
-		}
-		rel, rerr := filepath.Rel(absRoot, abs)
-		if rerr == nil && !strings.HasPrefix(rel, "..") {
-			return abs, true, nil
-		}
-	}
-	return "", false, fmt.Errorf("%w: path must be under import root or a library root", ErrInvalid)
-}
-
-// ValidateImportSourcePath accepts media under the import inbox or an online library root.
-// inPlace is true when the file already lives under a library root (bind without move).
-func (s *Store) ValidateImportSourcePath(path string) (abs string, inPlace bool, err error) {
-	abs, inPlace, err = s.ValidateImportAnyPath(path)
-	if err != nil {
-		return "", false, err
+		return "", err
 	}
 	if !mediaExts[strings.ToLower(filepath.Ext(abs))] {
-		return "", false, fmt.Errorf("%w: unsupported media extension", ErrInvalid)
+		return "", fmt.Errorf("%w: unsupported media extension", ErrInvalid)
 	}
-	return abs, inPlace, nil
+	return abs, nil
 }
 
 func (s *Store) hasPendingImport(videoID int64, path string) (bool, error) {

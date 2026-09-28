@@ -20,7 +20,7 @@ const videoDownloadOrderOldest = `(v.upload_date IS NULL OR v.upload_date = '') 
 const videoSelectCols = `id, series_id, source_id, remote_id, title, upload_date, source_url,
 		       status, season, episode, COALESCE(description,''), thumbnail_url,
 		       COALESCE(media_type,''), duration_seconds, width, height, fps,
-		       download_format_selector, download_remux_container, import_src,
+		       download_format_selector, download_remux_container,
 		       acquired_via, acquired_at, sidecars_acquired_at,
 		       COALESCE(sorttitle,''), COALESCE(originaltitle,''), COALESCE(studio,''),
 		       COALESCE(genres,'[]'), COALESCE(tags,'[]'),
@@ -49,7 +49,6 @@ type Video struct {
 	FPS                           sql.NullFloat64
 	DownloadFormatSelector        sql.NullString
 	DownloadRemuxContainer        sql.NullString
-	ImportSrc                     sql.NullString
 	AcquiredVia                   sql.NullString
 	AcquiredAt                    sql.NullString
 	SidecarsAcquiredAt            sql.NullString
@@ -503,7 +502,7 @@ func scanVideo(scanner interface {
 		&v.UploadDate, &v.SourceURL, &v.Status, &v.Season, &v.Episode,
 		&v.Description, &v.ThumbnailURL, &v.MediaType,
 		&v.DurationSeconds, &v.Width, &v.Height, &v.FPS,
-		&v.DownloadFormatSelector, &v.DownloadRemuxContainer, &v.ImportSrc, &v.AcquiredVia, &v.AcquiredAt, &v.SidecarsAcquiredAt,
+		&v.DownloadFormatSelector, &v.DownloadRemuxContainer, &v.AcquiredVia, &v.AcquiredAt, &v.SidecarsAcquiredAt,
 		&v.SortTitle, &v.OriginalTitle, &v.Studio,
 		&genresRaw, &tagsRaw, &v.UniqueIDType, &v.UniqueIDValue, &actorsRaw,
 		&v.Tagline, &v.Country, &v.MPAA, &v.PackRole,

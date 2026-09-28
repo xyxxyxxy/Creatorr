@@ -88,7 +88,6 @@ CREATE TABLE IF NOT EXISTS videos (
   fps REAL,
   download_format_selector TEXT,
   download_remux_container TEXT,
-  import_src TEXT,
   acquired_via TEXT,
   acquired_at TEXT,
   sidecars_acquired_at TEXT,

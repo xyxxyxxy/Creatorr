@@ -33,8 +33,8 @@ type seriesTreeLock struct {
 
 // discoverSeriesTrees finds directories containing tvshow.nfo under scanRoot.
 // Nested trees: longer path wins for ownership of descendant files.
-// rootID > 0 enables SeriesDir / uniqueid / title match against that library root.
-func (s *Store) discoverSeriesTrees(scanRoot string, rootID int64) ([]ImportSeriesFolder, map[string]seriesTreeLock, error) {
+// Matches known series library-wide by uniqueid / title / folder basename.
+func (s *Store) discoverSeriesTrees(scanRoot string) ([]ImportSeriesFolder, map[string]seriesTreeLock, error) {
 	scanRoot = filepath.Clean(scanRoot)
 	var nfoDirs []string
 	err := filepath.WalkDir(scanRoot, func(path string, d os.DirEntry, err error) error {
@@ -58,14 +58,6 @@ func (s *Store) discoverSeriesTrees(scanRoot string, rootID int64) ([]ImportSeri
 	sort.Slice(nfoDirs, func(i, j int) bool {
 		return len(nfoDirs[i]) > len(nfoDirs[j])
 	})
-
-	var dirBySeriesID map[string]int64
-	if rootID > 0 {
-		dirBySeriesID, err = s.seriesDirIDsForRoot(rootID, scanRoot)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
 
 	folders := make([]ImportSeriesFolder, 0, len(nfoDirs))
 	locks := map[string]seriesTreeLock{}
@@ -91,14 +83,9 @@ func (s *Store) discoverSeriesTrees(scanRoot string, rootID int64) ([]ImportSeri
 		}
 		var seriesID *int64
 		unknown := true
-		if rootID > 0 {
-			if id, ok := dirBySeriesID[dir]; ok {
-				seriesID = &id
-				unknown = false
-			} else if id, ok := s.matchSeriesForFolder(rootID, scanRoot, dir, parsed); ok {
-				seriesID = &id
-				unknown = false
-			}
+		if id, ok := s.matchSeriesForInboxFolder(dir, parsed); ok {
+			seriesID = &id
+			unknown = false
 		}
 		draftKey := dir
 		f := ImportSeriesFolder{
@@ -128,52 +115,33 @@ func (s *Store) discoverSeriesTrees(scanRoot string, rootID int64) ([]ImportSeri
 	return folders, locks, nil
 }
 
-func (s *Store) seriesDirIDsForRoot(rootID int64, absRoot string) (map[string]int64, error) {
-	rows, err := s.DB.SQL.Query(`SELECT id, title FROM series WHERE root_id = ?`, rootID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	out := map[string]int64{}
-	for rows.Next() {
-		var id int64
-		var title string
-		if err := rows.Scan(&id, &title); err != nil {
-			return nil, err
-		}
-		out[filepath.Clean(SeriesDir(absRoot, title))] = id
-	}
-	return out, rows.Err()
-}
-
-func (s *Store) matchSeriesForFolder(rootID int64, absRoot, folder string, parsed ParsedSeriesNFO) (int64, bool) {
+// matchSeriesForInboxFolder matches a tvshow.nfo tree under the import folder to an
+// existing series (any root) by uniqueid, title, or sanitized folder basename.
+func (s *Store) matchSeriesForInboxFolder(folder string, parsed ParsedSeriesNFO) (int64, bool) {
 	folder = filepath.Clean(folder)
 	if uid := strings.TrimSpace(parsed.UniqueIDValue); uid != "" {
 		var id int64
 		err := s.DB.SQL.QueryRow(`
 			SELECT id FROM series
-			WHERE root_id = ? AND uniqueid_value = ? COLLATE NOCASE
+			WHERE uniqueid_value = ? COLLATE NOCASE
 			LIMIT 1
-		`, rootID, uid).Scan(&id)
+		`, uid).Scan(&id)
 		if err == nil && id > 0 {
 			return id, true
 		}
 	}
 	title := strings.TrimSpace(parsed.Title)
-	if title == "" {
-		return 0, false
-	}
-	if filepath.Clean(SeriesDir(absRoot, title)) == folder {
+	if title != "" {
 		var id int64
 		err := s.DB.SQL.QueryRow(`
-			SELECT id FROM series WHERE root_id = ? AND title = ? COLLATE NOCASE LIMIT 1
-		`, rootID, title).Scan(&id)
+			SELECT id FROM series WHERE title = ? COLLATE NOCASE LIMIT 1
+		`, title).Scan(&id)
 		if err == nil && id > 0 {
 			return id, true
 		}
 	}
 	base := filepath.Base(folder)
-	rows, qerr := s.DB.SQL.Query(`SELECT id, title FROM series WHERE root_id = ?`, rootID)
+	rows, qerr := s.DB.SQL.Query(`SELECT id, title FROM series`)
 	if qerr != nil {
 		return 0, false
 	}
@@ -275,39 +243,23 @@ type importSeriesLock struct {
 }
 
 // importSeriesLockForPath reports whether abs sits under a tvshow.nfo tree and
-// whether that tree is a known series on a library root or an unknown draft.
+// whether that tree matches a known series or is an unknown draft.
 func (s *Store) importSeriesLockForPath(abs string) (importSeriesLock, bool, error) {
 	abs = filepath.Clean(strings.TrimSpace(abs))
 	folder := owningTVShowDir(abs)
 	if folder == "" {
 		return importSeriesLock{}, false, nil
 	}
+	if !s.pathUnderImportInbox(folder) {
+		// Import paths must be under the inbox; library trees are not scanned.
+		return importSeriesLock{}, false, nil
+	}
 	parsed, perr := ParseSeriesNFOFile(filepath.Join(folder, "tvshow.nfo"))
 	if perr != nil {
 		parsed = ParsedSeriesNFO{Title: filepath.Base(folder)}
 	}
-	roots, err := s.ListRoots()
-	if err != nil {
-		return importSeriesLock{}, false, err
-	}
-	for _, root := range roots {
-		absRoot, aerr := filepath.Abs(root.Path)
-		if aerr != nil {
-			absRoot = filepath.Clean(root.Path)
-		}
-		if folder != absRoot && !strings.HasPrefix(folder, absRoot+string(filepath.Separator)) {
-			continue
-		}
-		dirByID, err := s.seriesDirIDsForRoot(root.ID, absRoot)
-		if err != nil {
-			return importSeriesLock{}, false, err
-		}
-		if id, ok := dirByID[folder]; ok {
-			return importSeriesLock{Folder: folder, SeriesID: id}, true, nil
-		}
-		if id, ok := s.matchSeriesForFolder(root.ID, absRoot, folder, parsed); ok {
-			return importSeriesLock{Folder: folder, SeriesID: id}, true, nil
-		}
+	if id, ok := s.matchSeriesForInboxFolder(folder, parsed); ok {
+		return importSeriesLock{Folder: folder, SeriesID: id}, true, nil
 	}
 	return importSeriesLock{Folder: folder, DraftKey: folder}, true, nil
 }

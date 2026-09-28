@@ -62,7 +62,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		integrityTaskKind = integrityTask.Kind
 		integrityTaskPrefix = activeTaskLinkPrefix(integrityTask.Status)
 	}
-	detailRows := videoDetailRows(h.Library, video)
+	detailRows := videoDetailRows(video)
 	mediaResolution := ""
 	if video.Width.Valid && video.Height.Valid && video.Width.Int64 > 0 && video.Height.Int64 > 0 {
 		mediaResolution = fmt.Sprintf("%dx%d", video.Width.Int64, video.Height.Int64)

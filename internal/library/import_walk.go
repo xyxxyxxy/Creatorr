@@ -34,5 +34,3 @@ func listAllFilesUnder(absRoot string) ([]string, error) {
 	sort.Strings(files)
 	return files, nil
 }
-
-// seriesDirsForRoot returns cleaned SeriesDir paths for every series on rootID.

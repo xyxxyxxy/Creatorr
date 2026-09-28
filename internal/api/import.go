@@ -20,7 +20,7 @@ func (s *Server) importBusy() (bool, error) {
 	return s.Queue.HasPendingOrRunningKind(queue.KindImportPlan, queue.SystemDomain)
 }
 
-func (s *Server) ScanImport(w http.ResponseWriter, r *http.Request, params gen.ScanImportParams) {
+func (s *Server) ScanImport(w http.ResponseWriter, r *http.Request) {
 	if busy, err := s.importBusy(); err != nil {
 		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "import scan failed", err.Error())
 		return
@@ -28,11 +28,7 @@ func (s *Server) ScanImport(w http.ResponseWriter, r *http.Request, params gen.S
 		writeLibraryErr(w, fmt.Errorf("%w: import already queued or running", library.ErrConflict), "import scan failed")
 		return
 	}
-	var rootID int64
-	if params.RootId != nil {
-		rootID = *params.RootId
-	}
-	res, err := s.Library.ScanImport(rootID)
+	res, err := s.Library.ScanImport()
 	if err != nil {
 		writeLibraryErr(w, err, "import scan failed")
 		return
@@ -242,7 +238,6 @@ func mapImportScan(res *library.ImportScanResult) gen.ImportScanResponse {
 		gc := gen.ImportCandidate{
 			Path:              c.Path,
 			Filename:          c.Filename,
-			Source:            gen.ImportCandidateSource(c.Source),
 			Role:              gen.ImportCandidateRole(c.Role),
 			SuggestedVideoId:  c.SuggestedVideoID,
 			SuggestedSeriesId: c.SuggestedSeriesID,

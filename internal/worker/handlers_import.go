@@ -26,7 +26,6 @@ func ImportHandler(d Deps) TaskHandler {
 			Path    string   `json:"path"`
 			Paths   []string `json:"paths"`
 			Mode    string   `json:"mode"`
-			InPlace bool     `json:"in_place"`
 			Replace bool     `json:"replace"`
 		}
 		if err := json.Unmarshal([]byte(t.Payload), &payload); err != nil {
@@ -69,7 +68,7 @@ func runImportMedia(
 
 	srcPath := strings.TrimSpace(paths[0])
 	progress("Validating import…", ptrFloat(0.1))
-	abs, inPlace, err := d.Library.ValidateImportSourcePath(srcPath)
+	abs, err := d.Library.ValidateImportMediaPath(srcPath)
 	if err != nil {
 		return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "invalid import path"), err.Error())
 	}
@@ -91,40 +90,6 @@ func runImportMedia(
 			}
 			_ = oldRows.Close()
 		}
-	}
-
-	if inPlace {
-		progress("Binding library file…", ptrFloat(0.5))
-		nfoBeside, _ := library.SidecarPathsBeside(abs)
-		infoBeside, thumbBeside, subBeside := library.FindDownloadSidecars(abs)
-		meta := library.MediaCompleteMeta{
-			AcquiredVia: library.AcquiredViaImport,
-			ImportSrc:   abs,
-			InPlace:     true,
-		}
-		// Do not register a foreign .nfo as library provenance - apply metadata then regenerate.
-		if err := d.Library.CompleteImport(videoID, abs, "", infoBeside, thumbBeside, subBeside, meta, taskID); err != nil {
-			return err
-		}
-		nfoPresent := nfoBeside != ""
-		if nfoPresent {
-			if err := d.Library.ApplyImportNFO(videoID, nfoBeside, taskID); err != nil {
-				return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "apply nfo failed"), err.Error())
-			}
-		} else {
-			_ = d.Library.SoftFillDurationFromMedia(ctx, videoID, abs)
-			if _, err := d.Library.RewriteVideoNFO(videoID, 0); err != nil {
-				return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "write nfo failed"), err.Error())
-			}
-		}
-		if id, err := d.Library.MaybeEnqueueMediaVerifyForImport(videoID, taskID); err != nil {
-			progress("Verify enqueue failed: "+err.Error(), nil)
-		} else if id == 0 {
-			progress("Integrity check skipped (File integrity off)", nil)
-		}
-		softEnqueueImportSidecarGapFill(d, videoID, nfoPresent, progress)
-		progress("Done", ptrFloat(1))
-		return nil
 	}
 
 	infoSrc, thumbCompanion, subSrcs := library.FindDownloadSidecars(abs)
@@ -218,7 +183,6 @@ func runImportMedia(
 	}
 	meta := library.MediaCompleteMeta{
 		AcquiredVia: library.AcquiredViaImport,
-		ImportSrc:   abs,
 	}
 	if err := d.Library.CompleteImport(videoID, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, taskID); err != nil {
 		return err

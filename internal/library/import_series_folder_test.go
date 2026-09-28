@@ -52,7 +52,7 @@ func TestScanImportSeriesFolderUnknownLocksMedia(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := s.ScanImport(0)
+	res, err := s.ScanImport()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,12 +95,15 @@ func TestScanImportSeriesFolderKnown(t *testing.T) {
 	}
 	defer func() { _ = d.Close() }()
 	libRoot := filepath.Join(tmp, "library")
+	inbox := filepath.Join(tmp, "import")
 	if err := os.MkdirAll(libRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(inbox, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	s := library.NewStore(d, queue.NewStore(d))
-	s.ImportRoot = filepath.Join(tmp, "import")
-	_ = os.MkdirAll(s.ImportRoot, 0o755)
+	s.ImportRoot = inbox
 	root, err := s.CreateRoot("lib", libRoot, "", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +118,8 @@ func TestScanImportSeriesFolderKnown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	showDir := library.SeriesDir(libRoot, ser.Title)
+	// Inbox tree matched by title to the existing series.
+	showDir := filepath.Join(inbox, "Known Show")
 	if err := os.MkdirAll(showDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +131,7 @@ func TestScanImportSeriesFolderKnown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := s.ScanImport(root.ID)
+	res, err := s.ScanImport()
 	if err != nil {
 		t.Fatal(err)
 	}

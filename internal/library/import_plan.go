@@ -114,12 +114,12 @@ func (s *Store) EnqueueImportPlan(p ImportPlanPayload) (int64, error) {
 			return 0, fmt.Errorf("%w: jobs[%d] path required when creating", ErrInvalid, i)
 		}
 		if path != "" {
-			if _, _, err := s.ValidateImportSourcePath(path); err != nil {
+			if _, err := s.ValidateImportInboxPath(path); err != nil {
 				return 0, fmt.Errorf("%w: jobs[%d] path: %v", ErrInvalid, i, err)
 			}
 		}
 		for _, pth := range paths {
-			if _, _, err := s.ValidateImportSourcePath(pth); err != nil {
+			if _, err := s.ValidateImportInboxPath(pth); err != nil {
 				return 0, fmt.Errorf("%w: jobs[%d] paths: %v", ErrInvalid, i, err)
 			}
 		}

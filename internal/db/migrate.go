@@ -88,6 +88,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo18(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 19:
+			if err := d.migrateTo19(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -566,6 +570,21 @@ func (d *DB) migrateTo18() error {
 		if _, err := d.SQL.Exec(`ALTER TABLE videos ADD COLUMN special_feature TEXT NOT NULL DEFAULT 'episode'`); err != nil {
 			return fmt.Errorf("add videos.special_feature: %w", err)
 		}
+	}
+	return nil
+}
+
+// migrateTo19 drops videos.import_src (inbox path provenance; acquired_via=import is enough).
+func (d *DB) migrateTo19() error {
+	has, err := d.tableHasColumn("videos", "import_src")
+	if err != nil {
+		return err
+	}
+	if !has {
+		return nil
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE videos DROP COLUMN import_src`); err != nil {
+		return fmt.Errorf("drop videos.import_src: %w", err)
 	}
 	return nil
 }
