@@ -155,6 +155,11 @@ func TestUpgradeCodeAgeRestricted(t *testing.T) {
 	if got != "CookieInvalid" {
 		t.Fatalf("generic sign-in must stay cookie, got %q", got)
 	}
+	// Bare CDN/media 403 is per-download, not cookie/session soft-pause.
+	got = upgradeCode("DownloadFailed", "ERROR: unable to download video data: HTTP Error 403: Forbidden")
+	if got != "DownloadFailed" {
+		t.Fatalf("bare media 403 must stay DownloadFailed, got %q", got)
+	}
 	both := "WARNING: [youtube] The provided YouTube account cookies are no longer valid.\nERROR: Sign in to confirm your age"
 	got = upgradeCode("DownloadFailed", both)
 	if got != "CookieInvalid" {

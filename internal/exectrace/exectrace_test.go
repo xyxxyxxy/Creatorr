@@ -42,6 +42,48 @@ func TestFormat(t *testing.T) {
 	}
 }
 
+func TestFormatRedactsPassword(t *testing.T) {
+	got := Format("/data/bin/yt-dlp", "--username", "a@example.com", "--password", "s3cret!", "-f", "b", "https://example.com/v")
+	if strings.Contains(got, "s3cret") {
+		t.Fatalf("password leaked: %q", got)
+	}
+	if !strings.Contains(got, "--password") || !strings.Contains(got, RedactedSecret) {
+		t.Fatalf("want redacted password flag: %q", got)
+	}
+	got = Format("yt-dlp", "--password=s3cret!", "https://example.com/v")
+	if strings.Contains(got, "s3cret") || !strings.Contains(got, "--password="+RedactedSecret) {
+		t.Fatalf("equals form: %q", got)
+	}
+	got = Format("yt-dlp", "-p", "s3cret!", "https://example.com/v")
+	if strings.Contains(got, "s3cret") || !strings.Contains(got, RedactedSecret) {
+		t.Fatalf("short -p: %q", got)
+	}
+	// ffmpeg -p must not be treated as yt-dlp password.
+	got = Format("ffmpeg", "-p", "not-a-secret", "out.mkv")
+	if !strings.Contains(got, "not-a-secret") {
+		t.Fatalf("ffmpeg -p should stay: %q", got)
+	}
+}
+
+func TestRedactLine(t *testing.T) {
+	in := `$ /data/bin/yt-dlp --username a@example.com --password "s3cret!" -f b https://example.com/v`
+	got := RedactLine(in)
+	if strings.Contains(got, "s3cret") {
+		t.Fatalf("leaked: %q", got)
+	}
+	if !strings.Contains(got, "--password "+RedactedSecret) {
+		t.Fatalf("got %q", got)
+	}
+	// Idempotent.
+	if again := RedactLine(got); again != got {
+		t.Fatalf("idempotent: %q vs %q", again, got)
+	}
+	plain := "Downloading 22%"
+	if RedactLine(plain) != plain {
+		t.Fatalf("plain progress changed")
+	}
+}
+
 func TestRecordNoopWithoutRecorder(t *testing.T) {
 	Record(context.Background(), "ffmpeg", "-version")
 	Record(context.TODO(), "ffmpeg", "-version")

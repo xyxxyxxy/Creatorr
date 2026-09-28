@@ -462,26 +462,10 @@ func classifyMatchFilterReject(stderr, matchFilter string) (code, message string
 
 // upgradeCode reclassifies a generic failure as CookieInvalid / RateLimited /
 // AgeRestricted when yt-dlp's own error text matches well-known site responses.
-// Delegates to errors.UpgradeCode so cookie/session lines beat age-gate text.
+// Delegates to errors.UpgradeCode (DetectPauseCode). Bare CDN/media
+// "HTTP Error 403: Forbidden" stays DownloadFailed - not a domain soft-pause.
 func upgradeCode(code, text string) string {
-	u := apperrors.UpgradeCode(code, text)
-	if u != code {
-		return u
-	}
-	switch u {
-	case apperrors.CodeDownloadFailed, apperrors.CodeResolveFailed, "":
-		// keep going for bare HTTP auth codes not covered by DetectPauseCode
-	default:
-		return u
-	}
-	low := strings.ToLower(text)
-	switch {
-	case strings.Contains(low, "http error 401") ||
-		strings.Contains(low, "http error 403"):
-		return apperrors.CodeCookieInvalid
-	default:
-		return u
-	}
+	return apperrors.UpgradeCode(code, text)
 }
 
 func pauseMessage(code string) string {

@@ -50,6 +50,7 @@ func (c *TaskCommands) Append(id int64, bin, line string) {
 	if line == "" {
 		return
 	}
+	line = exectrace.RedactLine(line)
 	class := commandBinaryClass(bin)
 	key := exectrace.Fingerprint(line)
 	if key == "" {

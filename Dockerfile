@@ -64,8 +64,8 @@ RUN apt-get update \
     ffmpeg \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --gid 1000 creatorr \
-  && useradd --uid 1000 --gid 1000 --home-dir /app --no-create-home --shell /usr/sbin/nologin creatorr \
-  && mkdir -p /data /library /import /yt-dlp-plugins /data/bin \
+  && useradd --uid 1000 --gid 1000 --home-dir /data --no-create-home --shell /usr/sbin/nologin creatorr \
+  && mkdir -p /data /data/cache /library /import /yt-dlp-plugins /data/bin \
        /usr/local/share/creatorr /usr/local/share/yt-dlp-plugins \
   && chown -R creatorr:creatorr /data /library /import /yt-dlp-plugins
 
@@ -83,7 +83,11 @@ LABEL org.opencontainers.image.title="Creatorr" \
       org.opencontainers.image.revision="${REVISION}"
 
 # Paths are fixed in-process when /data exists (see internal/config). No path env vars.
-ENV CREATORR_PORT=8787
+# HOME/XDG_CACHE_HOME must be writable: yt-dlp (and site plugins) cache under ~/.cache.
+# /app is WORKDIR only and is not writable by uid 1000.
+ENV CREATORR_PORT=8787 \
+    HOME=/data \
+    XDG_CACHE_HOME=/data/cache
 
 WORKDIR /app
 USER 1000:1000
