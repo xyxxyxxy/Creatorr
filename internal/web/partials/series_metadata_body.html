@@ -37,12 +37,12 @@
     </div>
     <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
       <legend class="fieldset-legend text-base">Images</legend>
-      <div class="grid gap-3 sm:grid-cols-2">
+      <div class="flex flex-wrap gap-3 items-start justify-between w-full">
         {{template "metadata_art_slot" (dict "Role" "poster" "Label" "Poster" "SeriesID" .Series.ID "HasFile" .Art.Poster "ArtVersion" (index .ArtMtimes "poster") "PrefetchPath" (index .PrefetchArt "poster") "PrefetchTaskID" .PrefetchTaskID)}}
-        {{template "metadata_art_slot" (dict "Role" "banner" "Label" "Banner" "SeriesID" .Series.ID "HasFile" .Art.Banner "ArtVersion" (index .ArtMtimes "banner") "PrefetchPath" (index .PrefetchArt "banner") "PrefetchTaskID" .PrefetchTaskID)}}
         {{template "metadata_art_slot" (dict "Role" "fanart" "Label" "Fanart" "SeriesID" .Series.ID "HasFile" .Art.Fanart "ArtVersion" (index .ArtMtimes "fanart") "PrefetchPath" (index .PrefetchArt "fanart") "PrefetchTaskID" .PrefetchTaskID)}}
         {{template "metadata_art_slot" (dict "Role" "clearlogo" "Label" "Clearlogo" "SeriesID" .Series.ID "HasFile" .Art.Clearlogo "ArtVersion" (index .ArtMtimes "clearlogo") "PrefetchPath" (index .PrefetchArt "clearlogo") "PrefetchTaskID" .PrefetchTaskID)}}
       </div>
+      {{template "metadata_art_slot" (dict "Role" "banner" "Label" "Banner" "SeriesID" .Series.ID "HasFile" .Art.Banner "ArtVersion" (index .ArtMtimes "banner") "PrefetchPath" (index .PrefetchArt "banner") "PrefetchTaskID" .PrefetchTaskID)}}
     </fieldset>
     {{template "metadata_actors_editor" (dict "Actors" .Series.Meta.Actors "NameOptions" .Suggestions.ActorNames "RoleOptions" .Suggestions.ActorRoles)}}
     <div class="grid gap-3 sm:grid-cols-2">

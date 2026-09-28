@@ -3263,11 +3263,14 @@
     if (!form) return;
     form.querySelectorAll("[data-art-slot]").forEach((slot) => {
       const img = slot.querySelector("[data-art-preview]");
-      const wrap = slot.querySelector("[data-art-preview-wrap]");
+      const empty = slot.querySelector("[data-art-empty]");
+      const clearBtn = slot.querySelector("[data-art-clear-btn]");
       const pref = slot.querySelector("input[data-art-prefetch]");
       const clear = slot.querySelector("input[data-art-clear]");
+      const file = slot.querySelector("input[data-art-file]");
       if (pref) pref.disabled = false;
       if (clear) clear.value = "";
+      if (file) file.value = "";
       if (!img) return;
       const prev = img.dataset.objectUrl;
       if (prev) {
@@ -3277,12 +3280,49 @@
       const orig = img.dataset.origSrc || "";
       if (orig) {
         img.src = orig;
-        if (wrap) wrap.classList.remove("hidden");
+        img.classList.remove("hidden");
+        if (empty) empty.classList.add("hidden");
+        if (clearBtn) {
+          clearBtn.disabled = false;
+          clearBtn.classList.remove("hidden");
+          clearBtn.removeAttribute("aria-hidden");
+          clearBtn.removeAttribute("tabindex");
+        }
       } else {
         img.removeAttribute("src");
-        if (wrap) wrap.classList.add("hidden");
+        img.classList.add("hidden");
+        if (empty) empty.classList.remove("hidden");
+        if (clearBtn) {
+          clearBtn.disabled = true;
+          clearBtn.classList.remove("hidden");
+          clearBtn.removeAttribute("aria-hidden");
+          clearBtn.removeAttribute("tabindex");
+        }
       }
     });
+  }
+
+  function setArtPreviewVisible(slot, visible) {
+    if (!slot) return;
+    const img = slot.querySelector("[data-art-preview]");
+    const empty = slot.querySelector("[data-art-empty]");
+    const clearBtn = slot.querySelector("[data-art-clear-btn]");
+    const editBtn = slot.querySelector("[data-art-edit-btn]");
+    if (img) img.classList.toggle("hidden", !visible);
+    if (empty) {
+      empty.classList.toggle("hidden", visible);
+      empty.setAttribute("aria-hidden", visible ? "true" : "false");
+    }
+    if (clearBtn) {
+      clearBtn.disabled = !visible;
+      clearBtn.removeAttribute("aria-hidden");
+      clearBtn.removeAttribute("tabindex");
+      clearBtn.classList.remove("hidden");
+    }
+    if (editBtn) {
+      const label = (editBtn.getAttribute("aria-label") || "").replace(/^(Set|Replace)\b/, visible ? "Replace" : "Set");
+      editBtn.setAttribute("aria-label", label);
+    }
   }
 
   function markArtCleared(slot) {
@@ -3290,7 +3330,6 @@
     const clear = slot.querySelector("input[data-art-clear]");
     const file = slot.querySelector("input[data-art-file]");
     const img = slot.querySelector("[data-art-preview]");
-    const wrap = slot.querySelector("[data-art-preview-wrap]");
     const pref = slot.querySelector("input[data-art-prefetch]");
     if (clear) clear.value = "1";
     if (pref) pref.disabled = true;
@@ -3303,8 +3342,8 @@
       }
       img.removeAttribute("src");
     }
-    // Hide wrap as a unit - never hide the indicator-item alone (that jumps the X).
-    if (wrap) wrap.classList.add("hidden");
+    // Drop image from UI only; disk clear waits for Save (clear_{Role}=1).
+    setArtPreviewVisible(slot, false);
   }
 
   function syncScanCronJoin(join) {
@@ -3571,7 +3610,20 @@
     const artClearBtn = ev.target.closest("[data-art-clear-btn]");
     if (artClearBtn) {
       ev.preventDefault();
+      ev.stopPropagation();
+      if (artClearBtn.disabled || artClearBtn.getAttribute("aria-disabled") === "true") {
+        return;
+      }
       markArtCleared(artClearBtn.closest("[data-art-slot]"));
+      return;
+    }
+    // Edit is a <label for=file>; keep a click fallback when label wiring is missing.
+    const artEditBtn = ev.target.closest("[data-art-edit-btn]");
+    if (artEditBtn && artEditBtn.tagName !== "LABEL") {
+      ev.preventDefault();
+      const slot = artEditBtn.closest("[data-art-slot]");
+      const file = slot && slot.querySelector("input[data-art-file]");
+      if (file instanceof HTMLInputElement) file.click();
       return;
     }
     const clearBtn = ev.target.closest("button[data-clear-override]");
@@ -3924,7 +3976,6 @@
     const slot = input.closest("[data-art-slot]");
     if (!slot) return;
     const img = slot.querySelector("[data-art-preview]");
-    const wrap = slot.querySelector("[data-art-preview-wrap]");
     if (!img) return;
     const pref = slot.querySelector("input[data-art-prefetch]");
     const clear = slot.querySelector("input[data-art-clear]");
@@ -3938,16 +3989,16 @@
       if (pref) pref.disabled = false;
       if (clear && clear.value === "1") {
         img.removeAttribute("src");
-        if (wrap) wrap.classList.add("hidden");
+        setArtPreviewVisible(slot, false);
         return;
       }
       const orig = img.dataset.origSrc || "";
       if (orig) {
         img.src = orig;
-        if (wrap) wrap.classList.remove("hidden");
+        setArtPreviewVisible(slot, true);
       } else {
         img.removeAttribute("src");
-        if (wrap) wrap.classList.add("hidden");
+        setArtPreviewVisible(slot, false);
       }
       return;
     }
@@ -3957,7 +4008,7 @@
     const url = URL.createObjectURL(file);
     img.dataset.objectUrl = url;
     img.src = url;
-    if (wrap) wrap.classList.remove("hidden");
+    setArtPreviewVisible(slot, true);
   });
 
   function moveListRow(row, dir) {

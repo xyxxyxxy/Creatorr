@@ -114,7 +114,6 @@
           "ArtVersion" .ThumbMtime
           "PrefetchPath" (index .PrefetchArt "thumb")
           "PrefetchTaskID" .PrefetchTaskID
-          "Hint" "Episode thumbnail beside packed media (stem-thumb.jpg). 'Save' installs or clears it."
         )}}
       </div>
       {{else}}
@@ -125,9 +124,7 @@
     <p class="text-sm opacity-70">
       Save rewrites the episode <code class="text-xs">.nfo</code> beside packed media
       and applies thumbnail changes.
-      Changing Upload date reindexes season/episode and renames packed files when the path changes.
-      Title alone does not rename - run 'Apply episode format' under 'Settings → Maintenance' for that.
-      Use <strong>Refresh sidecars</strong> on the video page to re-fetch thumb / subs from the source.
+      Changing Title, Upload date, or Special feature reindexes when needed and renames packed files when the path changes.
     </p>
     </fieldset>
 
