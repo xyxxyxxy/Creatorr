@@ -62,6 +62,21 @@
 }
 
 /*
+  Inline Import match dropdowns sit inside scrolling list rows. Raise open
+  panels above the next row so search + rich options stay clickable.
+  details[open] is the click-toggle path (focus-based div.dropdown needed
+  two clicks here: open + pick).
+*/
+#import-list .dropdown:focus-within,
+#import-list .dropdown:has(:focus),
+#import-list details.dropdown[open] {
+  z-index: 50;
+}
+#import-list .dropdown .dropdown-content {
+  z-index: 50;
+}
+
+/*
   Radio button joins (delivery mode, discovered status): label.btn wrapping a
   radio - highlight when checked. Stock daisyUI join radios are input.btn
   (aria-label only); we need label text / Lucide icons inside.

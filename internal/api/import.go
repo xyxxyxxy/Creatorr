@@ -61,13 +61,14 @@ func (s *Server) GetImportPicker(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, v := range videos {
 		out.Videos = append(out.Videos, gen.ImportPickerVideo{
-			Id:          v.ID,
-			SeriesId:    v.SeriesID,
-			Title:       v.Title,
-			SeriesTitle: v.SeriesTitle,
-			Status:      v.Status,
-			HasMedia:    v.HasMedia,
-			HasThumb:    v.HasThumb,
+			Id:             v.ID,
+			SeriesId:       v.SeriesID,
+			Title:          v.Title,
+			SeriesTitle:    v.SeriesTitle,
+			Status:         v.Status,
+			HasMedia:       v.HasMedia,
+			HasThumb:       v.HasThumb,
+			SpecialFeature: v.PackRole,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)

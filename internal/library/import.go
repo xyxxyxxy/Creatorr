@@ -338,6 +338,7 @@ type ImportPickerVideo struct {
 	Status      string `json:"status"`
 	HasMedia    bool   `json:"has_media"` // true when a kind=video files row exists
 	HasThumb    bool   `json:"has_thumb"` // true when a kind=thumb files row exists
+	PackRole    string `json:"special_feature"`
 }
 
 // ImportPickerSeries is a series row for the Import Match UI (no sources loaded).
@@ -369,7 +370,7 @@ func (s *Store) ListImportPickerSeries() ([]ImportPickerSeries, error) {
 // ListImportPickerVideos returns all indexed videos for Import dropdowns.
 func (s *Store) ListImportPickerVideos() ([]ImportPickerVideo, error) {
 	rows, err := s.DB.SQL.Query(`
-		SELECT v.id, v.series_id, v.title, s.title, v.status,
+		SELECT v.id, v.series_id, v.title, s.title, v.status, v.special_feature,
 		  EXISTS(SELECT 1 FROM files f WHERE f.video_id = v.id AND f.kind = 'video') AS has_media,
 		  EXISTS(SELECT 1 FROM files f WHERE f.video_id = v.id AND f.kind = 'thumb') AS has_thumb
 		FROM videos v
@@ -384,9 +385,10 @@ func (s *Store) ListImportPickerVideos() ([]ImportPickerVideo, error) {
 	for rows.Next() {
 		var v ImportPickerVideo
 		var hasMedia, hasThumb int
-		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.SeriesTitle, &v.Status, &hasMedia, &hasThumb); err != nil {
+		if err := rows.Scan(&v.ID, &v.SeriesID, &v.Title, &v.SeriesTitle, &v.Status, &v.PackRole, &hasMedia, &hasThumb); err != nil {
 			return nil, err
 		}
+		v.PackRole = NormalizePackRole(v.PackRole)
 		v.HasMedia = hasMedia != 0
 		v.HasThumb = hasThumb != 0
 		out = append(out, v)

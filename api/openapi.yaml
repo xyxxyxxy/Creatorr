@@ -1956,7 +1956,7 @@ components:
 
     ImportPickerVideo:
       type: object
-      required: [id, series_id, title, series_title, status, has_media, has_thumb]
+      required: [id, series_id, title, series_title, status, has_media, has_thumb, special_feature]
       properties:
         id:
           type: integer
@@ -1976,6 +1976,9 @@ components:
         has_thumb:
           type: boolean
           description: True when a kind=thumb files row exists
+        special_feature:
+          type: string
+          description: Pack role (episode, special_episode, or feature kind)
 
     ImportPickerResponse:
       type: object

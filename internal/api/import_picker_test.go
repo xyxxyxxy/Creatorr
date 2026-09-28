@@ -70,4 +70,7 @@ func TestGetImportPicker(t *testing.T) {
 	if len(out.Videos) != 1 || out.Videos[0].Title != "Ep One" || out.Videos[0].HasMedia {
 		t.Fatalf("videos=%v", out.Videos)
 	}
+	if out.Videos[0].SpecialFeature != "episode" {
+		t.Fatalf("special_feature=%q want episode", out.Videos[0].SpecialFeature)
+	}
 }

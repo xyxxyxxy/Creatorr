@@ -19,7 +19,7 @@
         <ol class="list-[lower-alpha] pl-5 space-y-0.5 mt-1">
           <li>Remote ID: sibling <code class="text-xs">.nfo</code> <code class="text-xs">&lt;uniqueid&gt;</code>, then <code class="text-xs">[id]</code> in filename, then <code class="text-xs">info.json</code> <code class="text-xs">id</code>.</li>
           <li>Title similarity on cleaned filename basename.</li>
-          <li>Series suggestion from parent folder / basename (series only; pick a video in 'Match').</li>
+          <li>Series suggestion from parent folder / basename (series only; pick a video in the row dropdown).</li>
         </ol>
       </li>
       <li>Sidecars: <code class="text-xs">.nfo</code> is first for editable episode metadata and identity (<code class="text-xs">&lt;uniqueid&gt;</code>); thumb needs a same-basename video beside it. Subs match by directory + basename to packed media. <code class="text-xs">info.json</code> is provenance (URL / tech); ID fallback only.</li>
@@ -37,7 +37,6 @@
       <button type="button" class="btn btn-ghost btn-sm border-transparent bg-transparent shadow-none font-normal tooltip tooltip-top" id="btn-import-rescan" data-tip="Clear matches and scan the import folder again" aria-label="Reset and rescan"{{if .ImportBusy}} disabled{{end}}><i data-lucide="refresh-cw" class="size-4"></i>Reset and rescan</button>
       <button type="button" class="btn btn-ghost btn-sm border-transparent bg-transparent shadow-none font-normal tooltip tooltip-top" id="btn-import-auto-match" disabled data-tip="Re-apply scan auto-matches" aria-label="Auto-match">Auto-match</button>
     </div>
-    <button type="button" class="btn" id="btn-import-bulk-series">Match all to series</button>
     <label class="label cursor-pointer gap-2 justify-start py-0">
       <input type="checkbox" class="checkbox checkbox-sm" id="import-filter-unmatched" />
       <span class="label-text text-sm">Show only unmatched</span>
@@ -193,12 +192,7 @@ async function loadImportPicker() {
         const key = bundleStateKey(b);
         scrubMediaVideoPick(getUIState(key), key);
       });
-      if (matchCtx && matchCtx.kind === 'media') {
-        scrubMediaVideoPick(matchCtx.draft, matchCtx.key);
-        renderMatchModalLists();
-      }
       if (importCandidates.length) renderImportPage();
-      else updateBulkSeriesBtn();
     } catch (err) {
       if (ac.signal.aborted || isImportFetchCanceled(err)) return;
       showImportMsg('Library index', 'Failed to load Match catalog: ' + (err && err.message ? err.message : String(err)), { error: true });
@@ -241,7 +235,10 @@ function finishImportMatchSeriesCreate(ser, form) {
   const toggle = document.getElementById('modal-add-series');
   if (toggle) toggle.checked = false;
   if (typeof window.syncAddSeriesForm === 'function') window.syncAddSeriesForm(form);
-  if (matchCtx) lockSeriesAndResetSearch(ser.id);
+  if (importCreateCtx && importCreateCtx.key) {
+    applySeriesPick(importCreateCtx.key, ser.id);
+    importCreateCtx = null;
+  }
 }
 
 document.body.addEventListener('creatorr:series-created', (ev) => {
@@ -530,82 +527,352 @@ function itemReady(kind, st) {
   return true;
 }
 
-/** Match modal context: key, kind, hints, draft. */
-let matchCtx = null;
+/** Active row for Add series / Add video from inline pickers. */
+let importCreateCtx = null; // { key, kind, hints, draft? }
 
-function matchActionsHTML(st, kind) {
+function packRoleBadgeLabel(role) {
+  const r = String(role || '').trim();
+  if (!r || r === 'episode') return '';
+  if (r === 'special_episode') return 'Special';
+  return r;
+}
+
+function packRoleBadgeHTML(role) {
+  const label = packRoleBadgeLabel(role);
+  if (!label) return '';
+  return `<span class="badge badge-secondary badge-sm shrink-0 tooltip tooltip-top" data-tip="Special kind: ${escapeHtml(label)}">${escapeHtml(label)}</span>`;
+}
+
+function matchStatusHTML(st, kind) {
   const ready = itemReady(kind, st);
-  const treeLocked = !!st.seriesFolderLocked;
-  const draftLocked = treeLocked && isDraftSeriesId(st.seriesId);
-  const status = ready
-    ? `<span class="tooltip tooltip-top inline-flex shrink-0 text-success" data-tip="matched" aria-label="matched">
+  if (ready) {
+    return `<span class="tooltip tooltip-top inline-flex shrink-0 text-success" data-tip="matched" aria-label="matched">
         <i data-lucide="check" class="size-6" aria-hidden="true"></i>
-      </span>`
-    : `<span class="tooltip tooltip-top inline-flex shrink-0 text-warning" data-tip="not matched" aria-label="not matched">
+      </span>`;
+  }
+  return `<span class="tooltip tooltip-top inline-flex shrink-0 text-warning" data-tip="not matched" aria-label="not matched">
         <i data-lucide="circle-dashed" class="size-6" aria-hidden="true"></i>
       </span>`;
-  // Unknown tvshow.nfo: series does not exist yet → create-only; no Match/Unmatch/Change video.
-  if (draftLocked && ready) {
-    return `
-    <div class="flex items-center gap-3 shrink-0 self-center">
-      ${status}
-      <span class="tooltip tooltip-top inline-flex" data-tip="Locked to new series from tvshow.nfo">
-        <button type="button" class="btn btn-soft btn-primary btn-square" disabled aria-label="Locked to new series from tvshow.nfo">
-          <i data-lucide="link" class="size-5" aria-hidden="true"></i>
-        </button>
-      </span>
-    </div>`;
-  }
-  // Known tvshow.nfo series: Unmatch cannot change series. Offer Match to change video under it.
-  if (ready && treeLocked) {
-    if (!importPickerReady) {
-      return `
-    <div class="flex items-center gap-3 shrink-0 self-center">
-      ${status}
-      <span class="tooltip tooltip-top inline-flex" data-tip="Loading library index">
-        <button type="button" class="btn btn-soft btn-primary btn-square" disabled aria-label="Loading library index">
-          <span class="loading loading-spinner loading-sm" aria-hidden="true"></span>
-        </button>
-      </span>
-    </div>`;
-    }
-    return `
-    <div class="flex items-center gap-3 shrink-0 self-center">
-      ${status}
-      <button type="button" class="btn btn-soft btn-primary btn-square js-open-match tooltip tooltip-top" data-tip="Change video" aria-label="Change video">
-        <i data-lucide="link" class="size-5" aria-hidden="true"></i>
-      </button>
-    </div>`;
-  }
-  if (ready) {
-    return `
-    <div class="flex items-center gap-3 shrink-0 self-center">
-      ${status}
-      <button type="button" class="btn btn-soft btn-primary btn-square js-unmatch tooltip tooltip-top" data-tip="Unmatch" aria-label="Unmatch">
-        <i data-lucide="unlink" class="size-5" aria-hidden="true"></i>
-      </button>
-    </div>`;
-  }
-  if (!importPickerReady) {
-    return `
-    <div class="flex items-center gap-3 shrink-0 self-center">
-      ${status}
-      <span class="tooltip tooltip-top inline-flex" data-tip="Loading library index">
-        <button type="button" class="btn btn-soft btn-primary btn-square" disabled aria-label="Loading library index">
-          <span class="loading loading-spinner loading-sm" aria-hidden="true"></span>
-        </button>
-      </span>
-    </div>`;
-  }
-  return `
-    <div class="flex items-center gap-3 shrink-0 self-center">
-      ${status}
-      <button type="button" class="btn btn-secondary js-open-match" aria-label="Match to video">
-        <i data-lucide="link" class="size-5" aria-hidden="true"></i>
-        Match to video
-      </button>
-    </div>`;
 }
+
+function matchActionsHTML(st, kind) {
+  return `<div class="flex items-center gap-3 shrink-0 self-center">${matchStatusHTML(st, kind)}</div>`;
+}
+
+function seriesPickLabel(st) {
+  if (isDraftSeriesId(st.seriesId)) {
+    const f = seriesFolderByDraftKey(draftKeyFromSeriesId(st.seriesId));
+    return f ? (f.title || 'New series') : 'New series (from tvshow.nfo)';
+  }
+  if (!st.seriesId) return '';
+  const s = SERIES.find((x) => Number(x.id) === Number(st.seriesId));
+  return s ? s.title : seriesLabel(st.seriesId);
+}
+
+function videoPickLabel(st) {
+  if (String(st.videoId) === CREATE) {
+    return (st.title || '').trim() || 'New video';
+  }
+  if (!st.videoId) return '';
+  const v = VIDEOS.find((x) => Number(x.id) === Number(st.videoId));
+  return v ? v.title : videoLabel(st.videoId);
+}
+
+function seriesTriggerInnerHTML(st) {
+  if (isDraftSeriesId(st.seriesId)) {
+    return `<span class="inline-flex items-center gap-2 min-w-0">
+      <span class="bg-base-200 size-6 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-3.5 opacity-40"></i></span>
+      <span class="truncate">${escapeHtml(seriesPickLabel(st))}</span>
+    </span>`;
+  }
+  if (st.seriesId) {
+    const s = SERIES.find((x) => Number(x.id) === Number(st.seriesId));
+    const poster = seriesPosterHTML(s)
+      .replaceAll('size-10', 'size-6')
+      .replaceAll('size-5', 'size-3.5')
+      .replaceAll('width="40"', 'width="24"')
+      .replaceAll('height="40"', 'height="24"');
+    return `<span class="inline-flex items-center gap-2 min-w-0">
+      <span class="relative shrink-0">${poster}</span>
+      <span class="truncate">${escapeHtml(seriesPickLabel(st))}</span>
+    </span>`;
+  }
+  return `<span class="opacity-60">Select series</span>`;
+}
+
+function videoTriggerInnerHTML(st) {
+  if (String(st.videoId) === CREATE) {
+    return `<span class="inline-flex items-center gap-2 min-w-0">
+      <span class="bg-base-200 size-6 rounded flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="plus" class="size-3.5 opacity-40"></i></span>
+      <span class="truncate">${escapeHtml(videoPickLabel(st))}</span>
+    </span>`;
+  }
+  if (st.videoId) {
+    const v = VIDEOS.find((x) => Number(x.id) === Number(st.videoId));
+    const thumb = v ? videoThumbURL(v) : '';
+    const img = thumb
+      ? `<img class="size-6 rounded object-cover shrink-0" src="${escapeHtml(thumb)}" alt="" loading="lazy" />`
+      : `<span class="bg-base-200 size-6 rounded flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="square-play" class="size-3.5 opacity-40"></i></span>`;
+    const badge = v ? packRoleBadgeHTML(v.special_feature) : '';
+    return `<span class="inline-flex items-center gap-2 min-w-0">
+      ${img}
+      <span class="truncate">${escapeHtml(videoPickLabel(st))}</span>
+      ${badge}
+    </span>`;
+  }
+  return `<span class="opacity-60">Select episode</span>`;
+}
+
+function seriesOptionRowHTML(s, selectedId) {
+  const sel = selectedId && Number(selectedId) === Number(s.id);
+  return `<li class="list-row cursor-pointer ${sel ? 'bg-base-200' : ''}" data-import-pick-series="${s.id}" role="option">
+    <div class="relative shrink-0">${seriesPosterHTML(s)}</div>
+    <div class="list-col-grow min-w-0 font-medium truncate">${escapeHtml(s.title)}</div>
+  </li>`;
+}
+
+function videoOptionRowHTML(v, selectedId) {
+  const sel = selectedId && Number(selectedId) === Number(v.id);
+  const thumb = videoThumbURL(v);
+  const img = thumb
+    ? `<img class="size-full rounded object-cover" src="${escapeHtml(thumb)}" alt="" loading="lazy" />`
+    : `<div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true"><i data-lucide="square-play" class="size-5 opacity-40"></i></div>`;
+  let suffix = '';
+  if (v.has_media) suffix = ' · has media';
+  const meta = escapeHtml(v.series_title) + suffix;
+  const badge = packRoleBadgeHTML(v.special_feature);
+  return `<li class="list-row cursor-pointer ${sel ? 'bg-base-200' : ''}" data-import-pick-video="${v.id}" role="option">
+    <div class="relative shrink-0 w-20 aspect-video">${img}</div>
+    <div class="list-col-grow min-w-0">
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="font-medium truncate">${escapeHtml(v.title)}</div>
+        ${badge}
+      </div>
+      <div class="text-xs opacity-60 truncate">${meta}</div>
+    </div>
+  </li>`;
+}
+
+function matchPickersHTML(st, kind) {
+  const treeLocked = !!st.seriesFolderLocked;
+  const draftLocked = treeLocked && isDraftSeriesId(st.seriesId);
+  const catalogReady = importPickerReady;
+  const forMedia = kind === 'media';
+  const seriesDisabled = !catalogReady || treeLocked;
+  const videoDisabled = !catalogReady || draftLocked;
+  const seriesResetDisabled = seriesDisabled || !st.seriesId;
+  const videoResetDisabled = videoDisabled || !st.videoId;
+  const createSeriesDisabled = !catalogReady || !forMedia || treeLocked;
+  const createVideoDisabled = !catalogReady || !forMedia || !st.seriesId || isDraftSeriesId(st.seriesId);
+
+  const seriesTip = !catalogReady ? 'Loading library index'
+    : treeLocked ? 'Locked by tvshow.nfo folder'
+    : 'Select series';
+  const videoTip = !catalogReady ? 'Loading library index'
+    : draftLocked ? 'New series from tvshow.nfo; video created on import'
+    : 'Select episode';
+
+  const seriesJoin = `
+  <div class="join join-horizontal shrink-0 max-w-full">
+    <details class="dropdown dropdown-bottom js-import-series-dd ${seriesDisabled ? 'pointer-events-none opacity-60' : ''}">
+      <summary class="btn btn-sm join-item border-base-300 bg-base-100 font-normal min-w-[10rem] max-w-[14rem] justify-start" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ''}>
+        ${seriesTriggerInnerHTML(st)}
+      </summary>
+      <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-80">
+        <input type="search" class="input input-bordered input-sm w-full mb-2 js-import-series-q" placeholder="Filter series" aria-label="Filter series" autocomplete="off" />
+        <ul class="list bg-base-100 max-h-64 overflow-y-auto js-import-series-list" role="listbox" aria-label="Series"></ul>
+      </div>
+    </details>
+    <button type="button" class="btn btn-sm btn-square join-item js-import-create-series tooltip tooltip-top" data-tip="Create new series" aria-label="Create new series" ${createSeriesDisabled ? 'disabled' : ''}>
+      <i data-lucide="plus" class="size-4" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="btn btn-sm btn-soft btn-error btn-square join-item js-import-reset-series tooltip tooltip-top" data-tip="Clear series" aria-label="Clear series" ${seriesResetDisabled ? 'disabled' : ''}>
+      <i data-lucide="x" class="size-4" aria-hidden="true"></i>
+    </button>
+  </div>`;
+
+  const videoJoin = `
+  <div class="join join-horizontal shrink-0 max-w-full">
+    <details class="dropdown dropdown-bottom js-import-video-dd ${videoDisabled ? 'pointer-events-none opacity-60' : ''}">
+      <summary class="btn btn-sm join-item border-base-300 bg-base-100 font-normal min-w-[10rem] max-w-[16rem] justify-start" aria-label="${escapeHtml(videoTip)}" ${videoDisabled ? 'aria-disabled="true"' : ''}>
+        ${videoTriggerInnerHTML(st)}
+      </summary>
+      <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-96">
+        <input type="search" class="input input-bordered input-sm w-full mb-2 js-import-video-q" placeholder="Filter videos" aria-label="Filter videos" autocomplete="off" />
+        <ul class="list bg-base-100 max-h-64 overflow-y-auto js-import-video-list" role="listbox" aria-label="Videos"></ul>
+      </div>
+    </details>
+    <button type="button" class="btn btn-sm btn-square join-item js-import-create-video tooltip tooltip-top" data-tip="Create new video" aria-label="Create new video" ${createVideoDisabled ? 'disabled' : ''}>
+      <i data-lucide="plus" class="size-4" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="btn btn-sm btn-soft btn-error btn-square join-item js-import-reset-video tooltip tooltip-top" data-tip="Clear video" aria-label="Clear video" ${videoResetDisabled ? 'disabled' : ''}>
+      <i data-lucide="x" class="size-4" aria-hidden="true"></i>
+    </button>
+  </div>`;
+
+  return `<div class="flex flex-wrap items-center gap-2">${seriesJoin}${videoJoin}</div>`;
+}
+
+function fillSeriesPickList(ul, st, q) {
+  if (!ul) return;
+  const needle = String(q || '').trim().toLowerCase();
+  let list = SERIES.slice();
+  if (needle) list = list.filter((s) => nameMatch(s.title, needle));
+  let html = '';
+  if (!list.length) {
+    html = '<li class="list-row"><span class="opacity-60 text-sm px-2">No series match</span></li>';
+  } else {
+    html = list.map((s) => seriesOptionRowHTML(s, st.seriesId)).join('');
+  }
+  ul.innerHTML = html;
+  lucideRefresh(ul);
+}
+
+function fillVideoPickList(ul, st, kind, stateKey, q) {
+  if (!ul) return;
+  const forMedia = kind === 'media';
+  const needle = String(q || '').trim();
+  let videos = [];
+  if (isDraftSeriesId(st.seriesId)) {
+    ul.innerHTML = '<li class="list-row"><span class="opacity-60 text-sm px-2">Create new video under this series folder</span></li>';
+    return;
+  }
+  if (st.seriesId) {
+    videos = videosForSeries(st.seriesId, { forMedia, q: needle, exceptKey: stateKey });
+  } else if (needle) {
+    videos = videosForSeries(null, { forMedia, q: needle, exceptKey: stateKey });
+  }
+  let html = '';
+  if (!st.seriesId && !needle) {
+    html = '<li class="list-row"><span class="opacity-60 text-sm px-2">Pick a series or search</span></li>';
+  } else if (!videos.length) {
+    html = '<li class="list-row"><span class="opacity-60 text-sm px-2">No videos match</span></li>';
+  } else {
+    html = videos.map((v) => videoOptionRowHTML(v, st.videoId)).join('');
+  }
+  ul.innerHTML = html;
+  lucideRefresh(ul);
+}
+
+function hintsForStateKey(stateKey) {
+  const b = importBundles.find((x) => bundleStateKey(x) === stateKey);
+  if (!b) return {};
+  if (b.kind === 'media' && b.video) {
+    const c = b.video;
+    return {
+      filename: c.filename,
+      suggested_title: c.suggested_title,
+      suggested_remote_id: c.suggested_remote_id,
+      suggested_upload_date: c.suggested_upload_date,
+      suggested_handler_id: c.suggested_handler_id,
+      suggested_webpage_url: c.suggested_webpage_url,
+    };
+  }
+  if (b.kind === 'sidecars' && b.sidecars && b.sidecars.length) {
+    const lead = b.sidecars.find((s) => s.suggested_video_id) || b.sidecars[0];
+    return {
+      filename: lead.filename,
+      suggested_title: lead.suggested_title,
+      suggested_remote_id: lead.suggested_remote_id,
+      suggested_upload_date: lead.suggested_upload_date,
+      suggested_handler_id: lead.suggested_handler_id,
+    };
+  }
+  return {};
+}
+
+function applySeriesPick(stateKey, seriesId) {
+  const st = getUIState(stateKey);
+  if (st.seriesFolderLocked) return;
+  st.seriesId = String(seriesId || '');
+  if (st.videoId && String(st.videoId) !== CREATE &&
+      !videoBelongsToSeries(st.videoId, st.seriesId)) {
+    st.videoId = '';
+  }
+  markAutoMatchStale();
+  renderImportPage();
+}
+
+function applyVideoPick(stateKey, kind, videoId) {
+  const st = getUIState(stateKey);
+  const vid = String(videoId || '');
+  if (!vid) return;
+  if (kind === 'media' && videoMatchedElsewhere(vid, stateKey)) return;
+  if (kind === 'sidecar' && !videoHasMedia(vid)) return;
+  if (st.seriesFolderLocked) {
+    if (isDraftSeriesId(st.seriesId)) return;
+    const vCheck = VIDEOS.find((x) => String(x.id) === vid);
+    if (vCheck && String(vCheck.series_id) !== String(st.seriesId)) return;
+  }
+  st.videoId = vid;
+  const v = VIDEOS.find((x) => String(x.id) === vid);
+  if (v && String(st.seriesId) !== String(v.series_id)) {
+    if (st.seriesFolderLocked) return;
+    st.seriesId = String(v.series_id);
+  }
+  if (kind === 'media') {
+    scrubMediaVideoPick(st, stateKey);
+    if (st.videoId && String(st.videoId) !== CREATE) {
+      claimMediaVideoExclusive(stateKey, st.videoId);
+    }
+  } else if (kind === 'sidecar') {
+    scrubSidecarVideoPick(st);
+  }
+  markAutoMatchStale();
+  renderImportPage();
+}
+
+function resetSeriesPick(stateKey) {
+  const st = getUIState(stateKey);
+  if (st.seriesFolderLocked) return;
+  st.seriesId = '';
+  st.videoId = '';
+  markAutoMatchStale();
+  renderImportPage();
+}
+
+function resetVideoPick(stateKey, kind) {
+  const st = getUIState(stateKey);
+  if (st.seriesFolderLocked && isDraftSeriesId(st.seriesId)) return;
+  st.videoId = '';
+  if (kind === 'sidecar') scrubSidecarVideoPick(st);
+  markAutoMatchStale();
+  renderImportPage();
+}
+
+function startCreateSeriesForRow(stateKey, kind) {
+  if (kind !== 'media') return;
+  const st = getUIState(stateKey);
+  if (st.seriesFolderLocked) return;
+  importCreateCtx = { key: stateKey, kind, hints: hintsForStateKey(stateKey) };
+  openAddSeriesForImportMatch();
+}
+
+function startCreateVideoForRow(stateKey, kind) {
+  if (kind !== 'media') return;
+  const st = getUIState(stateKey);
+  if (!st.seriesId || isDraftSeriesId(st.seriesId)) {
+    showImportMsg('Create video', 'Pick a series first', { error: true });
+    return;
+  }
+  const hints = hintsForStateKey(stateKey);
+  importCreateCtx = {
+    key: stateKey,
+    kind,
+    hints,
+    draft: {
+      seriesId: st.seriesId,
+      videoId: CREATE,
+      title: st.title || hints.suggested_title || '',
+      remote: st.remote || hints.suggested_remote_id || '',
+      upload: st.upload || uploadDateInputValue(hints.suggested_upload_date) || '',
+      handler: st.handler || hints.suggested_handler_id || 'yt-dlp',
+      seriesFolderLocked: !!st.seriesFolderLocked,
+    },
+  };
+  openAddVideoForImportMatch();
+}
+
 
 function otherActionsHTML() {
   return `
@@ -621,230 +888,10 @@ function otherActionsHTML() {
     </div>`;
 }
 
-function closeMatchModal() {
-  document.getElementById('modal-library-picker').checked = false;
-  matchCtx = null;
-}
-
-function syncMatchCreateFields() {
-  // Create fields live in Add video modal (Match → Create new video only; scan never auto-CREATE).
-}
-
-function createSeriesListRowHTML() {
-  return `<li class="list-row cursor-pointer" data-create-series role="option">
-    <div class="relative shrink-0">
-      <div class="bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true">
-        <i data-lucide="plus" class="size-5 opacity-60"></i>
-      </div>
-    </div>
-    <div class="list-col-grow min-w-0 font-medium">Create new series</div>
-  </li>`;
-}
-
 function seriesPosterHTML(s) {
   const fallback = `<div class="bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true"><i data-lucide="tv" class="size-5 opacity-40"></i></div>`;
   if (!s || !s.poster_url) return fallback;
   return `<img class="size-10 rounded-full object-cover" src="${escapeHtml(s.poster_url)}" alt="" width="40" height="40" loading="lazy" onerror="this.onerror=null;this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden')" /><div class="hidden bg-base-200 size-10 rounded-full flex items-center justify-center" aria-hidden="true"><i data-lucide="tv" class="size-5 opacity-40"></i></div>`;
-}
-
-function seriesListRowHTML(s, selectedId) {
-  const sel = selectedId && Number(selectedId) === Number(s.id);
-  return `<li class="list-row cursor-pointer ${sel ? 'bg-base-200' : ''}" data-series-id="${s.id}" role="option" aria-selected="${sel ? 'true' : 'false'}">
-    <div class="relative shrink-0">${seriesPosterHTML(s)}</div>
-    <div class="list-col-grow min-w-0 font-medium truncate">${escapeHtml(s.title)}</div>
-  </li>`;
-}
-
-function lockedSeriesRowHTML(s, opts) {
-  const title = s ? s.title : 'Series';
-  const treeLocked = !!(opts && opts.treeLocked);
-  const unlock = treeLocked ? '' : `<button type="button" class="btn btn-ghost btn-sm btn-square shrink-0 tooltip tooltip-left" data-unlock-series aria-label="Change series" data-tip="Change series">
-      <i data-lucide="x" class="size-4"></i>
-    </button>`;
-  const note = treeLocked
-    ? `<div class="text-xs opacity-60">Locked by tvshow.nfo folder</div>`
-    : '';
-  return `<li class="list-row bg-base-200" aria-selected="true">
-    <div class="relative shrink-0">${seriesPosterHTML(s)}</div>
-    <div class="list-col-grow min-w-0">
-      <div class="font-medium truncate">${escapeHtml(title)}</div>
-      ${note}
-    </div>
-    ${unlock}
-  </li>`;
-}
-
-function videoListRowHTML(v, selectedId, exceptKey) {
-  const sel = selectedId && Number(selectedId) === Number(v.id);
-  const thumb = videoThumbURL(v);
-  const img = thumb
-    ? `<img class="size-full rounded object-cover" src="${escapeHtml(thumb)}" alt="" loading="lazy" />`
-    : `<div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true"><i data-lucide="square-play" class="size-5 opacity-40"></i></div>`;
-  let suffix = '';
-  if (v.has_media) suffix = ' · has media';
-  const meta = escapeHtml(v.series_title) + suffix;
-  return `<li class="list-row cursor-pointer ${sel ? 'bg-base-200' : ''}" data-video-id="${v.id}" role="option" aria-selected="${sel ? 'true' : 'false'}">
-    <div class="relative shrink-0 w-20 aspect-video">${img}</div>
-    <div class="list-col-grow min-w-0">
-      <div class="font-medium truncate">${escapeHtml(v.title)}</div>
-      <div class="text-xs opacity-60 truncate">${meta}</div>
-    </div>
-  </li>`;
-}
-
-function lockedVideoRowHTML(v) {
-  const thumb = v ? videoThumbURL(v) : '';
-  const img = thumb
-    ? `<img class="size-full rounded object-cover" src="${escapeHtml(thumb)}" alt="" loading="lazy" />`
-    : `<div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true"><i data-lucide="square-play" class="size-5 opacity-40"></i></div>`;
-  const title = v ? v.title : 'Video';
-  const meta = v ? (escapeHtml(v.series_title) + (v.has_media ? ' · has media' : '')) : '';
-  return `<li class="list-row bg-base-200" data-video-id="${v ? v.id : ''}" aria-selected="true">
-    <div class="relative shrink-0 w-20 aspect-video">${img}</div>
-    <div class="list-col-grow min-w-0">
-      <div class="font-medium truncate">${escapeHtml(title)}</div>
-      <div class="text-xs opacity-60 truncate">${meta}</div>
-    </div>
-    <button type="button" class="btn btn-ghost btn-sm btn-square shrink-0 tooltip tooltip-left" data-unlock-video aria-label="Change video" data-tip="Change video">
-      <i data-lucide="x" class="size-4"></i>
-    </button>
-  </li>`;
-}
-
-function createListRowHTML(selected, enabled) {
-  if (!enabled) {
-    // Tip wraps the label only (not the list-row flex host) so daisyUI bubbles work.
-    return `<li class="list-row opacity-60" role="option" aria-disabled="true" aria-selected="false">
-    <div class="relative shrink-0 w-20 aspect-video">
-      <div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true">
-        <i data-lucide="plus" class="size-5 opacity-40"></i>
-      </div>
-    </div>
-    <div class="list-col-grow min-w-0 self-center">
-      <span class="tooltip tooltip-left cursor-not-allowed" data-tip="Pick a series first">
-        <span class="font-medium">Create new video</span>
-      </span>
-    </div>
-  </li>`;
-  }
-  return `<li class="list-row cursor-pointer ${selected ? 'bg-base-200' : ''}" data-video-id="${CREATE}" role="option" aria-selected="${selected ? 'true' : 'false'}">
-    <div class="relative shrink-0 w-20 aspect-video">
-      <div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true">
-        <i data-lucide="plus" class="size-5 opacity-60"></i>
-      </div>
-    </div>
-    <div class="list-col-grow min-w-0 font-medium">Create new video</div>
-  </li>`;
-}
-
-function renderMatchModalLists() {
-  if (!matchCtx) return;
-  const bulkSeries = matchCtx.kind === 'bulk-series';
-  const qEl = document.getElementById('library-picker-q');
-  const q = qEl?.value || '';
-  const draft = matchCtx.draft;
-  const seriesList = document.getElementById('library-picker-series');
-  const videoList = document.getElementById('library-picker-videos');
-  const videosCol = document.getElementById('library-picker-videos-col');
-  const grid = document.getElementById('library-picker-grid');
-  const box = document.getElementById('library-picker-box');
-  const seriesLocked = !!draft.seriesId;
-  // CREATE is a draft intent, not a locked library pick - keep the video list open.
-  const videoLocked = !!draft.videoId && String(draft.videoId) !== CREATE;
-  if (box) {
-    // Series-only picker (bulk) is one column - half width of the two-pane Match modal.
-    box.classList.toggle('max-w-4xl', !bulkSeries);
-    box.classList.toggle('max-w-2xl', bulkSeries);
-  }
-  if (grid) grid.classList.toggle('md:grid-cols-2', !bulkSeries);
-  if (videosCol) videosCol.classList.toggle('hidden', bulkSeries);
-  if (qEl) {
-    const ph = bulkSeries
-      ? 'Filter series'
-      : (videoLocked ? 'Video selected' : 'Filter series and videos');
-    qEl.placeholder = ph;
-    qEl.setAttribute('aria-label', ph);
-    qEl.disabled = !bulkSeries && videoLocked;
-  }
-  if (seriesLocked) {
-    let s = null;
-    if (isDraftSeriesId(draft.seriesId)) {
-      const f = seriesFolderByDraftKey(draftKeyFromSeriesId(draft.seriesId));
-      s = { title: f ? f.title : 'New series (from tvshow.nfo)' };
-    } else {
-      s = SERIES.find((x) => Number(x.id) === Number(draft.seriesId));
-    }
-    seriesList.innerHTML = lockedSeriesRowHTML(s, { treeLocked: !!draft.seriesFolderLocked });
-  } else {
-    const series = seriesForQuery(q);
-    // Sidecar Attach needs an existing series with packed media - no Create new series.
-    let html = matchCtx.kind === 'sidecar' ? '' : createSeriesListRowHTML();
-    if (series.length) {
-      html += series.map((s) => seriesListRowHTML(s, draft.seriesId)).join('');
-    } else if (String(q || '').trim()) {
-      html += '<li class="list-row"><span class="opacity-60 text-sm px-2">No series match</span></li>';
-    } else if (!html) {
-      html += '<li class="list-row"><span class="opacity-60 text-sm px-2">No series</span></li>';
-    }
-    seriesList.innerHTML = html;
-  }
-  const forMedia = matchCtx.kind === 'media';
-  if (bulkSeries) {
-    lucideRefresh(seriesList);
-    return;
-  }
-  if (videoLocked) {
-    const v = VIDEOS.find((x) => String(x.id) === String(draft.videoId));
-    videoList.innerHTML = lockedVideoRowHTML(v);
-  } else {
-    const draftSeries = isDraftSeriesId(draft.seriesId);
-    let videos = [];
-    const exceptKey = matchCtx.key;
-    // Draft tvshow.nfo: create-only (catalog videos belong to other series).
-    if (!draftSeries) {
-      if (draft.seriesId) {
-        videos = videosForSeries(draft.seriesId, { forMedia, q, exceptKey });
-      } else if (String(q || '').trim()) {
-        videos = videosForSeries(null, { forMedia, q, exceptKey });
-      }
-    }
-    let html = '';
-    // Create only for media Match (sidecar Attach needs an existing packed video).
-    if (forMedia) {
-      html += createListRowHTML(String(draft.videoId) === CREATE, !!draft.seriesId);
-    }
-    if (videos.length) {
-      html += videos.map((v) => videoListRowHTML(v, '', exceptKey)).join('');
-    } else if (draftSeries && forMedia) {
-      html += '<li class="list-row"><span class="opacity-60 text-sm px-2">Create new video under this series folder</span></li>';
-    } else if (!draft.seriesId && !String(q || '').trim()) {
-      html += '<li class="list-row"><span class="opacity-60 text-sm px-2">Pick a series or search</span></li>';
-    } else {
-      html += '<li class="list-row"><span class="opacity-60 text-sm px-2">No videos match</span></li>';
-    }
-    videoList.innerHTML = html;
-  }
-  videoList.classList.add('flex-1');
-  videoList.classList.remove('shrink-0');
-  lucideRefresh(seriesList);
-  lucideRefresh(videoList);
-}
-
-function lockSeriesAndResetSearch(seriesId) {
-  if (!matchCtx) return;
-  matchCtx.draft.seriesId = String(seriesId || '');
-  if (matchCtx.draft.videoId && String(matchCtx.draft.videoId) !== CREATE &&
-      !videoBelongsToSeries(matchCtx.draft.videoId, matchCtx.draft.seriesId)) {
-    matchCtx.draft.videoId = '';
-  }
-  const qEl = document.getElementById('library-picker-q');
-  if (qEl) qEl.value = '';
-  if (matchCtx.kind === 'bulk-series' && matchCtx.draft.seriesId) {
-    applyBulkSeriesToMissing(matchCtx.draft.seriesId);
-    closeMatchModal();
-    return;
-  }
-  renderMatchModalLists();
 }
 
 function addSeriesToImportPicker(ser) {
@@ -1011,28 +1058,29 @@ async function pollAddVideoPrefetch(tid) {
 }
 
 function openAddVideoForImportMatch() {
-  if (!matchCtx || !matchCtx.draft.seriesId) return;
+  if (!importCreateCtx || !importCreateCtx.draft || !importCreateCtx.draft.seriesId) return;
   const toggle = document.getElementById('modal-add-video');
   const form = document.querySelector('form.js-add-video-form');
   if (!toggle || !form) return;
-  form.dataset.addVideoSeriesId = String(matchCtx.draft.seriesId);
+  form.dataset.addVideoSeriesId = String(importCreateCtx.draft.seriesId);
   form.querySelector('#add-video-draft-token').value = '';
   setAddVideoFetchErr(form, '');
   setAddVideoBusy(form, false);
-  const hints = matchCtx.hints || {};
+  const hints = importCreateCtx.hints || {};
+  const draft = importCreateCtx.draft;
   // Site/file id only (info.json / brackets). Synthetic suggestions are never sent.
   let siteRemote = '';
   if (!hints.suggested_remote_id_generated) {
-    siteRemote = String(matchCtx.draft.remote || hints.suggested_remote_id || '').trim();
+    siteRemote = String(draft.remote || hints.suggested_remote_id || '').trim();
   }
   form.dataset.addVideoSiteRemote = siteRemote;
   const urlEl = form.querySelector('#add-video-url');
   if (urlEl) urlEl.value = hints.suggested_webpage_url || '';
   const titleEl = form.querySelector('#add-video-title');
-  if (titleEl) titleEl.value = matchCtx.draft.title || hints.suggested_title || '';
+  if (titleEl) titleEl.value = draft.title || hints.suggested_title || '';
   const uploadEl = form.querySelector('#add-video-upload');
   if (uploadEl) {
-    uploadEl.value = matchCtx.draft.upload || uploadDateInputValue(hints.suggested_upload_date) || '';
+    uploadEl.value = draft.upload || uploadDateInputValue(hints.suggested_upload_date) || '';
   }
   const uploadNote = form.querySelector('#add-video-upload-note');
   if (uploadNote) {
@@ -1057,6 +1105,7 @@ function addVideoToImportPicker(v, seriesId) {
     status: v.status || 'ignored',
     has_media: false,
     has_thumb: false,
+    special_feature: v.special_feature || 'episode',
   };
   const idx = VIDEOS.findIndex((x) => Number(x.id) === id);
   if (idx >= 0) VIDEOS[idx] = { ...VIDEOS[idx], ...row };
@@ -1069,17 +1118,26 @@ function addVideoToImportPicker(v, seriesId) {
 }
 
 function finishImportMatchVideoCreate(v, form) {
-  if (!matchCtx || !v || v.id == null) return;
-  const seriesId = form?.dataset?.addVideoSeriesId || matchCtx.draft.seriesId;
+  if (!importCreateCtx || !v || v.id == null) return;
+  const seriesId = form?.dataset?.addVideoSeriesId || importCreateCtx.draft?.seriesId;
   addVideoToImportPicker(v, seriesId);
-  matchCtx.draft.videoId = String(v.id);
-  matchCtx.draft.seriesId = String(seriesId || matchCtx.draft.seriesId || '');
-  matchCtx.draft.title = v.title || matchCtx.draft.title || '';
-  matchCtx.draft.remote = v.remote_id || matchCtx.draft.remote || '';
-  matchCtx.draft.upload = uploadDateInputValue(v.upload_date) || matchCtx.draft.upload || '';
+  const key = importCreateCtx.key;
+  const kind = importCreateCtx.kind || 'media';
+  const st = getUIState(key);
+  st.seriesId = String(seriesId || st.seriesId || '');
+  st.videoId = String(v.id);
+  st.title = v.title || st.title || '';
+  st.remote = v.remote_id || st.remote || '';
+  st.upload = uploadDateInputValue(v.upload_date) || st.upload || '';
+  if (kind === 'media') {
+    scrubMediaVideoPick(st, key);
+    claimMediaVideoExclusive(key, st.videoId);
+  }
+  markAutoMatchStale();
+  importCreateCtx = null;
   const toggle = document.getElementById('modal-add-video');
   if (toggle) toggle.checked = false;
-  applyMatchModal();
+  renderImportPage();
 }
 
 async function submitAddVideoForImportMatch(form) {
@@ -1146,149 +1204,6 @@ async function submitAddVideoForImportMatch(form) {
   }
 }
 
-function unlockSeries() {
-  if (!matchCtx) return;
-  if (matchCtx.draft.seriesFolderLocked) return;
-  matchCtx.draft.seriesId = '';
-  matchCtx.draft.videoId = '';
-  const qEl = document.getElementById('library-picker-q');
-  if (qEl) {
-    qEl.value = '';
-    qEl.disabled = false;
-  }
-  renderMatchModalLists();
-}
-
-function unlockVideo() {
-  if (!matchCtx) return;
-  matchCtx.draft.videoId = '';
-  const qEl = document.getElementById('library-picker-q');
-  if (qEl) {
-    qEl.value = '';
-    qEl.disabled = false;
-  }
-  renderMatchModalLists();
-}
-
-function uploadDateInputValue(rfc) {
-  const m = String(rfc || '').match(/^(\d{4}-\d{2}-\d{2})/);
-  return m ? m[1] : '';
-}
-
-function uploadDateToRFC(dateStr) {
-  const d = String(dateStr || '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '';
-  return d + 'T00:00:00Z';
-}
-
-function openMatchModal(key, kind, hints) {
-  if (!importPickerReady) {
-    showImportMsg('Match', 'Library index still loading', { warning: true });
-    return;
-  }
-  const st = getUIState(key);
-  if (kind === 'media') scrubMediaVideoPick(st, key);
-  matchCtx = {
-    key,
-    kind,
-    hints: hints || {},
-    draft: {
-      seriesId: st.seriesId || '',
-      videoId: st.videoId || '',
-      title: st.title || hints.suggested_title || '',
-      remote: st.remote || hints.suggested_remote_id || '',
-      upload: st.upload || uploadDateInputValue(hints.suggested_upload_date) || '',
-      handler: st.handler || hints.suggested_handler_id || 'yt-dlp',
-      seriesFolderLocked: !!st.seriesFolderLocked,
-    },
-  };
-  const heading = document.getElementById('library-picker-title');
-  if (heading) heading.textContent = 'Select series/video';
-  document.getElementById('library-picker-subtitle').textContent = hints.filename || '';
-  const qEl = document.getElementById('library-picker-q');
-  qEl.value = '';
-  qEl.disabled = false;
-  renderMatchModalLists();
-  document.getElementById('modal-library-picker').checked = true;
-  if (!qEl.disabled) {
-    // Defer so focus sticks after modal becomes visible.
-    requestAnimationFrame(() => {
-      qEl.focus();
-      qEl.select();
-    });
-  }
-}
-
-function openBulkSeriesMatchModal() {
-  if (!importPickerReady) {
-    showImportMsg('Match', 'Library index still loading', { warning: true });
-    return;
-  }
-  matchCtx = {
-    key: '',
-    kind: 'bulk-series',
-    hints: {},
-    draft: { seriesId: '', videoId: '', title: '', remote: '', upload: '', handler: '' },
-  };
-  const heading = document.getElementById('library-picker-title');
-  if (heading) heading.textContent = 'Select series/video';
-  const n = countBundlesMissingSeries();
-  document.getElementById('library-picker-subtitle').textContent =
-    n === 1
-      ? 'Apply to 1 import item with no series'
-      : 'Apply to ' + n + ' import items with no series';
-  const qEl = document.getElementById('library-picker-q');
-  qEl.value = '';
-  qEl.disabled = false;
-  renderMatchModalLists();
-  document.getElementById('modal-library-picker').checked = true;
-  requestAnimationFrame(() => {
-    qEl.focus();
-    qEl.select();
-  });
-}
-
-function applyMatchModal() {
-  if (!matchCtx) return;
-  if (matchCtx.kind === 'bulk-series') {
-    if (!matchCtx.draft.seriesId) return;
-    applyBulkSeriesToMissing(matchCtx.draft.seriesId);
-    closeMatchModal();
-    return;
-  }
-  syncMatchCreateFields();
-  if (!itemReady(matchCtx.kind, matchCtx.draft)) return;
-  const st = getUIState(matchCtx.key);
-  st.seriesId = matchCtx.draft.seriesId || '';
-  st.videoId = matchCtx.draft.videoId || '';
-  st.title = matchCtx.draft.title || '';
-  st.remote = matchCtx.draft.remote || '';
-  st.upload = matchCtx.draft.upload || '';
-  st.handler = matchCtx.draft.handler || '';
-  st.seriesFolderLocked = !!matchCtx.draft.seriesFolderLocked;
-  if (matchCtx.kind === 'media') {
-    scrubMediaVideoPick(st, matchCtx.key);
-    if (st.videoId && String(st.videoId) !== CREATE) {
-      claimMediaVideoExclusive(matchCtx.key, st.videoId);
-    }
-  } else if (matchCtx.kind === 'sidecar') {
-    scrubSidecarVideoPick(st);
-  }
-  markAutoMatchStale();
-  closeMatchModal();
-  renderImportPage();
-}
-
-function wireMatchOpener(el, kind, hints) {
-  el.querySelector('.js-open-match')?.addEventListener('click', () => {
-    openMatchModal(el.dataset.stateKey, kind, hints);
-  });
-  el.querySelector('.js-unmatch')?.addEventListener('click', () => {
-    clearBundleMatch(el.dataset.stateKey);
-    renderImportPage();
-  });
-}
-
 /** Clear series/video pick for one list item (empty strings override scan suggestions). */
 function clearBundleMatch(stateKey) {
   if (!stateKey) return;
@@ -1307,6 +1222,17 @@ function clearBundleMatch(stateKey) {
   st.handler = '';
   st.seriesFolderLocked = false;
   markAutoMatchStale();
+}
+
+function uploadDateInputValue(rfc) {
+  const m = String(rfc || '').match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : '';
+}
+
+function uploadDateToRFC(dateStr) {
+  const d = String(dateStr || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '';
+  return d + 'T00:00:00Z';
 }
 
 /** True when the operator changed matches away from the last scan auto-seed and still has picks. */
@@ -1624,7 +1550,6 @@ function updateImportBtn() {
   btn.appendChild(icon);
   btn.appendChild(document.createTextNode(label));
   lucideRefresh(btn);
-  updateBulkSeriesBtn();
   updateAutoMatchBtn();
 }
 
@@ -1659,22 +1584,6 @@ function applyBulkSeriesToMissing(seriesId) {
   renderImportPage();
 }
 
-function countBundlesMissingSeries() {
-  importBundles = buildImportBundles(importCandidates);
-  let n = 0;
-  importBundles.forEach((b) => {
-    if (b.kind === 'other') return;
-    if (!defaultStateForBundle(b).seriesId) n++;
-  });
-  return n;
-}
-
-function updateBulkSeriesBtn() {
-  const btn = document.getElementById('btn-import-bulk-series');
-  if (!btn) return;
-  const n = countBundlesMissingSeries();
-  btn.disabled = !importPickerReady || n === 0;
-}
 
 function importTotalPages(list) {
   const n = (list || importBundles).length;
@@ -1988,26 +1897,17 @@ function buildSidecarBundleItem(b) {
   const li = document.createElement('li');
   li.className = 'import-item rounded-box border border-base-300 p-4';
   li.dataset.stateKey = bundleStateKey(b);
-  const match = stateMatchNote('sidecar', st, lead, 'no match');
   const primary = b.sidecars[0];
   const rest = b.sidecars.slice(1);
+  li.dataset.kind = 'sidecar';
   li.innerHTML = `
     <div class="flex items-center gap-2">
       <div class="min-w-0 flex-1 space-y-2">
         ${filesStack(primary, rest)}
-        ${metaLine(match)}
+        ${matchPickersHTML(st, 'sidecar')}
       </div>
       ${matchActionsHTML(st, 'sidecar')}
     </div>`;
-  wireMatchOpener(li, 'sidecar', {
-    filename: primary.filename,
-    suggested_title: lead.suggested_title,
-    suggested_remote_id: lead.suggested_remote_id,
-    suggested_remote_id_generated: !!lead.suggested_remote_id_generated,
-    suggested_upload_date: lead.suggested_upload_date,
-    suggested_upload_date_from_mtime: !!lead.suggested_upload_date_from_mtime,
-    suggested_handler_id: lead.suggested_handler_id,
-  });
   return li;
 }
 
@@ -2017,25 +1917,15 @@ function buildMediaBundleItem(b) {
   const li = document.createElement('li');
   li.className = 'import-item rounded-box border border-base-300 p-4';
   li.dataset.stateKey = bundleStateKey(b);
-  const match = stateMatchNote('media', st, c, 'no match');
+  li.dataset.kind = 'media';
   li.innerHTML = `
     <div class="flex items-center gap-2">
       <div class="min-w-0 flex-1 space-y-2">
         ${filesStack(c, b.sidecars)}
-        ${metaLine(match)}
+        ${matchPickersHTML(st, 'media')}
       </div>
       ${matchActionsHTML(st, 'media')}
     </div>`;
-  wireMatchOpener(li, 'media', {
-    filename: c.filename,
-    suggested_title: c.suggested_title,
-    suggested_remote_id: c.suggested_remote_id,
-    suggested_remote_id_generated: !!c.suggested_remote_id_generated,
-    suggested_upload_date: c.suggested_upload_date,
-    suggested_upload_date_from_mtime: !!c.suggested_upload_date_from_mtime,
-    suggested_handler_id: c.suggested_handler_id,
-    suggested_webpage_url: c.suggested_webpage_url,
-  });
   return li;
 }
 
@@ -2442,7 +2332,6 @@ async function runImportScan(opts) {
   if (importScanAbort) importScanAbort.abort();
   const ac = new AbortController();
   importScanAbort = ac;
-  closeMatchModal();
   setImportScanBusy(true);
   if (!preserveMatches) {
     importCandidates = [];
@@ -2502,10 +2391,6 @@ document.getElementById('btn-import-rescan').addEventListener('click', () => {
   }
   runImportScan({ preserveMatches: false });
 });
-document.getElementById('btn-import-bulk-series').addEventListener('click', () => {
-  if (countBundlesMissingSeries() === 0) return;
-  openBulkSeriesMatchModal();
-});
 document.getElementById('btn-import-auto-match').addEventListener('click', () => {
   applyAutoMatch();
 });
@@ -2513,72 +2398,96 @@ document.getElementById('import-filter-unmatched').addEventListener('change', ()
   importPage = 1;
   renderImportPage();
 });
-document.getElementById('library-picker-q').addEventListener('input', () => {
-  renderMatchModalLists();
-});
-document.getElementById('library-picker-series').addEventListener('click', (ev) => {
-  if (!matchCtx) return;
-  const unlock = ev.target.closest('[data-unlock-series]');
-  if (unlock) {
-    unlockSeries();
-    return;
-  }
-  if (matchCtx.draft.seriesId) return; // locked
-  if (ev.target.closest('[data-create-series]')) {
-    if (matchCtx.kind === 'sidecar') return;
-    openAddSeriesForImportMatch();
-    return;
-  }
-  const row = ev.target.closest('[data-series-id]');
-  if (!row) return;
-  lockSeriesAndResetSearch(row.dataset.seriesId);
-});
-document.getElementById('library-picker-videos').addEventListener('click', (ev) => {
-  if (!matchCtx) return;
-  const unlock = ev.target.closest('[data-unlock-video]');
-  if (unlock) {
-    unlockVideo();
-    return;
-  }
-  // Real library video pick locks the list; CREATE stays clickable (opens Add video).
-  if (matchCtx.draft.videoId && String(matchCtx.draft.videoId) !== CREATE) return;
-  const row = ev.target.closest('[data-video-id]');
-  if (!row) return;
-  const vid = String(row.dataset.videoId);
-  if (vid === CREATE) {
-    if (matchCtx.kind === 'sidecar') return;
-    if (!matchCtx.draft.seriesId) {
-      showImportMsg('Create video', 'Pick a series first', { error: true });
+
+const importListRoot = document.getElementById('import-list');
+if (importListRoot) {
+  // details[open] stays open while focusing search / scrolling; fill on open.
+  importListRoot.addEventListener('toggle', (ev) => {
+    const dd = ev.target;
+    if (!(dd instanceof HTMLDetailsElement) || !dd.open) return;
+    const item = dd.closest('.import-item');
+    if (!item) return;
+    const key = item.dataset.stateKey;
+    const kind = item.dataset.kind;
+    if (!key || !kind) return;
+    const st = getUIState(key);
+    importListRoot.querySelectorAll('details.dropdown[open]').forEach((other) => {
+      if (other !== dd) other.open = false;
+    });
+    if (dd.classList.contains('js-import-series-dd')) {
+      const ul = dd.querySelector('.js-import-series-list');
+      const qEl = dd.querySelector('.js-import-series-q');
+      fillSeriesPickList(ul, st, qEl?.value || '');
+      queueMicrotask(() => qEl?.focus({ preventScroll: true }));
       return;
     }
-    if (!matchCtx.draft.title) matchCtx.draft.title = matchCtx.hints.suggested_title || '';
-    if (!matchCtx.draft.remote) matchCtx.draft.remote = matchCtx.hints.suggested_remote_id || '';
-    if (!matchCtx.draft.upload) matchCtx.draft.upload = uploadDateInputValue(matchCtx.hints.suggested_upload_date) || '';
-    openAddVideoForImportMatch();
-    return;
-  }
-  if (matchCtx.kind === 'media' && videoMatchedElsewhere(vid, matchCtx.key)) return;
-  if (matchCtx.kind === 'sidecar' && !videoHasMedia(vid)) return;
-  // tvshow.nfo lock: never retarget to another series' video.
-  if (matchCtx.draft.seriesFolderLocked) {
-    if (isDraftSeriesId(matchCtx.draft.seriesId)) {
-      showImportMsg('Match', 'This folder creates a new series; pick Create new video only.', { error: true });
+    if (dd.classList.contains('js-import-video-dd')) {
+      const ul = dd.querySelector('.js-import-video-list');
+      const qEl = dd.querySelector('.js-import-video-q');
+      fillVideoPickList(ul, st, kind, key, qEl?.value || '');
+      queueMicrotask(() => qEl?.focus({ preventScroll: true }));
+    }
+  }, true);
+  importListRoot.addEventListener('input', (ev) => {
+    const item = ev.target.closest('.import-item');
+    if (!item) return;
+    const key = item.dataset.stateKey;
+    const kind = item.dataset.kind;
+    if (!key || !kind) return;
+    const st = getUIState(key);
+    if (ev.target.classList.contains('js-import-series-q')) {
+      fillSeriesPickList(item.querySelector('.js-import-series-list'), st, ev.target.value);
       return;
     }
-    const vCheck = VIDEOS.find((x) => String(x.id) === vid);
-    if (vCheck && String(vCheck.series_id) !== String(matchCtx.draft.seriesId)) {
-      showImportMsg('Match', 'Locked to this series folder; pick a video from the same series.', { error: true });
+    if (ev.target.classList.contains('js-import-video-q')) {
+      fillVideoPickList(item.querySelector('.js-import-video-list'), st, kind, key, ev.target.value);
+    }
+  });
+  // mousedown + preventDefault: pick before details blur/close; one gesture.
+  importListRoot.addEventListener('mousedown', (ev) => {
+    if (ev.button !== 0) return;
+    const ser = ev.target.closest('[data-import-pick-series]');
+    const vid = ev.target.closest('[data-import-pick-video]');
+    if (!ser && !vid) return;
+    const item = ev.target.closest('.import-item');
+    if (!item) return;
+    const key = item.dataset.stateKey;
+    const kind = item.dataset.kind;
+    if (!key || !kind) return;
+    ev.preventDefault();
+    if (ser) {
+      applySeriesPick(key, ser.getAttribute('data-import-pick-series'));
       return;
     }
-  }
-  matchCtx.draft.videoId = vid;
-  const v = VIDEOS.find((x) => String(x.id) === vid);
-  if (v && String(matchCtx.draft.seriesId) !== String(v.series_id)) {
-    if (matchCtx.draft.seriesFolderLocked) return;
-    matchCtx.draft.seriesId = String(v.series_id);
-  }
-  applyMatchModal();
-});
+    applyVideoPick(key, kind, vid.getAttribute('data-import-pick-video'));
+  });
+  importListRoot.addEventListener('click', (ev) => {
+    const item = ev.target.closest('.import-item');
+    if (!item) return;
+    const key = item.dataset.stateKey;
+    const kind = item.dataset.kind;
+    if (!key || !kind) return;
+    if (ev.target.closest('[data-import-pick-series], [data-import-pick-video]')) {
+      ev.preventDefault();
+      return;
+    }
+    if (ev.target.closest('.js-import-create-series')) {
+      startCreateSeriesForRow(key, kind);
+      return;
+    }
+    if (ev.target.closest('.js-import-create-video')) {
+      startCreateVideoForRow(key, kind);
+      return;
+    }
+    if (ev.target.closest('.js-import-reset-series')) {
+      resetSeriesPick(key);
+      return;
+    }
+    if (ev.target.closest('.js-import-reset-video')) {
+      resetVideoPick(key, kind);
+    }
+  });
+}
 document.body.addEventListener('click', async (ev) => {
   const btn = ev.target.closest('.js-add-video-fetch');
   if (!btn) return;
@@ -2648,7 +2557,6 @@ document.body.addEventListener('submit', (ev) => {
   ev.preventDefault();
   submitAddVideoForImportMatch(form);
 });
-document.getElementById('library-picker-cancel').addEventListener('click', () => closeMatchModal());
 
 function isImportBusyKind(kind) {
   return kind === 'import' || kind === 'import_plan';
