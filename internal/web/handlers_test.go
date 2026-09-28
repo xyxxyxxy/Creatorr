@@ -244,14 +244,8 @@ func TestImportPageWithoutSeries(t *testing.T) {
 		t.Fatalf("with series status %d", rec2.Code)
 	}
 	body2 := rec2.Body.String()
-	if !strings.Contains(body2, `id="import-full-scan-note"`) || !strings.Contains(body2, "Not all videos may be indexed yet") {
-		t.Fatalf("expected full-scan import note after create series: %s", truncate(body2, 400))
-	}
-	if strings.Contains(body2, `id="import-full-scan-note" role="alert" class="alert alert-warning text-sm hidden"`) {
-		t.Fatalf("full-scan note should be visible while full_scan_done=0: %s", truncate(body2, 400))
-	}
-	if !strings.Contains(body2, `alert alert-warning`) || !strings.Contains(body2, "incomplete on one or more sources") {
-		t.Fatalf("expected warning full-scan import note: %s", truncate(body2, 400))
+	if strings.Contains(body2, `id="import-full-scan-note"`) || strings.Contains(body2, "Not all videos may be indexed yet") {
+		t.Fatalf("full-scan import note should be removed: %s", truncate(body2, 400))
 	}
 	if !strings.Contains(body2, `id="btn-import"`) || !strings.Contains(body2, "File matching") {
 		t.Fatalf("expected import UI with series: %s", truncate(body2, 400))

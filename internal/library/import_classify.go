@@ -95,7 +95,9 @@ func ClassifyImportFile(filename string) (role, stemBase string) {
 		return ImportRoleNFO, strings.TrimSuffix(name, filepath.Ext(name))
 	}
 	if subExts[ext] {
-		return ImportRoleSub, strings.TrimSuffix(name, filepath.Ext(name))
+		// Strip .lang / .lang-REGION / .lang.auto before the sub ext so
+		// Show [id].en.srt groups with Show [id].mkv (same as guessSubtitleWorkStem).
+		return ImportRoleSub, guessSubtitleWorkStem(name)
 	}
 	if thumbExts[ext] {
 		stem := strings.TrimSuffix(name, filepath.Ext(name))

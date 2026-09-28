@@ -48,4 +48,16 @@ func TestImportSidecarStemMatchesMedia(t *testing.T) {
 	if library.ImportSidecarStemMatchesMedia(otherDir, media) {
 		t.Fatal("different directory must not match")
 	}
+	langSub := filepath.Join(dir, "Ep One [id1].en.srt")
+	if !library.ImportSidecarStemMatchesMedia(langSub, media) {
+		t.Fatal("lang-tagged .en.srt should match media stem")
+	}
+	engSub := filepath.Join(dir, "Ep One [id1].eng.srt")
+	if !library.ImportSidecarStemMatchesMedia(engSub, media) {
+		t.Fatal("lang-tagged .eng.srt should match media stem")
+	}
+	autoSub := filepath.Join(dir, "Ep One [id1].en.auto.srt")
+	if !library.ImportSidecarStemMatchesMedia(autoSub, media) {
+		t.Fatal("lang-tagged .en.auto.srt should match media stem")
+	}
 }

@@ -258,7 +258,11 @@ func TestMaybeEnqueueImportSidecarGapFill(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	id, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID)
+	if _, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID, true); err != nil || enqueued {
+		t.Fatalf("want skip when import NFO present: enqueued=%v err=%v", enqueued, err)
+	}
+
+	id, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID, false)
 	if err != nil || !enqueued || id == 0 {
 		t.Fatalf("want enqueue with source_url: id=%d enqueued=%v err=%v", id, enqueued, err)
 	}
@@ -277,14 +281,14 @@ func TestMaybeEnqueueImportSidecarGapFill(t *testing.T) {
 	if _, err := s.DB.SQL.Exec(`INSERT INTO files (video_id, path, kind, acquired_at) VALUES (?, ?, 'thumb', datetime('now'))`, res.VideoID, thumb); err != nil {
 		t.Fatal(err)
 	}
-	if _, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID); err == nil && enqueued {
+	if _, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID, false); err == nil && enqueued {
 		t.Fatal("want skip/conflict while first gap-fill still queued")
 	}
 
 	if _, err := s.DB.SQL.Exec(`UPDATE tasks SET status = 'done' WHERE id = ?`, id); err != nil {
 		t.Fatal(err)
 	}
-	id2, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID)
+	id2, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID, false)
 	if err != nil || !enqueued || id2 == 0 {
 		t.Fatalf("want enqueue even with thumb present: id=%d enqueued=%v err=%v", id2, enqueued, err)
 	}
@@ -292,7 +296,7 @@ func TestMaybeEnqueueImportSidecarGapFill(t *testing.T) {
 	if _, err := s.DB.SQL.Exec(`UPDATE videos SET source_url = NULL WHERE id = ?`, res.VideoID); err != nil {
 		t.Fatal(err)
 	}
-	if _, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID); err != nil || enqueued {
+	if _, enqueued, err := s.MaybeEnqueueImportSidecarGapFill(res.VideoID, false); err != nil || enqueued {
 		t.Fatalf("want skip without source_url: enqueued=%v err=%v", enqueued, err)
 	}
 }

@@ -15,8 +15,7 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	profiles, _ := h.Library.ListProfiles()
-	incompleteFullScan, _ := h.Library.HasIncompleteFullScan()
-	importBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindImport, queue.SystemDomain)
+	importBusy, _ := importQueueBusy(h.Queue)
 
 	render(w, "import", struct {
 		pageBase
@@ -24,7 +23,6 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 		Roots               []library.RootFolder
 		Profiles            []library.QualityProfile
 		ScanCronDescriptors []string
-		IncompleteFullScan  bool
 		ImportBusy          bool
 	}{
 		pageBase:            newPage("Import", "import", nil),
@@ -32,27 +30,24 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 		Roots:               roots,
 		Profiles:            profiles,
 		ScanCronDescriptors: scanCronDescriptors(),
-		IncompleteFullScan:  incompleteFullScan,
 		ImportBusy:          importBusy,
 	})
 }
 
-func (h *Handler) importFullScanStatus(w http.ResponseWriter, r *http.Request) {
-	incomplete, err := h.Library.HasIncompleteFullScan()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(map[string]bool{"incomplete": incomplete})
-}
-
 func (h *Handler) importBusyStatus(w http.ResponseWriter, r *http.Request) {
-	busy, err := h.Queue.HasPendingOrRunningKind(queue.KindImport, queue.SystemDomain)
+	busy, err := importQueueBusy(h.Queue)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"busy": busy})
+}
+
+func importQueueBusy(q *queue.Store) (bool, error) {
+	busy, err := q.HasPendingOrRunningKind(queue.KindImport, queue.SystemDomain)
+	if err != nil || busy {
+		return busy, err
+	}
+	return q.HasPendingOrRunningKind(queue.KindImportPlan, queue.SystemDomain)
 }

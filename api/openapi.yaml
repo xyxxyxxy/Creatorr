@@ -1338,7 +1338,10 @@ paths:
         import inbox only. With root_id, scans that online library root for unmanaged
         (orphan) files. Media match existing videos by id/title; orphan sidecars match by
         filename stem beside a tracked video. Library hits bind in place (no move); inbox
-        media move into the series folder. Nothing binds until POST /api/import/manual.
+        media move into the series folder. Nothing binds until POST /api/import/manual
+        (or POST /api/import/confirm when creating series from tvshow.nfo trees).
+        Folders containing tvshow.nfo are returned in series_folders; descendant media
+        are locked to that series (known series_id or draft_key for confirm).
       parameters:
         - name: root_id
           in: query
@@ -1402,6 +1405,42 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Already has file or import queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/import/confirm:
+    post:
+      tags: [library]
+      operationId: importConfirm
+      summary: Confirm series-folder + video import plan - enqueue one import_plan task
+      description: >
+        Used when the scan found unknown tvshow.nfo trees. Creates series (with operator
+        defaults), applies tvshow.nfo metadata and series art, then imports each job.
+        No series rows or file moves until the worker runs. When series is empty, clients
+        should use POST /api/import/manual per job instead.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportConfirmRequest"
+      responses:
+        "201":
+          description: Import plan task enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnqueueTaskResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Import or import_plan already queued or running
           content:
             application/json:
               schema:
@@ -1594,6 +1633,84 @@ components:
           type: integer
           format: int64
 
+    ImportConfirmSeries:
+      type: object
+      required: [draft_key, folder_path, root_id, quality_profile_id]
+      properties:
+        draft_key:
+          type: string
+          description: Stable key from scan series_folders (absolute folder path)
+        folder_path:
+          type: string
+          description: Absolute path of the tvshow.nfo folder
+        title:
+          type: string
+          description: >
+            Optional and ignored for naming. Server uses tvshow.nfo title, else the folder basename.
+        root_id:
+          type: integer
+          format: int64
+        quality_profile_id:
+          type: integer
+          format: int64
+        delivery_mode:
+          type: string
+          enum: [video, audio]
+          description: Defaults to video when omitted
+        monitored:
+          type: boolean
+          description: Operator choice from Import summary (shared across series in one confirm)
+
+    ImportConfirmJob:
+      type: object
+      description: >
+        One video bind/create job inside an import plan. Same XOR rules as ImportManualRequest
+        for video_id vs series_id, except series_id may be omitted when series_draft_key is set
+        (resolved after series create in the worker).
+      properties:
+        path:
+          type: string
+        paths:
+          type: array
+          items:
+            type: string
+        video_id:
+          type: integer
+          format: int64
+        series_id:
+          type: integer
+          format: int64
+        series_draft_key:
+          type: string
+          description: Draft key of a series created in this plan (mutually exclusive with series_id for create)
+        title:
+          type: string
+        remote_id:
+          type: string
+        handler_id:
+          type: string
+        source_url:
+          type: string
+        upload_date:
+          type: string
+        description:
+          type: string
+        replace:
+          type: boolean
+
+    ImportConfirmRequest:
+      type: object
+      required: [series, jobs]
+      properties:
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportConfirmSeries"
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportConfirmJob"
+
     ImportManualRequest:
       type: object
       description: >
@@ -1638,13 +1755,6 @@ components:
             Server falls back to file mtime when omitted and sidecars lack a date.
         description:
           type: string
-        verify:
-          type: boolean
-          description: >
-            When true, after successful import bind/pack enqueue system integrity_check_initial
-            when the series quality profile has File integrity on (null-decode + checksums/NFO).
-            Explicit opt-in; ignores the mature-only timing gate. No-op when File integrity is off.
-            Default false.
         replace:
           type: boolean
           description: >
@@ -1753,10 +1863,86 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ImportSeriesSuggestion"
+        series_folder_draft_key:
+          type: string
+          description: >
+            When set, this file is under an unknown tvshow.nfo tree; series is created on
+            import confirm using this draft key (absolute folder path).
+        series_folder_locked:
+          type: boolean
+          description: >
+            True when a tvshow.nfo tree owns this path; Match UI must not change series.
+
+    ImportSeriesFolderParsed:
+      type: object
+      properties:
+        title:
+          type: string
+        sorttitle:
+          type: string
+        originaltitle:
+          type: string
+        plot:
+          type: string
+        tagline:
+          type: string
+        studio:
+          type: string
+        country:
+          type: string
+        mpaa:
+          type: string
+        premiered:
+          type: string
+        monitored:
+          type: boolean
+        genres:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        uniqueid_type:
+          type: string
+        uniqueid_value:
+          type: string
+
+    ImportSeriesFolder:
+      type: object
+      required: [draft_key, folder_path, unknown, title, monitored, art_roles, art_paths, media_count]
+      properties:
+        draft_key:
+          type: string
+        folder_path:
+          type: string
+        series_id:
+          type: integer
+          format: int64
+          nullable: true
+        unknown:
+          type: boolean
+        title:
+          type: string
+        monitored:
+          type: boolean
+        parsed:
+          $ref: "#/components/schemas/ImportSeriesFolderParsed"
+        art_roles:
+          type: array
+          items:
+            type: string
+        art_paths:
+          type: array
+          items:
+            type: string
+        media_count:
+          type: integer
 
     ImportScanResponse:
       type: object
-      required: [import_path, candidates]
+      required: [import_path, candidates, series_folders]
       properties:
         import_path:
           type: string
@@ -1765,6 +1951,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ImportCandidate"
+        series_folders:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportSeriesFolder"
+          description: tvshow.nfo trees under the scan path (known and unknown)
 
     ImportPickerSeries:
       type: object

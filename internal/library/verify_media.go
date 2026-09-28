@@ -383,7 +383,8 @@ func (s *Store) EnqueueMediaVerify(videoID, parentTaskID int64) (int64, error) {
 
 // MaybeEnqueueMediaVerifyForImport cancels prior verify tasks, then enqueues when the
 // series quality profile has File integrity on. Ignores the mature-only timing gate
-// (import verify is an explicit operator opt-in). Returns 0 when File integrity is off.
+// (import always follows the profile, unlike archive pack maturity gating).
+// Returns 0 when File integrity is off.
 func (s *Store) MaybeEnqueueMediaVerifyForImport(videoID, parentTaskID int64) (int64, error) {
 	_ = s.CancelMediaVerifyForVideo(videoID, queue.CancelReasonSupersededImport)
 	on, err := s.seriesProfileVerifyMedia(videoID)
