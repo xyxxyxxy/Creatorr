@@ -34,14 +34,13 @@
   <div class="divider" aria-hidden="true"></div>
   <div class="flex flex-wrap items-center gap-3 min-w-0 w-full">
     <div class="flex items-center gap-1">
-      <button type="button" class="btn btn-ghost btn-sm border-transparent bg-transparent shadow-none font-normal tooltip tooltip-top" id="btn-import-rescan" data-tip="Clear matches and scan the import folder again" aria-label="Reset and rescan"{{if .ImportBusy}} disabled{{end}}><i data-lucide="refresh-cw" class="size-4"></i>Reset and rescan</button>
-      <button type="button" class="btn btn-ghost btn-sm border-transparent bg-transparent shadow-none font-normal tooltip tooltip-top" id="btn-import-auto-match" disabled data-tip="Re-apply scan auto-matches" aria-label="Auto-match">Auto-match</button>
+      <button type="button" class="btn btn-ghost btn-sm border-transparent bg-transparent shadow-none font-normal" id="btn-import-rescan" aria-label="Reset and rescan"{{if .ImportBusy}} disabled{{end}}><i data-lucide="refresh-cw" class="size-4"></i>Reset and rescan</button>
     </div>
     <label class="label cursor-pointer gap-2 justify-start py-0">
       <input type="checkbox" class="checkbox checkbox-sm" id="import-filter-unmatched" />
       <span class="label-text text-sm">Show only unmatched</span>
     </label>
-    <button type="button" class="btn btn-primary ml-auto tooltip tooltip-top" id="btn-import" disabled data-tip="Review ready items, then schedule import"><i data-lucide="folder-input" class="size-4"></i>Import</button>
+    <button type="button" class="btn btn-primary ml-auto tooltip tooltip-top" id="btn-import" disabled data-tip="Review ready items, then queue import"><i data-lucide="folder-input" class="size-4"></i>Import</button>
   </div>
 </div>
 <div id="import-empty" class="alert mt-2 hidden" role="status"><span></span></div>
@@ -56,7 +55,7 @@
     <p><a href="/tasks" class="link link-primary">View progress on Tasks</a>.</p>
   </div>
 </div>
-<ul id="import-list" class="flex flex-col gap-3 w-full list-none p-0 m-0 mt-2{{if .ImportBusy}} hidden{{end}}" aria-label="Import candidates"></ul>
+<ul id="import-list" class="flex flex-col gap-1.5 w-full list-none p-0 m-0 mt-2{{if .ImportBusy}} hidden{{end}}" aria-label="Import candidates"></ul>
 <div id="import-pager" class="hidden flex flex-wrap items-center justify-between gap-2 mt-3">
   <p class="text-sm opacity-60" id="import-pager-label"></p>
   <div class="join">
@@ -67,11 +66,24 @@
 </div>
 {{template "list_panel_end"}}
 
+<input type="checkbox" id="modal-import-rescan" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box max-w-md">
+    <h3 class="font-bold text-lg mb-2">Reset and rescan?</h3>
+    <p class="text-sm mb-4">Clear match picks and scan the import folder again. Unsaved series and episode selections are lost.</p>
+    <div class="modal-action">
+      <label for="modal-import-rescan" class="btn">Cancel</label>
+      <button type="button" class="btn btn-error" id="btn-import-rescan-confirm">Reset and rescan</button>
+    </div>
+  </div>
+  <label class="modal-backdrop" for="modal-import-rescan">Close</label>
+</div>
+
 <input type="checkbox" id="modal-import-summary" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box max-w-3xl w-11/12">
     <h3 class="font-bold text-lg mb-1">Import summary</h3>
-    <p class="text-sm opacity-70 mb-2">Review ready items, then schedule import. Nothing is written until you confirm.</p>
+    <p class="text-sm opacity-70 mb-2">Review ready items, then queue import.</p>
     <ul class="steps w-full mb-3 hidden" id="import-summary-steps" aria-label="Import steps">
       <li class="step" data-import-summary-step-ind="series">Series</li>
       <li class="step" data-import-summary-step-ind="videos">Videos</li>
@@ -79,7 +91,7 @@
     <div id="import-summary-step-series" class="hidden space-y-4 max-h-[60vh] overflow-y-auto" aria-label="Series to import"></div>
     <div id="import-summary-step-videos">
       <div id="import-summary-list" class="flex flex-col gap-3 w-full max-h-[60vh] overflow-y-auto" aria-label="Import summary"></div>
-      <div id="import-summary-replace-confirm" class="hidden mt-3 space-y-2">
+      <div id="import-summary-replace-confirm" class="hidden mt-3 space-y-2 rounded-box border border-warning/50 bg-warning/10 px-3 py-2">
         <p class="text-sm">The import will override already present files in the library.</p>
         <label class="label cursor-pointer gap-2 justify-start py-0 w-fit">
           <input type="checkbox" class="checkbox checkbox-sm" id="import-summary-override-ack" />
@@ -140,10 +152,14 @@ const MEDIA_EXTS = { '.mkv':1, '.mp4':1, '.mov':1, '.webm':1, '.m4v':1 };
 let importCandidates = [];
 let importBundles = [];
 let importPage = 1;
+/** Absolute inbox root from last scan (`import_path`). */
+let importScanRoot = '';
+/** Operator series picks on folder paths (including import root). tvshow.nfo locks win. */
+const folderUIState = new Map();
 /** @type {Map<string, {seriesId?: string, videoId?: string, title?: string, remote?: string, handler?: string}>} */
 const importUIState = new Map();
 let pendingImportJobs = [];
-/** True after user edits/clears a match; false after scan or Auto-match (suggestions already applied). */
+/** True after user edits/clears a match; false after scan (suggestions already applied). */
 let autoMatchStale = false;
 /** @type {AbortController|null} */
 let importScanAbort = null;
@@ -316,6 +332,11 @@ function finishImportMatchSeriesCreate(ser, form) {
   const toggle = document.getElementById('modal-add-series');
   if (toggle) toggle.checked = false;
   if (typeof window.syncAddSeriesForm === 'function') window.syncAddSeriesForm(form);
+  if (importCreateCtx && importCreateCtx.folderPath) {
+    applyFolderSeriesPick(importCreateCtx.folderPath, ser.id);
+    importCreateCtx = null;
+    return;
+  }
   if (importCreateCtx && importCreateCtx.key) {
     applySeriesPick(importCreateCtx.key, ser.id);
     importCreateCtx = null;
@@ -598,22 +619,18 @@ function packRoleBadgeHTML(role) {
   return `<span class="badge badge-secondary badge-sm shrink-0 tooltip tooltip-top" data-tip="Special kind: ${escapeHtml(label)}">${escapeHtml(label)}</span>`;
 }
 
-function matchStatusHTML(st, kind) {
-  const ready = itemReady(kind, st);
-  if (ready) {
-    return `<span class="tooltip tooltip-top inline-flex shrink-0 text-success" data-tip="matched" aria-label="matched">
-        <i data-lucide="check" class="size-4" aria-hidden="true"></i>
-      </span>`;
-  }
-  return `<span class="tooltip tooltip-top inline-flex shrink-0 text-warning" data-tip="not matched" aria-label="not matched">
-        <i data-lucide="circle-help" class="size-4" aria-hidden="true"></i>
-      </span>`;
+/** Row chrome: neutral folders/other, warning unmatched, success matched. */
+function importRowBoxClass(tone) {
+  const base = 'space-y-2 rounded-box border border-base-300 px-2 py-1.5';
+  if (tone === 'success') return base + ' import-row-ok';
+  if (tone === 'warning') return base + ' import-row-warn';
+  return base;
 }
 
-function filesStack(primary, sidecars, leadIconHTML) {
+function filesStack(primary, sidecars, leadIconHTML, parentDir) {
   let html = `<div class="flex flex-wrap items-center gap-1.5 text-xs min-w-0">
     ${leadIconHTML || roleIconMark(primary)}
-    <span class="min-w-0">${fileCell(primary)}</span>`;
+    <span class="min-w-0">${fileCell(primary, parentDir)}</span>`;
   if (sidecars && sidecars.length) {
     const n = sidecars.length;
     html += `<span class="opacity-50 px-0.5" aria-hidden="true">+</span>`;
@@ -668,9 +685,10 @@ function seriesTriggerInnerHTML(st) {
 }
 
 function videoTriggerInnerHTML(st) {
+  // Height matches series size-8 poster; width 16:9 via .js-import-video-thumb (input.css).
   if (String(st.videoId) === CREATE) {
     return `<span class="inline-flex items-center gap-2 min-w-0">
-      <span class="bg-base-200 size-8 rounded flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="plus" class="size-4 opacity-40"></i></span>
+      <span class="js-import-video-thumb bg-base-200 flex items-center justify-center" aria-hidden="true"><i data-lucide="plus" class="size-4 opacity-40"></i></span>
       <span class="truncate">${escapeHtml(videoPickLabel(st))}</span>
     </span>`;
   }
@@ -678,8 +696,8 @@ function videoTriggerInnerHTML(st) {
     const v = VIDEOS.find((x) => Number(x.id) === Number(st.videoId));
     const thumb = v ? videoThumbURL(v) : '';
     const img = thumb
-      ? `<img class="size-8 rounded object-cover shrink-0" src="${escapeHtml(thumb)}" alt="" loading="lazy" />`
-      : `<span class="bg-base-200 size-8 rounded flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="square-play" class="size-4 opacity-40"></i></span>`;
+      ? `<img class="js-import-video-thumb" src="${escapeHtml(thumb)}" alt="" width="56" height="32" loading="lazy" />`
+      : `<span class="js-import-video-thumb bg-base-200 flex items-center justify-center" aria-hidden="true"><i data-lucide="square-play" class="size-4 opacity-40"></i></span>`;
     const badge = v ? packRoleBadgeHTML(v.special_feature) : '';
     return `<span class="inline-flex items-center gap-2 min-w-0">
       ${img}
@@ -722,26 +740,25 @@ function videoOptionRowHTML(v, selectedId) {
 
 function matchPickersHTML(st, kind) {
   const treeLocked = !!st.seriesFolderLocked;
-  const draftLocked = treeLocked && isDraftSeriesId(st.seriesId);
+  const folderLocked = !!st.folderSeriesLocked;
   const catalogReady = importPickerReady;
   const forMedia = kind === 'media';
-  const seriesDisabled = !catalogReady || treeLocked;
-  const videoDisabled = !catalogReady || draftLocked;
+  // tvshow.nfo: series + episode locked. Parent/root folder pick: series locked, episode free.
+  const seriesDisabled = !catalogReady || treeLocked || folderLocked;
+  const videoDisabled = !catalogReady || treeLocked;
   const seriesResetDisabled = seriesDisabled || !st.seriesId;
   const videoResetDisabled = videoDisabled || !st.videoId;
-  const createSeriesDisabled = !catalogReady || !forMedia || treeLocked;
-  const createVideoDisabled = !catalogReady || !forMedia || !st.seriesId || isDraftSeriesId(st.seriesId);
+  const createSeriesDisabled = !catalogReady || !forMedia || treeLocked || folderLocked;
+  const createVideoDisabled = !catalogReady || !forMedia || treeLocked || !st.seriesId || isDraftSeriesId(st.seriesId);
 
   const seriesTip = !catalogReady ? 'Loading library index'
-    : treeLocked ? 'Locked by tvshow.nfo folder'
-    : 'Select series';
+    : (st.seriesLockReason || (treeLocked ? 'Locked by tvshow.nfo' : folderLocked ? 'Locked by parent folder' : 'Select series'));
   const videoTip = !catalogReady ? 'Loading library index'
-    : draftLocked ? 'New series from tvshow.nfo; video created on import'
-    : 'Select episode';
+    : (st.videoLockReason || (treeLocked ? 'Locked by tvshow.nfo folder' : 'Select episode'));
 
-  const seriesJoin = `
-  <div class="join join-horizontal shrink-0 max-w-full">
-    <details class="dropdown dropdown-bottom js-import-series-dd ${seriesDisabled ? 'pointer-events-none opacity-60' : ''}">
+  const seriesJoinInner = `
+  <div class="join join-horizontal shrink-0 max-w-full ${seriesDisabled ? 'pointer-events-none opacity-60' : ''}">
+    <details class="dropdown dropdown-bottom js-import-series-dd">
       <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden shrink-0" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ''}>
         ${seriesTriggerInnerHTML(st)}
       </summary>
@@ -754,13 +771,13 @@ function matchPickersHTML(st, kind) {
       <i data-lucide="plus" class="size-5" aria-hidden="true"></i>
     </button>
     <button type="button" class="btn btn-soft btn-error btn-square join-item js-import-reset-series tooltip tooltip-top" data-tip="Clear" aria-label="Clear" ${seriesResetDisabled ? 'disabled' : ''}>
-      <i data-lucide="x" class="size-5" aria-hidden="true"></i>
+      <i data-lucide="unlink" class="size-5" aria-hidden="true"></i>
     </button>
   </div>`;
 
-  const videoJoin = `
-  <div class="join join-horizontal shrink-0 max-w-full">
-    <details class="dropdown dropdown-bottom js-import-video-dd ${videoDisabled ? 'pointer-events-none opacity-60' : ''}">
+  const videoJoinInner = `
+  <div class="join join-horizontal shrink-0 max-w-full ${videoDisabled ? 'pointer-events-none opacity-60' : ''}">
+    <details class="dropdown dropdown-bottom js-import-video-dd">
       <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden shrink-0" aria-label="${escapeHtml(videoTip)}" ${videoDisabled ? 'aria-disabled="true"' : ''}>
         ${videoTriggerInnerHTML(st)}
       </summary>
@@ -773,9 +790,16 @@ function matchPickersHTML(st, kind) {
       <i data-lucide="plus" class="size-5" aria-hidden="true"></i>
     </button>
     <button type="button" class="btn btn-soft btn-error btn-square join-item js-import-reset-video tooltip tooltip-top" data-tip="Clear" aria-label="Clear" ${videoResetDisabled ? 'disabled' : ''}>
-      <i data-lucide="x" class="size-5" aria-hidden="true"></i>
+      <i data-lucide="unlink" class="size-5" aria-hidden="true"></i>
     </button>
   </div>`;
+
+  const seriesJoin = seriesDisabled
+    ? `<span class="tooltip tooltip-top inline-flex max-w-full" data-tip="${escapeHtml(seriesTip)}">${seriesJoinInner}</span>`
+    : seriesJoinInner;
+  const videoJoin = videoDisabled
+    ? `<span class="tooltip tooltip-top inline-flex max-w-full" data-tip="${escapeHtml(videoTip)}">${videoJoinInner}</span>`
+    : videoJoinInner;
 
   return `<div class="flex flex-wrap items-center gap-2">${seriesJoin}${videoJoin}</div>`;
 }
@@ -872,7 +896,7 @@ function hintsForStateKey(stateKey) {
 
 function applySeriesPick(stateKey, seriesId) {
   const st = getUIState(stateKey);
-  if (st.seriesFolderLocked) return;
+  if (st.seriesFolderLocked || st.folderSeriesLocked) return;
   st.seriesId = String(seriesId || '');
   if (st.videoId && String(st.videoId) !== CREATE &&
       !videoBelongsToSeries(st.videoId, st.seriesId)) {
@@ -886,17 +910,13 @@ function applyVideoPick(stateKey, kind, videoId) {
   const st = getUIState(stateKey);
   const vid = String(videoId || '');
   if (!vid) return;
+  if (st.seriesFolderLocked) return;
   if (kind === 'media' && videoMatchedElsewhere(vid, stateKey)) return;
   if (kind === 'sidecar' && !videoHasMedia(vid)) return;
-  if (st.seriesFolderLocked) {
-    if (isDraftSeriesId(st.seriesId)) return;
-    const vCheck = VIDEOS.find((x) => String(x.id) === vid);
-    if (vCheck && String(vCheck.series_id) !== String(st.seriesId)) return;
-  }
   st.videoId = vid;
   const v = VIDEOS.find((x) => String(x.id) === vid);
   if (v && String(st.seriesId) !== String(v.series_id)) {
-    if (st.seriesFolderLocked) return;
+    if (st.folderSeriesLocked) return;
     st.seriesId = String(v.series_id);
   }
   if (kind === 'media') {
@@ -913,7 +933,7 @@ function applyVideoPick(stateKey, kind, videoId) {
 
 function resetSeriesPick(stateKey) {
   const st = getUIState(stateKey);
-  if (st.seriesFolderLocked) return;
+  if (st.seriesFolderLocked || st.folderSeriesLocked) return;
   st.seriesId = '';
   st.videoId = '';
   markAutoMatchStale();
@@ -922,7 +942,7 @@ function resetSeriesPick(stateKey) {
 
 function resetVideoPick(stateKey, kind) {
   const st = getUIState(stateKey);
-  if (st.seriesFolderLocked && isDraftSeriesId(st.seriesId)) return;
+  if (st.seriesFolderLocked) return;
   st.videoId = '';
   if (kind === 'sidecar') scrubSidecarVideoPick(st);
   markAutoMatchStale();
@@ -932,14 +952,22 @@ function resetVideoPick(stateKey, kind) {
 function startCreateSeriesForRow(stateKey, kind) {
   if (kind !== 'media') return;
   const st = getUIState(stateKey);
-  if (st.seriesFolderLocked) return;
+  if (st.seriesFolderLocked || st.folderSeriesLocked) return;
   importCreateCtx = { key: stateKey, kind, hints: hintsForStateKey(stateKey) };
+  openAddSeriesForImportMatch();
+}
+
+function startCreateSeriesForFolder(folderPath) {
+  const info = folderLockInfo(folderPath);
+  if (info.nfo || info.parentPick) return;
+  importCreateCtx = { folderPath: normImportPath(folderPath), kind: 'folder', hints: {} };
   openAddSeriesForImportMatch();
 }
 
 function startCreateVideoForRow(stateKey, kind) {
   if (kind !== 'media') return;
   const st = getUIState(stateKey);
+  if (st.seriesFolderLocked) return;
   if (!st.seriesId || isDraftSeriesId(st.seriesId)) {
     showImportMsg('Create video', 'Pick a series first', { error: true });
     return;
@@ -1327,6 +1355,7 @@ function uploadDateToRFC(dateStr) {
 /** True when the operator changed matches away from the last scan auto-seed and still has picks. */
 function hasManualMatchPicks() {
   if (!autoMatchStale) return false;
+  if (folderUIState.size > 0) return true;
   return importBundles.some(bundleHasMatchPick);
 }
 
@@ -1348,31 +1377,14 @@ function countSuggestedAutoMatches() {
 
 function notifyAutoMatchCount(n) {
   if (n <= 0) {
-    showImportMsg('Auto-match', 'No auto matches found.', { warning: true });
+    showImportMsg('Scan', 'No auto matches found.', { warning: true });
     return;
   }
-  showImportMsg('Auto-match', n === 1 ? '1 auto match found.' : (n + ' auto matches found.'));
-}
-
-/** Drop UI overrides and re-seed each bundle from the last scan's suggested_* fields. */
-function applyAutoMatch() {
-  if (!autoMatchStale || !importCandidates.length) return;
-  syncVisibleItemState();
-  importBundles = buildImportBundles(importCandidates);
-  importBundles.forEach((b) => {
-    if (b.kind === 'other') return;
-    importUIState.delete(bundleStateKey(b));
-    defaultStateForBundle(b);
-  });
-  ensureMediaMatchExclusive();
-  autoMatchStale = false;
-  renderImportPage();
-  notifyAutoMatchCount(countSuggestedAutoMatches());
+  showImportMsg('Scan', n === 1 ? '1 auto match found.' : (n + ' auto matches found.'));
 }
 
 function markAutoMatchStale() {
   autoMatchStale = true;
-  updateAutoMatchBtn();
 }
 
 function bundleHasMatchPick(b) {
@@ -1381,25 +1393,79 @@ function bundleHasMatchPick(b) {
   return !!(st.seriesId || st.videoId);
 }
 
-function updateAutoMatchBtn() {
-  const btn = document.getElementById('btn-import-auto-match');
-  if (!btn) return;
-  btn.disabled = !autoMatchStale || !importCandidates.length;
-}
-
 function actionLabel(c) {
   if (isSidecar(c)) return 'Attach';
   return 'Import';
 }
 
-function fileCell(c) {
-  return `<code class="text-xs break-all">${escapeHtml(c.path || c.filename || '')}</code>`;
+/** Path relative to parent folder when under it; else absolute. */
+function displayPathUnderFolder(absPath, parentDir) {
+  const p = normImportPath(absPath);
+  const parent = normImportPath(parentDir);
+  if (!p) return '';
+  if (parent && (p === parent || p.startsWith(parent + '/'))) {
+    return p.slice(parent.length + 1);
+  }
+  return p || String(absPath || '');
+}
+
+function fileCell(c, parentDir) {
+  const raw = (c && (c.path || c.filename)) || '';
+  const shown = parentDir != null ? displayPathUnderFolder(raw, parentDir) : raw;
+  return `<code class="text-xs break-all">${escapeHtml(shown)}</code>`;
+}
+
+function seriesFolderAt(folderPath) {
+  const path = normImportPath(folderPath);
+  return (importSeriesFolders || []).find((f) => normImportPath(f.folder_path || f.draft_key) === path) || null;
+}
+
+function artRoleAsImportRole(role) {
+  switch (String(role || '')) {
+    case 'poster':
+    case 'banner':
+    case 'fanart':
+    case 'clearlogo':
+      return 'thumb';
+    default:
+      return 'thumb';
+  }
+}
+
+/** tvshow.nfo + series art marks beside a folder path (same shape as media sidecars). */
+function folderMetaMarksHTML(folderPath) {
+  const f = seriesFolderAt(folderPath);
+  if (!f) return '';
+  const marks = [];
+  const dir = normImportPath(folderPath);
+  marks.push({ role: 'nfo', path: dir + '/tvshow.nfo', filename: 'tvshow.nfo' });
+  const paths = f.art_paths || [];
+  const roles = f.art_roles || [];
+  paths.forEach((p, i) => {
+    const path = String(p || '').replace(/\\/g, '/');
+    const base = path.split('/').pop() || roles[i] || 'art';
+    marks.push({
+      role: artRoleAsImportRole(roles[i]),
+      path,
+      filename: base,
+    });
+  });
+  let html = `<span class="opacity-50 px-0.5" aria-hidden="true">+</span>`;
+  html += `<span class="opacity-60">${marks.length} sidecar${marks.length === 1 ? '' : 's'}</span>`;
+  marks.forEach((m) => {
+    html += roleIconMark(m);
+  });
+  return html;
+}
+
+function folderPathLabel(folderPath) {
+  return normImportPath(folderPath) + '/';
 }
 
 /** Mirror web.sidecarKindIcon / sidecarKindLabel for import roles. */
 function roleIcon(role) {
   switch (String(role || '')) {
-    case 'video': return 'film';
+    case 'video': return 'video';
     case 'nfo': return 'file-text';
     case 'json': return 'braces';
     case 'thumb': return 'image';
@@ -1483,30 +1549,69 @@ function applySeriesFolderLockToState(st, c) {
   if (c.series_folder_draft_key) {
     st.seriesId = DRAFT_PREFIX + c.series_folder_draft_key;
     st.seriesFolderLocked = true;
+    st.folderSeriesLocked = false;
+    st.seriesLockReason = 'Locked by tvshow.nfo';
+    st.videoLockReason = 'Locked by tvshow.nfo folder';
     // Unknown series: never keep a catalog video pick (belongs to another series).
     if (st.videoId && String(st.videoId) !== CREATE) st.videoId = CREATE;
     return;
   }
-  if (c.series_folder_locked && c.suggested_series_id) {
-    st.seriesId = String(c.suggested_series_id);
+  if (c.series_folder_locked) {
     st.seriesFolderLocked = true;
+    st.folderSeriesLocked = false;
+    st.seriesLockReason = 'Locked by tvshow.nfo';
+    st.videoLockReason = 'Locked by tvshow.nfo folder';
+    if (c.suggested_series_id) {
+      st.seriesId = String(c.suggested_series_id);
+    } else {
+      const nfo = nfoFolderForPath(dirOfImportPath(c.path));
+      if (nfo) st.seriesId = nfoSeriesId(nfo);
+    }
     if (st.videoId && String(st.videoId) !== CREATE) {
-      const v = VIDEOS.find((x) => String(x.id) === String(st.videoId));
-      if (!v || String(v.series_id) !== String(st.seriesId)) st.videoId = CREATE;
+      if (isDraftSeriesId(st.seriesId)) {
+        st.videoId = CREATE;
+      } else {
+        const v = VIDEOS.find((x) => String(x.id) === String(st.videoId));
+        if (!v || String(v.series_id) !== String(st.seriesId)) st.videoId = CREATE;
+      }
     }
   }
+}
+
+/** Apply operator folder/root series pick (weaker than tvshow.nfo). */
+function applyOperatorFolderLockToState(st, filePath) {
+  if (!st || st.seriesFolderLocked) return;
+  const info = folderLockInfo(dirOfImportPath(filePath));
+  if (info.nfo) return;
+  if (info.seriesId) {
+    st.seriesId = String(info.seriesId);
+    st.folderSeriesLocked = true;
+    st.seriesLockReason = info.seriesReason || 'Locked by parent folder';
+    st.videoLockReason = '';
+    if (st.videoId && String(st.videoId) !== CREATE &&
+        !videoBelongsToSeries(st.videoId, st.seriesId)) {
+      st.videoId = '';
+    }
+    return;
+  }
+  st.folderSeriesLocked = false;
+  st.seriesLockReason = '';
+  st.videoLockReason = '';
 }
 
 function defaultStateForBundle(b) {
   const key = bundleStateKey(b);
   const st = getUIState(key);
+  const primaryPath = bundlePrimaryPath(b);
   if (st.videoId != null || st.seriesId != null) {
     if (b.kind === 'media') {
       applySeriesFolderLockToState(st, b.video);
+      applyOperatorFolderLockToState(st, primaryPath);
       scrubMediaVideoPick(st, key);
     } else if (b.kind === 'sidecars') {
       const lead = b.sidecars.find((s) => s.suggested_video_id) || b.sidecars[0];
       applySeriesFolderLockToState(st, lead);
+      applyOperatorFolderLockToState(st, primaryPath);
       scrubSidecarVideoPick(st);
     }
     return st;
@@ -1515,9 +1620,10 @@ function defaultStateForBundle(b) {
     const c = b.video;
     st.seriesId = c.suggested_series_id ? String(c.suggested_series_id) : '';
     applySeriesFolderLockToState(st, c);
+    applyOperatorFolderLockToState(st, primaryPath);
     if (c.suggested_video_id) st.videoId = String(c.suggested_video_id);
     else st.videoId = '';
-    // tvshow.nfo tree re-import: no catalog video yet → create under the locked series.
+    // tvshow.nfo tree: no catalog video yet → create under the locked series.
     if (st.seriesFolderLocked && !st.videoId) st.videoId = CREATE;
     scrubMediaVideoPick(st, key);
     st.title = c.suggested_title || '';
@@ -1528,6 +1634,7 @@ function defaultStateForBundle(b) {
     const lead = b.sidecars.find((s) => s.suggested_video_id) || b.sidecars[0];
     st.seriesId = lead.suggested_series_id ? String(lead.suggested_series_id) : '';
     applySeriesFolderLockToState(st, lead);
+    applyOperatorFolderLockToState(st, primaryPath);
     st.videoId = lead.suggested_video_id ? String(lead.suggested_video_id) : '';
     scrubSidecarVideoPick(st);
   }
@@ -1623,7 +1730,6 @@ function updateImportBtn() {
   btn.appendChild(icon);
   btn.appendChild(document.createTextNode(label));
   lucideRefresh(btn);
-  updateAutoMatchBtn();
 }
 
 function syncVisibleItemState() {
@@ -1682,6 +1788,371 @@ function visibleImportBundles() {
   return importBundles.filter(bundleUnmatched);
 }
 
+function normImportPath(p) {
+  return String(p || '').replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+function importRootPath() {
+  return normImportPath(importScanRoot) || '/import';
+}
+
+function importRootLabel() {
+  return importRootPath() + '/';
+}
+
+function dirOfImportPath(path) {
+  const p = normImportPath(path);
+  const i = p.lastIndexOf('/');
+  if (i <= 0) return importRootPath();
+  const dir = p.slice(0, i);
+  const root = importRootPath();
+  if (dir.length < root.length) return root;
+  return dir || root;
+}
+
+function pathIsUnder(child, parent) {
+  const c = normImportPath(child);
+  const p = normImportPath(parent);
+  if (!c || !p) return false;
+  return c === p || c.startsWith(p + '/');
+}
+
+function bundlePrimaryPath(b) {
+  if (!b) return '';
+  if (b.kind === 'media' && b.video) return b.video.path;
+  if (b.kind === 'sidecars' && b.sidecars && b.sidecars[0]) return b.sidecars[0].path;
+  if (b.kind === 'other' && b.files && b.files[0]) return b.files[0].path;
+  return '';
+}
+
+function nfoFolderForPath(dirPath) {
+  const dir = normImportPath(dirPath);
+  let best = null;
+  let bestLen = -1;
+  (importSeriesFolders || []).forEach((f) => {
+    const fp = normImportPath(f.folder_path || f.draft_key);
+    if (!fp) return;
+    if (dir === fp || dir.startsWith(fp + '/')) {
+      if (fp.length > bestLen) {
+        best = f;
+        bestLen = fp.length;
+      }
+    }
+  });
+  return best;
+}
+
+function nfoSeriesId(f) {
+  if (!f) return '';
+  if (f.series_id != null && Number(f.series_id) > 0) return String(f.series_id);
+  if (f.unknown || f.draft_key) return DRAFT_PREFIX + f.draft_key;
+  return '';
+}
+
+/**
+ * Lock info for a folder path (itself or nearest ancestor).
+ * tvshow.nfo wins over operator folder picks.
+ */
+function folderLockInfo(folderPath) {
+  const root = importRootPath();
+  let dir = normImportPath(folderPath) || root;
+  const nfo = nfoFolderForPath(dir);
+  if (nfo) {
+    const nfoPath = normImportPath(nfo.folder_path || nfo.draft_key);
+    return {
+      nfo,
+      nfoPath,
+      seriesId: nfoSeriesId(nfo),
+      seriesReason: 'Locked by tvshow.nfo',
+      videoReason: 'Locked by tvshow.nfo folder',
+      parentPick: null,
+    };
+  }
+  // Walk up for operator pick (including root).
+  while (dir && dir.length >= root.length) {
+    const st = folderUIState.get(dir);
+    if (st && st.seriesId) {
+      return {
+        nfo: null,
+        nfoPath: '',
+        seriesId: String(st.seriesId),
+        seriesReason: dir === root ? 'Locked by import root' : 'Locked by parent folder',
+        videoReason: '',
+        parentPick: { path: dir, seriesId: String(st.seriesId) },
+      };
+    }
+    if (dir === root) break;
+    const i = dir.lastIndexOf('/');
+    if (i <= 0) break;
+    dir = dir.slice(0, i);
+  }
+  return { nfo: null, nfoPath: '', seriesId: '', seriesReason: '', videoReason: '', parentPick: null };
+}
+
+function folderOwnSeriesState(folderPath) {
+  const path = normImportPath(folderPath);
+  const root = importRootPath();
+  const nfoHere = (importSeriesFolders || []).find((f) => normImportPath(f.folder_path || f.draft_key) === path);
+  if (nfoHere) {
+    return {
+      seriesId: nfoSeriesId(nfoHere),
+      seriesFolderLocked: true,
+      folderSeriesLocked: false,
+      seriesLockReason: 'Locked by tvshow.nfo',
+      nfo: true,
+    };
+  }
+  // Ancestor tvshow.nfo (not this folder): lock series to that tree.
+  const nfoAnc = nfoFolderForPath(path);
+  const nfoAncPath = nfoAnc ? normImportPath(nfoAnc.folder_path || nfoAnc.draft_key) : '';
+  if (nfoAnc && nfoAncPath && nfoAncPath !== path) {
+    return {
+      seriesId: nfoSeriesId(nfoAnc),
+      seriesFolderLocked: true,
+      folderSeriesLocked: true,
+      seriesLockReason: 'Locked by tvshow.nfo',
+      nfo: false,
+    };
+  }
+  // Ancestor operator pick (not this folder): lock series to parent/root.
+  let dir = path;
+  while (dir && dir.length >= root.length) {
+    if (dir !== path) {
+      const st = folderUIState.get(dir);
+      if (st && st.seriesId) {
+        return {
+          seriesId: String(st.seriesId),
+          seriesFolderLocked: false,
+          folderSeriesLocked: true,
+          seriesLockReason: dir === root ? 'Locked by import root' : 'Locked by parent folder',
+          nfo: false,
+        };
+      }
+    }
+    if (dir === root) break;
+    const i = dir.lastIndexOf('/');
+    if (i <= 0) break;
+    dir = dir.slice(0, i);
+  }
+  const own = folderUIState.get(path) || {};
+  return {
+    seriesId: own.seriesId ? String(own.seriesId) : '',
+    seriesFolderLocked: false,
+    folderSeriesLocked: false,
+    seriesLockReason: '',
+    nfo: false,
+  };
+}
+
+function applyFolderSeriesPick(folderPath, seriesId) {
+  const path = normImportPath(folderPath);
+  const info = folderOwnSeriesState(path);
+  if (info.nfo || info.folderSeriesLocked || info.seriesFolderLocked) return;
+  const sid = String(seriesId || '');
+  if (!sid) folderUIState.delete(path);
+  else folderUIState.set(path, { seriesId: sid });
+  // Parent owns the subtree: drop descendant folder picks.
+  [...folderUIState.keys()].forEach((k) => {
+    if (k !== path && pathIsUnder(k, path)) folderUIState.delete(k);
+  });
+  importBundles.forEach((b) => {
+    const fp = bundlePrimaryPath(b);
+    const dir = dirOfImportPath(fp);
+    if (!(dir === path || pathIsUnder(dir, path))) return;
+    const st = getUIState(bundleStateKey(b));
+    if (st.seriesFolderLocked) return;
+    st.seriesId = sid;
+    st.folderSeriesLocked = !!sid;
+    if (st.videoId && String(st.videoId) !== CREATE && sid &&
+        !videoBelongsToSeries(st.videoId, sid)) {
+      st.videoId = '';
+    }
+  });
+  markAutoMatchStale();
+  renderImportPage();
+}
+
+function resetFolderSeriesPick(folderPath) {
+  applyFolderSeriesPick(folderPath, '');
+}
+
+function folderSeriesPickersHTML(folderPath) {
+  const path = normImportPath(folderPath);
+  const own = folderOwnSeriesState(path);
+  const st = {
+    seriesId: own.seriesId,
+    seriesFolderLocked: own.seriesFolderLocked,
+    folderSeriesLocked: own.folderSeriesLocked,
+    seriesLockReason: own.seriesLockReason,
+  };
+  const catalogReady = importPickerReady;
+  const seriesDisabled = !catalogReady || own.seriesFolderLocked || own.folderSeriesLocked;
+  const seriesResetDisabled = seriesDisabled || !own.seriesId || own.nfo;
+  const createSeriesDisabled = !catalogReady || own.seriesFolderLocked || own.folderSeriesLocked;
+  const seriesTip = !catalogReady ? 'Loading library index'
+    : (own.seriesLockReason || 'Select series');
+
+  const joinInner = `
+  <div class="join join-horizontal shrink-0 max-w-full ${seriesDisabled ? 'pointer-events-none opacity-60' : ''}" data-folder-path="${escapeHtml(path)}">
+    <details class="dropdown dropdown-bottom js-import-folder-series-dd">
+      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden shrink-0" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ''}>
+        ${seriesTriggerInnerHTML(st)}
+      </summary>
+      <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-80">
+        <input type="search" class="input input-bordered input-sm w-full mb-2 js-import-series-q" placeholder="Filter" aria-label="Filter" autocomplete="off" />
+        <ul class="list bg-base-100 max-h-64 overflow-y-auto js-import-series-list" role="listbox" aria-label="Series"></ul>
+      </div>
+    </details>
+    <button type="button" class="btn btn-square join-item js-import-create-folder-series tooltip tooltip-top" data-tip="Create new" aria-label="Create new" ${createSeriesDisabled ? 'disabled' : ''}>
+      <i data-lucide="plus" class="size-5" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="btn btn-soft btn-error btn-square join-item js-import-reset-folder-series tooltip tooltip-top" data-tip="Clear" aria-label="Clear" ${seriesResetDisabled ? 'disabled' : ''}>
+      <i data-lucide="unlink" class="size-5" aria-hidden="true"></i>
+    </button>
+  </div>`;
+  if (seriesDisabled) {
+    return `<span class="tooltip tooltip-top inline-flex max-w-full" data-tip="${escapeHtml(seriesTip)}">${joinInner}</span>`;
+  }
+  return joinInner;
+}
+
+/**
+ * Nested inbox tree: root = import path, folders with series joins, leaf bundles.
+ * Omits empty directories. No collapse.
+ */
+function buildImportFolderTree(bundles) {
+  const rootPath = importRootPath();
+  const root = { path: rootPath, name: importRootLabel(), bundles: [], children: new Map(), depth: 0 };
+
+  function ensureDir(dirPath) {
+    const path = normImportPath(dirPath) || rootPath;
+    if (path === rootPath) return root;
+    const parts = [];
+    let cur = path;
+    while (cur && cur.length > rootPath.length) {
+      parts.unshift(cur);
+      const i = cur.lastIndexOf('/');
+      if (i <= 0) break;
+      cur = cur.slice(0, i);
+    }
+    let node = root;
+    parts.forEach((p) => {
+      if (!node.children.has(p)) {
+        const base = p.slice(p.lastIndexOf('/') + 1) || p;
+        node.children.set(p, {
+          path: p,
+          name: base,
+          bundles: [],
+          children: new Map(),
+          depth: node.depth + 1,
+        });
+      }
+      node = node.children.get(p);
+    });
+    return node;
+  }
+
+  (importSeriesFolders || []).forEach((f) => {
+    ensureDir(f.folder_path || f.draft_key);
+  });
+
+  (bundles || []).forEach((b) => {
+    const fp = bundlePrimaryPath(b);
+    if (!fp) return;
+    const node = ensureDir(dirOfImportPath(fp));
+    node.bundles.push(b);
+  });
+
+  function prune(node, isRoot) {
+    [...node.children.keys()].forEach((k) => {
+      const child = node.children.get(k);
+      if (!prune(child, false)) node.children.delete(k);
+    });
+    if (isRoot) return true;
+    return node.bundles.length > 0 || node.children.size > 0;
+  }
+  prune(root, true);
+  collapseEmptyFolderChains(root);
+  return root;
+}
+
+/** Merge successive dirs with no media and no tvshow.nfo into one path row. */
+function collapseEmptyFolderChains(node) {
+  [...(node.children || new Map()).values()].forEach((child) => collapseEmptyFolderChains(child));
+  const next = new Map();
+  [...(node.children || new Map()).entries()].forEach(([key, child]) => {
+    let tip = child;
+    while (
+      tip.bundles.length === 0 &&
+      tip.children.size === 1 &&
+      !seriesFolderAt(tip.path)
+    ) {
+      tip = [...tip.children.values()][0];
+    }
+    setFolderTreeDepth(tip, node.depth + 1);
+    next.set(tip.path, tip);
+  });
+  node.children = next;
+}
+
+function setFolderTreeDepth(node, depth) {
+  node.depth = depth;
+  [...(node.children || new Map()).values()].forEach((c) => setFolderTreeDepth(c, depth + 1));
+}
+
+function flattenTreeLeaves(node, out) {
+  out = out || [];
+  (node.bundles || []).forEach((b) => out.push(b));
+  [...(node.children || new Map()).values()]
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+    .forEach((c) => flattenTreeLeaves(c, out));
+  return out;
+}
+
+/** Keep only leaf bundles in `keep` set; drop empty dirs. */
+function filterTreeToBundles(node, keep, isRoot) {
+  node.bundles = (node.bundles || []).filter((b) => keep.has(b));
+  [...node.children.keys()].forEach((k) => {
+    const child = node.children.get(k);
+    if (!filterTreeToBundles(child, keep, false)) node.children.delete(k);
+  });
+  if (isRoot) return true;
+  return node.bundles.length > 0 || node.children.size > 0;
+}
+
+function buildFolderRow(node) {
+  const li = document.createElement('li');
+  li.className = 'import-folder py-1';
+  li.dataset.folderPath = node.path;
+  const pad = Math.min(node.depth, 8) * 1.25;
+  li.style.marginLeft = pad ? (pad + 'rem') : '';
+  const label = folderPathLabel(node.path);
+  const icon = node.depth === 0 ? 'inbox' : 'folder';
+  li.innerHTML = `
+    <div class="${importRowBoxClass('neutral')}">
+      <div class="flex flex-wrap items-center gap-1.5 text-xs min-w-0">
+        <i data-lucide="${icon}" class="size-4 opacity-70 shrink-0" aria-hidden="true"></i>
+        <span class="min-w-0"><code class="text-xs break-all">${escapeHtml(label)}</code></span>
+        ${folderMetaMarksHTML(node.path)}
+      </div>
+      ${folderSeriesPickersHTML(node.path)}
+    </div>`;
+  return li;
+}
+
+function appendTreeToList(list, node) {
+  list.appendChild(buildFolderRow(node));
+  (node.bundles || []).forEach((b) => {
+    const el = buildImportBundleItem(b, node.path);
+    const pad = Math.min(node.depth + 1, 8) * 1.25;
+    el.style.marginLeft = pad + 'rem';
+    list.appendChild(el);
+  });
+  [...(node.children || new Map()).values()]
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+    .forEach((c) => appendTreeToList(list, c));
+}
+
 /** Own series_folders draft_key for a candidate (unknown draft or known series_id / path). */
 function folderKeyForCandidate(c) {
   if (!c) return '';
@@ -1716,39 +2187,6 @@ function folderKeyForBundle(b) {
     return folderKeyForCandidate(lead);
   }
   return '';
-}
-
-/**
- * Group tree-locked bundles under their tvshow.nfo folder; free items stay top-level.
- * First sighting of a folder opens the group; later locked bundles join that group.
- */
-function buildImportListRows(bundles) {
-  const rows = [];
-  const groupIndex = new Map();
-  (bundles || []).forEach((b) => {
-    const key = folderKeyForBundle(b);
-    if (!key) {
-      rows.push({ kind: 'bundle', bundle: b });
-      return;
-    }
-    let idx = groupIndex.get(key);
-    if (idx == null) {
-      const folder = seriesFolderByDraftKey(key) || {
-        draft_key: key,
-        folder_path: key,
-        title: 'Series',
-        unknown: true,
-        art_roles: [],
-        art_paths: [],
-        media_count: 0,
-      };
-      idx = rows.length;
-      groupIndex.set(key, idx);
-      rows.push({ kind: 'series_group', folder, bundles: [] });
-    }
-    rows[idx].bundles.push(b);
-  });
-  return rows;
 }
 
 function listFilterNote(visibleLen) {
@@ -1794,27 +2232,26 @@ function renderImportPage() {
   ensureMediaMatchExclusive();
   updateImportBtn();
   const visible = visibleImportBundles();
-  const rows = buildImportListRows(visible);
   if (!importBundles.length) {
     pager.classList.add('hidden');
     return;
   }
-  // Page top-level rows so a tvshow.nfo wrap keeps all its locked media together.
-  const pages = importTotalPages(rows);
+  const tree = buildImportFolderTree(visible);
+  const leaves = flattenTreeLeaves(tree);
+  const pages = importTotalPages(leaves);
   if (importPage > pages) importPage = pages;
   const start = (importPage - 1) * PAGE_SIZE;
-  const slice = rows.slice(start, start + PAGE_SIZE);
-  if (!rows.length) {
+  const slice = leaves.slice(start, start + PAGE_SIZE);
+  const keep = new Set(slice);
+  filterTreeToBundles(tree, keep, true);
+  collapseEmptyFolderChains(tree);
+  if (!leaves.length) {
     list.innerHTML = `<li class="opacity-60 text-sm py-2">${listFilterEmptyLabel()}</li>`;
   } else {
-    slice.forEach((row) => {
-      if (row.kind === 'series_group') list.appendChild(buildSeriesFolderItem(row));
-      else list.appendChild(buildImportBundleItem(row.bundle));
-    });
+    appendTreeToList(list, tree);
   }
-  const leafCount = (listRows) => listRows.reduce((n, r) => n + (r.kind === 'series_group' ? r.bundles.length : 1), 0);
-  const fromLeaf = slice.length ? leafCount(rows.slice(0, start)) + 1 : 0;
-  const toLeaf = fromLeaf ? fromLeaf + leafCount(slice) - 1 : 0;
+  const fromLeaf = slice.length ? start + 1 : 0;
+  const toLeaf = fromLeaf ? start + slice.length : 0;
   const filterNote = listFilterNote(visible.length);
   document.getElementById('import-pager-label').textContent =
     'Showing ' + fromLeaf + ' - ' + toLeaf + ' of ' + visible.length + ' item(s)' + filterNote;
@@ -1889,110 +2326,60 @@ function setImportTasksBusy(busy) {
   }
 }
 
-function buildImportBundleItem(b) {
-  if (b.kind === 'other') return buildOtherItem(b.files[0]);
-  if (b.kind === 'sidecars') return buildSidecarBundleItem(b);
-  return buildMediaBundleItem(b);
+function buildImportBundleItem(b, parentDir) {
+  if (b.kind === 'other') return buildOtherItem(b.files[0], parentDir);
+  if (b.kind === 'sidecars') return buildSidecarBundleItem(b, parentDir);
+  return buildMediaBundleItem(b, parentDir);
 }
 
-function joinFolderPath(dir, name) {
-  const base = String(dir || '').replace(/\\/g, '/').replace(/\/+$/, '');
-  return base ? (base + '/' + name) : name;
-}
-
-function seriesFolderFilesStack(f) {
-  const dir = f.folder_path || f.draft_key || '';
-  const primary = { path: joinFolderPath(dir, 'tvshow.nfo'), filename: 'tvshow.nfo', role: 'nfo' };
-  const arts = (f.art_paths || []).map((p) => {
-    const path = String(p || '').replace(/\\/g, '/');
-    const i = path.lastIndexOf('/');
-    return { path, filename: i >= 0 ? path.slice(i + 1) : path, role: 'thumb' };
-  });
-  return filesStack(primary, arts);
-}
-
-function seriesFolderMatchNote(f) {
-  const n = Number(f.media_count) || (f._bundleCount || 0);
-  const media = n === 1 ? '1 media' : n + ' media';
-  if (f.unknown) {
-    return `<span class="opacity-60 text-xs">${escapeHtml('Create series: ' + (f.title || 'Series') + ' (' + media + ')')}</span>`;
-  }
-  const title = f.title || seriesLabel(f.series_id) || 'series';
-  return `<span class="opacity-60 text-xs">${escapeHtml('Series folder: ' + title + ' (' + media + ')')}</span>`;
-}
-
-/** Outer wrap: tvshow.nfo (+ art) header, nested locked media/sidecar rows. */
-function buildSeriesFolderItem(row) {
-  const f = row.folder || {};
-  f._bundleCount = (row.bundles || []).length;
+function buildOtherItem(c, parentDir) {
   const li = document.createElement('li');
-  li.className = 'import-series-folder rounded-box border border-base-300 p-4';
-  if (f.draft_key) li.dataset.draftKey = f.draft_key;
-  const header = document.createElement('div');
-  header.className = 'flex items-center gap-2 pb-3 mb-3 border-b border-base-300';
-  header.innerHTML = `
-    <div class="min-w-0 flex-1 space-y-2">
-      ${seriesFolderFilesStack(f)}
-      ${metaLine(seriesFolderMatchNote(f))}
-    </div>
-    <div class="flex items-center gap-3 shrink-0 self-center">
-      <span class="tooltip tooltip-top inline-flex shrink-0 text-info" data-tip="Series folder locked" aria-label="Series folder locked">
-        <i data-lucide="folder-lock" class="size-6" aria-hidden="true"></i>
-      </span>
-    </div>`;
-  li.appendChild(header);
-  const ul = document.createElement('ul');
-  ul.className = 'flex flex-col gap-3 list-none p-0 m-0';
-  ul.setAttribute('aria-label', 'Media under ' + (f.title || 'series folder'));
-  (row.bundles || []).forEach((b) => ul.appendChild(buildImportBundleItem(b)));
-  li.appendChild(ul);
-  return li;
-}
-
-function buildOtherItem(c) {
-  const li = document.createElement('li');
-  li.className = 'import-item rounded-box border border-base-300 p-4';
+  li.className = 'import-item py-1.5';
   const note = c.role === 'json'
     ? '<span class="opacity-60 text-xs">info.json is provenance - import only with media</span>'
     : '<span class="opacity-60 text-xs">not importable</span>';
   li.innerHTML = `
-    <div class="flex items-center gap-2">
-      <div class="min-w-0 flex-1 space-y-2">
-        ${filesStack(c, null)}
-        ${metaLine(note)}
+    <div class="${importRowBoxClass('neutral')}">
+      <div class="flex items-center gap-2">
+        <div class="min-w-0 flex-1 space-y-2">
+          ${filesStack(c, null, null, parentDir)}
+          ${metaLine(note)}
+        </div>
+        ${otherActionsHTML()}
       </div>
-      ${otherActionsHTML()}
     </div>`;
   return li;
 }
 
-function buildSidecarBundleItem(b) {
+function buildSidecarBundleItem(b, parentDir) {
   const lead = b.sidecars.find((s) => s.suggested_video_id) || b.sidecars[0];
   const st = defaultStateForBundle(b);
   const li = document.createElement('li');
-  li.className = 'import-item rounded-box border border-base-300 p-4';
+  li.className = 'import-item py-1.5';
   li.dataset.stateKey = bundleStateKey(b);
   const primary = b.sidecars[0];
   const rest = b.sidecars.slice(1);
   li.dataset.kind = 'sidecar';
+  const tone = itemReady('sidecar', st) ? 'success' : 'warning';
   li.innerHTML = `
-    <div class="space-y-2">
-      ${filesStack(primary, rest, matchStatusHTML(st, 'sidecar'))}
+    <div class="${importRowBoxClass(tone)}">
+      ${filesStack(primary, rest, null, parentDir)}
       ${matchPickersHTML(st, 'sidecar')}
     </div>`;
   return li;
 }
 
-function buildMediaBundleItem(b) {
+function buildMediaBundleItem(b, parentDir) {
   const c = b.video;
   const st = defaultStateForBundle(b);
   const li = document.createElement('li');
-  li.className = 'import-item rounded-box border border-base-300 p-4';
+  li.className = 'import-item py-1.5';
   li.dataset.stateKey = bundleStateKey(b);
   li.dataset.kind = 'media';
+  const tone = itemReady('media', st) ? 'success' : 'warning';
   li.innerHTML = `
-    <div class="space-y-2">
-      ${filesStack(c, b.sidecars, matchStatusHTML(st, 'media'))}
+    <div class="${importRowBoxClass(tone)}">
+      ${filesStack(c, b.sidecars, null, parentDir)}
       ${matchPickersHTML(st, 'media')}
     </div>`;
   return li;
@@ -2309,8 +2696,8 @@ document.getElementById('import-prev').addEventListener('click', () => {
 document.getElementById('import-next').addEventListener('click', () => {
   syncVisibleItemState();
   importBundles = buildImportBundles(importCandidates);
-  const rows = buildImportListRows(visibleImportBundles());
-  if (importPage < importTotalPages(rows)) { importPage++; renderImportPage(); }
+  const leaves = flattenTreeLeaves(buildImportFolderTree(visibleImportBundles()));
+  if (importPage < importTotalPages(leaves)) { importPage++; renderImportPage(); }
 });
 
 document.getElementById('btn-import').addEventListener('click', () => {
@@ -2415,6 +2802,8 @@ async function runImportScan(opts) {
     importCandidates = [];
     importBundles = [];
     importSeriesFolders = [];
+    importScanRoot = '';
+    folderUIState.clear();
     importPage = 1;
     importUIState.clear();
     autoMatchStale = false;
@@ -2433,10 +2822,12 @@ async function runImportScan(opts) {
     const data = await res.json();
     const next = data.candidates || [];
     importSeriesFolders = data.series_folders || [];
+    importScanRoot = String(data.import_path || '').trim();
     if (preserveMatches) {
       pruneImportUIState(next);
     } else {
       autoMatchStale = false;
+      folderUIState.clear();
     }
     importCandidates = next;
     if (!importCandidates.length) {
@@ -2444,7 +2835,6 @@ async function runImportScan(opts) {
       importListEl().innerHTML = '';
       document.getElementById('import-pager').classList.add('hidden');
       setImportEmpty('No untracked files found.');
-      updateAutoMatchBtn();
       updateImportBtn();
       if (notifyAutoMatch) notifyAutoMatchCount(0);
       return;
@@ -2471,14 +2861,17 @@ async function runImportScan(opts) {
   }
 }
 
+const importRescanToggle = document.getElementById('modal-import-rescan');
 document.getElementById('btn-import-rescan').addEventListener('click', () => {
   if (hasManualMatchPicks()) {
-    if (!window.confirm('Clear manual matches and rescan the import folder?')) return;
+    if (importRescanToggle) importRescanToggle.checked = true;
+    return;
   }
   runImportScan({ preserveMatches: false });
 });
-document.getElementById('btn-import-auto-match').addEventListener('click', () => {
-  applyAutoMatch();
+document.getElementById('btn-import-rescan-confirm')?.addEventListener('click', () => {
+  if (importRescanToggle) importRescanToggle.checked = false;
+  runImportScan({ preserveMatches: false });
 });
 document.getElementById('import-filter-unmatched').addEventListener('change', () => {
   importPage = 1;
@@ -2487,19 +2880,38 @@ document.getElementById('import-filter-unmatched').addEventListener('change', ()
 
 const importListRoot = document.getElementById('import-list');
 if (importListRoot) {
+  // Close Match dropdowns when clicking outside (details stay open on focus otherwise).
+  document.addEventListener('pointerdown', (ev) => {
+    const open = importListRoot.querySelectorAll('details.dropdown[open]');
+    if (!open.length) return;
+    open.forEach((dd) => {
+      if (!dd.contains(ev.target)) dd.open = false;
+    });
+  }, true);
   // details[open] stays open while focusing search / scrolling; fill on open.
   importListRoot.addEventListener('toggle', (ev) => {
     const dd = ev.target;
     if (!(dd instanceof HTMLDetailsElement) || !dd.open) return;
+    const folderJoin = dd.closest('[data-folder-path]');
     const item = dd.closest('.import-item');
+    importListRoot.querySelectorAll('details.dropdown[open]').forEach((other) => {
+      if (other !== dd) other.open = false;
+    });
+    if (folderJoin && dd.classList.contains('js-import-folder-series-dd')) {
+      const path = folderJoin.getAttribute('data-folder-path');
+      const own = folderOwnSeriesState(path);
+      const st = { seriesId: own.seriesId };
+      const ul = dd.querySelector('.js-import-series-list');
+      const qEl = dd.querySelector('.js-import-series-q');
+      fillSeriesPickList(ul, st, qEl?.value || '');
+      queueMicrotask(() => qEl?.focus({ preventScroll: true }));
+      return;
+    }
     if (!item) return;
     const key = item.dataset.stateKey;
     const kind = item.dataset.kind;
     if (!key || !kind) return;
     const st = getUIState(key);
-    importListRoot.querySelectorAll('details.dropdown[open]').forEach((other) => {
-      if (other !== dd) other.open = false;
-    });
     if (dd.classList.contains('js-import-series-dd')) {
       const ul = dd.querySelector('.js-import-series-list');
       const qEl = dd.querySelector('.js-import-series-q');
@@ -2515,6 +2927,13 @@ if (importListRoot) {
     }
   }, true);
   importListRoot.addEventListener('input', (ev) => {
+    const folderJoin = ev.target.closest('[data-folder-path]');
+    if (folderJoin && ev.target.classList.contains('js-import-series-q')) {
+      const path = folderJoin.getAttribute('data-folder-path');
+      const own = folderOwnSeriesState(path);
+      fillSeriesPickList(folderJoin.querySelector('.js-import-series-list'), { seriesId: own.seriesId }, ev.target.value);
+      return;
+    }
     const item = ev.target.closest('.import-item');
     if (!item) return;
     const key = item.dataset.stateKey;
@@ -2540,12 +2959,17 @@ if (importListRoot) {
     const ser = ev.target.closest('[data-import-pick-series]');
     const vid = ev.target.closest('[data-import-pick-video]');
     if (!ser && !vid) return;
+    ev.preventDefault();
+    const folderJoin = ev.target.closest('[data-folder-path]');
+    if (folderJoin && ser) {
+      applyFolderSeriesPick(folderJoin.getAttribute('data-folder-path'), ser.getAttribute('data-import-pick-series'));
+      return;
+    }
     const item = ev.target.closest('.import-item');
     if (!item) return;
     const key = item.dataset.stateKey;
     const kind = item.dataset.kind;
     if (!key || !kind) return;
-    ev.preventDefault();
     if (ser) {
       applySeriesPick(key, ser.getAttribute('data-import-pick-series'));
       return;
@@ -2553,6 +2977,22 @@ if (importListRoot) {
     applyVideoPick(key, kind, vid.getAttribute('data-import-pick-video'));
   });
   importListRoot.addEventListener('click', (ev) => {
+    const folderJoin = ev.target.closest('[data-folder-path]');
+    if (folderJoin) {
+      const path = folderJoin.getAttribute('data-folder-path');
+      if (ev.target.closest('[data-import-pick-series], [data-import-pick-video]')) {
+        ev.preventDefault();
+        return;
+      }
+      if (ev.target.closest('.js-import-create-folder-series')) {
+        startCreateSeriesForFolder(path);
+        return;
+      }
+      if (ev.target.closest('.js-import-reset-folder-series')) {
+        resetFolderSeriesPick(path);
+        return;
+      }
+    }
     const item = ev.target.closest('.import-item');
     if (!item) return;
     const key = item.dataset.stateKey;

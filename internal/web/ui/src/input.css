@@ -78,11 +78,29 @@
   z-index: 50;
 }
 #import-list .js-import-series-dd > summary.btn,
-#import-list .js-import-video-dd > summary.btn {
+#import-list .js-import-video-dd > summary.btn,
+#import-list .js-import-folder-series-dd > summary.btn {
   width: 18rem;
   min-width: 18rem;
   max-width: 18rem;
   flex-shrink: 0;
+}
+/* Episode trigger thumb: same height as series size-8 poster, 16:9 width. */
+#import-list .js-import-video-thumb {
+  height: 2rem;
+  width: 3.5rem;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: var(--radius-selector, 0.5rem);
+}
+/* Import row tones (classes built in import.html <script>). */
+#import-list .import-row-ok {
+  border-color: color-mix(in oklab, var(--color-success) 50%, transparent);
+  background-color: color-mix(in oklab, var(--color-success) 10%, transparent);
+}
+#import-list .import-row-warn {
+  border-color: color-mix(in oklab, var(--color-warning) 50%, transparent);
+  background-color: color-mix(in oklab, var(--color-warning) 10%, transparent);
 }
 
 /*
