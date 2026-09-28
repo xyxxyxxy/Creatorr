@@ -3334,7 +3334,9 @@
       input.classList.remove("opacity-60");
       if (hidden) hidden.remove();
       if (!input.value.trim() || input.value.trim() === "never") {
-        input.value = (input.dataset.prevCron || input.dataset.cronDefault || "").trim();
+        let fill = (input.dataset.prevCron || input.dataset.cronDefault || "").trim();
+        if (!fill && cronName === "scan_cron") fill = "@weekly";
+        input.value = fill;
       }
     }
   }

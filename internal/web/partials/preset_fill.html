@@ -16,7 +16,8 @@
 {{$ph := .FieldPlaceholder}}{{if not $ph}}{{$ph = "* * * * *"}}{{end}}
 {{$regularLabel := .RegularLabel}}{{if not $regularLabel}}{{$regularLabel = "enabled"}}{{end}}
 {{$listID := printf "%s-dl" $id}}
-{{$off := not $cur}}
+{{/* "never" is the disabled display (and a legacy stored off value), not an active cron. */}}
+{{$off := or (not $cur) (eq $cur "never") (eq $cur "Never")}}
 {{$inputClass := .FieldClass}}
 {{$fieldError := .FieldError}}
 <div class="w-full" {{if .Autosave}}data-settings-cron-autosave{{end}}>

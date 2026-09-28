@@ -7,7 +7,8 @@
   Use aria-disabled + cursor-not-allowed; mute the icon only (tip-safe).
 */}}
 <span id="source-scan-actions-{{.ID}}" class="contents source-scan-actions" {{if .OOB}}hx-swap-oob="true"{{end}}>
-  {{if and (ne .Kind "single") .FullScanDone}}
+  {{/* Keep Scan visible while a scan is queued. Full scan clears full_scan_done immediately, which would otherwise hide this button. */}}
+  {{if and (ne .Kind "single") (or .FullScanDone .ScanActive)}}
   {{$scanOff := or .ScanActive (not .DomainActive)}}
   {{$tipScan := "Scan for new videos"}}
   {{if .ScanActive}}{{$tipScan = "'Scan' queued"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{end}}
@@ -15,11 +16,11 @@
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     <input type="hidden" name="source_id" value="{{.ID}}" />
     {{if $scanOff}}
-    <span class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="{{$tipScan}}" aria-label="Scan for new videos" aria-disabled="true" role="button" tabindex="-1">
+    <span class="btn btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="{{$tipScan}}" aria-label="Scan for new videos" aria-disabled="true" role="button" tabindex="-1">
       <i data-lucide="scan-line" class="size-3.5 opacity-50" aria-hidden="true"></i>
     </span>
     {{else}}
-    <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="{{$tipScan}}" aria-label="Scan for new videos">
+    <button type="submit" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="{{$tipScan}}" aria-label="Scan for new videos">
       <i data-lucide="scan-line" class="size-3.5"></i>
     </button>
     {{end}}
@@ -32,11 +33,11 @@
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     <input type="hidden" name="source_id" value="{{.ID}}" />
     {{if $fullOff}}
-    <span class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="{{$tipFull}}" aria-label="Start full scan" aria-disabled="true" role="button" tabindex="-1">
+    <span class="btn btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="{{$tipFull}}" aria-label="Start full scan" aria-disabled="true" role="button" tabindex="-1">
       <i data-lucide="scan-text" class="size-3.5 opacity-50" aria-hidden="true"></i>
     </span>
     {{else}}
-    <button type="submit" class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="{{$tipFull}}" aria-label="Start full scan">
+    <button type="submit" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="{{$tipFull}}" aria-label="Start full scan">
       <i data-lucide="scan-text" class="size-3.5"></i>
     </button>
     {{end}}
