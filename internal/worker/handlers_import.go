@@ -257,6 +257,9 @@ func runImportMedia(
 		progress("Integrity check skipped (File integrity off)", nil)
 	}
 	softEnqueueImportSidecarGapFill(d, videoID, srcNFO != "", progress)
+	if folder := d.Library.NearestImportSeriesFolder(abs); folder != "" {
+		_ = d.Library.RemoveImportSeriesFolderIfDrained(folder)
+	}
 	progress("Done", ptrFloat(1))
 	return nil
 }

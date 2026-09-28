@@ -413,3 +413,91 @@ func countMediaUnderFolders(candidates []ImportCandidate, folders []ImportSeries
 		folders[i].MediaCount = n
 	}
 }
+
+// NearestImportSeriesFolder returns the closest ancestor with tvshow.nfo under ImportRoot.
+func (s *Store) NearestImportSeriesFolder(abs string) string {
+	abs = filepath.Clean(strings.TrimSpace(abs))
+	if abs == "" || !s.pathUnderImportInbox(abs) {
+		return ""
+	}
+	absRoot, err := filepath.Abs(strings.TrimSpace(s.ImportRoot))
+	if err != nil {
+		return ""
+	}
+	absRoot = filepath.Clean(absRoot)
+	dir := abs
+	if st, err := os.Stat(abs); err == nil && !st.IsDir() {
+		dir = filepath.Dir(abs)
+	}
+	for {
+		if fileExists(filepath.Join(dir, "tvshow.nfo")) {
+			return dir
+		}
+		if dir == absRoot {
+			return ""
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		rel, err := filepath.Rel(absRoot, parent)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+// RemoveImportSeriesFolderIfDrained deletes an inbox tvshow.nfo tree when only series
+// meta / empty dirs remain (no media and no other files). Never touches library roots.
+func (s *Store) RemoveImportSeriesFolderIfDrained(folder string) error {
+	folder = filepath.Clean(strings.TrimSpace(folder))
+	if folder == "" || !s.pathUnderImportInbox(folder) {
+		return nil
+	}
+	absRoot, err := filepath.Abs(strings.TrimSpace(s.ImportRoot))
+	if err != nil {
+		return nil
+	}
+	absRoot = filepath.Clean(absRoot)
+	if folder == absRoot {
+		return nil
+	}
+	if !fileExists(filepath.Join(folder, "tvshow.nfo")) {
+		return nil
+	}
+	keep, err := importSeriesFolderHasKeepers(folder)
+	if err != nil || keep {
+		return err
+	}
+	return os.RemoveAll(folder)
+}
+
+func importSeriesFolderHasKeepers(folder string) (bool, error) {
+	meta := map[string]struct{}{}
+	for _, p := range SeriesFolderMetaPaths(folder) {
+		meta[filepath.Clean(p)] = struct{}{}
+	}
+	var keep bool
+	err := filepath.WalkDir(folder, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		clean := filepath.Clean(path)
+		if _, ok := meta[clean]; ok {
+			return nil
+		}
+		if strings.EqualFold(d.Name(), "tvshow.nfo") {
+			return nil
+		}
+		keep = true
+		return filepath.SkipAll
+	})
+	if err != nil {
+		return true, err
+	}
+	return keep, nil
+}

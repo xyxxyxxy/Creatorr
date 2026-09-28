@@ -40,6 +40,9 @@ func ImportPlanHandler(d Deps) TaskHandler {
 				return err
 			}
 		}
+		for _, draft := range payload.Series {
+			_ = d.Library.RemoveImportSeriesFolderIfDrained(draft.FolderPath)
+		}
 		progress("Done", ptrFloat(1))
 		return nil
 	}

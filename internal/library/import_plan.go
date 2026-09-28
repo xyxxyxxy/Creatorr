@@ -3,7 +3,6 @@ package library
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -201,34 +200,12 @@ func (s *Store) ApplyImportSeriesFolder(d ImportPlanSeriesDraft) (seriesID int64
 		absRoot = root.Path
 	}
 	target := filepath.Clean(SeriesDir(absRoot, title))
+	// Never rename the whole inbox tree here: jobs still hold the original paths, and a
+	// successful rename would leave unpackaged media under SeriesDir. Copy art only;
+	// PackMedia moves media; RemoveImportSeriesFolderIfDrained clears the drained inbox shell.
 	artSrc := map[string]string{}
-	if target == folder {
-		// Art already in place; only write DB + regenerate NFO.
-	} else {
-		// Prefer rename when target empty (library re-import with retitled series).
-		if !dirExists(target) && dirExists(folder) {
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return seriesID, err
-			}
-			if err := os.Rename(folder, target); err != nil {
-				// Fall back to copy art from original folder.
-				artSrc = DiscoverSeriesFolderArt(folder)
-			} else {
-				folder = target
-				nfoPath = filepath.Join(folder, "tvshow.nfo")
-				if _, err := ParseSeriesNFOFile(nfoPath); err == nil {
-					parsed, _ = ParseSeriesNFOFile(nfoPath)
-				}
-			}
-		} else {
-			artSrc = DiscoverSeriesFolderArt(folder)
-		}
-	}
-	// Re-parse after possible rename.
-	if fileExists(filepath.Join(folder, "tvshow.nfo")) {
-		if p2, err := ParseSeriesNFOFile(filepath.Join(folder, "tvshow.nfo")); err == nil {
-			parsed = p2
-		}
+	if target != folder {
+		artSrc = DiscoverSeriesFolderArt(folder)
 	}
 	params := SaveSeriesMetadataParams{
 		Plot:          parsed.Plot,

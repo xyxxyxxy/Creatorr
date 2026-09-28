@@ -355,3 +355,105 @@ func TestEnqueueImportPlanNoSeriesRows(t *testing.T) {
 		t.Fatalf("kind=%s", kind)
 	}
 }
+
+func TestRemoveImportSeriesFolderIfDrained(t *testing.T) {
+	tmp := t.TempDir()
+	d, err := db.Open(filepath.Join(tmp, "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	inbox := filepath.Join(tmp, "import")
+	libRoot := filepath.Join(tmp, "library")
+	_ = os.MkdirAll(inbox, 0o755)
+	_ = os.MkdirAll(libRoot, 0o755)
+	s := library.NewStore(d, queue.NewStore(d))
+	s.ImportRoot = inbox
+
+	folder := filepath.Join(inbox, "Cool Show")
+	sub := filepath.Join(folder, "S2020")
+	_ = os.MkdirAll(sub, 0o755)
+	_ = os.WriteFile(filepath.Join(folder, "tvshow.nfo"), []byte(`<tvshow><title>Cool Show</title></tvshow>`), 0o644)
+	_ = os.WriteFile(filepath.Join(folder, "poster.jpg"), []byte("p"), 0o644)
+	media := filepath.Join(sub, "ep.mkv")
+	_ = os.WriteFile(media, []byte("m"), 0o644)
+
+	if got := s.NearestImportSeriesFolder(media); got != folder {
+		t.Fatalf("nearest=%q want %q", got, folder)
+	}
+	if err := s.RemoveImportSeriesFolderIfDrained(folder); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(folder); err != nil {
+		t.Fatalf("folder with media must stay: %v", err)
+	}
+
+	_ = os.Remove(media)
+	if err := s.RemoveImportSeriesFolderIfDrained(folder); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(folder); !os.IsNotExist(err) {
+		t.Fatalf("drained inbox series folder should be gone, stat=%v", err)
+	}
+
+	// Library series folders are never deleted by this helper.
+	libShow := filepath.Join(libRoot, "Lib Show")
+	_ = os.MkdirAll(libShow, 0o755)
+	_ = os.WriteFile(filepath.Join(libShow, "tvshow.nfo"), []byte(`<tvshow><title>Lib Show</title></tvshow>`), 0o644)
+	if err := s.RemoveImportSeriesFolderIfDrained(libShow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(libShow); err != nil {
+		t.Fatalf("library folder must stay: %v", err)
+	}
+}
+
+func TestApplyImportSeriesFolderKeepsInboxTree(t *testing.T) {
+	tmp := t.TempDir()
+	d, err := db.Open(filepath.Join(tmp, "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	inbox := filepath.Join(tmp, "import")
+	libRoot := filepath.Join(tmp, "library")
+	_ = os.MkdirAll(inbox, 0o755)
+	_ = os.MkdirAll(libRoot, 0o755)
+	s := library.NewStore(d, queue.NewStore(d))
+	s.ImportRoot = inbox
+	root, err := s.CreateRoot("lib", libRoot, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, err := s.CreateProfile("best", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	folder := filepath.Join(inbox, "Cool Show")
+	_ = os.MkdirAll(folder, 0o755)
+	_ = os.WriteFile(filepath.Join(folder, "tvshow.nfo"), []byte(`<tvshow><title>Cool Show</title><plot>Hi</plot></tvshow>`), 0o644)
+	_ = os.WriteFile(filepath.Join(folder, "poster.jpg"), []byte("p"), 0o644)
+	media := filepath.Join(folder, "ep.mkv")
+	_ = os.WriteFile(media, []byte("media"), 0o644)
+
+	sid, err := s.ApplyImportSeriesFolder(library.ImportPlanSeriesDraft{
+		DraftKey: folder, FolderPath: folder, Title: "Cool Show",
+		RootID: root.ID, QualityProfileID: prof.ID, Monitored: true, DeliveryMode: "video",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sid <= 0 {
+		t.Fatal("series id")
+	}
+	if _, err := os.Stat(media); err != nil {
+		t.Fatalf("inbox media must remain until PackMedia: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(folder, "tvshow.nfo")); err != nil {
+		t.Fatalf("inbox tvshow.nfo must remain until drained: %v", err)
+	}
+	libPoster := filepath.Join(library.SeriesDir(libRoot, "Cool Show"), "poster.jpg")
+	if _, err := os.Stat(libPoster); err != nil {
+		t.Fatalf("library art should be copied: %v", err)
+	}
+}
