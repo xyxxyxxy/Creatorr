@@ -25,7 +25,7 @@
              autocomplete="url"
              {{if not .Disabled}}required{{end}}
              {{if .Disabled}}disabled{{end}} />
-      <button type="submit" class="btn btn-soft join-item shrink-0" {{if .Disabled}}disabled{{end}}>
+      <button type="submit" class="btn btn-secondary join-item shrink-0" {{if .Disabled}}disabled{{end}}>
         {{if .Disabled}}<span class="loading loading-spinner loading-sm"></span>{{end}}
         Fetch
       </button>
@@ -33,4 +33,5 @@
     <p class="label whitespace-normal">{{$info}}</p>
   </fieldset>
 </form>
+<div class="divider" aria-hidden="true"></div>
 {{end}}

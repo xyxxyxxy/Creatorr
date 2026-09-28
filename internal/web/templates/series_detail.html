@@ -398,26 +398,26 @@
 <div class="modal">
   <div class="modal-box max-w-2xl">
     <h3 class="font-bold text-lg mb-2" data-video-bulk-meta-title>Edit metadata</h3>
-    <p class="text-sm opacity-70 mb-3">Fields shared by every selected video are pre-filled. Clear a field back to empty for No change. Filled fields replace that value on every selected video. Genres, tags, and actors replace the whole list when you add at least one entry (actor order is kept). Upload date is preserved. Changing Special feature may enqueue a file rename.</p>
+    <p class="text-sm opacity-70 mb-3">Fields shared by every selected video are pre-filled. Clear a field back to empty for No change. Filled fields replace that value on every selected video. Genres, tags, and actors replace the whole list when you add at least one entry (actor order is kept). Upload date is preserved. Changing Special kind may enqueue a file rename.</p>
     <form method="post" action="/actions/bulk-edit-videos-metadata" class="space-y-3" id="form-bulk-edit-videos-metadata">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <div data-bulk-video-ids></div>
-      <div class="grid gap-3 sm:grid-cols-2">
-        {{template "metadata_suggest_row" (dict "Name" "studio" "Label" "Studio" "Value" "" "Placeholder" "No change" "ListID" "video-bulk-meta-dl-studio" "Options" .MetaForm.Suggestions.Studios)}}
-        {{template "metadata_suggest_row" (dict "Name" "country" "Label" "Country" "Value" "" "Placeholder" "No change" "ListID" "video-bulk-meta-dl-country" "Options" .MetaForm.Suggestions.Countries)}}
-      </div>
-      {{template "metadata_suggest_row" (dict "Name" "mpaa" "Label" "Content rating" "Value" "" "Placeholder" "No change" "ListID" "video-bulk-meta-dl-mpaa" "Options" .MetaForm.Suggestions.MPAAs)}}
       <fieldset class="fieldset">
-        <legend class="fieldset-legend">Special feature</legend>
+        <legend class="fieldset-legend">Special kind</legend>
         <select name="special_feature" class="select w-full" data-bulk-special-feature>
           <option value="">No change</option>
-          <option value="episode">regular episode</option>
+          <option value="episode">none</option>
           {{range .PackRoleOptions}}
           <option value="{{.Value}}">{{.Label}}</option>
           {{end}}
         </select>
         <p class="label whitespace-normal">Controls how packed files are stored. See the library root formats for details.</p>
       </fieldset>
+      <div class="grid gap-3 sm:grid-cols-2">
+        {{template "metadata_suggest_row" (dict "Name" "studio" "Label" "Studio" "Value" "" "Placeholder" "No change" "ListID" "video-bulk-meta-dl-studio" "Options" .MetaForm.Suggestions.Studios)}}
+        {{template "metadata_suggest_row" (dict "Name" "country" "Label" "Country" "Value" "" "Placeholder" "No change" "ListID" "video-bulk-meta-dl-country" "Options" .MetaForm.Suggestions.Countries)}}
+      </div>
+      {{template "metadata_suggest_row" (dict "Name" "mpaa" "Label" "Content rating" "Value" "" "Placeholder" "No change" "ListID" "video-bulk-meta-dl-mpaa" "Options" .MetaForm.Suggestions.MPAAs)}}
       <div class="grid gap-3 sm:grid-cols-2">
         {{template "metadata_string_list_editor" (dict
           "Label" "Genres"

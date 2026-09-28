@@ -26,4 +26,10 @@ func TestVideoListFilterActive(t *testing.T) {
 	if !(VideoListFilter{Year: VideoYearUnknown}).Active() {
 		t.Fatal("unknown year should be active")
 	}
+	if !(VideoListFilter{PackRole: PackRoleRegular}).Active() {
+		t.Fatal("pack role should be active")
+	}
+	if !(VideoListFilter{PackRole: VideoPackRoleAnySpecial}).Active() {
+		t.Fatal("any special should be active")
+	}
 }

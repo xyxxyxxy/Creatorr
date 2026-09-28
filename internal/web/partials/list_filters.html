@@ -9,7 +9,7 @@
           SeriesBulkMode (bool - leading multi-select join-item for /series),
           VideoBulkMode (bool - leading multi-select join-item for series video list).
      Active filters (non-empty q/date/select) use daisyUI input-primary / select-primary.
-     JS: select/date/datetime-local change submits immediately; search submits on blur (js-list-filters). */}}
+     JS: select/date/datetime-local change submits immediately; search debounces (~350ms) after typing stops and flushes on blur (js-list-filters). */}}
 {{$live := .LiveTarget}}
 {{$qName := .QueryName}}{{if not $qName}}{{$qName = "q"}}{{end}}
 {{$qPh := .QueryPlaceholder}}{{if not $qPh}}{{$qPh = "Search"}}{{end}}

@@ -27,44 +27,64 @@
     {{if .PrefetchTaskID}}<input type="hidden" name="prefetch_task_id" value="{{.PrefetchTaskID}}" />{{end}}
     <fieldset class="space-y-3 border-0 p-0 m-0 min-w-0" {{if .PrefetchPending}}disabled{{end}}>
 
-    <div class="grid gap-3 sm:grid-cols-2 items-start">
-      {{template "form_row" (dict "Name" "title" "Label" "Title" "Value" .Video.Title "Required" true)}}
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">Upload date</legend>
-        <div class="join w-full">
-          <input type="date" name="upload_date" class="input join-item grow min-w-[10rem]" value="{{.UploadDateDay}}" aria-label="Upload date" />
-          <input type="time" name="upload_time" class="input join-item w-28 shrink-0" value="{{.UploadDateTime}}" aria-label="Upload time (UTC, optional)" />
+    <div class="grid grid-cols-2 gap-3 items-start">
+      {{if .HasPackAnchor}}
+      <div class="min-w-0">
+        {{template "metadata_art_slot" (dict
+          "Role" "thumb"
+          "Label" "Thumbnail"
+          "SeriesID" .Series.ID
+          "VideoID" .Video.ID
+          "HasFile" .HasThumb
+          "ArtVersion" .ThumbMtime
+          "PrefetchPath" (index .PrefetchArt "thumb")
+          "PrefetchTaskID" .PrefetchTaskID
+        )}}
+      </div>
+      {{else}}
+      <fieldset class="fieldset min-w-0 w-full">
+        <legend class="fieldset-legend">Thumbnail</legend>
+        <p class="label whitespace-normal">Download the video first to edit the episode thumbnail.</p>
+      </fieldset>
+      {{end}}
+      {{/* Invisible legend matches Thumbnail fieldset spacing so Title lines up with the image. */}}
+      <fieldset class="fieldset min-w-0 w-full border-0 p-0 bg-transparent">
+        <legend class="fieldset-legend invisible" aria-hidden="true">Thumbnail</legend>
+        <div class="flex flex-col gap-3 min-w-0 w-full">
+          <label class="input w-full">
+            <span class="label shrink-0">Title</span>
+            <input type="text" name="title" class="grow min-w-0" placeholder="Title" value="{{.Video.Title}}" required />
+          </label>
+          <fieldset class="fieldset w-full min-w-0 border-0 p-0 bg-transparent">
+            <label class="input w-full">
+              <span class="label shrink-0">Uploaded</span>
+              <input type="date" name="upload_date" class="grow min-w-0" value="{{.UploadDateDay}}" aria-label="Uploaded" />
+              <input type="time" name="upload_time" class="w-28 shrink-0" value="{{.UploadDateTime}}" aria-label="Upload time (optional, UTC)" />
+            </label>
+            <p class="label whitespace-normal">Date and time are UTC.</p>
+          </fieldset>
+          {{$packRole := .Video.PackRole}}
+          {{$packNone := or (eq $packRole "") (eq $packRole "episode")}}
+          <fieldset class="fieldset w-full min-w-0 border-0 p-0 bg-transparent">
+            <label class="select w-full">
+              <span class="label shrink-0">Special kind</span>
+              <select name="special_feature" class="grow min-w-0{{if $packNone}} opacity-60{{end}}" data-special-kind>
+                <option value="episode" {{if $packNone}}selected{{end}}>none</option>
+                {{range .PackRoleOptions}}
+                <option value="{{.Value}}" {{if eq .Value $packRole}}selected{{end}}>{{.Label}}</option>
+                {{end}}
+              </select>
+            </label>
+            <p class="label whitespace-normal">Controls how packed files are stored. See the library root formats for details.</p>
+          </fieldset>
         </div>
-        <p class="label whitespace-normal">UTC. Date is essential for episode numbering. Time helps order episodes released on the same day.</p>
       </fieldset>
     </div>
-    {{$packRole := .Video.PackRole}}
-    {{$packSpecial := .PackRoleIsSpecial}}
-    <fieldset class="fieldset">
-      <legend class="fieldset-legend">Special feature</legend>
-      <div class="join w-full" data-pack-role-join>
-        {{if not $packSpecial}}<input type="hidden" name="special_feature" value="episode" data-pack-role-submit />{{end}}
-        <select name="special_feature" class="select join-item grow min-w-0{{if not $packSpecial}} opacity-60{{end}}"
-                data-pack-role-select
-                data-pack-role-default="special_episode"
-                {{if not $packSpecial}}disabled{{end}}>
-          <option value="" disabled {{if not $packSpecial}}selected{{end}}>regular episode</option>
-          {{range .PackRoleOptions}}
-          <option value="{{.Value}}" {{if and $packSpecial (eq .Value $packRole)}}selected{{end}}>{{.Label}}</option>
-          {{end}}
-        </select>
-        <label class="btn join-item gap-2 no-animation shrink-0">
-          <input type="checkbox" class="checkbox checkbox-sm" data-pack-role-enable {{if $packSpecial}}checked{{end}} />
-          <span class="whitespace-nowrap font-normal">is special feature</span>
-        </label>
-      </div>
-      <p class="label whitespace-normal">Controls how packed files are stored. See the library root formats for details.</p>
-    </fieldset>
-    {{template "form_row" (dict "Type" "textarea" "Name" "plot" "Label" "Plot" "Value" .Video.Description "Placeholder" "none")}}
     <div class="grid gap-3 sm:grid-cols-2">
       {{template "form_row" (dict "Name" "sorttitle" "Label" "Sort title" "Value" .Video.SortTitle "Placeholder" "none")}}
       {{template "form_row" (dict "Name" "originaltitle" "Label" "Original title" "Value" .Video.OriginalTitle "Placeholder" "none")}}
     </div>
+    {{template "form_row" (dict "Type" "textarea" "Name" "plot" "Label" "Plot" "Value" .Video.Description "Placeholder" "none" "Rows" 5)}}
     <div class="grid gap-3 sm:grid-cols-2">
       {{template "metadata_suggest_row" (dict "Name" "tagline" "Label" "Tagline" "Value" .Video.Tagline)}}
       {{template "metadata_suggest_row" (dict "Name" "studio" "Label" "Studio" "Value" .Video.Studio "ListID" "video-meta-dl-studio" "Options" .Suggestions.Studios)}}
@@ -101,31 +121,13 @@
       )}}
     </div>
 
-    <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
-      <legend class="fieldset-legend text-base">Images</legend>
-      {{if .HasPackAnchor}}
-      <div class="grid gap-3 sm:grid-cols-2">
-        {{template "metadata_art_slot" (dict
-          "Role" "thumb"
-          "Label" "Thumbnail"
-          "SeriesID" .Series.ID
-          "VideoID" .Video.ID
-          "HasFile" .HasThumb
-          "ArtVersion" .ThumbMtime
-          "PrefetchPath" (index .PrefetchArt "thumb")
-          "PrefetchTaskID" .PrefetchTaskID
-        )}}
-      </div>
-      {{else}}
-      <p class="text-sm opacity-70">Download the video first to edit the episode thumbnail.</p>
-      {{end}}
-    </fieldset>
-
-    <p class="text-sm opacity-70">
-      Save rewrites the episode <code class="text-xs">.nfo</code> beside packed media
-      and applies thumbnail changes.
-      Changing Title, Upload date, or Special feature reindexes when needed and renames packed files when the path changes.
-    </p>
+    <div role="alert" class="alert alert-info text-sm">
+      <span>
+        Save rewrites the episode <code class="text-xs">.nfo</code> beside packed media
+        and applies thumbnail changes.
+        Changing Title, Uploaded, or Special kind reindexes when needed and renames packed files when the path changes.
+      </span>
+    </div>
     </fieldset>
 
     <div class="modal-action">

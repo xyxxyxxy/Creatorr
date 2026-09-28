@@ -1922,6 +1922,25 @@
       if (Number.isNaN(d.getTime())) return;
       el.value = d.toLocaleDateString(undefined, { dateStyle: "medium" });
     });
+    syncAllSpecialKindSelects(scope);
+  }
+
+  function syncSpecialKindSelect(sel) {
+    if (!(sel instanceof HTMLSelectElement)) return;
+    const none = !sel.value || sel.value === "episode";
+    sel.classList.toggle("opacity-60", none);
+  }
+
+  function syncAllSpecialKindSelects(root) {
+    let scope = root && root.nodeType === 1 ? root : document;
+    if (scope !== document && scope.isConnected === false) {
+      const id = scope.id;
+      scope = (id && document.getElementById(id)) || document.body;
+    }
+    if (scope.matches && scope.matches("[data-special-kind]")) syncSpecialKindSelect(scope);
+    if (scope.querySelectorAll) {
+      scope.querySelectorAll("[data-special-kind]").forEach(syncSpecialKindSelect);
+    }
   }
 
   function createLucideIcons(root) {
@@ -3097,9 +3116,11 @@
     location.assign(u.pathname + u.search);
   });
 
-  // List filters (js-list-filters): select → submit now; search → submit on blur.
-  // Keep caret in search field across HTMX swap of live list panels.
+  // List filters (js-list-filters): select/date → submit now; search → debounce after
+  // typing stops, and flush on blur. Keep caret in search across HTMX live swaps.
   let listFilterQFocus = null;
+  let listFilterSearchTimer = null;
+  const LIST_FILTER_SEARCH_MS = 350;
   function captureListFilterQFocus() {
     const el = document.activeElement;
     if (!el || el.tagName !== "INPUT" || el.type !== "search") {
@@ -3138,6 +3159,19 @@
     if (typeof form.requestSubmit === "function") form.requestSubmit();
     else form.submit();
   }
+  function clearListFilterSearchTimer() {
+    if (listFilterSearchTimer != null) {
+      window.clearTimeout(listFilterSearchTimer);
+      listFilterSearchTimer = null;
+    }
+  }
+  function scheduleListFilterSearch(form) {
+    clearListFilterSearchTimer();
+    listFilterSearchTimer = window.setTimeout(() => {
+      listFilterSearchTimer = null;
+      if (form && form.isConnected) submitListFilters(form);
+    }, LIST_FILTER_SEARCH_MS);
+  }
   document.body.addEventListener("change", (ev) => {
     const el = ev.target;
     if (!el) return;
@@ -3165,6 +3199,13 @@
       el.classList.toggle("hidden", !on);
     });
   });
+  document.body.addEventListener("input", (ev) => {
+    const el = ev.target;
+    if (!el || el.tagName !== "INPUT" || el.type !== "search") return;
+    const form = el.closest("form.js-list-filters");
+    if (!form) return;
+    scheduleListFilterSearch(form);
+  });
   document.body.addEventListener("focusout", (ev) => {
     const el = ev.target;
     if (!el || el.tagName !== "INPUT" || el.type !== "search") return;
@@ -3172,6 +3213,7 @@
     if (!form) return;
     const next = ev.relatedTarget;
     if (next && form.contains(next)) return;
+    clearListFilterSearchTimer();
     submitListFilters(form);
   });
 
@@ -3725,6 +3767,10 @@
     if (el instanceof HTMLInputElement && el.hasAttribute("data-pack-role-enable")) {
       const join = el.closest("[data-pack-role-join]");
       if (join) syncPackRoleJoin(join);
+      return;
+    }
+    if (el instanceof HTMLSelectElement && el.hasAttribute("data-special-kind")) {
+      syncSpecialKindSelect(el);
       return;
     }
     if (!(el instanceof HTMLSelectElement) || !el.hasAttribute("data-rate-unit")) {

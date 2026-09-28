@@ -68,13 +68,14 @@ type Video struct {
 }
 
 // VideoListFilter scopes series video lists by title, status, source, media type,
-// upload calendar year, and upload calendar day (UTC).
+// upload calendar year, special kind, and upload calendar day (UTC).
 type VideoListFilter struct {
 	Title     string   // case-insensitive substring; empty = any title
 	Statuses  []string // empty = all statuses
 	SourceID  int64    // 0 = all sources
 	MediaType string   // non-empty exact match; empty query = all
 	Year      int      // UTC calendar year of upload_date; 0 = any; VideoYearUnknown = undated
+	PackRole  string   // empty = any; episode = regular; special = any special; else exact special_feature
 	FromDay   string   // YYYY-MM-DD inclusive; empty = no lower bound
 	ToDay     string   // YYYY-MM-DD inclusive; empty = no upper bound
 }
@@ -82,9 +83,12 @@ type VideoListFilter struct {
 // VideoYearUnknown selects videos with missing/empty upload_date (?year=unknown).
 const VideoYearUnknown = -1
 
+// VideoPackRoleAnySpecial is the list-filter value for every non-regular special_feature.
+const VideoPackRoleAnySpecial = "special"
+
 // Active reports whether any filter constraint is set.
 func (f VideoListFilter) Active() bool {
-	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID > 0 || strings.TrimSpace(f.MediaType) != "" || f.Year != 0 || f.FromDay != "" || f.ToDay != ""
+	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID > 0 || strings.TrimSpace(f.MediaType) != "" || f.Year != 0 || strings.TrimSpace(f.PackRole) != "" || f.FromDay != "" || f.ToDay != ""
 }
 
 func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter) {
@@ -114,6 +118,17 @@ func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter
 		b.WriteString(` AND upload_date IS NOT NULL AND trim(upload_date) != ''`)
 		b.WriteString(` AND CAST(strftime('%Y', upload_date) AS INTEGER) = ?`)
 		*args = append(*args, f.Year)
+	}
+	switch role := strings.TrimSpace(f.PackRole); role {
+	case "":
+		// any kind
+	case PackRoleRegular:
+		b.WriteString(` AND ` + SQLPackRoleRegularPred)
+	case VideoPackRoleAnySpecial:
+		b.WriteString(` AND NOT (` + SQLPackRoleRegularPred + `)`)
+	default:
+		b.WriteString(` AND special_feature = ?`)
+		*args = append(*args, NormalizePackRole(role))
 	}
 	if f.FromDay == "" && f.ToDay == "" {
 		return
