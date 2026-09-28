@@ -20,6 +20,17 @@ type pageBase struct {
 	AuthUsername string // operator account; for navbar account menu
 	NotifyCount  int    // unread notifications for nav bell badge
 	NotifyAlert  bool   // true when any unread alert (badge-error vs badge-info)
+	// Nav chrome badges (painted with the shell; JS refresh keeps them live).
+	NavSeriesErrors int
+	NavTasksActive  int
+	NavTasksPaused  int
+}
+
+// pageNavBadges are shell badge counts for newPage (series/tasks; notify uses SetNotifyBadgeForPage).
+type pageNavBadges struct {
+	SeriesErrors int
+	TasksActive  int
+	TasksPaused  int
 }
 
 // usernameForPage returns the operator username for shell chrome (set from Handler.Mount).
@@ -27,6 +38,9 @@ var usernameForPage func() string
 
 // notifyBadgeForPage returns unread badge count + has-alert (set from Handler.Mount).
 var notifyBadgeForPage func() (count int, hasAlert bool)
+
+// navBadgesForPage returns series/tasks nav badge counts for shell chrome (set from Handler.Mount).
+var navBadgesForPage func() pageNavBadges
 
 // SetUsernameForPage wires the operator username lookup used by newPage.
 func SetUsernameForPage(fn func() string) {
@@ -36,6 +50,11 @@ func SetUsernameForPage(fn func() string) {
 // SetNotifyBadgeForPage wires unread notification badge lookup used by newPage.
 func SetNotifyBadgeForPage(fn func() (count int, hasAlert bool)) {
 	notifyBadgeForPage = fn
+}
+
+// SetNavBadgesForPage wires series/tasks nav badge counts used by newPage.
+func SetNavBadgesForPage(fn func() pageNavBadges) {
+	navBadgesForPage = fn
 }
 
 // EpisodeLucideIcon is the Lucide name for indexed episodes (library videos).
@@ -50,6 +69,12 @@ func newPage(title, nav string, flash *flash) pageBase {
 	}
 	if notifyBadgeForPage != nil {
 		p.NotifyCount, p.NotifyAlert = notifyBadgeForPage()
+	}
+	if navBadgesForPage != nil {
+		b := navBadgesForPage()
+		p.NavSeriesErrors = b.SeriesErrors
+		p.NavTasksActive = b.TasksActive
+		p.NavTasksPaused = b.TasksPaused
 	}
 	return p
 }

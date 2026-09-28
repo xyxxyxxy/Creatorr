@@ -1,10 +1,14 @@
+{{define "nav_badge_label"}}{{if gt . 99}}99+{{else}}{{.}}{{end}}{{end}}
+
 {{define "nav_links"}}
 {{/* Desktop: includeBadgeIDs true. Mobile: omit badge IDs (unique IDs only on desktop). IconClass optional (default size-4). */}}
 {{$icon := "size-4"}}{{if .IconClass}}{{$icon = .IconClass}}{{end}}
 <li>
   <a href="/series"{{if eq .Nav "series"}} class="active"{{end}}>
     <i data-lucide="tv" class="{{$icon}}"></i>Series
-    {{if .IncludeBadgeIDs}}<span id="series-error-badge" class="badge badge-error badge-sm hidden">0</span>{{end}}
+    {{if .IncludeBadgeIDs}}
+    <span id="series-error-badge" class="badge badge-error badge-sm{{if not .SeriesErrors}} hidden{{end}}">{{if .SeriesErrors}}{{template "nav_badge_label" .SeriesErrors}}{{else}}0{{end}}</span>
+    {{end}}
   </a>
 </li>
 <li>
@@ -16,8 +20,8 @@
   <a href="/tasks"{{if eq .Nav "tasks"}} class="active"{{end}}>
     <i data-lucide="list-todo" class="{{$icon}}"></i>Tasks
     {{if .IncludeBadgeIDs}}
-    <span id="tasks-badge" class="badge badge-accent badge-sm hidden">0</span>
-    <span id="tasks-paused-badge" class="badge badge-warning badge-sm hidden">0</span>
+    <span id="tasks-badge" class="badge badge-accent badge-sm{{if not .TasksActive}} hidden{{end}}">{{if .TasksActive}}{{template "nav_badge_label" .TasksActive}}{{else}}0{{end}}</span>
+    <span id="tasks-paused-badge" class="badge badge-warning badge-sm{{if not .TasksPaused}} hidden{{end}}">{{if .TasksPaused}}{{template "nav_badge_label" .TasksPaused}}{{else}}0{{end}}</span>
     {{end}}
   </a>
 </li>
@@ -86,7 +90,14 @@
   </div>
   <div class="navbar-center hidden lg:flex">
     <ul class="menu menu-horizontal px-1">
-      {{template "nav_links" (dict "Nav" .Nav "SettingsTab" .SettingsTab "IncludeBadgeIDs" true)}}
+      {{template "nav_links" (dict
+        "Nav" .Nav
+        "SettingsTab" .SettingsTab
+        "IncludeBadgeIDs" true
+        "SeriesErrors" .NavSeriesErrors
+        "TasksActive" .NavTasksActive
+        "TasksPaused" .NavTasksPaused
+      )}}
     </ul>
   </div>
 {{end}}
