@@ -34,7 +34,7 @@
   <div class="divider" aria-hidden="true"></div>
   <div class="flex flex-wrap items-center gap-3 min-w-0 w-full">
     <div class="flex items-center gap-1">
-      <button type="button" class="btn btn-ghost btn-sm border-transparent bg-transparent shadow-none font-normal" id="btn-import-rescan" aria-label="Reset and rescan"{{if .ImportBusy}} disabled{{end}}><i data-lucide="refresh-cw" class="size-4"></i>Reset and rescan</button>
+      <button type="button" class="btn" id="btn-import-rescan" aria-label="Reset and rescan"{{if .ImportBusy}} disabled{{end}}><i data-lucide="refresh-cw" class="size-4"></i>Reset and rescan</button>
     </div>
     <label class="label cursor-pointer gap-2 justify-start py-0">
       <input type="checkbox" class="checkbox checkbox-sm" id="import-filter-unmatched" />
@@ -1458,8 +1458,24 @@ function folderMetaMarksHTML(folderPath) {
   return html;
 }
 
-function folderPathLabel(folderPath) {
-  return normImportPath(folderPath) + '/';
+/** Folder label relative to parent tree row (root keeps absolute `/import/`). */
+function folderPathLabel(folderPath, parentPath) {
+  const p = normImportPath(folderPath);
+  if (!p) return '/';
+  const parent = normImportPath(parentPath);
+  if (parent && (p === parent || p.startsWith(parent + '/'))) {
+    const rel = p === parent ? '' : p.slice(parent.length + 1);
+    return (rel || p.slice(p.lastIndexOf('/') + 1) || p) + '/';
+  }
+  return p + '/';
+}
+
+/** Leaf folder with exactly one media/sidecar row and no nfo: fold into the file row. */
+function folderIsSingleBundleMergeable(node) {
+  if (!node || !node.depth) return false;
+  if (seriesFolderAt(node.path)) return false;
+  if ((node.children || new Map()).size > 0) return false;
+  return (node.bundles || []).length === 1;
 }
 
 /** Mirror web.sidecarKindIcon / sidecarKindLabel for import roles. */
@@ -2120,15 +2136,29 @@ function filterTreeToBundles(node, keep, isRoot) {
   return node.bundles.length > 0 || node.children.size > 0;
 }
 
-function buildFolderRow(node) {
+/** Tree rail: │ for open ancestors, ├/└ for this row. */
+function importTreeGuideHTML(continues, isLast) {
+  let html = '<span class="import-tree-guide" aria-hidden="true">';
+  (continues || []).forEach((cont) => {
+    html += `<span class="import-tree-pad">${cont ? '│' : ''}</span>`;
+  });
+  html += `<span class="import-tree-elbow">${isLast ? '└' : '├'}</span>`;
+  html += '</span>';
+  return html;
+}
+
+function wrapImportTreeRow(guideOpts, bodyHTML) {
+  if (!guideOpts) return bodyHTML;
+  return `<div class="flex gap-1 min-w-0 items-start">${importTreeGuideHTML(guideOpts.continues, guideOpts.isLast)}<div class="min-w-0 flex-1">${bodyHTML}</div></div>`;
+}
+
+function buildFolderRow(node, guideOpts, parentPath) {
   const li = document.createElement('li');
   li.className = 'import-folder py-1';
   li.dataset.folderPath = node.path;
-  const pad = Math.min(node.depth, 8) * 1.25;
-  li.style.marginLeft = pad ? (pad + 'rem') : '';
-  const label = folderPathLabel(node.path);
+  const label = folderPathLabel(node.path, parentPath);
   const icon = node.depth === 0 ? 'inbox' : 'folder';
-  li.innerHTML = `
+  const body = `
     <div class="${importRowBoxClass('neutral')}">
       <div class="flex flex-wrap items-center gap-1.5 text-xs min-w-0">
         <i data-lucide="${icon}" class="size-4 opacity-70 shrink-0" aria-hidden="true"></i>
@@ -2137,20 +2167,45 @@ function buildFolderRow(node) {
       </div>
       ${folderSeriesPickersHTML(node.path)}
     </div>`;
+  li.innerHTML = wrapImportTreeRow(guideOpts, body);
   return li;
 }
 
-function appendTreeToList(list, node) {
-  list.appendChild(buildFolderRow(node));
-  (node.bundles || []).forEach((b) => {
-    const el = buildImportBundleItem(b, node.path);
-    const pad = Math.min(node.depth + 1, 8) * 1.25;
-    el.style.marginLeft = pad + 'rem';
-    list.appendChild(el);
+/**
+ * Flatten tree into list rows. guideOpts: {continues: bool[], isLast}.
+ * Root has no rail; children get │/├/└ from sibling order (bundles then folders).
+ * Single-bundle dirs (no nfo) skip the folder row; file path keeps that segment.
+ */
+function appendTreeToList(list, node, ancestorContinues, isLast, parentPath) {
+  ancestorContinues = ancestorContinues || [];
+  const isRoot = !node.depth;
+  list.appendChild(buildFolderRow(
+    node,
+    isRoot ? null : { continues: ancestorContinues, isLast: !!isLast },
+    parentPath || '',
+  ));
+
+  const kids = [...(node.children || new Map()).values()]
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const bundles = node.bundles || [];
+  const total = bundles.length + kids.length;
+  const childContinues = isRoot ? [] : ancestorContinues.concat(!isLast);
+  let idx = 0;
+  bundles.forEach((b) => {
+    const last = idx === total - 1;
+    list.appendChild(buildImportBundleItem(b, node.path, { continues: childContinues, isLast: last }));
+    idx++;
   });
-  [...(node.children || new Map()).values()]
-    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
-    .forEach((c) => appendTreeToList(list, c));
+  kids.forEach((c) => {
+    const last = idx === total - 1;
+    if (folderIsSingleBundleMergeable(c)) {
+      // Path relative to this parent so the skipped folder name stays on the file line.
+      list.appendChild(buildImportBundleItem(c.bundles[0], node.path, { continues: childContinues, isLast: last }));
+    } else {
+      appendTreeToList(list, c, childContinues, last, node.path);
+    }
+    idx++;
+  });
 }
 
 /** Own series_folders draft_key for a candidate (unknown draft or known series_id / path). */
@@ -2326,19 +2381,19 @@ function setImportTasksBusy(busy) {
   }
 }
 
-function buildImportBundleItem(b, parentDir) {
-  if (b.kind === 'other') return buildOtherItem(b.files[0], parentDir);
-  if (b.kind === 'sidecars') return buildSidecarBundleItem(b, parentDir);
-  return buildMediaBundleItem(b, parentDir);
+function buildImportBundleItem(b, parentDir, guideOpts) {
+  if (b.kind === 'other') return buildOtherItem(b.files[0], parentDir, guideOpts);
+  if (b.kind === 'sidecars') return buildSidecarBundleItem(b, parentDir, guideOpts);
+  return buildMediaBundleItem(b, parentDir, guideOpts);
 }
 
-function buildOtherItem(c, parentDir) {
+function buildOtherItem(c, parentDir, guideOpts) {
   const li = document.createElement('li');
   li.className = 'import-item py-1.5';
   const note = c.role === 'json'
     ? '<span class="opacity-60 text-xs">info.json is provenance - import only with media</span>'
     : '<span class="opacity-60 text-xs">not importable</span>';
-  li.innerHTML = `
+  const body = `
     <div class="${importRowBoxClass('neutral')}">
       <div class="flex items-center gap-2">
         <div class="min-w-0 flex-1 space-y-2">
@@ -2348,10 +2403,11 @@ function buildOtherItem(c, parentDir) {
         ${otherActionsHTML()}
       </div>
     </div>`;
+  li.innerHTML = wrapImportTreeRow(guideOpts, body);
   return li;
 }
 
-function buildSidecarBundleItem(b, parentDir) {
+function buildSidecarBundleItem(b, parentDir, guideOpts) {
   const lead = b.sidecars.find((s) => s.suggested_video_id) || b.sidecars[0];
   const st = defaultStateForBundle(b);
   const li = document.createElement('li');
@@ -2361,15 +2417,16 @@ function buildSidecarBundleItem(b, parentDir) {
   const rest = b.sidecars.slice(1);
   li.dataset.kind = 'sidecar';
   const tone = itemReady('sidecar', st) ? 'success' : 'warning';
-  li.innerHTML = `
+  const body = `
     <div class="${importRowBoxClass(tone)}">
       ${filesStack(primary, rest, null, parentDir)}
       ${matchPickersHTML(st, 'sidecar')}
     </div>`;
+  li.innerHTML = wrapImportTreeRow(guideOpts, body);
   return li;
 }
 
-function buildMediaBundleItem(b, parentDir) {
+function buildMediaBundleItem(b, parentDir, guideOpts) {
   const c = b.video;
   const st = defaultStateForBundle(b);
   const li = document.createElement('li');
@@ -2377,11 +2434,12 @@ function buildMediaBundleItem(b, parentDir) {
   li.dataset.stateKey = bundleStateKey(b);
   li.dataset.kind = 'media';
   const tone = itemReady('media', st) ? 'success' : 'warning';
-  li.innerHTML = `
+  const body = `
     <div class="${importRowBoxClass(tone)}">
       ${filesStack(c, b.sidecars, null, parentDir)}
       ${matchPickersHTML(st, 'media')}
     </div>`;
+  li.innerHTML = wrapImportTreeRow(guideOpts, body);
   return li;
 }
 

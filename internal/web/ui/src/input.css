@@ -102,6 +102,23 @@
   border-color: color-mix(in oklab, var(--color-warning) 50%, transparent);
   background-color: color-mix(in oklab, var(--color-warning) 10%, transparent);
 }
+/* Flat list tree rail (│ ├ └). */
+#import-list .import-tree-guide {
+  display: inline-flex;
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  opacity: 0.45;
+  user-select: none;
+  padding-top: 0.55rem;
+}
+#import-list .import-tree-pad,
+#import-list .import-tree-elbow {
+  display: inline-block;
+  width: 0.875rem;
+  text-align: center;
+}
 
 /*
   Radio button joins (delivery mode, discovered status): label.btn wrapping a
