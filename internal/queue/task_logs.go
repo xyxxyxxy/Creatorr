@@ -3,6 +3,8 @@ package queue
 import (
 	"strings"
 	"sync"
+
+	"github.com/xyxxyxxy/Creatorr/internal/exectrace"
 )
 
 const taskLogCap = 200
@@ -23,6 +25,7 @@ func newTaskLogs() *TaskLogs {
 }
 
 // Append adds a progress line for task id. Skips empty and consecutive duplicates.
+// Password values in command-echo lines are redacted before storage.
 func (l *TaskLogs) Append(id int64, line string) {
 	if l == nil || id <= 0 {
 		return
@@ -31,6 +34,7 @@ func (l *TaskLogs) Append(id int64, line string) {
 	if line == "" {
 		return
 	}
+	line = exectrace.RedactLine(line)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	buf := l.byID[id]
