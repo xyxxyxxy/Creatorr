@@ -8,7 +8,7 @@ Use these terms consistently in code comments, UI copy, OpenAPI, tests, and docs
 
 | Term | Meaning |
 | --- | --- |
-| **Series** | One title, one root folder, one quality profile, **delivery mode** (`video` default \| `audio`), **monitored** flag, sources, video **index**, optional show metadata (`tvshow.nfo` + art). Import can recreate a series from an on-disk `tvshow.nfo` tree (`import_plan`). |
+| **Series** | One title, one root folder, one quality profile, **delivery mode** (`video` default \| `audio`), **monitored** flag, sources, video **index**, optional show metadata (`tvshow.nfo` + art). Import can create a series from an on-disk `tvshow.nfo` tree or a bare title draft (`import_plan`). Imported videos keep `source_id` NULL until a feed re-index assigns one; the UI exposes a virtual Import bucket for those rows. |
 | **Source** | URL on a series (immutable after create; same URL may exist on other series; uniqueness is per series). **Kind** `feed` (full scan then tip Scan) or `single` (index once) is fixed at create. Feed: `scan_cron`, optional **Mark new videos as ignored** (`index_as_ignored`), optional **title include/exclude** (`title_regexp_include` / `title_regexp_exclude`), optional **full scan limit** (`full_scan_limit`). Singles: no title filters / mark-new-as-ignored / full-scan-limit UI (always index as wanted). No per-source monitored. |
 | **Feed / single** | Source kinds. Feed = recurring tip Scan; single = one-shot index (no tip Scan after first index). |
 | **Video** | Indexed creator content in a series (not “item”). Status + metadata + optional files + **video history**. On disk after pack it is treated as an **episode** (below). |

@@ -343,8 +343,29 @@ type ImportPickerVideo struct {
 
 // ImportPickerSeries is a series row for the Import Match UI (no sources loaded).
 type ImportPickerSeries struct {
-	ID    int64  `json:"id"`
-	Title string `json:"title"`
+	ID     int64  `json:"id"`
+	Title  string `json:"title"`
+	RootID int64  `json:"root_id"`
+}
+
+// ListImportPickerSeries returns id/title/root for every series (no sources, no disk I/O).
+func (s *Store) ListImportPickerSeries() ([]ImportPickerSeries, error) {
+	rows, err := s.DB.SQL.Query(`
+		SELECT id, title, root_id FROM series ORDER BY title COLLATE NOCASE, id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []ImportPickerSeries
+	for rows.Next() {
+		var ser ImportPickerSeries
+		if err := rows.Scan(&ser.ID, &ser.Title, &ser.RootID); err != nil {
+			return nil, err
+		}
+		out = append(out, ser)
+	}
+	return out, rows.Err()
 }
 
 // ImportPickerVideoQuery filters ListImportPickerVideos.
@@ -354,26 +375,6 @@ type ImportPickerVideoQuery struct {
 	HasMedia *bool
 	IDs      []int64
 	Limit    int
-}
-
-// ListImportPickerSeries returns id/title for every series (no sources, no disk I/O).
-func (s *Store) ListImportPickerSeries() ([]ImportPickerSeries, error) {
-	rows, err := s.DB.SQL.Query(`
-		SELECT id, title FROM series ORDER BY title COLLATE NOCASE, id
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	var out []ImportPickerSeries
-	for rows.Next() {
-		var ser ImportPickerSeries
-		if err := rows.Scan(&ser.ID, &ser.Title); err != nil {
-			return nil, err
-		}
-		out = append(out, ser)
-	}
-	return out, rows.Err()
 }
 
 // ListImportPickerVideos returns a capped video list for Import / Maintenance pickers.

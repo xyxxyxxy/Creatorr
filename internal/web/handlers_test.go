@@ -206,7 +206,7 @@ func TestImportPageWithoutSeries(t *testing.T) {
 	if !strings.Contains(body, `id="btn-import"`) || !strings.Contains(body, "File matching") {
 		t.Fatalf("import UI should render with no series: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, "modal-add-series") || !strings.Contains(body, "js-import-create-series") {
+	if !strings.Contains(body, "modal-add-series") || !strings.Contains(body, "data-import-allow-create") {
 		t.Fatalf("expected add-series modal + inline create join with no series: %s", truncate(body, 400))
 	}
 	if !strings.Contains(body, "modal-add-video") || !strings.Contains(body, "js-add-video-form") {
@@ -256,7 +256,7 @@ func TestImportPageWithoutSeries(t *testing.T) {
 	if strings.Contains(body2, "Create a series first") {
 		t.Fatalf("empty-series gate should be gone: %s", truncate(body2, 400))
 	}
-	if !strings.Contains(body2, "modal-add-series") || !strings.Contains(body2, "js-import-create-series") {
+	if !strings.Contains(body2, "modal-add-series") || !strings.Contains(body2, "data-import-allow-create") {
 		t.Fatalf("expected add-series modal + inline create join when series exist: %s", truncate(body2, 400))
 	}
 	if !strings.Contains(body2, "modal-add-video") || !strings.Contains(body2, "js-add-video-form") {
@@ -1354,6 +1354,13 @@ func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
 		SourceURL: "https://example.com/c",
 	})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
+		SeriesID:   ser.ID,
+		Title:      "Ep One",
+		UploadDate: "2024-01-02T00:00:00Z",
+	}); err != nil {
 		t.Fatal(err)
 	}
 	h := &web.Handler{Library: lib, Queue: q}

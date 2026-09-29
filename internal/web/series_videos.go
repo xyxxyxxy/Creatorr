@@ -212,7 +212,15 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 			Selected: st == sel,
 		})
 	}
-	srcOpts := make([]listFilterOpt, 0, len(ser.Sources))
+	srcOpts := make([]listFilterOpt, 0, len(ser.Sources)+1)
+	nullImportCount, _ := h.Library.CountVideosWithNullSource(id)
+	if nullImportCount > 0 {
+		srcOpts = append(srcOpts, listFilterOpt{
+			Value:    library.VideoSourceImportQuery,
+			Label:    "Import",
+			Selected: filter.SourceID == library.VideoSourceImport,
+		})
+	}
 	for _, src := range ser.Sources {
 		srcOpts = append(srcOpts, listFilterOpt{
 			Value:    strconv.FormatInt(src.ID, 10),
@@ -311,8 +319,9 @@ func parseSeriesVideoListFilter(r *http.Request, sources []library.Source) libra
 		f.Statuses = append(f.Statuses, st)
 	}
 	if raw := strings.TrimSpace(r.URL.Query().Get("source")); raw != "" {
-		sid, err := strconv.ParseInt(raw, 10, 64)
-		if err == nil && sid > 0 {
+		if strings.EqualFold(raw, library.VideoSourceImportQuery) {
+			f.SourceID = library.VideoSourceImport
+		} else if sid, err := strconv.ParseInt(raw, 10, 64); err == nil && sid > 0 {
 			for _, src := range sources {
 				if src.ID == sid {
 					f.SourceID = sid
@@ -351,7 +360,9 @@ func seriesVideoFilterQuery(filter library.VideoListFilter, page int) string {
 	for _, st := range filter.Statuses {
 		q.Add("status", st)
 	}
-	if filter.SourceID > 0 {
+	if filter.SourceID == library.VideoSourceImport {
+		q.Set("source", library.VideoSourceImportQuery)
+	} else if filter.SourceID > 0 {
 		q.Set("source", strconv.FormatInt(filter.SourceID, 10))
 	}
 	if role := strings.TrimSpace(filter.PackRole); role != "" {

@@ -47,9 +47,11 @@ func (s *Server) GetImportPicker(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, ser := range series {
 		poster := fmt.Sprintf("/series/%d/art/poster", ser.ID)
+		rootID := ser.RootID
 		out.Series = append(out.Series, gen.ImportPickerSeries{
 			Id:        ser.ID,
 			Title:     ser.Title,
+			RootId:    rootID,
 			PosterUrl: &poster,
 		})
 	}
@@ -192,13 +194,18 @@ func (s *Server) ImportConfirm(w http.ResponseWriter, r *http.Request) {
 	for _, ser := range body.Series {
 		d := library.ImportPlanSeriesDraft{
 			DraftKey:         ser.DraftKey,
-			FolderPath:       ser.FolderPath,
 			RootID:           ser.RootId,
 			QualityProfileID: ser.QualityProfileId,
 			Monitored:        ser.Monitored == nil || *ser.Monitored,
 		}
+		if ser.Kind != nil {
+			d.Kind = string(*ser.Kind)
+		}
+		if ser.FolderPath != nil {
+			d.FolderPath = *ser.FolderPath
+		}
 		if ser.Title != nil {
-			d.Title = *ser.Title // ignored for naming; EnqueueImportPlan re-resolves from disk
+			d.Title = *ser.Title
 		}
 		if ser.DeliveryMode != nil {
 			d.DeliveryMode = string(*ser.DeliveryMode)

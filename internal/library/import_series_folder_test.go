@@ -156,7 +156,7 @@ func TestScanImportSeriesFolderKnown(t *testing.T) {
 	}
 }
 
-func TestEnqueueImportRejectsUnknownSeriesFolderBind(t *testing.T) {
+func TestEnqueueImportAllowsRematchUnderUnknownSeriesFolder(t *testing.T) {
 	tmp := t.TempDir()
 	d, err := db.Open(filepath.Join(tmp, "t.db"))
 	if err != nil {
@@ -198,30 +198,25 @@ func TestEnqueueImportRejectsUnknownSeriesFolderBind(t *testing.T) {
 	if err := os.WriteFile(media, []byte("m"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.EnqueueImport(media, videoID, false)
-	if err == nil {
-		t.Fatal("expected reject bind under unknown tvshow.nfo")
+	media2 := filepath.Join(folder, "ep2.mkv")
+	if err := os.WriteFile(media2, []byte("m"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "unknown tvshow.nfo") {
-		t.Fatalf("err=%v", err)
+	// Match may rematch under an unknown tvshow.nfo tree (auto-select only; joins stay editable).
+	if _, err := s.EnqueueImport(media, videoID, false); err != nil {
+		t.Fatalf("bind under unknown tvshow.nfo: %v", err)
 	}
-	_, _, err = s.EnqueueImportCreate(media, library.CreateImportVideoParams{
+	if _, _, err := s.EnqueueImportCreate(media2, library.CreateImportVideoParams{
 		SeriesID: ser.ID, Title: "Ep", UploadDate: "2020-01-01T00:00:00Z",
-	})
-	if err == nil {
-		t.Fatal("expected reject create under unknown tvshow.nfo")
+	}); err != nil {
+		t.Fatalf("create under unknown tvshow.nfo: %v", err)
 	}
-	_, err = s.EnqueueImportPlan(library.ImportPlanPayload{
-		Series: []library.ImportPlanSeriesDraft{{
-			DraftKey: folder, FolderPath: folder, Title: "Locked Show",
-			RootID: root.ID, QualityProfileID: prof.ID, Monitored: true, DeliveryMode: "video",
-		}},
+	if _, err := s.EnqueueImportPlan(library.ImportPlanPayload{
 		Jobs: []library.ImportPlanJob{{
 			Path: media, VideoID: videoID,
 		}},
-	})
-	if err == nil {
-		t.Fatal("expected reject plan job with video_id under draft folder")
+	}); err != nil {
+		t.Fatalf("plan bind under unknown tvshow.nfo: %v", err)
 	}
 }
 
@@ -245,7 +240,7 @@ func TestImportSeriesTitleFromFolder(t *testing.T) {
 	}
 }
 
-func TestEnqueueImportPlanIgnoresClientTitle(t *testing.T) {
+func TestEnqueueImportPlanKeepsClientTitle(t *testing.T) {
 	tmp := t.TempDir()
 	d, err := db.Open(filepath.Join(tmp, "t.db"))
 	if err != nil {
@@ -291,11 +286,8 @@ func TestEnqueueImportPlanIgnoresClientTitle(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT payload FROM tasks WHERE id = ?`, taskID).Scan(&payload); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(payload, `"title":"Real Show"`) {
-		t.Fatalf("payload should lock NFO title, got %s", payload)
-	}
-	if strings.Contains(payload, "Client Rename") {
-		t.Fatalf("client title must be ignored: %s", payload)
+	if !strings.Contains(payload, "Client Rename") {
+		t.Fatalf("payload should keep operator title rename, got %s", payload)
 	}
 }
 

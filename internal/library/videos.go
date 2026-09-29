@@ -71,7 +71,7 @@ type Video struct {
 type VideoListFilter struct {
 	Title     string   // case-insensitive substring; empty = any title
 	Statuses  []string // empty = all statuses
-	SourceID  int64    // 0 = all sources
+	SourceID  int64    // 0 = all sources; VideoSourceImport = source_id IS NULL
 	MediaType string   // non-empty exact match; empty query = all
 	Year      int      // UTC calendar year of upload_date; 0 = any; VideoYearUnknown = undated
 	PackRole  string   // empty = any; episode = regular; special = any special; else exact special_feature
@@ -82,12 +82,19 @@ type VideoListFilter struct {
 // VideoYearUnknown selects videos with missing/empty upload_date (?year=unknown).
 const VideoYearUnknown = -1
 
+// VideoSourceImport filters videos with source_id IS NULL (?source=import).
+// Covers Import-created rows and Add-video indexed rows until they gain a feed source_id.
+const VideoSourceImport int64 = -1
+
+// VideoSourceImportQuery is the HTTP/query sentinel for VideoSourceImport.
+const VideoSourceImportQuery = "import"
+
 // VideoPackRoleAnySpecial is the list-filter value for every non-regular special_feature.
 const VideoPackRoleAnySpecial = "special"
 
 // Active reports whether any filter constraint is set.
 func (f VideoListFilter) Active() bool {
-	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID > 0 || strings.TrimSpace(f.MediaType) != "" || f.Year != 0 || strings.TrimSpace(f.PackRole) != "" || f.FromDay != "" || f.ToDay != ""
+	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID != 0 || strings.TrimSpace(f.MediaType) != "" || f.Year != 0 || strings.TrimSpace(f.PackRole) != "" || f.FromDay != "" || f.ToDay != ""
 }
 
 func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter) {
@@ -101,7 +108,10 @@ func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter
 			*args = append(*args, st)
 		}
 	}
-	if f.SourceID > 0 {
+	switch {
+	case f.SourceID == VideoSourceImport:
+		b.WriteString(` AND source_id IS NULL`)
+	case f.SourceID > 0:
 		b.WriteString(` AND source_id = ?`)
 		*args = append(*args, f.SourceID)
 	}
@@ -452,6 +462,15 @@ func (s *Store) DistinctVideoYears(seriesID int64) (years []int, unknown bool, e
 		}
 	}
 	return years, unknown, rows.Err()
+}
+
+// CountVideosWithNullSource returns how many videos on the series have source_id IS NULL.
+func (s *Store) CountVideosWithNullSource(seriesID int64) (int, error) {
+	var n int
+	err := s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM videos WHERE series_id = ? AND source_id IS NULL
+	`, seriesID).Scan(&n)
+	return n, err
 }
 
 // CountVideosBySource returns video counts keyed by source_id for a series.

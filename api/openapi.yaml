@@ -1469,12 +1469,12 @@ paths:
     post:
       tags: [library]
       operationId: importConfirm
-      summary: Confirm series-folder + video import plan - enqueue one import_plan task
+      summary: Confirm import plan - enqueue one import_plan task
       description: >
-        Used when the scan found unknown tvshow.nfo trees. Creates series (with operator
-        defaults), applies tvshow.nfo metadata and series art, then imports each job.
-        No series rows or file moves until the worker runs. When series is empty, clients
-        should use POST /api/import/manual per job instead.
+        Always used by the Import Match UI confirm path. Creates series drafts (nfo_folder and/or bare),
+        then binds or creates videos per job, one series unit at a time. series may be empty when every
+        job targets an existing series_id (bind or create). Resumes on process restart via payload cursors;
+        logical failures leave the task failed. N× POST /api/import/manual remains an API escape hatch only.
       requestBody:
         required: true
         content:
@@ -1690,18 +1690,25 @@ components:
 
     ImportConfirmSeries:
       type: object
-      required: [draft_key, folder_path, root_id, quality_profile_id]
+      required: [draft_key, root_id, quality_profile_id]
       properties:
         draft_key:
           type: string
-          description: Stable key from scan series_folders (absolute folder path)
+          description: Stable key (absolute folder path for nfo_folder, or client draft id for bare)
+        kind:
+          type: string
+          enum: [nfo_folder, bare]
+          description: >
+            nfo_folder (default when omitted) requires folder_path with tvshow.nfo.
+            bare creates from title only (Import plus series draft).
         folder_path:
           type: string
-          description: Absolute path of the tvshow.nfo folder
+          description: Absolute path of the tvshow.nfo folder (required for nfo_folder)
         title:
           type: string
           description: >
-            Optional and ignored for naming. Server uses tvshow.nfo title, else the folder basename.
+            Required for bare. For nfo_folder, defaults from tvshow.nfo / folder basename;
+            operator may rename for uniqueness.
         root_id:
           type: integer
           format: int64
@@ -1711,10 +1718,10 @@ components:
         delivery_mode:
           type: string
           enum: [video, audio]
-          description: Defaults to video when omitted
+          description: Defaults to video when omitted (Import UI uses this default; no confirm control)
         monitored:
           type: boolean
-          description: Operator choice from Import summary (shared across series in one confirm)
+          description: Defaults to true when omitted (Import UI uses this default; no confirm control)
 
     ImportConfirmJob:
       type: object
@@ -1922,7 +1929,7 @@ components:
         series_folder_locked:
           type: boolean
           description: >
-            True when a tvshow.nfo tree owns this path; Match UI must not change series.
+            True when a tvshow.nfo tree owns this path (scan auto-selects that series; Match joins stay editable).
 
     ImportSeriesFolderParsed:
       type: object
@@ -2010,13 +2017,17 @@ components:
 
     ImportPickerSeries:
       type: object
-      required: [id, title]
+      required: [id, title, root_id]
       properties:
         id:
           type: integer
           format: int64
         title:
           type: string
+        root_id:
+          type: integer
+          format: int64
+          description: Root folder id (for Import series-title uniqueness checks)
         poster_url:
           type: string
           description: Series poster path (`/series/{id}/art/poster`); always set, no disk probe

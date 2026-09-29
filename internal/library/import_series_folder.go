@@ -208,145 +208,18 @@ func applySeriesTreeLock(c *ImportCandidate, lock seriesTreeLock) {
 	}
 }
 
-// owningTVShowDir returns the nearest ancestor directory containing tvshow.nfo, or "".
-func owningTVShowDir(abs string) string {
-	abs = filepath.Clean(strings.TrimSpace(abs))
-	if abs == "" || abs == "." {
-		return ""
-	}
-	dir := abs
-	if !isDir(abs) {
-		dir = filepath.Dir(abs)
-	}
-	for {
-		if fileExists(filepath.Join(dir, "tvshow.nfo")) {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-}
-
-func isDir(path string) bool {
-	st, err := os.Stat(path)
-	return err == nil && st.IsDir()
-}
-
-// importSeriesLock is a tvshow.nfo ownership constraint for an import path.
-type importSeriesLock struct {
-	Folder   string
-	SeriesID int64  // >0 when the folder matches an existing library series
-	DraftKey string // set when unknown (create via import_plan); equals Folder
-}
-
-// importSeriesLockForPath reports whether abs sits under a tvshow.nfo tree and
-// whether that tree matches a known series or is an unknown draft.
-func (s *Store) importSeriesLockForPath(abs string) (importSeriesLock, bool, error) {
-	abs = filepath.Clean(strings.TrimSpace(abs))
-	folder := owningTVShowDir(abs)
-	if folder == "" {
-		return importSeriesLock{}, false, nil
-	}
-	if !s.pathUnderImportInbox(folder) {
-		// Import paths must be under the inbox; library trees are not scanned.
-		return importSeriesLock{}, false, nil
-	}
-	parsed, perr := ParseSeriesNFOFile(filepath.Join(folder, "tvshow.nfo"))
-	if perr != nil {
-		parsed = ParsedSeriesNFO{Title: filepath.Base(folder)}
-	}
-	if id, ok := s.matchSeriesForInboxFolder(folder, parsed); ok {
-		return importSeriesLock{Folder: folder, SeriesID: id}, true, nil
-	}
-	return importSeriesLock{Folder: folder, DraftKey: folder}, true, nil
-}
-
-// assertImportPathAllowsVideo rejects binding media under a tvshow.nfo tree to the wrong series
-// (or any video when the tree is an unknown draft).
+// assertImportPathAllowsVideo previously enforced tvshow.nfo ownership; Match may rematch freely (auto-select only).
 func (s *Store) assertImportPathAllowsVideo(abs string, videoID int64) error {
-	lock, ok, err := s.importSeriesLockForPath(abs)
-	if err != nil || !ok {
-		return err
-	}
-	if lock.DraftKey != "" {
-		return fmt.Errorf("%w: path under unknown tvshow.nfo (%s); use import confirm to create the series", ErrInvalid, lock.Folder)
-	}
-	v, err := s.GetVideo(videoID)
-	if err != nil {
-		return err
-	}
-	if v.SeriesID != lock.SeriesID {
-		return fmt.Errorf("%w: path locked to series %d by tvshow.nfo; video belongs to series %d", ErrInvalid, lock.SeriesID, v.SeriesID)
-	}
 	return nil
 }
 
-// assertImportPathAllowsSeries rejects create-under-series when the path's tvshow.nfo lock disagrees.
+// assertImportPathAllowsSeries previously enforced tvshow.nfo ownership; Match may rematch freely (auto-select only).
 func (s *Store) assertImportPathAllowsSeries(abs string, seriesID int64) error {
-	lock, ok, err := s.importSeriesLockForPath(abs)
-	if err != nil || !ok {
-		return err
-	}
-	if lock.DraftKey != "" {
-		return fmt.Errorf("%w: path under unknown tvshow.nfo (%s); use import confirm to create the series", ErrInvalid, lock.Folder)
-	}
-	if seriesID != lock.SeriesID {
-		return fmt.Errorf("%w: path locked to series %d by tvshow.nfo", ErrInvalid, lock.SeriesID)
-	}
 	return nil
 }
 
-// assertImportPlanJobLock ensures a plan job respects the path's tvshow.nfo ownership.
-func (s *Store) assertImportPlanJobLock(j ImportPlanJob, draftKeys map[string]struct{}) error {
-	path := strings.TrimSpace(j.Path)
-	if path == "" && len(j.Paths) > 0 {
-		path = strings.TrimSpace(j.Paths[0])
-	}
-	if path == "" {
-		return nil
-	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		abs = filepath.Clean(path)
-	}
-	lock, ok, err := s.importSeriesLockForPath(abs)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		if j.SeriesDraftKey != "" {
-			return fmt.Errorf("%w: series_draft_key set but path is not under that tvshow.nfo tree", ErrInvalid)
-		}
-		return nil
-	}
-	if lock.DraftKey != "" {
-		if j.VideoID > 0 {
-			return fmt.Errorf("%w: path under unknown tvshow.nfo cannot bind to an existing video", ErrInvalid)
-		}
-		if j.SeriesID > 0 {
-			return fmt.Errorf("%w: path under unknown tvshow.nfo cannot target an existing series_id", ErrInvalid)
-		}
-		if strings.TrimSpace(j.SeriesDraftKey) != lock.DraftKey {
-			return fmt.Errorf("%w: path locked to draft %s", ErrInvalid, lock.DraftKey)
-		}
-		if _, ok := draftKeys[lock.DraftKey]; !ok {
-			return fmt.Errorf("%w: path under unknown tvshow.nfo missing series draft", ErrInvalid)
-		}
-		return nil
-	}
-	// Known series folder.
-	if j.SeriesDraftKey != "" {
-		return fmt.Errorf("%w: path locked to existing series %d; series_draft_key not allowed", ErrInvalid, lock.SeriesID)
-	}
-	if j.VideoID > 0 {
-		return s.assertImportPathAllowsVideo(abs, j.VideoID)
-	}
-	if j.SeriesID > 0 && j.SeriesID != lock.SeriesID {
-		return fmt.Errorf("%w: path locked to series %d by tvshow.nfo", ErrInvalid, lock.SeriesID)
-	}
+// assertImportPlanJobLock previously enforced tvshow.nfo ownership; Match may rematch freely (auto-select only).
+func (s *Store) assertImportPlanJobLock(j ImportPlanJob, draftKeys map[string]struct{}, bareDrafts map[string]struct{}) error {
 	return nil
 }
 

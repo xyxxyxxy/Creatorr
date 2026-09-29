@@ -1987,6 +1987,16 @@
     restoreKeepScroll();
   }
 
+  /** Series detail: Import source link uses #series-videos-live (after keep-scroll restore). */
+  function scrollSeriesVideosAnchor() {
+    if (location.hash !== "#series-videos-live") return;
+    const el = document.getElementById("series-videos-live");
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ block: "start" });
+    });
+  }
+
   function connectEvents() {
     if (!window.EventSource) return;
     const es = new EventSource("/api/events");
@@ -2485,6 +2495,7 @@
     createLucideIcons();
     formatLocalTimes();
     restoreSeriesScroll();
+    scrollSeriesVideosAnchor();
     refreshBadge();
     refreshNotifyBadge();
     refreshNotifyDropdown();
