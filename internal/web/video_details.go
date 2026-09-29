@@ -15,8 +15,8 @@ type videoDetailRow struct {
 	IsPath bool
 }
 
-// videoDetailRows builds labeled rows from dedicated video columns (+ derived import mode).
-func videoDetailRows(store *library.Store, v *library.Video) []videoDetailRow {
+// videoDetailRows builds labeled rows from dedicated video columns.
+func videoDetailRows(v *library.Video) []videoDetailRow {
 	if v == nil {
 		return nil
 	}
@@ -31,14 +31,6 @@ func videoDetailRows(store *library.Store, v *library.Video) []videoDetailRow {
 
 	if v.DownloadFormatSelector.Valid {
 		add("Download format", v.DownloadFormatSelector.String, false, false)
-	}
-	if v.ImportSrc.Valid && strings.TrimSpace(v.ImportSrc.String) != "" {
-		add("Import path", v.ImportSrc.String, false, true)
-		if store != nil && store.ImportInPlace(v.ImportSrc.String) {
-			add("Import mode", "bound in place", false, false)
-		} else {
-			add("Import mode", "packed from inbox", false, false)
-		}
 	}
 	return out
 }

@@ -47,6 +47,7 @@ func (s *Store) PreviewApplyEpisodeNaming(seriesIDs, videoIDs []int64) (*ApplyRe
 		RootPath    string
 		UploadDate  sql.NullString
 		SourceURL   string
+		PackRole    string
 	}
 	var list []prow
 	yearsBySeries := map[int64]map[int]bool{}
@@ -55,7 +56,7 @@ func (s *Store) PreviewApplyEpisodeNaming(seriesIDs, videoIDs []int64) (*ApplyRe
 		if err := rows.Scan(&r.ID, &r.Title, &r.RemoteID, &r.Season, &r.Episode, &r.SeriesTitle, &r.RootID, &r.RootPath, &r.UploadDate, &r.SourceURL); err != nil {
 			return nil, err
 		}
-		_ = s.DB.SQL.QueryRow(`SELECT series_id FROM videos WHERE id = ?`, r.ID).Scan(&r.SeriesID)
+		_ = s.DB.SQL.QueryRow(`SELECT series_id, COALESCE(special_feature,'') FROM videos WHERE id = ?`, r.ID).Scan(&r.SeriesID, &r.PackRole)
 		list = append(list, r)
 		if r.UploadDate.Valid {
 			if y := SeasonYearFromUpload(r.UploadDate.String); y > 0 && r.SeriesID > 0 {
@@ -116,10 +117,16 @@ func (s *Store) PreviewApplyEpisodeNaming(seriesIDs, videoIDs []int64) (*ApplyRe
 		if strings.TrimSpace(r.SourceURL) != "" {
 			domain = namingDomain(r.SourceURL)
 		}
-		dest, err := BuildEpisodePaths(r.RootPath, EpisodeNFO{
+		meta := EpisodeNFO{
 			SeriesTitle: r.SeriesTitle, Title: r.Title, Season: wantSeason, Episode: wantEpisode,
-			Aired: aired, UniqueID: r.RemoteID, Domain: domain,
-		}, cfg)
+			Aired: aired, UniqueID: r.RemoteID, Domain: domain, PackRole: NormalizePackRole(r.PackRole),
+		}
+		if IsSpecialFeature(meta.PackRole) {
+			if y := SeasonYearFromUpload(aired); y > 0 {
+				meta.Season = y
+			}
+		}
+		dest, err := BuildEpisodePaths(r.RootPath, meta, cfg)
 		if err != nil {
 			out.Unchanged++
 			continue

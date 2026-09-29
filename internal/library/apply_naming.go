@@ -313,13 +313,15 @@ func (p applyNamingPayload) isFullLibrary() bool {
 }
 
 func (p applyNamingPayload) namingConfigForRoot(rootID int64) NamingConfig {
+	cfg := NamingConfigFromRoot(nil)
 	if len(p.FormatsByRoot) > 0 {
 		if fmtStr, ok := p.FormatsByRoot[strconv.FormatInt(rootID, 10)]; ok {
 			fmtStr = strings.TrimSpace(fmtStr)
 			if fmtStr == "" {
 				fmtStr = DefaultEpisodeFormat
 			}
-			return NamingConfig{EpisodeFormat: fmtStr}
+			cfg.EpisodeFormat = fmtStr
+			return cfg
 		}
 	}
 	// Legacy single-format payload (in-flight across upgrade).
@@ -327,7 +329,19 @@ func (p applyNamingPayload) namingConfigForRoot(rootID int64) NamingConfig {
 	if fmtStr == "" {
 		fmtStr = DefaultEpisodeFormat
 	}
-	return NamingConfig{EpisodeFormat: fmtStr}
+	cfg.EpisodeFormat = fmtStr
+	return cfg
+}
+
+// namingConfigForRootFolder merges payload episode_format snapshot with live special formats from root.
+func (p applyNamingPayload) namingConfigForRootFolder(root *RootFolder) NamingConfig {
+	if root == nil {
+		return p.namingConfigForRoot(0)
+	}
+	cfg := NamingConfigFromRoot(root)
+	snap := p.namingConfigForRoot(root.ID)
+	cfg.EpisodeFormat = snap.EpisodeFormat
+	return cfg
 }
 
 func (p applyNamingPayload) payloadMap() map[string]any {
@@ -426,6 +440,21 @@ func (s *Store) ApplyEpisodeNamingPass(ctx context.Context, task *queue.Task, pr
 	for _, r := range list {
 		touched = append(touched, r.ID)
 		bySeries[r.SeriesID] = append(bySeries[r.SeriesID], r.ID)
+	}
+	// Special/feature counters for every series in the Apply scope.
+	for seriesID := range bySeries {
+		if _, err := s.ReindexSpecialEpisodes(seriesID); err != nil {
+			return 0, 0, 0, err
+		}
+		kinds, kerr := s.listFeatureKindsInSeries(seriesID)
+		if kerr != nil {
+			return 0, 0, 0, kerr
+		}
+		for _, kind := range kinds {
+			if _, err := s.ReindexSpecialFeatures(seriesID, kind); err != nil {
+				return 0, 0, 0, err
+			}
+		}
 	}
 
 	total := len(list)
@@ -648,16 +677,8 @@ func (s *Store) episodeCollisionSuffixState(videoID int64, p applyNamingPayload)
 	if v.SourceURL.Valid {
 		domain = namingDomain(v.SourceURL.String)
 	}
-	cfg := p.namingConfigForRoot(ser.RootID)
-	dest, err := BuildEpisodePaths(root.Path, EpisodeNFO{
-		SeriesTitle: ser.Title,
-		Title:       v.Title,
-		Season:      season,
-		Episode:     episode,
-		Aired:       aired,
-		UniqueID:    v.RemoteID,
-		Domain:      domain,
-	}, cfg)
+	cfg := p.namingConfigForRootFolder(root)
+	dest, err := BuildEpisodePaths(root.Path, pathEpisodeNFO(v, ser.Title, season, episode, aired, domain), cfg)
 	if err != nil {
 		return "", "", false, err
 	}

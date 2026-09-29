@@ -28,8 +28,12 @@
             <td>video title; <code class="text-xs">:N</code> caps runes</td>
           </tr>
           <tr>
+            <td><code class="text-xs">{kind}</code></td>
+            <td><code class="text-xs">Episode</code> for regular Episode; <code class="text-xs">Specials</code> for Special episode; special feature kind name (e.g. <code class="text-xs">trailers</code>) for features.</td>
+          </tr>
+          <tr>
             <td><code class="text-xs">{episode}</code> / <code class="text-xs">{episode:04}</code></td>
-            <td>1-based index within the series UTC year (oldest upload first; equal times use arrival order). Bare form is unpadded; <code class="text-xs">:04</code> zero-pads.</td>
+            <td>1-based index for regular episodes within the series UTC year (oldest upload first; equal times use arrival order; undated last by id). Special episode: among all Specials in the series. Special feature: among the same feature name series-wide. Bare form is unpadded; <code class="text-xs">:04</code> zero-pads.</td>
           </tr>
           <tr>
             <td><code class="text-xs">{date}</code></td>
@@ -37,7 +41,7 @@
           </tr>
           <tr>
             <td><code class="text-xs">{year}</code></td>
-            <td>calendar year (year-season, e.g. 2026)</td>
+            <td>calendar year (year-season for regulars, e.g. 2026). Optional cosmetic token for Special feature stems; does not change the extras folder.</td>
           </tr>
           <tr>
             <td><code class="text-xs">{month}</code> / <code class="text-xs">{month:02}</code></td>
@@ -58,7 +62,7 @@
         </tbody>
       </table>
     </div>
-    <p>The following tokens become available after the release date of a video is known: <code class="text-xs">{date}</code>, <code class="text-xs">{year}</code>, <code class="text-xs">{month}</code>, <code class="text-xs">{day}</code>, <code class="text-xs">{hour}</code>, <code class="text-xs">{minute}</code>, and <code class="text-xs">{episode}</code>.</p>
+    <p>Date tokens (<code class="text-xs">{date}</code>, <code class="text-xs">{year}</code>, <code class="text-xs">{month}</code>, <code class="text-xs">{day}</code>, <code class="text-xs">{hour}</code>, <code class="text-xs">{minute}</code>) need a known upload date. <code class="text-xs">{episode}</code> follows the kind bucket (regulars need a dated year; Specials and features still number undated videos by id).</p>
   </div>
 </details>
 {{end}}

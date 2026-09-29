@@ -7,6 +7,7 @@ import (
 
 	"github.com/xyxxyxxy/Creatorr/internal/config"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 const (
@@ -23,7 +24,7 @@ const (
 
 // SeedDefaults inserts the shipped root folder and quality profiles when tables are empty.
 // Root path comes from cfg.InitialRootFolder (/library in container; var/library local),
-// stored as an absolute path. Seeded root name is the last path segment (operator create may leave name empty).
+// stored as an absolute path. Seeded root name is left empty (optional display label).
 // Profiles: best (bv*+ba/b merge with progressive fallback, verify_media on), HD 1080p, HD 720p, SD 480p (soft unrestricted tails).
 // Seed insert order is unrelated to UI order (ListProfiles sorts by name).
 // Remux is always MKV (library.RemuxContainer; not a Setting).
@@ -47,10 +48,10 @@ func SeedDefaults(database *db.DB, cfg config.Config) error {
 		return err
 	}
 	if roots == 0 {
-		name := filepath.Base(path)
 		_, err = database.SQL.Exec(`
-			INSERT INTO root_folders (name, path, retention_ttl_seconds, episode_format) VALUES (?, ?, NULL, ?)
-		`, name, path, DefaultEpisodeFormat)
+			INSERT INTO root_folders (name, path, retention_ttl_seconds, episode_format, special_episode_format, special_feature_format)
+			VALUES (?, ?, NULL, ?, ?, ?)
+		`, "", path, DefaultEpisodeFormat, settings.DefaultSpecialEpisodeFormat, settings.DefaultSpecialFeatureFormat)
 		if err != nil {
 			return fmt.Errorf("seed root: %w", err)
 		}

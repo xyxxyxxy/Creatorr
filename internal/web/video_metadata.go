@@ -37,13 +37,17 @@ type videoMetadataView struct {
 	ManagedGenrePipe   string
 	OperatorTagItems   []string
 	OperatorGenreItems []string
+	PackRoleOptions    []struct{ Value, Label string }
+	PackRoleIsSpecial  bool
 }
 
 func (h *Handler) buildVideoMetadataView(ser *library.Series, video *library.Video) videoMetadataView {
 	v := videoMetadataView{
-		Series:      ser,
-		Video:       video,
-		PrefetchArt: map[string]string{},
+		Series:            ser,
+		Video:             video,
+		PrefetchArt:       map[string]string{},
+		PackRoleOptions:   library.PackRoleSelectOptions(),
+		PackRoleIsSpecial: library.IsSpecialPackRole(video.PackRole),
 	}
 	if h.Library != nil {
 		v.Suggestions, _ = h.Library.ListMetaSuggestions()
@@ -240,6 +244,7 @@ func (h *Handler) actionSaveVideoMetadata(w http.ResponseWriter, r *http.Request
 		Country:       r.FormValue("country"),
 		MPAA:          r.FormValue("mpaa"),
 		UploadDate:    library.CombineUploadFormDateTime(r.FormValue("upload_date"), r.FormValue("upload_time")),
+		PackRole:      r.FormValue("special_feature"),
 		ThumbSrc:      thumbSrc,
 		ThumbClear:    thumbClear,
 	})

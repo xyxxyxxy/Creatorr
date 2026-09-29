@@ -36,6 +36,11 @@ type EpisodeNFO struct {
 	SourceSite     string // legacy fallback when UniqueIDType empty
 	Domain         string // source hostname for {domain}; empty when unknown
 	RuntimeSeconds int    // 0 = omit; Emby/Kodi use this for episode duration
+	PackRole       string // empty / special_episode / feature kind
+	// DisplaySeason/DisplayEpisode: Special episode timeline placement (omit when DisplaySeason==0 && !DisplayEpisodeSet).
+	DisplaySeason     int
+	DisplayEpisode    int
+	DisplayEpisodeSet bool // true when DisplayEpisode should be written (including 0 is unused; episode always >=1 when set)
 }
 
 // WriteEpisodeNFO writes episodedetails XML at path.
@@ -61,6 +66,12 @@ func FormatEpisodeNFO(meta EpisodeNFO) []byte {
 	}
 	fmt.Fprintf(&b, "  <season>%d</season>\n", meta.Season)
 	fmt.Fprintf(&b, "  <episode>%d</episode>\n", meta.Episode)
+	if IsSpecialEpisode(meta.PackRole) && meta.DisplaySeason > 0 {
+		fmt.Fprintf(&b, "  <displayseason>%d</displayseason>\n", meta.DisplaySeason)
+		if meta.DisplayEpisodeSet {
+			fmt.Fprintf(&b, "  <displayepisode>%d</displayepisode>\n", meta.DisplayEpisode)
+		}
+	}
 	plot := meta.Plot
 	if plot == "" {
 		plot = meta.Title
@@ -492,20 +503,23 @@ func (s *Store) episodeNFOBeside(v *Video, mediaPath string) (EpisodeNFO, string
 	if v.Episode.Valid {
 		episode = int(v.Episode.Int64)
 	}
-	if season == 0 || episode == 0 {
-		upload := ""
-		if v.UploadDate.Valid {
-			upload = v.UploadDate.String
-		}
-		s2, e2, aerr := s.AssignSeasonEpisode(v.SeriesID, upload, 0, v.ID)
-		if aerr != nil {
-			return EpisodeNFO{}, "", aerr
-		}
-		if season == 0 {
-			season = s2
-		}
-		if episode == 0 {
-			episode = e2
+	role := NormalizePackRole(v.PackRole)
+	if !IsSpecialEpisode(role) && !IsSpecialFeature(role) {
+		if season == 0 || episode == 0 {
+			upload := ""
+			if v.UploadDate.Valid {
+				upload = v.UploadDate.String
+			}
+			s2, e2, aerr := s.AssignSeasonEpisode(v.SeriesID, upload, 0, v.ID)
+			if aerr != nil {
+				return EpisodeNFO{}, "", aerr
+			}
+			if season == 0 {
+				season = s2
+			}
+			if episode == 0 {
+				episode = e2
+			}
 		}
 	}
 
@@ -519,7 +533,17 @@ func (s *Store) episodeNFOBeside(v *Video, mediaPath string) (EpisodeNFO, string
 	if v.DurationSeconds.Valid && v.DurationSeconds.Int64 > 0 {
 		runtime = int(v.DurationSeconds.Int64)
 	}
-	return episodeMetaFromVideo(v, seriesTitle, season, episode, aired, runtime), nfoPath, nil
+	meta := episodeMetaFromVideo(v, seriesTitle, season, episode, aired, runtime)
+	if IsSpecialFeature(role) {
+		// Cosmetic {year} for feature stems uses upload year; DB season stays NULL.
+		if y := SeasonYearFromUpload(aired); y > 0 {
+			meta.Season = y
+		}
+	}
+	if err := s.ApplySpecialDisplay(&meta, v.SeriesID, v.ID, aired); err != nil {
+		return EpisodeNFO{}, "", err
+	}
+	return meta, nfoPath, nil
 }
 
 // EpisodeMetaFromVideo builds EpisodeNFO from a video row (shared by pack / rewrite / stream).
@@ -566,6 +590,7 @@ func episodeMetaFromVideo(v *Video, seriesTitle string, season, episode int, air
 		SourceSite:     sourceSite,
 		Domain:         domain,
 		RuntimeSeconds: runtime,
+		PackRole:       NormalizePackRole(v.PackRole),
 	}
 }
 

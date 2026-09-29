@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
 )
 
@@ -174,10 +173,10 @@ func (s *Store) insertListedVideo(seriesID int64, src any, li ListedVideo, uploa
 	return s.DB.SQL.Exec(`
 		INSERT INTO videos (
 		  series_id, source_id, remote_id, title, upload_date,
-		  source_url, status, season, episode, description, thumbnail_url, media_type
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		  source_url, status, season, episode, description, thumbnail_url, media_type, special_feature
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, seriesID, src, li.RemoteID, li.Title, uploadVal, nullEmpty(li.WebpageURL),
-		status, season, episode, li.Description, thumb, mt)
+		status, season, episode, li.Description, thumb, mt, PackRoleRegular)
 }
 
 func nullEmpty(s string) any {
@@ -246,6 +245,7 @@ type DownloadContext struct {
 	RootPath       string
 	RootID         int64
 	EpisodeFormat  string
+	Naming         NamingConfig
 	FormatSelector string
 	URL            string
 	Profile        QualityProfile
@@ -258,14 +258,14 @@ func (s *Store) PrepareDownload(videoID int64) (*DownloadContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	var title, rootPath, episodeFormat, deliveryMode string
+	var title, rootPath, deliveryMode string
 	var profileID, rootID int64
 	err = s.DB.SQL.QueryRow(`
-		SELECT s.title, r.id, r.path, r.episode_format, s.quality_profile_id, s.delivery_mode
+		SELECT s.title, r.id, r.path, s.quality_profile_id, s.delivery_mode
 		FROM series s
 		JOIN root_folders r ON r.id = s.root_id
 		WHERE s.id = ?
-	`, v.SeriesID).Scan(&title, &rootID, &rootPath, &episodeFormat, &profileID, &deliveryMode)
+	`, v.SeriesID).Scan(&title, &rootID, &rootPath, &profileID, &deliveryMode)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -282,12 +282,14 @@ func (s *Store) PrepareDownload(videoID int64) (*DownloadContext, error) {
 	}
 	url = DownloadURL(url, v.RemoteID)
 	_ = s.EnsureSeriesDirCapped(rootPath, title)
+	naming := s.LoadNamingConfigForRoot(rootID)
 	return &DownloadContext{
 		Video:          *v,
 		SeriesTitle:    title,
 		RootPath:       rootPath,
 		RootID:         rootID,
-		EpisodeFormat:  settings.NormalizeEpisodeFormat(episodeFormat),
+		EpisodeFormat:  naming.EpisodeFormat,
+		Naming:         naming,
 		FormatSelector: prof.FormatSelector,
 		URL:            url,
 		Profile:        *prof,
@@ -324,13 +326,9 @@ func (s *Store) CompleteDownload(videoID int64, mediaPath, nfoPath, infoPath, th
 	return s.completeMedia(videoID, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, taskID, "packed", "Packed to library")
 }
 
-// CompleteImport records files installed from the import folder or bound in place from the library.
+// CompleteImport records files installed from the import folder.
 func (s *Store) CompleteImport(videoID int64, mediaPath, nfoPath, infoPath, thumbPath string, subPaths []string, meta MediaCompleteMeta, taskID int64) error {
-	msg := "Imported from import folder"
-	if meta.InPlace || (meta.ImportSrc != "" && s.ImportInPlace(meta.ImportSrc)) {
-		msg = "Bound library file in place"
-	}
-	return s.completeMedia(videoID, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, taskID, "imported", msg)
+	return s.completeMedia(videoID, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, taskID, "imported", "Imported from import folder")
 }
 
 func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumbPath string, subPaths []string, meta MediaCompleteMeta, taskID int64, event, message string) error {
@@ -437,14 +435,7 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 	if strings.TrimSpace(meta.DownloadFormatSelector) != "" {
 		formatVal = strings.TrimSpace(meta.DownloadFormatSelector)
 	}
-	var importSrcVal any
-	if strings.TrimSpace(meta.ImportSrc) != "" {
-		importSrcVal = strings.TrimSpace(meta.ImportSrc)
-	}
 	acquiredVia := NormalizeAcquiredVia(meta.AcquiredVia)
-	if strings.TrimSpace(meta.ImportSrc) != "" && (acquiredVia == "" || acquiredVia == AcquiredViaSource) {
-		acquiredVia = AcquiredViaImport
-	}
 	if acquiredVia == "" {
 		acquiredVia = AcquiredViaSource
 	}
@@ -475,14 +466,13 @@ func (s *Store) completeMedia(videoID int64, mediaPath, nfoPath, infoPath, thumb
 		  acquired_via = ?,
 		  download_format_selector = COALESCE(?, download_format_selector),
 		  download_remux_container = ?,
-		  import_src = COALESCE(?, import_src),
 		  duration_seconds = COALESCE(?, duration_seconds),
 		  width = COALESCE(?, width),
 		  height = COALESCE(?, height),
 		  fps = COALESCE(?, fps),
 		  media_type = CASE WHEN (media_type IS NULL OR media_type = '') AND ? != '' THEN ? ELSE media_type END,
 		  description = COALESCE(NULLIF(description, ''), ?)`
-	args := []any{acquired, acquired, acquiredVia, formatVal, remuxVal, importSrcVal, durVal, widthVal, heightVal, fpsVal, mediaType, mediaType, descVal}
+	args := []any{acquired, acquired, acquiredVia, formatVal, remuxVal, durVal, widthVal, heightVal, fpsVal, mediaType, mediaType, descVal}
 
 	if uploadFromInfo != "" && needDate {
 		var seriesID int64

@@ -13,7 +13,6 @@
 @source "../../templates/**/*.html";
 @source "../../partials/**/*.html";
 @source "../../static/app.js";
-@source "../../static/library_picker.js";
 
 /*
   Exception (approved): daisyUI .modal-box uses overflow-y:auto, which clips tooltip
@@ -38,8 +37,8 @@
 }
 
 /*
-  Notifications + flash toasts above .modal (z-index 1200) so the Select series/video
-  library picker does not trap the bell menu or toasts under the backdrop.
+  Notifications + flash toasts above .modal (z-index 1200) so dialogs do not trap the
+  bell menu or toasts under the backdrop.
   daisyUI .toast-top defaults to top:1rem (over sticky navbar bell/user); offset below
   min-h-14 header + small gap.
 */
@@ -59,6 +58,231 @@
 #import-list .tooltip:is(:hover, :focus-within),
 #import-summary-tree .tooltip:is(:hover, :focus-within) {
   z-index: 40;
+}
+/* Episode pick list: Special kind tip must clear the scroll panel chrome. */
+#import-list details.dropdown[open] .js-import-video-list .tooltip:is(:hover, :focus-within) {
+  z-index: 60;
+}
+#import-list details.dropdown[open] .dropdown-content {
+  overflow: visible;
+}
+
+/*
+  Inline Import match dropdowns sit inside scrolling list rows. Raise open
+  panels above the next row so search + rich options stay clickable.
+  details[open] is the click-toggle path (focus-based div.dropdown needed
+  two clicks here: open + pick).
+  Fixed summary widths live here: Tailwind does not emit utilities that only
+  appear inside <script> template strings in import.html.
+  Open pick panels match the full join width (trigger + Clear).
+*/
+#import-list .dropdown:focus-within,
+#import-list .dropdown:has(:focus),
+#import-list details.dropdown[open] {
+  z-index: 50;
+}
+#import-list .dropdown .dropdown-content {
+  z-index: 50;
+}
+/* Leaf match joins: series + episode each take half the row box. */
+#import-list .import-match-joins {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+}
+#import-list .import-match-joins > .join,
+#import-list .import-match-joins > .import-join-tip {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 0;
+  max-width: 100%;
+}
+#import-list .import-match-joins > .import-join-tip {
+  display: inline-flex;
+  max-width: 100%;
+}
+#import-list .import-match-joins > .import-join-tip > .join {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+#import-list .import-match-joins > .join,
+#import-list .import-match-joins > .import-join-tip > .join,
+#import-list .import-folder .join {
+  position: relative;
+}
+/* Folder series join: half row width (same share as one match join). */
+#import-list .import-folder .join {
+  width: 50%;
+  min-width: 0;
+  max-width: 100%;
+}
+#import-list .import-match-joins > .join > details.dropdown,
+#import-list .import-match-joins > .import-join-tip > .join > details.dropdown,
+#import-list .import-folder .join > details.dropdown {
+  position: static;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#import-list .import-match-joins .js-import-series-dd > summary.btn,
+#import-list .import-match-joins .js-import-video-dd > summary.btn,
+#import-list .js-import-folder-series-dd > summary.btn {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+/* Match + folder pick panels: same width as join (trigger + Clear). */
+#import-list .import-match-joins .js-import-series-dd > .dropdown-content,
+#import-list .import-match-joins .js-import-video-dd > .dropdown-content,
+#import-list .js-import-folder-series-dd > .dropdown-content {
+  left: 0;
+  right: 0;
+  width: auto;
+  max-width: none;
+}
+#import-list .js-import-video-list {
+  overflow-x: hidden;
+}
+/* Episode trigger thumb: same height as series size-8 poster, 16:9 width. */
+#import-list .js-import-video-thumb {
+  height: 2rem;
+  width: 3.5rem;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: var(--radius-selector, 0.5rem);
+}
+/* Import row tones (classes built in import.html <script>). */
+#import-list .import-row-ok {
+  border-color: color-mix(in oklab, var(--color-success) 50%, transparent);
+  background-color: color-mix(in oklab, var(--color-success) 10%, transparent);
+}
+#import-list .import-row-warn {
+  border-color: color-mix(in oklab, var(--color-warning) 50%, transparent);
+  background-color: color-mix(in oklab, var(--color-warning) 10%, transparent);
+}
+#import-list .import-row-error {
+  border-color: color-mix(in oklab, var(--color-error) 50%, transparent);
+  background-color: color-mix(in oklab, var(--color-error) 10%, transparent);
+}
+#import-list .import-file-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  width: 100%;
+}
+/* Main = name + sidecars. Name shrinks; sidecars never leave the flex line. */
+#import-list .import-file-line-main {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  flex: 1 1 0%;
+  overflow: hidden;
+}
+#import-list .import-file-line-name {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+#import-list .import-file-line-path {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+#import-list .import-file-line-sidecars {
+  flex: 0 0 auto;
+}
+#import-list .import-file-line-right {
+  flex: 0 0 auto;
+  margin-left: auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+/*
+  Flat list tree rail: continuous CSS lines (no ASCII).
+  Row gap lives here so verticals can bridge it (Tailwind gap alone leaves air).
+*/
+#import-list {
+  gap: 0.375rem;
+  --import-tree-row-gap: 0.375rem;
+}
+#import-list .import-tree-guide {
+  --import-tree-col: 1rem;
+  --import-tree-stroke: 4px;
+  --import-tree-line: color-mix(in oklab, var(--color-base-content) 22%, var(--color-base-100));
+  display: flex;
+  flex-shrink: 0;
+  align-self: stretch;
+  gap: 0.25rem;
+  user-select: none;
+  margin-right: 0.5rem;
+  overflow: visible;
+}
+#import-list .import-tree-pad,
+#import-list .import-tree-elbow {
+  position: relative;
+  box-sizing: border-box;
+  width: var(--import-tree-col);
+  min-width: var(--import-tree-col);
+  max-width: var(--import-tree-col);
+  flex: 0 0 var(--import-tree-col);
+  overflow: visible;
+}
+#import-list .import-tree-pad-cont::before,
+#import-list .import-tree-elbow-mid::before,
+#import-list .import-tree-elbow-mid::after {
+  content: "";
+  position: absolute;
+  background-color: var(--import-tree-line);
+}
+/* Ancestor open: full-height vertical, bridge row gap. */
+#import-list .import-tree-pad-cont::before {
+  left: 50%;
+  top: calc(var(--import-tree-row-gap) / -2);
+  bottom: calc(var(--import-tree-row-gap) / -2);
+  width: var(--import-tree-stroke);
+  transform: translateX(-50%);
+}
+/* Mid (├): full-height vertical + horizontal stub. */
+#import-list .import-tree-elbow-mid::before {
+  left: 50%;
+  top: calc(var(--import-tree-row-gap) / -2);
+  bottom: calc(var(--import-tree-row-gap) / -2);
+  width: var(--import-tree-stroke);
+  transform: translateX(-50%);
+}
+#import-list .import-tree-elbow-mid::after {
+  left: 50%;
+  top: 50%;
+  right: 0;
+  width: auto;
+  height: var(--import-tree-stroke);
+  transform: translateY(-50%);
+}
+/* End (└): one rounded corner (border), not two crossing bars. */
+#import-list .import-tree-elbow-end::after {
+  content: "";
+  position: absolute;
+  box-sizing: border-box;
+  left: calc(50% - var(--import-tree-stroke) / 2);
+  top: calc(var(--import-tree-row-gap) / -2);
+  right: 0;
+  height: calc(50% + var(--import-tree-row-gap) / 2);
+  background: transparent;
+  border-left: var(--import-tree-stroke) solid var(--import-tree-line);
+  border-bottom: var(--import-tree-stroke) solid var(--import-tree-line);
+  border-bottom-left-radius: 0.5rem;
 }
 
 /*

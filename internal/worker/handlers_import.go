@@ -26,7 +26,6 @@ func ImportHandler(d Deps) TaskHandler {
 			Path    string   `json:"path"`
 			Paths   []string `json:"paths"`
 			Mode    string   `json:"mode"`
-			InPlace bool     `json:"in_place"`
 			Replace bool     `json:"replace"`
 		}
 		if err := json.Unmarshal([]byte(t.Payload), &payload); err != nil {
@@ -69,7 +68,7 @@ func runImportMedia(
 
 	srcPath := strings.TrimSpace(paths[0])
 	progress("Validating import…", ptrFloat(0.1))
-	abs, inPlace, err := d.Library.ValidateImportSourcePath(srcPath)
+	abs, err := d.Library.ValidateImportMediaPath(srcPath)
 	if err != nil {
 		return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "invalid import path"), err.Error())
 	}
@@ -93,40 +92,6 @@ func runImportMedia(
 		}
 	}
 
-	if inPlace {
-		progress("Binding library file…", ptrFloat(0.5))
-		nfoBeside, _ := library.SidecarPathsBeside(abs)
-		infoBeside, thumbBeside, subBeside := library.FindDownloadSidecars(abs)
-		meta := library.MediaCompleteMeta{
-			AcquiredVia: library.AcquiredViaImport,
-			ImportSrc:   abs,
-			InPlace:     true,
-		}
-		// Do not register a foreign .nfo as library provenance - apply metadata then regenerate.
-		if err := d.Library.CompleteImport(videoID, abs, "", infoBeside, thumbBeside, subBeside, meta, taskID); err != nil {
-			return err
-		}
-		nfoPresent := nfoBeside != ""
-		if nfoPresent {
-			if err := d.Library.ApplyImportNFO(videoID, nfoBeside, taskID); err != nil {
-				return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "apply nfo failed"), err.Error())
-			}
-		} else {
-			_ = d.Library.SoftFillDurationFromMedia(ctx, videoID, abs)
-			if _, err := d.Library.RewriteVideoNFO(videoID, 0); err != nil {
-				return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "write nfo failed"), err.Error())
-			}
-		}
-		if id, err := d.Library.MaybeEnqueueMediaVerifyForImport(videoID, taskID); err != nil {
-			progress("Verify enqueue failed: "+err.Error(), nil)
-		} else if id == 0 {
-			progress("Integrity check skipped (File integrity off)", nil)
-		}
-		softEnqueueImportSidecarGapFill(d, videoID, nfoPresent, progress)
-		progress("Done", ptrFloat(1))
-		return nil
-	}
-
 	infoSrc, thumbCompanion, subSrcs := library.FindDownloadSidecars(abs)
 	srcNFO := strings.TrimSuffix(abs, filepath.Ext(abs)) + ".nfo"
 	if _, err := os.Stat(srcNFO); err != nil {
@@ -147,40 +112,32 @@ func runImportMedia(
 	if err != nil {
 		return err
 	}
-	season, episode := 0, 0
-	if dlctx.Video.Season.Valid {
-		season = int(dlctx.Video.Season.Int64)
-	}
-	if dlctx.Video.Episode.Valid {
-		episode = int(dlctx.Video.Episode.Int64)
-	}
 	upload := ""
 	if dlctx.Video.UploadDate.Valid {
 		upload = dlctx.Video.UploadDate.String
 	}
-	if upload != "" {
-		sNum, eNum, aerr := d.Library.AssignSeasonEpisode(dlctx.Video.SeriesID, upload, 0, videoID)
-		if aerr != nil {
-			return aerr
-		}
-		season, episode = sNum, eNum
+	season, episode, aerr := d.Library.AssignPackNumbers(&dlctx.Video, upload, taskID)
+	if aerr != nil {
+		return aerr
 	}
 	progress("Installing to library…", ptrFloat(0.5))
 	dlctx, err = d.Library.PrepareDownload(videoID)
 	if err != nil {
 		return err
 	}
+	// Prefer numbers from AssignPackNumbers; refresh video for PackRole / title.
 	aired := ""
 	if dlctx.Video.UploadDate.Valid {
 		aired = dlctx.Video.UploadDate.String
 	}
-	uidVal := strings.TrimSpace(dlctx.Video.UniqueIDValue)
-	if uidVal == "" {
-		uidVal = dlctx.Video.RemoteID
-	}
-	uidType := strings.TrimSpace(dlctx.Video.UniqueIDType)
-	if uidType == "" {
-		uidType = "yt-dlp"
+	if fresh, gerr := d.Library.GetVideo(videoID); gerr == nil {
+		dlctx.Video = *fresh
+		if fresh.Season.Valid {
+			season = int(fresh.Season.Int64)
+		}
+		if fresh.Episode.Valid {
+			episode = int(fresh.Episode.Int64)
+		}
 	}
 	thumbURL := ""
 	if dlctx.Video.ThumbnailURL.Valid {
@@ -188,30 +145,19 @@ func runImportMedia(
 	}
 	thumbSrc, cleanupThumb := library.MaterializeThumbSrc(thumbCompanion, thumbURL)
 	defer cleanupThumb()
+	runtime := 0
+	if dlctx.Video.DurationSeconds.Valid && dlctx.Video.DurationSeconds.Int64 > 0 {
+		runtime = int(dlctx.Video.DurationSeconds.Int64)
+	}
+	epMeta := library.EpisodeMetaFromVideo(&dlctx.Video, dlctx.SeriesTitle, season, episode, aired, runtime)
+	if library.IsSpecialFeature(epMeta.PackRole) {
+		if y := library.SeasonYearFromUpload(aired); y > 0 {
+			epMeta.Season = y
+		}
+	}
+	_ = d.Library.ApplySpecialDisplay(&epMeta, dlctx.Video.SeriesID, dlctx.Video.ID, aired)
 	mediaPath, nfoPath, infoPath, thumbPath, subPaths, pathSuffix, err := library.PackMedia(
-		abs, dlctx.RootPath,
-		library.EpisodeNFO{
-			SeriesTitle:   dlctx.SeriesTitle,
-			Title:         dlctx.Video.Title,
-			SortTitle:     dlctx.Video.SortTitle,
-			OriginalTitle: dlctx.Video.OriginalTitle,
-			Season:        season,
-			Episode:       episode,
-			Plot:          dlctx.Video.Description,
-			Tagline:       dlctx.Video.Tagline,
-			Studio:        dlctx.Video.Studio,
-			Genres:        dlctx.Video.Genres,
-			Tags:          dlctx.Video.Tags,
-			Actors:        dlctx.Video.Actors,
-			Country:       dlctx.Video.Country,
-			MPAA:          dlctx.Video.MPAA,
-			Aired:         aired,
-			UniqueID:      uidVal,
-			UniqueIDType:  uidType,
-			SourceSite:    uidType,
-			Domain:        library.NamingDomain(dlctx.URL),
-		},
-		library.NamingConfig{EpisodeFormat: dlctx.EpisodeFormat}, infoSrc, thumbSrc, subSrcs,
+		abs, dlctx.RootPath, epMeta, dlctx.Naming, infoSrc, thumbSrc, subSrcs,
 	)
 	if err != nil {
 		return apperrors.WithDetail(apperrors.New(apperrors.CodeImportFailed, "install failed"), err.Error())
@@ -237,7 +183,6 @@ func runImportMedia(
 	}
 	meta := library.MediaCompleteMeta{
 		AcquiredVia: library.AcquiredViaImport,
-		ImportSrc:   abs,
 	}
 	if err := d.Library.CompleteImport(videoID, mediaPath, nfoPath, infoPath, thumbPath, subPaths, meta, taskID); err != nil {
 		return err

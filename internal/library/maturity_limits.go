@@ -12,23 +12,18 @@ const (
 	MaxMaturitySidecarDays     = 365
 	HoursPerDay                = 24
 	MaxMaturitySidecarHours    = MaxMaturitySidecarDays * HoursPerDay
+
+	// RecommendedMaturityMediaHours is the UI enable default for media delay.
+	RecommendedMaturityMediaHours = 6
+	// RecommendedMaturitySidecarDays is the UI enable default for sidecar delay.
+	RecommendedMaturitySidecarDays = 14
 )
 
-// MaturityMediaHourPresets are UI slider stops (hours). Index 0 = off.
+// MaturityMediaHourPresets are legacy UI stops (hours). Index 0 = off.
 var MaturityMediaHourPresets = []int{0, 1, 2, 6, 12, 24, 48}
 
-// MaturityMediaPresetLabels are readout labels for MaturityMediaHourPresets.
-var MaturityMediaPresetLabels = []string{
-	"off", "1h", "2h", "6h", "12h", "1 day", "2 days",
-}
-
-// MaturitySidecarDayPresets are UI slider stops (days). Index 0 = off.
+// MaturitySidecarDayPresets are legacy UI stops (days). Index 0 = off.
 var MaturitySidecarDayPresets = []int{0, 7, 14, 30, 90, 180, 365}
-
-// MaturitySidecarPresetLabels are readout labels for MaturitySidecarDayPresets.
-var MaturitySidecarPresetLabels = []string{
-	"off", "1 week", "2 weeks", "1 month", "3 months", "6 months", "1 year",
-}
 
 // ClampMaturityRedownloadHours clamps hours to 0..MaxMaturityRedownloadHours.
 func ClampMaturityRedownloadHours(n int) int {
@@ -73,7 +68,7 @@ func MaturitySidecarHoursToDays(hours int) int {
 	return ClampMaturitySidecarHours(hours) / HoursPerDay
 }
 
-// MaturityMediaHoursForPreset returns hours for a media slider index (clamped).
+// MaturityMediaHoursForPreset returns hours for a legacy preset index (clamped).
 func MaturityMediaHoursForPreset(idx int) int {
 	if idx < 0 {
 		return MaturityMediaHourPresets[0]
@@ -84,7 +79,7 @@ func MaturityMediaHoursForPreset(idx int) int {
 	return MaturityMediaHourPresets[idx]
 }
 
-// MaturityMediaPresetIndex returns the nearest media preset index for hours.
+// MaturityMediaPresetIndex returns the nearest legacy media preset index for hours.
 func MaturityMediaPresetIndex(hours int) int {
 	hours = ClampMaturityRedownloadHours(hours)
 	best, bestDist := 0, absInt(hours-MaturityMediaHourPresets[0])
@@ -96,12 +91,26 @@ func MaturityMediaPresetIndex(hours int) int {
 	return best
 }
 
-// MaturityMediaLabel returns the UI label for an hour count (nearest preset).
+// MaturityMediaLabel returns a short UI label for an hour count.
 func MaturityMediaLabel(hours int) string {
-	return MaturityMediaPresetLabels[MaturityMediaPresetIndex(hours)]
+	hours = ClampMaturityRedownloadHours(hours)
+	if hours == 0 {
+		return "off"
+	}
+	if hours%HoursPerDay == 0 {
+		d := hours / HoursPerDay
+		if d == 1 {
+			return "1 day"
+		}
+		return fmt.Sprintf("%d days", d)
+	}
+	if hours == 1 {
+		return "1h"
+	}
+	return fmt.Sprintf("%dh", hours)
 }
 
-// MaturitySidecarDaysForPreset returns days for a slider index (clamped).
+// MaturitySidecarDaysForPreset returns days for a legacy slider index (clamped).
 func MaturitySidecarDaysForPreset(idx int) int {
 	if idx < 0 {
 		return MaturitySidecarDayPresets[0]
@@ -112,7 +121,7 @@ func MaturitySidecarDaysForPreset(idx int) int {
 	return MaturitySidecarDayPresets[idx]
 }
 
-// MaturitySidecarPresetIndex returns the nearest preset index for days.
+// MaturitySidecarPresetIndex returns the nearest legacy preset index for days.
 func MaturitySidecarPresetIndex(days int) int {
 	days = ClampMaturitySidecarDays(days)
 	best, bestDist := 0, absInt(days-MaturitySidecarDayPresets[0])
@@ -124,9 +133,29 @@ func MaturitySidecarPresetIndex(days int) int {
 	return best
 }
 
-// MaturitySidecarLabel returns the UI label for a day count (nearest preset).
+// MaturitySidecarLabel returns a short UI label for a day count.
 func MaturitySidecarLabel(days int) string {
-	return MaturitySidecarPresetLabels[MaturitySidecarPresetIndex(days)]
+	days = ClampMaturitySidecarDays(days)
+	switch days {
+	case 0:
+		return "off"
+	case 1:
+		return "1 day"
+	case 7:
+		return "1 week"
+	case 14:
+		return "2 weeks"
+	case 30:
+		return "1 month"
+	case 90:
+		return "3 months"
+	case 180:
+		return "6 months"
+	case 365:
+		return "1 year"
+	default:
+		return fmt.Sprintf("%d days", days)
+	}
 }
 
 func absInt(n int) int {

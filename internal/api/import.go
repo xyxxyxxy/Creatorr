@@ -20,7 +20,7 @@ func (s *Server) importBusy() (bool, error) {
 	return s.Queue.HasPendingOrRunningKind(queue.KindImportPlan, queue.SystemDomain)
 }
 
-func (s *Server) ScanImport(w http.ResponseWriter, r *http.Request, params gen.ScanImportParams) {
+func (s *Server) ScanImport(w http.ResponseWriter, r *http.Request) {
 	if busy, err := s.importBusy(); err != nil {
 		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "import scan failed", err.Error())
 		return
@@ -28,11 +28,7 @@ func (s *Server) ScanImport(w http.ResponseWriter, r *http.Request, params gen.S
 		writeLibraryErr(w, fmt.Errorf("%w: import already queued or running", library.ErrConflict), "import scan failed")
 		return
 	}
-	var rootID int64
-	if params.RootId != nil {
-		rootID = *params.RootId
-	}
-	res, err := s.Library.ScanImport(rootID)
+	res, err := s.Library.ScanImport()
 	if err != nil {
 		writeLibraryErr(w, err, "import scan failed")
 		return
@@ -46,32 +42,59 @@ func (s *Server) GetImportPicker(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "import picker series failed", err.Error())
 		return
 	}
-	videos, err := s.Library.ListImportPickerVideos()
+	out := gen.ImportPickerResponse{
+		Series: make([]gen.ImportPickerSeries, 0, len(series)),
+	}
+	for _, ser := range series {
+		poster := fmt.Sprintf("/series/%d/art/poster", ser.ID)
+		rootID := ser.RootID
+		out.Series = append(out.Series, gen.ImportPickerSeries{
+			Id:        ser.ID,
+			Title:     ser.Title,
+			RootId:    rootID,
+			PosterUrl: &poster,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) GetImportPickerVideos(w http.ResponseWriter, r *http.Request, params gen.GetImportPickerVideosParams) {
+	q := library.ImportPickerVideoQuery{Limit: 50}
+	if params.Limit != nil {
+		q.Limit = *params.Limit
+	}
+	if params.SeriesId != nil {
+		sid := *params.SeriesId
+		q.SeriesID = &sid
+	}
+	if params.Q != nil {
+		q.Q = *params.Q
+	}
+	if params.HasMedia != nil {
+		hm := *params.HasMedia
+		q.HasMedia = &hm
+	}
+	if params.Ids != nil {
+		q.IDs = *params.Ids
+	}
+	videos, err := s.Library.ListImportPickerVideos(q)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "import picker videos failed", err.Error())
 		return
 	}
-	out := gen.ImportPickerResponse{
-		Series: make([]gen.ImportPickerSeries, 0, len(series)),
+	out := gen.ImportPickerVideosResponse{
 		Videos: make([]gen.ImportPickerVideo, 0, len(videos)),
-	}
-	for _, ser := range series {
-		poster := fmt.Sprintf("/series/%d/art/poster", ser.ID)
-		out.Series = append(out.Series, gen.ImportPickerSeries{
-			Id:        ser.ID,
-			Title:     ser.Title,
-			PosterUrl: &poster,
-		})
 	}
 	for _, v := range videos {
 		out.Videos = append(out.Videos, gen.ImportPickerVideo{
-			Id:          v.ID,
-			SeriesId:    v.SeriesID,
-			Title:       v.Title,
-			SeriesTitle: v.SeriesTitle,
-			Status:      v.Status,
-			HasMedia:    v.HasMedia,
-			HasThumb:    v.HasThumb,
+			Id:             v.ID,
+			SeriesId:       v.SeriesID,
+			Title:          v.Title,
+			SeriesTitle:    v.SeriesTitle,
+			Status:         v.Status,
+			HasMedia:       v.HasMedia,
+			HasThumb:       v.HasThumb,
+			SpecialFeature: v.PackRole,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -171,13 +194,18 @@ func (s *Server) ImportConfirm(w http.ResponseWriter, r *http.Request) {
 	for _, ser := range body.Series {
 		d := library.ImportPlanSeriesDraft{
 			DraftKey:         ser.DraftKey,
-			FolderPath:       ser.FolderPath,
 			RootID:           ser.RootId,
 			QualityProfileID: ser.QualityProfileId,
 			Monitored:        ser.Monitored == nil || *ser.Monitored,
 		}
+		if ser.Kind != nil {
+			d.Kind = string(*ser.Kind)
+		}
+		if ser.FolderPath != nil {
+			d.FolderPath = *ser.FolderPath
+		}
 		if ser.Title != nil {
-			d.Title = *ser.Title // ignored for naming; EnqueueImportPlan re-resolves from disk
+			d.Title = *ser.Title
 		}
 		if ser.DeliveryMode != nil {
 			d.DeliveryMode = string(*ser.DeliveryMode)
@@ -242,7 +270,6 @@ func mapImportScan(res *library.ImportScanResult) gen.ImportScanResponse {
 		gc := gen.ImportCandidate{
 			Path:              c.Path,
 			Filename:          c.Filename,
-			Source:            gen.ImportCandidateSource(c.Source),
 			Role:              gen.ImportCandidateRole(c.Role),
 			SuggestedVideoId:  c.SuggestedVideoID,
 			SuggestedSeriesId: c.SuggestedSeriesID,

@@ -22,12 +22,13 @@ const (
 	TokDay     = "day"
 	TokHour    = "hour"
 	TokMinute  = "minute"
+	TokKind = "kind"
 )
 
 var knownTokens = map[string]bool{
 	TokSeries: true, TokEpisode: true, TokTitle: true, TokID: true,
 	TokDate: true, TokDomain: true, TokYear: true, TokMonth: true, TokDay: true,
-	TokHour: true, TokMinute: true,
+	TokHour: true, TokMinute: true, TokKind: true,
 }
 
 // tokenRe matches {name} or {name:00} / {name:80} (pad zeros for ints; max runes for series/title).
@@ -52,6 +53,8 @@ type Values struct {
 	Hour     int
 	Minute   int
 	HasClock bool
+	// Kind is {kind}: "Episode" (regular), "Specials", or special-feature kind name.
+	Kind string
 }
 
 // Validate reports unknown tokens. Empty format is allowed (caller decides required).
@@ -107,6 +110,8 @@ func Expand(format string, v Values) (string, error) {
 			return formatClockPart(v.Hour, v.HasClock, pad)
 		case TokMinute:
 			return formatClockPart(v.Minute, v.HasClock, pad)
+		case TokKind:
+			return v.Kind
 		default:
 			return tok
 		}
@@ -272,6 +277,11 @@ func ExpandAndSanitize(format string, v Values) (string, error) {
 			return formatClockPart(v.Hour, v.HasClock, pad)
 		case TokMinute:
 			return formatClockPart(v.Minute, v.HasClock, pad)
+		case TokKind:
+			if strings.TrimSpace(v.Kind) == "" {
+				return ""
+			}
+			return SanitizeFilename(v.Kind, 100)
 		default:
 			return tok
 		}

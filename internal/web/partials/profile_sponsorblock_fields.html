@@ -55,14 +55,14 @@
   <fieldset class="fieldset gap-2">
     <legend class="fieldset-legend"><h3 class="font-semibold m-0 text-inherit">Encoding</h3></legend>
     <p>By default, cuts are only spliced at keyframes, so cut points are often early or late. Re-encode will cut at exact timestamps without needing keyframes (always H.264 for host cost). Because re-encode is heavy on the host, it is scheduled as a separate low priority system task.</p>
-    <div class="flex w-full gap-4 items-start flex-wrap">
-      <label class="label cursor-pointer gap-2 justify-start flex-1 min-w-0">
+    <div class="flex flex-col w-full gap-2 items-start">
+      <label class="label cursor-pointer gap-2 justify-start">
         <input type="hidden" name="sponsorblock_reencode_cut" value="0" />
         <input type="checkbox" class="checkbox checkbox-sm" name="sponsorblock_reencode_cut" value="1"
           {{if $reenc}}checked{{end}} data-sb-reencode />
         <span class="label-text">Re-encode on cut for higher accuracy</span>
       </label>
-      <span class="inline-flex flex-1 min-w-0 w-fit max-w-full{{if not $reenc}} tooltip tooltip-top{{end}}"
+      <span class="inline-flex w-fit max-w-full{{if not $reenc}} tooltip tooltip-top{{end}}"
             {{if not $reenc}}data-tip="Requires re-encode to be enabled"{{end}}
             data-sb-cards-wrap>
         <label class="label gap-2 justify-start cursor-pointer has-[input:disabled]:!cursor-not-allowed">

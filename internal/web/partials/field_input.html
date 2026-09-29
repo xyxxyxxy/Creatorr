@@ -46,12 +46,14 @@
   <span class="tooltip tooltip-top block w-full" {{if $disabledTip}}data-tip="{{$disabledTip}}"{{end}}>
     <textarea {{if .ID}}id="{{.ID}}"{{end}}
               class="textarea w-full pointer-events-none {{if .Mono}}font-mono{{end}} {{.InputClass}}"
+              {{if .Rows}}rows="{{.Rows}}"{{end}}
               {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
               disabled>{{.Value}}</textarea>
   </span>
   {{else}}
   <textarea name="{{.Name}}" {{if .ID}}id="{{.ID}}"{{end}}
             class="textarea w-full{{$vClass}} {{if .Mono}}font-mono{{end}} {{.InputClass}}"
+            {{if .Rows}}rows="{{.Rows}}"{{end}}
             {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
             {{if .Required}}required{{end}}>{{.Value}}</textarea>
   {{if $validator}}<p class="validator-hint hidden">{{$vHint}}</p>{{end}}

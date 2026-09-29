@@ -1,10 +1,14 @@
 {{define "metadata_art_slot"}}
 {{/*
-  Art upload slot with optional preview (saved series art / video thumb, prefetch, or local file pick).
-  Clear saved art: X sets clear_{Role}=1 and hides the preview wrap (do not hide the X alone).
-  Expects: Role, Label, Hint|Info|Help, HasFile, SeriesID, ArtVersion (optional), PrefetchPath (optional), PrefetchTaskID (optional)
+  Art upload slot with preview (saved series art / video thumb, prefetch, or local file pick).
+  Edit + clear are a joined btn-xs pair at the bottom-right of the frame (pencil left, X right).
+  Edit is a label for the hidden file input. Clear only updates the form (clear_{Role}=1 / drop
+  prefetch) until Save.
+  Empty placeholder uses a default ratio per role; when an image is set the frame follows the
+  image aspect (capped by role max width). Poster default is 1:1 (channel profile).
+  Expects: Role, Label, HasFile, SeriesID, ArtVersion (optional), PrefetchPath (optional), PrefetchTaskID (optional)
   Optional VideoID: preview URLs use video thumb / video-meta prefetch routes instead of series art.
-  Hint (or Info/Help) is a fieldset label under the file input, not a legend info tip.
+  Optional NoLegend: omit fieldset legend (caller supplies label; useful when aligning beside fields).
 */}}
 {{$preview := ""}}
 {{if .PrefetchPath}}
@@ -20,35 +24,66 @@
     {{$preview = printf "/series/%d/art/%s?v=%d" .SeriesID .Role .ArtVersion}}
   {{end}}
 {{end}}
-{{$hint := .Hint}}{{if not $hint}}{{$hint = .Info}}{{end}}{{if not $hint}}{{$hint = .Help}}{{end}}
-{{$canClear := and .HasFile (not .PrefetchPath)}}
-<fieldset class="fieldset">
-  <legend class="fieldset-legend">{{.Label}}</legend>
-  <div class="flex flex-wrap gap-3 items-end" data-art-slot{{if $canClear}} data-art-can-clear{{end}}>
+{{/* Empty placeholder ratios: poster 1:1, banner ~1000:185, fanart/thumb 16:9, clearlogo ~8:3. */}}
+{{$empty := "w-40 aspect-video"}}
+{{$img := "block max-w-40 w-auto h-auto pointer-events-none"}}
+{{if eq .Role "poster"}}{{$empty = "w-24 aspect-square"}}{{$img = "block max-w-24 w-auto h-auto pointer-events-none"}}
+{{else if eq .Role "banner"}}{{$empty = "w-80 max-w-full aspect-[1000/185]"}}{{$img = "block max-w-80 w-auto h-auto max-w-full pointer-events-none"}}
+{{else if eq .Role "fanart"}}{{$empty = "w-40 aspect-video"}}{{$img = "block max-w-40 w-auto h-auto pointer-events-none"}}
+{{else if eq .Role "clearlogo"}}{{$empty = "w-60 aspect-[8/3]"}}{{$img = "block max-w-60 w-auto h-auto pointer-events-none"}}
+{{else if eq .Role "thumb"}}{{$empty = "w-full aspect-video"}}{{$img = "block w-full h-auto pointer-events-none"}}
+{{end}}
+{{$fileID := printf "art-file-%s-%d" .Role .SeriesID}}
+{{if .VideoID}}{{$fileID = printf "art-file-%s-%d-%d" .Role .SeriesID .VideoID}}{{end}}
+{{$frame := "rounded border border-base-300 bg-base-300 relative overflow-hidden inline-block max-w-full"}}
+{{if eq .Role "thumb"}}{{$frame = "rounded border border-base-300 bg-base-300 relative overflow-hidden block w-full"}}{{end}}
+{{if .NoLegend}}
+<div class="{{if eq .Role "banner"}}w-fit max-w-full mx-auto{{else if eq .Role "thumb"}}w-full{{end}}" data-art-slot-root>
+{{else}}
+<fieldset class="fieldset{{if eq .Role "banner"}} w-fit max-w-full mx-auto{{else if eq .Role "thumb"}} w-full{{end}}">
+  <legend class="fieldset-legend{{if eq .Role "banner"}} text-center{{end}}">{{.Label}}</legend>
+{{end}}
+  <div class="flex flex-col gap-1 items-start{{if eq .Role "thumb"}} w-full{{end}}" data-art-slot{{if .HasFile}} data-art-can-clear{{end}}>
     {{if .PrefetchPath}}
     <input type="hidden" name="prefetch_{{.Role}}" value="{{.PrefetchPath}}" data-art-prefetch />
     {{end}}
-    {{if $canClear}}
+    {{if .HasFile}}
     <input type="hidden" name="clear_{{.Role}}" value="" data-art-clear />
     {{end}}
-    <div class="indicator shrink-0{{if not $preview}} hidden{{end}}" data-art-preview-wrap>
-      {{if $canClear}}
-      <button type="button" class="indicator-item indicator-top indicator-end btn btn-circle btn-xs btn-error z-10" data-art-clear-btn aria-label="Clear {{.Label}}"><i data-lucide="x" class="size-3.5"></i></button>
-      {{end}}
+    <input type="file" id="{{$fileID}}" name="{{.Role}}" class="sr-only" accept="image/*" tabindex="-1" data-art-file />
+    <div class="{{$frame}}" data-art-frame data-art-preview-wrap>
+      <span data-art-empty
+            class="{{$empty}} flex items-center justify-center text-base-content/40 pointer-events-none{{if $preview}} hidden{{end}}"
+            aria-hidden="{{if $preview}}true{{else}}false{{end}}">
+        <i data-lucide="image" class="size-6"></i>
+      </span>
       <img data-art-preview data-orig-src="{{$preview}}"
            {{if $preview}}src="{{$preview}}"{{end}}
            alt="{{.Label}}"
-           class="max-h-24 max-w-40 rounded object-cover border border-base-300 block" />
-    </div>
-    <div class="grow min-w-[12rem]">
-      <input type="file" name="{{.Role}}" class="file-input w-full" accept="image/*" data-art-file />
-      {{if and $hint (not .PrefetchPath)}}
-      <p class="label whitespace-normal">{{$hint}}</p>
-      {{end}}
+           class="{{$img}}{{if not $preview}} hidden{{end}}" />
+      <div class="absolute bottom-1 right-1 join z-10">
+        <label for="{{$fileID}}"
+               class="btn btn-xs btn-square join-item cursor-pointer"
+               data-art-edit-btn
+               aria-label="{{if $preview}}Replace{{else}}Set{{end}} {{.Label}}">
+          <i data-lucide="pencil" class="size-3.5 pointer-events-none"></i>
+        </label>
+        <button type="button"
+                class="btn btn-xs btn-square btn-error join-item"
+                data-art-clear-btn
+                aria-label="Clear {{.Label}}"
+                {{if not $preview}}disabled{{end}}>
+          <i data-lucide="x" class="size-3.5 pointer-events-none"></i>
+        </button>
+      </div>
     </div>
   </div>
   {{if .PrefetchPath}}
-  <p class="label whitespace-normal">Prefetched preview - kept on 'Save' (or replace with a new file).</p>
+  <p class="label whitespace-normal">Prefetched preview - kept on 'Save' (or replace / clear before Save).</p>
   {{end}}
+{{if .NoLegend}}
+</div>
+{{else}}
 </fieldset>
+{{end}}
 {{end}}

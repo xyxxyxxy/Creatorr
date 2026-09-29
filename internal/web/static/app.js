@@ -1325,16 +1325,17 @@
     "sync_files",
   ]);
 
-  /** Persistent across HTMX refresh of #maintenance-live. */
+  /** Persistent across HTMX refresh of #maintenance-live. Series-only scope. */
   let maintenanceScope = {
     seriesIds: [],
-    videoIds: [],
-    seriesTitle: "",
     seriesTitles: [],
-    videoTitles: [],
   };
   /** Selected action values; restored after HTMX busy refresh. Cleared on Run. */
   let maintenanceSelectedActions = new Set();
+  /** Series catalog for scope picker (GET /api/import/picker). */
+  let maintenanceSeriesCatalog = [];
+  let maintenanceSeriesCatalogReady = false;
+  let maintenanceSeriesCatalogPromise = null;
 
   const maintenanceActionLabels = {
     apply_episode_naming: "Apply episode format",
@@ -1352,25 +1353,147 @@
       .replace(/"/g, "&quot;");
   }
 
-  function maintenanceScopeLabel() {
-    const nS = maintenanceScope.seriesIds.length;
-    const nV = maintenanceScope.videoIds.length;
-    if (nV > 0) {
-      const title = maintenanceScope.seriesTitle || "Series";
-      return nV === 1 ? "1 video (" + title + ")" : nV + " videos (" + title + ")";
-    }
-    if (nS > 0) return nS === 1 ? "1 series" : nS + " series";
-    return "All series";
+  function clearMaintenanceScope() {
+    maintenanceScope = { seriesIds: [], seriesTitles: [] };
   }
 
-  function clearMaintenanceScope() {
-    maintenanceScope = {
-      seriesIds: [],
-      videoIds: [],
-      seriesTitle: "",
-      seriesTitles: [],
-      videoTitles: [],
-    };
+  function ensureMaintenanceSeriesCatalog() {
+    if (maintenanceSeriesCatalogReady) return Promise.resolve();
+    if (maintenanceSeriesCatalogPromise) return maintenanceSeriesCatalogPromise;
+    maintenanceSeriesCatalogPromise = fetch("/api/import/picker", {
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("picker " + res.status);
+        return res.json();
+      })
+      .then((data) => {
+        maintenanceSeriesCatalog = Array.isArray(data.series) ? data.series : [];
+        maintenanceSeriesCatalogReady = true;
+      })
+      .catch(() => {
+        maintenanceSeriesCatalog = [];
+        maintenanceSeriesCatalogReady = false;
+      })
+      .finally(() => {
+        maintenanceSeriesCatalogPromise = null;
+      });
+    return maintenanceSeriesCatalogPromise;
+  }
+
+  function maintenanceSeriesById(id) {
+    const n = Number(id);
+    return maintenanceSeriesCatalog.find((s) => Number(s.id) === n) || null;
+  }
+
+  function maintenanceSeriesPosterHTML(s) {
+    const fallback =
+      '<span class="bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></span>';
+    if (!s || !s.poster_url) return fallback;
+    return (
+      '<img class="size-8 rounded-full object-cover shrink-0" src="' +
+      escapeMaintenanceHtml(s.poster_url) +
+      '" alt="" width="32" height="32" loading="lazy" />'
+    );
+  }
+
+  /** Same row as scope chips; omit remove for confirm modal. */
+  function maintenanceSeriesScopeRowHTML(id, titleHint, withRemove) {
+    const s = id != null ? maintenanceSeriesById(id) : null;
+    const title =
+      (s && s.title) || titleHint || (id != null ? "Series #" + id : "All series");
+    let html =
+      '<li class="flex items-center gap-2 min-w-0 rounded-box border border-base-300 bg-base-100 px-2 py-1.5">' +
+      maintenanceSeriesPosterHTML(s) +
+      '<span class="truncate grow min-w-0 text-sm font-medium">' +
+      escapeMaintenanceHtml(title) +
+      "</span>";
+    if (withRemove && id != null) {
+      html +=
+        '<button type="button" class="btn btn-soft btn-error btn-square btn-sm shrink-0" data-maintenance-remove-series="' +
+        escapeMaintenanceHtml(String(id)) +
+        '" aria-label="Remove">' +
+        '<i data-lucide="x" class="size-4" aria-hidden="true"></i>' +
+        "</button>";
+    }
+    return html + "</li>";
+  }
+
+  function lucideRefreshMaintenance(root) {
+    if (!root || !window.lucide || typeof window.lucide.createIcons !== "function") return;
+    window.lucide.createIcons({ root: root, attrs: { "stroke-width": 1.75, "aria-hidden": "true" } });
+  }
+
+  function renderMaintenanceScopeChips() {
+    const host = document.getElementById("maintenance-scope-chips");
+    if (!host) return;
+    if (!maintenanceScope.seriesIds.length) {
+      host.innerHTML = "";
+      return;
+    }
+    host.innerHTML = maintenanceScope.seriesIds
+      .map((id, i) =>
+        maintenanceSeriesScopeRowHTML(id, maintenanceScope.seriesTitles[i], true)
+      )
+      .join("");
+    lucideRefreshMaintenance(host);
+  }
+
+  function fillMaintenanceSeriesPickList(q) {
+    const ul = document.querySelector(".js-maintenance-series-list");
+    if (!ul) return;
+    const needle = String(q || "").trim().toLowerCase();
+    const selected = new Set(maintenanceScope.seriesIds.map(Number));
+    const rows = maintenanceSeriesCatalog.filter((s) => {
+      if (selected.has(Number(s.id))) return false;
+      if (!needle) return true;
+      return String(s.title || "").toLowerCase().includes(needle);
+    });
+    if (!maintenanceSeriesCatalogReady) {
+      ul.innerHTML = '<li class="list-row opacity-60 text-sm">Loading series…</li>';
+      return;
+    }
+    if (!rows.length) {
+      ul.innerHTML =
+        '<li class="list-row opacity-60 text-sm">' +
+        (needle ? "No matches" : "No series left to add") +
+        "</li>";
+      return;
+    }
+    ul.innerHTML = rows
+      .map((s) => {
+        return (
+          '<li class="list-row cursor-pointer" data-maintenance-pick-series="' +
+          escapeMaintenanceHtml(String(s.id)) +
+          '" role="option">' +
+          '<div class="relative shrink-0">' +
+          maintenanceSeriesPosterHTML(s) +
+          "</div>" +
+          '<div class="list-col-grow min-w-0 font-medium truncate">' +
+          escapeMaintenanceHtml(s.title || "") +
+          "</div></li>"
+        );
+      })
+      .join("");
+  }
+
+  function addMaintenanceSeries(id) {
+    const n = Number(id);
+    if (!(n > 0) || maintenanceScope.seriesIds.includes(n)) return;
+    const s = maintenanceSeriesById(n);
+    maintenanceScope.seriesIds.push(n);
+    maintenanceScope.seriesTitles.push((s && s.title) || "Series #" + n);
+    refreshMaintenanceScopeUI();
+  }
+
+  function removeMaintenanceSeries(id) {
+    const n = Number(id);
+    const i = maintenanceScope.seriesIds.indexOf(n);
+    if (i < 0) return;
+    maintenanceScope.seriesIds.splice(i, 1);
+    maintenanceScope.seriesTitles.splice(i, 1);
+    refreshMaintenanceScopeUI();
   }
 
   function syncMaintenanceScopeFields() {
@@ -1384,21 +1507,7 @@
       inp.value = String(id);
       host.appendChild(inp);
     });
-    maintenanceScope.videoIds.forEach((id) => {
-      const inp = document.createElement("input");
-      inp.type = "hidden";
-      inp.name = "video_ids";
-      inp.value = String(id);
-      host.appendChild(inp);
-    });
-    const label = document.getElementById("maintenance-scope-label");
-    if (label) label.textContent = maintenanceScopeLabel();
-    const clearBtn = document.getElementById("maintenance-scope-clear");
-    if (clearBtn) {
-      const has =
-        maintenanceScope.seriesIds.length > 0 || maintenanceScope.videoIds.length > 0;
-      clearBtn.classList.toggle("hidden", !has);
-    }
+    renderMaintenanceScopeChips();
   }
 
   function readMaintenanceActionChecks() {
@@ -1488,7 +1597,7 @@
 
   function wireMaintenanceScope() {
     if (!onMaintenancePage()) return;
-    refreshMaintenanceScopeUI();
+    ensureMaintenanceSeriesCatalog().then(() => refreshMaintenanceScopeUI());
   }
 
   function selectedMaintenanceActionLabels() {
@@ -1541,34 +1650,24 @@
       )
       .join("");
     const nS = maintenanceScope.seriesIds.length;
-    const nV = maintenanceScope.videoIds.length;
     let lead = "";
-    let items = [];
-    if (nV > 0) {
-      const seriesName = maintenanceScope.seriesTitle || "Series";
-      lead =
-        nV === 1
-          ? "1 video in " + seriesName + ":"
-          : nV + " videos in " + seriesName + ":";
-      items = (maintenanceScope.videoTitles || []).slice();
-      while (items.length < nV) items.push("Video #" + maintenanceScope.videoIds[items.length]);
-    } else if (nS > 0) {
+    if (nS > 0) {
       lead = nS === 1 ? "1 series:" : nS + " series:";
-      items = (maintenanceScope.seriesTitles || []).slice();
-      while (items.length < nS) items.push("Series #" + maintenanceScope.seriesIds[items.length]);
+      listEl.className =
+        "flex flex-col gap-1.5 w-full min-w-0 list-none p-0 m-0 max-h-60 overflow-y-auto mb-2";
+      listEl.innerHTML = maintenanceScope.seriesIds
+        .map((id, i) =>
+          maintenanceSeriesScopeRowHTML(id, maintenanceScope.seriesTitles[i], false)
+        )
+        .join("");
     } else {
       lead = "Whole library:";
-      items = ["All series"];
+      listEl.className =
+        "flex flex-col gap-1.5 w-full min-w-0 list-none p-0 m-0 max-h-60 overflow-y-auto mb-2";
+      listEl.innerHTML = maintenanceSeriesScopeRowHTML(null, "All series", false);
     }
     leadEl.textContent = lead;
-    listEl.innerHTML = items
-      .map(
-        (name) =>
-          '<li class="list-row py-2 px-3"><span class="list-col-grow min-w-0 truncate">' +
-          escapeMaintenanceHtml(name) +
-          "</span></li>"
-      )
-      .join("");
+    lucideRefreshMaintenance(listEl);
     affectedEl.textContent = "Counting packed videos…";
     externalBox.classList.add("hidden");
     externalText.textContent = "";
@@ -1633,30 +1732,19 @@
     document.documentElement.dataset.maintenanceScopeDelegated = "1";
     document.addEventListener("click", (ev) => {
       if (!onMaintenancePage()) return;
-      if (ev.target.closest("#maintenance-scope-choose")) {
-        if (typeof window.openLibraryPicker !== "function") return;
-        window.openLibraryPicker({
-          mode: "multi",
-          packedOnly: true,
-          initialSeriesIds: maintenanceScope.seriesIds.slice(),
-          initialVideoIds: maintenanceScope.videoIds.slice(),
-          subtitle: "Scope for selected maintenance actions",
-          onConfirm: (result) => {
-            maintenanceScope = {
-              seriesIds: (result.seriesIds || []).map(Number).filter((n) => n > 0),
-              videoIds: (result.videoIds || []).map(Number).filter((n) => n > 0),
-              seriesTitle: result.seriesTitle || "",
-              seriesTitles: Array.isArray(result.seriesTitles) ? result.seriesTitles.slice() : [],
-              videoTitles: Array.isArray(result.videoTitles) ? result.videoTitles.slice() : [],
-            };
-            refreshMaintenanceScopeUI();
-          },
-        });
+      const removeBtn = ev.target.closest("[data-maintenance-remove-series]");
+      if (removeBtn) {
+        removeMaintenanceSeries(removeBtn.getAttribute("data-maintenance-remove-series"));
         return;
       }
-      if (ev.target.closest("#maintenance-scope-clear")) {
-        clearMaintenanceScope();
-        refreshMaintenanceScopeUI();
+      const pick = ev.target.closest("[data-maintenance-pick-series]");
+      if (pick) {
+        ev.preventDefault();
+        const dd = pick.closest("details.js-maintenance-series-dd");
+        addMaintenanceSeries(pick.getAttribute("data-maintenance-pick-series"));
+        if (dd) dd.open = false;
+        const qEl = document.querySelector(".js-maintenance-series-q");
+        if (qEl) qEl.value = "";
         return;
       }
       if (ev.target.closest("#maintenance-preview-rename")) {
@@ -1675,6 +1763,29 @@
         form.dataset.maintenanceConfirmed = "1";
         if (typeof form.requestSubmit === "function") form.requestSubmit();
         else form.submit();
+      }
+    });
+    document.addEventListener("toggle", (ev) => {
+      if (!onMaintenancePage()) return;
+      const dd = ev.target;
+      if (!(dd instanceof HTMLDetailsElement) || !dd.open) return;
+      if (!dd.classList.contains("js-maintenance-series-dd")) return;
+      const qEl = dd.querySelector(".js-maintenance-series-q");
+      ensureMaintenanceSeriesCatalog().then(() => {
+        fillMaintenanceSeriesPickList(qEl ? qEl.value : "");
+        queueMicrotask(() => qEl && qEl.focus({ preventScroll: true }));
+      });
+    }, true);
+    document.addEventListener("pointerdown", (ev) => {
+      if (!onMaintenancePage()) return;
+      document.querySelectorAll("details.js-maintenance-series-dd[open]").forEach((dd) => {
+        if (!dd.contains(ev.target)) dd.open = false;
+      });
+    }, true);
+    document.addEventListener("input", (ev) => {
+      if (!onMaintenancePage()) return;
+      if (ev.target && ev.target.classList && ev.target.classList.contains("js-maintenance-series-q")) {
+        fillMaintenanceSeriesPickList(ev.target.value);
       }
     });
     document.addEventListener("change", (ev) => {
@@ -1876,6 +1987,16 @@
     restoreKeepScroll();
   }
 
+  /** Series detail: Import source link uses #series-videos-live (after keep-scroll restore). */
+  function scrollSeriesVideosAnchor() {
+    if (location.hash !== "#series-videos-live") return;
+    const el = document.getElementById("series-videos-live");
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ block: "start" });
+    });
+  }
+
   function connectEvents() {
     if (!window.EventSource) return;
     const es = new EventSource("/api/events");
@@ -1922,6 +2043,25 @@
       if (Number.isNaN(d.getTime())) return;
       el.value = d.toLocaleDateString(undefined, { dateStyle: "medium" });
     });
+    syncAllSpecialKindSelects(scope);
+  }
+
+  function syncSpecialKindSelect(sel) {
+    if (!(sel instanceof HTMLSelectElement)) return;
+    const none = !sel.value || sel.value === "episode";
+    sel.classList.toggle("opacity-60", none);
+  }
+
+  function syncAllSpecialKindSelects(root) {
+    let scope = root && root.nodeType === 1 ? root : document;
+    if (scope !== document && scope.isConnected === false) {
+      const id = scope.id;
+      scope = (id && document.getElementById(id)) || document.body;
+    }
+    if (scope.matches && scope.matches("[data-special-kind]")) syncSpecialKindSelect(scope);
+    if (scope.querySelectorAll) {
+      scope.querySelectorAll("[data-special-kind]").forEach(syncSpecialKindSelect);
+    }
   }
 
   function createLucideIcons(root) {
@@ -2355,6 +2495,7 @@
     createLucideIcons();
     formatLocalTimes();
     restoreSeriesScroll();
+    scrollSeriesVideosAnchor();
     refreshBadge();
     refreshNotifyBadge();
     refreshNotifyDropdown();
@@ -2379,6 +2520,8 @@
     initQualityProfileGate();
     syncAllRateLimitJoins();
     syncAllScanCronJoins();
+    syncAllMaturityJoins();
+    syncAllPackRoleJoins();
     snapshotStringListEditors(document);
     document.querySelectorAll("form.js-add-series-form").forEach(syncAddSeriesForm);
     openAddSeriesModal();
@@ -2427,6 +2570,9 @@
     }
     if (root && (root.id === "maintenance-live" || root.querySelector?.("#maintenance-live"))) {
       wireMaintenanceScope();
+    }
+    if (root && (root.id === "video-metadata-body" || root.querySelector?.("[data-pack-role-join]"))) {
+      syncAllPackRoleJoins(root);
     }
     const y = document.body.dataset.listLiveScrollY;
     if (y != null && root && (root.id === "series-videos-live" || root.id === "series-list-live")) {
@@ -3092,9 +3238,11 @@
     location.assign(u.pathname + u.search);
   });
 
-  // List filters (js-list-filters): select → submit now; search → submit on blur.
-  // Keep caret in search field across HTMX swap of live list panels.
+  // List filters (js-list-filters): select/date → submit now; search → debounce after
+  // typing stops, and flush on blur. Keep caret in search across HTMX live swaps.
   let listFilterQFocus = null;
+  let listFilterSearchTimer = null;
+  const LIST_FILTER_SEARCH_MS = 350;
   function captureListFilterQFocus() {
     const el = document.activeElement;
     if (!el || el.tagName !== "INPUT" || el.type !== "search") {
@@ -3133,6 +3281,19 @@
     if (typeof form.requestSubmit === "function") form.requestSubmit();
     else form.submit();
   }
+  function clearListFilterSearchTimer() {
+    if (listFilterSearchTimer != null) {
+      window.clearTimeout(listFilterSearchTimer);
+      listFilterSearchTimer = null;
+    }
+  }
+  function scheduleListFilterSearch(form) {
+    clearListFilterSearchTimer();
+    listFilterSearchTimer = window.setTimeout(() => {
+      listFilterSearchTimer = null;
+      if (form && form.isConnected) submitListFilters(form);
+    }, LIST_FILTER_SEARCH_MS);
+  }
   document.body.addEventListener("change", (ev) => {
     const el = ev.target;
     if (!el) return;
@@ -3160,6 +3321,13 @@
       el.classList.toggle("hidden", !on);
     });
   });
+  document.body.addEventListener("input", (ev) => {
+    const el = ev.target;
+    if (!el || el.tagName !== "INPUT" || el.type !== "search") return;
+    const form = el.closest("form.js-list-filters");
+    if (!form) return;
+    scheduleListFilterSearch(form);
+  });
   document.body.addEventListener("focusout", (ev) => {
     const el = ev.target;
     if (!el || el.tagName !== "INPUT" || el.type !== "search") return;
@@ -3167,6 +3335,7 @@
     if (!form) return;
     const next = ev.relatedTarget;
     if (next && form.contains(next)) return;
+    clearListFilterSearchTimer();
     submitListFilters(form);
   });
 
@@ -3258,11 +3427,14 @@
     if (!form) return;
     form.querySelectorAll("[data-art-slot]").forEach((slot) => {
       const img = slot.querySelector("[data-art-preview]");
-      const wrap = slot.querySelector("[data-art-preview-wrap]");
+      const empty = slot.querySelector("[data-art-empty]");
+      const clearBtn = slot.querySelector("[data-art-clear-btn]");
       const pref = slot.querySelector("input[data-art-prefetch]");
       const clear = slot.querySelector("input[data-art-clear]");
+      const file = slot.querySelector("input[data-art-file]");
       if (pref) pref.disabled = false;
       if (clear) clear.value = "";
+      if (file) file.value = "";
       if (!img) return;
       const prev = img.dataset.objectUrl;
       if (prev) {
@@ -3272,12 +3444,49 @@
       const orig = img.dataset.origSrc || "";
       if (orig) {
         img.src = orig;
-        if (wrap) wrap.classList.remove("hidden");
+        img.classList.remove("hidden");
+        if (empty) empty.classList.add("hidden");
+        if (clearBtn) {
+          clearBtn.disabled = false;
+          clearBtn.classList.remove("hidden");
+          clearBtn.removeAttribute("aria-hidden");
+          clearBtn.removeAttribute("tabindex");
+        }
       } else {
         img.removeAttribute("src");
-        if (wrap) wrap.classList.add("hidden");
+        img.classList.add("hidden");
+        if (empty) empty.classList.remove("hidden");
+        if (clearBtn) {
+          clearBtn.disabled = true;
+          clearBtn.classList.remove("hidden");
+          clearBtn.removeAttribute("aria-hidden");
+          clearBtn.removeAttribute("tabindex");
+        }
       }
     });
+  }
+
+  function setArtPreviewVisible(slot, visible) {
+    if (!slot) return;
+    const img = slot.querySelector("[data-art-preview]");
+    const empty = slot.querySelector("[data-art-empty]");
+    const clearBtn = slot.querySelector("[data-art-clear-btn]");
+    const editBtn = slot.querySelector("[data-art-edit-btn]");
+    if (img) img.classList.toggle("hidden", !visible);
+    if (empty) {
+      empty.classList.toggle("hidden", visible);
+      empty.setAttribute("aria-hidden", visible ? "true" : "false");
+    }
+    if (clearBtn) {
+      clearBtn.disabled = !visible;
+      clearBtn.removeAttribute("aria-hidden");
+      clearBtn.removeAttribute("tabindex");
+      clearBtn.classList.remove("hidden");
+    }
+    if (editBtn) {
+      const label = (editBtn.getAttribute("aria-label") || "").replace(/^(Set|Replace)\b/, visible ? "Replace" : "Set");
+      editBtn.setAttribute("aria-label", label);
+    }
   }
 
   function markArtCleared(slot) {
@@ -3285,7 +3494,6 @@
     const clear = slot.querySelector("input[data-art-clear]");
     const file = slot.querySelector("input[data-art-file]");
     const img = slot.querySelector("[data-art-preview]");
-    const wrap = slot.querySelector("[data-art-preview-wrap]");
     const pref = slot.querySelector("input[data-art-prefetch]");
     if (clear) clear.value = "1";
     if (pref) pref.disabled = true;
@@ -3298,8 +3506,8 @@
       }
       img.removeAttribute("src");
     }
-    // Hide wrap as a unit - never hide the indicator-item alone (that jumps the X).
-    if (wrap) wrap.classList.add("hidden");
+    // Drop image from UI only; disk clear waits for Save (clear_{Role}=1).
+    setArtPreviewVisible(slot, false);
   }
 
   function syncScanCronJoin(join) {
@@ -3350,6 +3558,106 @@
       const v = input.value.trim();
       regular.checked = !!v && v !== "never";
       syncScanCronJoin(join);
+    });
+  }
+
+  function syncMaturityJoin(join) {
+    if (!join) return;
+    const input = join.querySelector("[data-maturity-input]");
+    const enable = join.querySelector("[data-maturity-enable]");
+    if (!(input instanceof HTMLInputElement) || !(enable instanceof HTMLInputElement)) return;
+    const fieldName = input.dataset.maturityName || "";
+    const activePh = input.dataset.maturityPlaceholder || input.dataset.maturityDefault || "";
+    let hidden = join.querySelector("[data-maturity-submit]");
+    if (!enable.checked) {
+      const cur = input.value.trim();
+      if (cur) input.dataset.prevMaturity = input.value;
+      input.value = "";
+      input.disabled = true;
+      input.removeAttribute("name");
+      input.removeAttribute("required");
+      input.placeholder = "none";
+      input.classList.add("opacity-60");
+      if (!hidden) {
+        hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.setAttribute("data-maturity-submit", "");
+        join.insertBefore(hidden, input);
+      }
+      hidden.name = fieldName;
+      hidden.value = "0";
+    } else {
+      input.disabled = false;
+      input.name = fieldName;
+      input.placeholder = activePh;
+      input.classList.remove("opacity-60");
+      if (hidden) hidden.remove();
+      if (!input.value.trim()) {
+        const fill = (input.dataset.prevMaturity || input.dataset.maturityDefault || "").trim();
+        input.value = fill;
+      }
+    }
+  }
+
+  function syncAllMaturityJoins(root) {
+    (root || document).querySelectorAll("[data-maturity-join]").forEach((join) => {
+      const input = join.querySelector("[data-maturity-input]");
+      const enable = join.querySelector("[data-maturity-enable]");
+      if (!(input instanceof HTMLInputElement) || !(enable instanceof HTMLInputElement)) return;
+      // After form.reset(), derive enable from whether a non-zero value is present.
+      const v = input.value.trim();
+      enable.checked = !!v && v !== "0";
+      syncMaturityJoin(join);
+    });
+  }
+
+  function syncPackRoleJoin(join) {
+    if (!join) return;
+    const sel = join.querySelector("[data-pack-role-select]");
+    const enable = join.querySelector("[data-pack-role-enable]");
+    if (!(sel instanceof HTMLSelectElement) || !(enable instanceof HTMLInputElement)) return;
+    let hidden = join.querySelector("[data-pack-role-submit]");
+    const placeholder = sel.querySelector('option[value=""]');
+    if (!enable.checked) {
+      const cur = sel.value;
+      if (cur) sel.dataset.prevPackRole = cur;
+      sel.value = "";
+      if (placeholder) placeholder.selected = true;
+      sel.disabled = true;
+      sel.removeAttribute("name");
+      sel.classList.add("opacity-60");
+      if (!hidden) {
+        hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.setAttribute("data-pack-role-submit", "");
+        join.insertBefore(hidden, sel);
+      }
+      hidden.name = "special_feature";
+      hidden.value = "episode";
+    } else {
+      sel.disabled = false;
+      sel.name = "special_feature";
+      sel.classList.remove("opacity-60");
+      if (hidden) hidden.remove();
+      const cur = sel.value.trim();
+      if (!cur) {
+        let fill = (sel.dataset.prevPackRole || "").trim();
+        if (!fill || fill === "episode") {
+          fill = sel.dataset.packRoleDefault || "special_episode";
+        }
+        sel.value = fill;
+        if (!sel.value) {
+          sel.value = sel.dataset.packRoleDefault || "special_episode";
+        }
+      }
+    }
+  }
+
+  function syncAllPackRoleJoins(root) {
+    (root || document).querySelectorAll("[data-pack-role-join]").forEach((join) => {
+      const enable = join.querySelector("[data-pack-role-enable]");
+      if (!(enable instanceof HTMLInputElement)) return;
+      syncPackRoleJoin(join);
     });
   }
 
@@ -3466,7 +3774,20 @@
     const artClearBtn = ev.target.closest("[data-art-clear-btn]");
     if (artClearBtn) {
       ev.preventDefault();
+      ev.stopPropagation();
+      if (artClearBtn.disabled || artClearBtn.getAttribute("aria-disabled") === "true") {
+        return;
+      }
       markArtCleared(artClearBtn.closest("[data-art-slot]"));
+      return;
+    }
+    // Edit is a <label for=file>; keep a click fallback when label wiring is missing.
+    const artEditBtn = ev.target.closest("[data-art-edit-btn]");
+    if (artEditBtn && artEditBtn.tagName !== "LABEL") {
+      ev.preventDefault();
+      const slot = artEditBtn.closest("[data-art-slot]");
+      const file = slot && slot.querySelector("input[data-art-file]");
+      if (file instanceof HTMLInputElement) file.click();
       return;
     }
     const clearBtn = ev.target.closest("button[data-clear-override]");
@@ -3530,6 +3851,14 @@
         syncScanCronJoin(join);
       }
     }
+    if (el instanceof HTMLInputElement && el.hasAttribute("data-maturity-input")) {
+      const join = el.closest("[data-maturity-join]");
+      const enable = join && join.querySelector("[data-maturity-enable]");
+      if (enable instanceof HTMLInputElement && el.value.trim() && el.value.trim() !== "0") {
+        enable.checked = true;
+        syncMaturityJoin(join);
+      }
+    }
     const rateJoin = el.closest("[data-rate-limit-join]");
     if (rateJoin && el.hasAttribute("data-rate-value")) {
       rateJoin.classList.remove("opacity-70");
@@ -3550,6 +3879,20 @@
         syncScanCronJoin(join);
         queueCronAutosave(join, true);
       }
+      return;
+    }
+    if (el instanceof HTMLInputElement && el.hasAttribute("data-maturity-enable")) {
+      const join = el.closest("[data-maturity-join]");
+      if (join) syncMaturityJoin(join);
+      return;
+    }
+    if (el instanceof HTMLInputElement && el.hasAttribute("data-pack-role-enable")) {
+      const join = el.closest("[data-pack-role-join]");
+      if (join) syncPackRoleJoin(join);
+      return;
+    }
+    if (el instanceof HTMLSelectElement && el.hasAttribute("data-special-kind")) {
+      syncSpecialKindSelect(el);
       return;
     }
     if (!(el instanceof HTMLSelectElement) || !el.hasAttribute("data-rate-unit")) {
@@ -3801,7 +4144,6 @@
     const slot = input.closest("[data-art-slot]");
     if (!slot) return;
     const img = slot.querySelector("[data-art-preview]");
-    const wrap = slot.querySelector("[data-art-preview-wrap]");
     if (!img) return;
     const pref = slot.querySelector("input[data-art-prefetch]");
     const clear = slot.querySelector("input[data-art-clear]");
@@ -3815,16 +4157,16 @@
       if (pref) pref.disabled = false;
       if (clear && clear.value === "1") {
         img.removeAttribute("src");
-        if (wrap) wrap.classList.add("hidden");
+        setArtPreviewVisible(slot, false);
         return;
       }
       const orig = img.dataset.origSrc || "";
       if (orig) {
         img.src = orig;
-        if (wrap) wrap.classList.remove("hidden");
+        setArtPreviewVisible(slot, true);
       } else {
         img.removeAttribute("src");
-        if (wrap) wrap.classList.add("hidden");
+        setArtPreviewVisible(slot, false);
       }
       return;
     }
@@ -3834,7 +4176,7 @@
     const url = URL.createObjectURL(file);
     img.dataset.objectUrl = url;
     img.src = url;
-    if (wrap) wrap.classList.remove("hidden");
+    setArtPreviewVisible(slot, true);
   });
 
   function moveListRow(row, dir) {
@@ -4519,6 +4861,9 @@
     form.querySelectorAll('input[name="studio"], input[name="country"], input[name="mpaa"]').forEach((el) => {
       el.value = "";
     });
+    form.querySelectorAll('select[name="special_feature"], [data-bulk-special-feature]').forEach((el) => {
+      el.value = "";
+    });
     form.querySelectorAll("[data-string-list-editor]").forEach((editor) => {
       const list = editor.querySelector("[data-string-list]");
       if (!list) return;
@@ -5001,6 +5346,11 @@
       setIfSame("studio", data.studio);
       setIfSame("country", data.country);
       setIfSame("mpaa", data.mpaa);
+      if (data.special_feature && data.special_feature.same) {
+        const role = String(data.special_feature.value || "").trim();
+        const sel = form.querySelector('select[name="special_feature"]');
+        if (sel && role) sel.value = role;
+      }
       if (data.genres && data.genres.same && Array.isArray(data.genres.value) && data.genres.value.length) {
         form.querySelectorAll("[data-string-list-editor]").forEach((ed) => {
           if (ed.getAttribute("data-item-name") === "genre") fillBulkStringList(ed, data.genres.value);

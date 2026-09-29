@@ -88,19 +88,20 @@
 
     <div class="fieldset bg-base-200 border border-base-300 rounded-box p-4 gap-3 w-full min-w-0" data-maintenance-scope>
       <div class="fieldset-legend">Select scope</div>
-      <p class="label whitespace-normal -mt-1">Optional. Empty means the whole library. Scope clears after Run.</p>
-      <div class="flex flex-col gap-2 w-full min-w-0">
-        <div class="flex w-full min-w-0 items-stretch gap-2">
-          <div class="join w-full min-w-0 grow">
-            <div class="input input-bordered join-item flex items-center grow min-w-0">
-              <span id="maintenance-scope-label" class="truncate text-base">All series</span>
-            </div>
-            <button type="button" class="btn join-item shrink-0" id="maintenance-scope-choose">Choose…</button>
+      <p class="label whitespace-normal -mt-1">Optional. Empty means the whole library. Add one or more series; scope clears after Run.</p>
+      <ul id="maintenance-scope-chips" class="flex flex-col gap-1.5 w-full min-w-0 list-none p-0 m-0" aria-label="Selected series"></ul>
+      <div class="join join-horizontal w-full max-w-full">
+        <details class="dropdown dropdown-bottom js-maintenance-series-dd grow min-w-0">
+          <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden w-full">
+            <span class="opacity-60">Select series</span>
+          </summary>
+          <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-80 max-w-[min(20rem,100vw)]">
+            <input type="search" class="input input-bordered input-sm w-full mb-2 js-maintenance-series-q" placeholder="Filter" aria-label="Filter" autocomplete="off" />
+            <ul class="list bg-base-100 max-h-64 overflow-y-auto js-maintenance-series-list" role="listbox" aria-label="Series"></ul>
           </div>
-          <button type="button" class="btn btn-ghost shrink-0 hidden" id="maintenance-scope-clear" aria-label="Clear scope">Clear</button>
-        </div>
-        <div id="maintenance-scope-fields" class="hidden" aria-hidden="true"></div>
+        </details>
       </div>
+      <div id="maintenance-scope-fields" class="hidden" aria-hidden="true"></div>
     </div>
 
     <div class="join w-full">

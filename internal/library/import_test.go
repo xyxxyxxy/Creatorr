@@ -46,7 +46,7 @@ func TestScanImportMatchesRemoteID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := s.ScanImportInbox()
+	res, err := s.ScanImport()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,9 +54,6 @@ func TestScanImportMatchesRemoteID(t *testing.T) {
 		t.Fatalf("candidates=%d", len(res.Candidates))
 	}
 	c := res.Candidates[0]
-	if c.Source != library.ImportSourceInbox {
-		t.Fatalf("source=%q", c.Source)
-	}
 	if c.MatchType != "id" || c.SuggestedVideoID == nil || *c.SuggestedVideoID != videoID {
 		t.Fatalf("match=%+v want video %d", c, videoID)
 	}
@@ -123,7 +120,7 @@ func TestScanImportPrefersNFOUniqueIDOverBracketAndInfoJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := s.ScanImportInbox()
+	res, err := s.ScanImport()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +175,7 @@ func TestScanImportPrefersNFOTitlePlotOverInfoJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := s.ScanImportInbox()
+	res, err := s.ScanImport()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +258,7 @@ func TestScanImportBracketBeatsInfoJSONWhenNoNFOUniqueID(t *testing.T) {
 	if err := os.WriteFile(nfo, []byte(`<?xml version="1.0"?><episodedetails><title>T</title></episodedetails>`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res, err := s.ScanImportInbox()
+	res, err := s.ScanImport()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +303,7 @@ func TestEnqueueImportCreateUnmatched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := s.ScanImportInbox()
+	res, err := s.ScanImport()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +367,7 @@ func TestScanImportSuggestsUploadDateFromMtime(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantDay := time.Now().UTC().Format("2006-01-02")
-	res, err := s.ScanImportInbox()
+	res, err := s.ScanImport()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -400,7 +397,7 @@ func TestScanImportNoSyntheticRemoteID(t *testing.T) {
 	if err := os.WriteFile(media, []byte("fake"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res, err := s.ScanImportInbox()
+	res, err := s.ScanImport()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +461,7 @@ func TestEnqueueImportRejectsOutsideRoot(t *testing.T) {
 	}
 }
 
-func TestScanImportLibraryOrphanBindInPlace(t *testing.T) {
+func TestEnqueueImportRejectsLibraryPath(t *testing.T) {
 	s := openLib(t)
 	inbox := filepath.Join(t.TempDir(), "import")
 	if err := os.MkdirAll(inbox, 0o755); err != nil {
@@ -505,77 +502,12 @@ func TestScanImportLibraryOrphanBindInPlace(t *testing.T) {
 	if err := os.WriteFile(media, []byte("libfake"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	nfo := strings.TrimSuffix(media, filepath.Ext(media)) + ".nfo"
-	if err := os.WriteFile(nfo, []byte("<episodedetails/>"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 
-	res, err := s.ScanImport(root.ID)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := s.ValidateImportMediaPath(media); !errors.Is(err, library.ErrInvalid) {
+		t.Fatalf("ValidateImportMediaPath: want ErrInvalid, got %v", err)
 	}
-	var orphan *library.ImportCandidate
-	for i := range res.Candidates {
-		c := &res.Candidates[i]
-		if c.Source == library.ImportSourceLibrary && c.Role == library.ImportRoleVideo {
-			orphan = c
-			break
-		}
-	}
-	if orphan == nil {
-		t.Fatalf("no library video candidate: %+v", res.Candidates)
-	}
-	if orphan.SuggestedVideoID == nil || *orphan.SuggestedVideoID != videoID {
-		t.Fatalf("want video %d, got %+v", videoID, orphan)
-	}
-
-	taskID, err := s.EnqueueImport(orphan.Path, videoID, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if taskID <= 0 {
-		t.Fatal("task id")
-	}
-	var payload string
-	if err := s.DB.SQL.QueryRow(`SELECT payload FROM tasks WHERE id = ?`, taskID).Scan(&payload); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(payload, `"in_place":true`) {
-		t.Fatalf("payload=%s", payload)
-	}
-
-	nfoPath, infoPath := library.SidecarPathsBeside(orphan.Path)
-	if nfoPath == "" {
-		t.Fatal("expected nfo sidecar")
-	}
-	if err := s.CompleteImport(videoID, orphan.Path, nfoPath, infoPath, "", nil, library.MediaCompleteMeta{
-		InPlace: true, ImportSrc: orphan.Path,
-	}, taskID); err != nil {
-		t.Fatal(err)
-	}
-	v, err := s.GetVideo(videoID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if v.Status != "downloaded" {
-		t.Fatalf("status=%s", v.Status)
-	}
-	path, ok, err := s.HasVideoFile(videoID)
-	if err != nil || !ok || path != orphan.Path {
-		t.Fatalf("file path=%q ok=%v err=%v", path, ok, err)
-	}
-	if _, err := os.Stat(orphan.Path); err != nil {
-		t.Fatal("library file should still exist in place")
-	}
-
-	res2, err := s.ScanImport(root.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range res2.Candidates {
-		if c.Path == orphan.Path {
-			t.Fatal("bound path should not appear as orphan")
-		}
+	if _, err := s.EnqueueImport(media, videoID, false); !errors.Is(err, library.ErrInvalid) {
+		t.Fatalf("EnqueueImport: want ErrInvalid, got %v", err)
 	}
 }
 
@@ -586,43 +518,28 @@ func TestScanImportSkipsSeriesFolderMeta(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.ImportRoot = inbox
-	libRoot := t.TempDir()
-	root, err := s.CreateRoot("archive", libRoot, "", nil)
-	if err != nil {
+	show := filepath.Join(inbox, "Meta Show")
+	if err := os.MkdirAll(show, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	profile, err := s.CreateProfile("default", "bv*+ba/b")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ser, err := s.CreateSeries(library.CreateSeriesParams{
-		Title: "Meta Show", SourceURL: "https://example.com/meta", RootID: root.ID, QualityProfileID: profile.ID, Monitored: false,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	seriesDir := library.SeriesDir(libRoot, ser.Title)
-	if err := os.MkdirAll(seriesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	tvshow := filepath.Join(seriesDir, "tvshow.nfo")
-	poster := filepath.Join(seriesDir, "poster.jpg")
-	banner := filepath.Join(seriesDir, "banner.jpg")
+	tvshow := filepath.Join(show, "tvshow.nfo")
+	poster := filepath.Join(show, "poster.jpg")
+	banner := filepath.Join(show, "banner.jpg")
 	for _, p := range []string{tvshow, poster, banner} {
 		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	notes := filepath.Join(seriesDir, "notes.txt")
+	notes := filepath.Join(show, "notes.txt")
 	if err := os.WriteFile(notes, []byte("hi"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	loosePoster := filepath.Join(libRoot, "poster.jpg")
+	loosePoster := filepath.Join(inbox, "poster.jpg")
 	if err := os.WriteFile(loosePoster, []byte("loose"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	res, err := s.ScanImport(root.ID)
+	res, err := s.ScanImport()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -704,14 +621,14 @@ func TestScanImportSidecarStemAndOther(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nfo := filepath.Join(dir, "Ep One [side1].nfo")
+	nfo := filepath.Join(inbox, "Ep One [side1].nfo")
 	_ = os.WriteFile(nfo, []byte("<episodedetails/>"), 0o644)
-	info := filepath.Join(dir, "Ep One [side1].info.json")
+	info := filepath.Join(inbox, "Ep One [side1].info.json")
 	_ = os.WriteFile(info, []byte(`{"id":"side1"}`), 0o644)
-	other := filepath.Join(dir, "notes.txt")
+	other := filepath.Join(inbox, "notes.txt")
 	_ = os.WriteFile(other, []byte("hi"), 0o644)
 
-	res, err := s.ScanImport(root.ID)
+	res, err := s.ScanImport()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -720,7 +637,7 @@ func TestScanImportSidecarStemAndOther(t *testing.T) {
 		switch c.Path {
 		case nfo:
 			sawNFO = true
-			if c.Role != library.ImportRoleNFO || c.MatchType != "sidecar_stem" || c.SuggestedVideoID == nil || *c.SuggestedVideoID != videoID {
+			if c.Role != library.ImportRoleNFO {
 				t.Fatalf("nfo candidate=%+v", c)
 			}
 		case info:
@@ -733,20 +650,17 @@ func TestScanImportSidecarStemAndOther(t *testing.T) {
 			if c.Role != library.ImportRoleOther || c.SuggestedVideoID != nil {
 				t.Fatalf("other candidate=%+v", c)
 			}
-		case media:
-			t.Fatal("tracked media should not appear")
 		}
 	}
 	if !sawNFO || !sawJSON || !sawOther {
 		t.Fatalf("saw nfo=%v json=%v other=%v candidates=%d", sawNFO, sawJSON, sawOther, len(res.Candidates))
 	}
 
-	taskID, err := s.EnqueueAttachSidecars(videoID, []string{nfo})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = os.WriteFile(nfo, []byte(`<?xml version="1.0"?><episodedetails><title>Attached Title</title><plot>Attached plot</plot></episodedetails>`), 0o644)
-	if err := s.AttachSidecarFiles(videoID, []string{nfo}, taskID); err != nil {
+	// NFO already beside packed media can still be applied (inbox NFO attach is rejected).
+	besideNFO := filepath.Join(dir, "Ep One [side1].nfo")
+	_ = os.WriteFile(besideNFO, []byte(`<?xml version="1.0"?><episodedetails><title>Attached Title</title><plot>Attached plot</plot></episodedetails>`), 0o644)
+	taskID := seedTaskID(t, s)
+	if err := s.AttachSidecarFiles(videoID, []string{besideNFO}, taskID); err != nil {
 		t.Fatal(err)
 	}
 	v, err := s.GetVideo(videoID)
@@ -759,12 +673,15 @@ func TestScanImportSidecarStemAndOther(t *testing.T) {
 	if _, err := s.EnqueueAttachSidecars(videoID, []string{info}); !errors.Is(err, library.ErrInvalid) {
 		t.Fatalf("attach info.json: want ErrInvalid, got %v", err)
 	}
-	wrongStem := filepath.Join(dir, "Other Title.nfo")
+	if _, err := s.EnqueueAttachSidecars(videoID, []string{besideNFO}); !errors.Is(err, library.ErrInvalid) {
+		t.Fatalf("attach library-path nfo: want ErrInvalid, got %v", err)
+	}
+	wrongStem := filepath.Join(inbox, "Other Title.nfo")
 	_ = os.WriteFile(wrongStem, []byte(`<episodedetails/>`), 0o644)
 	if _, err := s.EnqueueAttachSidecars(videoID, []string{wrongStem}); !errors.Is(err, library.ErrInvalid) {
 		t.Fatalf("attach wrong-stem nfo: want ErrInvalid, got %v", err)
 	}
-	wrongThumb := filepath.Join(dir, "Other Title-thumb.jpg")
+	wrongThumb := filepath.Join(inbox, "Other Title-thumb.jpg")
 	_ = os.WriteFile(wrongThumb, []byte("x"), 0o644)
 	if _, err := s.EnqueueAttachSidecars(videoID, []string{wrongThumb}); !errors.Is(err, library.ErrInvalid) {
 		t.Fatalf("attach wrong-stem thumb: want ErrInvalid, got %v", err)
@@ -774,16 +691,6 @@ func TestScanImportSidecarStemAndOther(t *testing.T) {
 	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM files WHERE video_id = ? AND kind = 'json'`, videoID).Scan(&jsonCount)
 	if nfoCount != 1 || jsonCount != 0 {
 		t.Fatalf("nfo=%d json=%d", nfoCount, jsonCount)
-	}
-
-	res2, err := s.ScanImport(root.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range res2.Candidates {
-		if c.Path == nfo {
-			t.Fatalf("attached sidecar still listed: %s", c.Path)
-		}
 	}
 }
 
@@ -884,7 +791,7 @@ func TestEnqueueImportReplaceExistingMedia(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	picker, err := s.ListImportPickerVideos()
+	picker, err := s.ListImportPickerVideos(library.ImportPickerVideoQuery{SeriesID: &ser.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

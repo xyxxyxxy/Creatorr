@@ -38,7 +38,15 @@ func (s *Server) CreateRoot(w http.ResponseWriter, r *http.Request) {
 	if body.EpisodeFormat != nil {
 		epFmt = *body.EpisodeFormat
 	}
-	root, err := s.Library.CreateRoot(name, body.Path, epFmt, body.RetentionTtlSeconds)
+	seFmt := ""
+	if body.SpecialEpisodeFormat != nil {
+		seFmt = *body.SpecialEpisodeFormat
+	}
+	sfFmt := ""
+	if body.SpecialFeatureFormat != nil {
+		sfFmt = *body.SpecialFeatureFormat
+	}
+	root, err := s.Library.CreateRootWithFormats(name, body.Path, epFmt, seFmt, sfFmt, body.RetentionTtlSeconds)
 	if err != nil {
 		writeLibraryErr(w, err, "create root failed")
 		return
@@ -57,7 +65,7 @@ func (s *Server) UpdateRoot(w http.ResponseWriter, r *http.Request, id gen.RootI
 	if body.RetentionTtlSeconds != nil {
 		retention = body.RetentionTtlSeconds
 	}
-	root, err := s.Library.UpdateRoot(int64(id), body.Name, body.Path, body.EpisodeFormat, retention, clearRetention)
+	root, err := s.Library.UpdateRootFormats(int64(id), body.Name, body.Path, body.EpisodeFormat, body.SpecialEpisodeFormat, body.SpecialFeatureFormat, retention, clearRetention)
 	if err != nil {
 		writeLibraryErr(w, err, "update root failed")
 		return
@@ -397,7 +405,14 @@ func writeLibraryErr(w http.ResponseWriter, err error, fallback string) {
 }
 
 func mapRoot(r library.RootFolder) gen.RootFolder {
-	out := gen.RootFolder{Id: r.ID, Name: r.Name, Path: r.Path, EpisodeFormat: r.EpisodeFormat}
+	out := gen.RootFolder{
+		Id:                   r.ID,
+		Name:                 r.Name,
+		Path:                 r.Path,
+		EpisodeFormat:        r.EpisodeFormat,
+		SpecialEpisodeFormat: r.SpecialEpisodeFormat,
+		SpecialFeatureFormat: r.SpecialFeatureFormat,
+	}
 	if r.RetentionTTLSeconds.Valid {
 		v := r.RetentionTTLSeconds.Int64
 		out.RetentionTtlSeconds = &v

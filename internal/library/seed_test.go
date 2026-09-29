@@ -40,7 +40,7 @@ func TestSeedDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantName := filepath.Base(absRoot)
+	wantName := ""
 	if name != wantName || path != absRoot || ttl != nil {
 		t.Fatalf("root name=%q path=%q ttl=%v want name %q path %q", name, path, ttl, wantName, absRoot)
 	}

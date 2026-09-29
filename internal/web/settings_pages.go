@@ -119,6 +119,8 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		Settings                     []settingsRowView
 		NamingLocked                 bool
 		DefaultEpisodeFormat         string
+		DefaultSpecialEpisodeFormat  string
+		DefaultSpecialFeatureFormat  string
 		Roots                        []rootSettingsRow
 		RootsPage                    PageInfo
 		Profiles                     []profileSettingsRow
@@ -134,6 +136,8 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		Settings:                     settingRows,
 		NamingLocked:                 applyBusy,
 		DefaultEpisodeFormat:         library.DefaultEpisodeFormat,
+		DefaultSpecialEpisodeFormat:  settings.DefaultSpecialEpisodeFormat,
+		DefaultSpecialFeatureFormat:  settings.DefaultSpecialFeatureFormat,
 		Roots:                        rootRows,
 		RootsPage:                    rootsPage,
 		Profiles:                     profileRows,

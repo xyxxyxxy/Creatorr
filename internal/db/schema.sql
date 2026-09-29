@@ -11,7 +11,9 @@ CREATE TABLE IF NOT EXISTS root_folders (
   name TEXT NOT NULL DEFAULT '',
   path TEXT NOT NULL UNIQUE,
   retention_ttl_seconds INTEGER,
-  episode_format TEXT NOT NULL DEFAULT 'S{year}/S{year}E{episode:04} [{id}]'
+  episode_format TEXT NOT NULL DEFAULT 'S{year}/S{year}E{episode:04} [{id}]',
+  special_episode_format TEXT NOT NULL DEFAULT '[{id}]',
+  special_feature_format TEXT NOT NULL DEFAULT '{episode:02} {title:100}'
 );
 
 CREATE TABLE IF NOT EXISTS quality_profiles (
@@ -86,7 +88,6 @@ CREATE TABLE IF NOT EXISTS videos (
   fps REAL,
   download_format_selector TEXT,
   download_remux_container TEXT,
-  import_src TEXT,
   acquired_via TEXT,
   acquired_at TEXT,
   sidecars_acquired_at TEXT,
@@ -102,6 +103,7 @@ CREATE TABLE IF NOT EXISTS videos (
   tagline TEXT NOT NULL DEFAULT '',
   country TEXT NOT NULL DEFAULT '',
   mpaa TEXT NOT NULL DEFAULT '',
+  special_feature TEXT NOT NULL DEFAULT 'episode',
   UNIQUE(series_id, remote_id)
 );
 

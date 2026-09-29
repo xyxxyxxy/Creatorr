@@ -2,7 +2,7 @@
 {{/*
   Form field. Text-like → field_input (fieldset). Checkbox → checkbox_field.
   Expects: Name, Label. Optional: Type, Value, Placeholder, Required, Info, Hint, Help (alias→Info),
-            Options, Checked, CheckLabel, Class, InputClass, Mono, Min, Step, Max, Disabled.
+            Options, Checked, CheckLabel, Class, InputClass, Mono, Min, Step, Max, Rows, Disabled.
 */}}
 {{$info := .Info}}{{if not $info}}{{$info = .Help}}{{end}}
 {{if eq .Type "checkbox"}}
@@ -32,6 +32,7 @@
   "Min" .Min
   "Step" .Step
   "Max" .Max
+  "Rows" .Rows
   "Disabled" .Disabled
 )}}
 {{end}}

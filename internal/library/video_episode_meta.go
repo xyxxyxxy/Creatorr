@@ -35,6 +35,8 @@ type SaveVideoMetadataParams struct {
 	// UploadDate is empty to clear, YYYY-MM-DD (midnight UTC), or date+time
 	// (YYYY-MM-DDTHH:MM / RFC3339). Time is optional in the Metadata form.
 	UploadDate string
+	// PackRole is empty=regular, special_episode, or a feature kind folder name.
+	PackRole string
 	// ThumbSrc is a local path to copy as the episode thumb (upload or prefetch cache). Empty = leave.
 	ThumbSrc string
 	// ThumbClear deletes the registered thumb sidecar on disk.
@@ -60,9 +62,14 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (Sav
 		return out, err
 	}
 	prevTitle := v.Title
+	prevRole := NormalizePackRole(v.PackRole)
 	title := strings.TrimSpace(p.Title)
 	if title == "" {
 		title = v.Title
+	}
+	packRole := NormalizePackRole(p.PackRole)
+	if err := ValidatePackRole(packRole); err != nil {
+		return out, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	sortTitle := omitWhenEqualTitle(p.SortTitle, title)
 	origTitle := omitWhenEqualTitle(p.OriginalTitle, title)
@@ -98,14 +105,14 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (Sav
 		  sorttitle = ?, originaltitle = ?, studio = ?,
 		  genres = ?, tags = ?, uniqueid_type = ?, uniqueid_value = ?,
 		  actors = ?, tagline = ?, country = ?, mpaa = ?,
-		  upload_date = ?
+		  upload_date = ?, special_feature = ?
 		WHERE id = ?
 	`, title, strings.TrimSpace(p.Plot),
 		sortTitle, origTitle, strings.TrimSpace(p.Studio),
 		encodeStringSlice(p.Genres), encodeStringSlice(p.Tags),
 		uidType, uidVal,
 		encodeActors(p.Actors), strings.TrimSpace(p.Tagline), strings.TrimSpace(p.Country),
-		strings.TrimSpace(p.MPAA), uploadVal, videoID)
+		strings.TrimSpace(p.MPAA), uploadVal, packRole, videoID)
 	if err != nil {
 		return out, err
 	}
@@ -122,11 +129,32 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (Sav
 		}
 	}
 	var renameIDs []int64
+	roleChanged := prevRole != packRole
+	if roleChanged {
+		if _, err := s.ReindexPackRoleBucket(v.SeriesID, prevRole); err != nil {
+			return out, err
+		}
+		if _, err := s.ReindexPackRoleBucket(v.SeriesID, packRole); err != nil {
+			return out, err
+		}
+		renameIDs = append(renameIDs, videoID)
+	}
 	if dayChanged || timeChangedSameDay {
 		if newDay == "" {
-			if _, err := s.DB.SQL.Exec(`UPDATE videos SET season = NULL, episode = NULL WHERE id = ?`, videoID); err != nil {
+			if IsSpecialEpisode(packRole) || IsSpecialFeature(packRole) {
+				if _, err := s.ReindexPackRoleBucket(v.SeriesID, packRole); err != nil {
+					return out, err
+				}
+			} else if _, err := s.DB.SQL.Exec(`UPDATE videos SET season = NULL, episode = NULL WHERE id = ?`, videoID); err != nil {
 				return out, err
 			}
+			renameIDs = append(renameIDs, videoID)
+		} else if IsSpecialEpisode(packRole) || IsSpecialFeature(packRole) {
+			c, rerr := s.ReindexPackRoleBucket(v.SeriesID, packRole)
+			if rerr != nil {
+				return out, rerr
+			}
+			renameIDs = append(renameIDs, c...)
 			renameIDs = append(renameIDs, videoID)
 		} else {
 			years := map[int]bool{}
@@ -145,6 +173,21 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (Sav
 				}
 				renameIDs = append(renameIDs, c...)
 			}
+		}
+	} else if roleChanged && (prevRole == PackRoleRegular || packRole == PackRoleRegular) {
+		upload := ""
+		if v.UploadDate.Valid {
+			upload = v.UploadDate.String
+		}
+		if normalized != "" {
+			upload = normalized
+		}
+		if y := SeasonYearFromUpload(upload); y > 0 {
+			c, rerr := s.ReindexSeriesUTCYear(v.SeriesID, y)
+			if rerr != nil {
+				return out, rerr
+			}
+			renameIDs = append(renameIDs, c...)
 		}
 	}
 	if title != prevTitle {

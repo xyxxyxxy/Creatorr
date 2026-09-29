@@ -388,13 +388,15 @@ type CommonMetaActors struct {
 
 // CommonSeriesMetadata reports which bulk-metadata fields are identical across ids.
 // Same=false means mixed; Same=true with empty value/list means every series is empty.
+// SpecialFeature is video-only (CommonVideoMetadata); series common leaves Same=false.
 type CommonSeriesMetadata struct {
-	Studio  CommonMetaString  `json:"studio"`
-	Country CommonMetaString  `json:"country"`
-	MPAA    CommonMetaString  `json:"mpaa"`
-	Genres  CommonMetaStrings `json:"genres"`
-	Tags    CommonMetaStrings `json:"tags"`
-	Actors  CommonMetaActors  `json:"actors"`
+	Studio         CommonMetaString  `json:"studio"`
+	Country        CommonMetaString  `json:"country"`
+	MPAA           CommonMetaString  `json:"mpaa"`
+	SpecialFeature CommonMetaString  `json:"special_feature"`
+	Genres         CommonMetaStrings `json:"genres"`
+	Tags           CommonMetaStrings `json:"tags"`
+	Actors         CommonMetaActors  `json:"actors"`
 }
 
 func stringSliceEqualOrdered(a, b []string) bool {

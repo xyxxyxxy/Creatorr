@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -67,7 +68,33 @@ func TestGetImportPicker(t *testing.T) {
 	if out.Series[0].PosterUrl == nil || *out.Series[0].PosterUrl == "" {
 		t.Fatal("want poster_url set without disk check")
 	}
-	if len(out.Videos) != 1 || out.Videos[0].Title != "Ep One" || out.Videos[0].HasMedia {
-		t.Fatalf("videos=%v", out.Videos)
+
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/import/picker/videos", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("videos empty status %d: %s", rec.Code, rec.Body.String())
+	}
+	var empty gen.ImportPickerVideosResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &empty); err != nil {
+		t.Fatal(err)
+	}
+	if len(empty.Videos) != 0 {
+		t.Fatalf("want empty without filter, got %v", empty.Videos)
+	}
+
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/import/picker/videos?series_id="+strconv.FormatInt(ser.ID, 10), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("videos status %d: %s", rec.Code, rec.Body.String())
+	}
+	var vids gen.ImportPickerVideosResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &vids); err != nil {
+		t.Fatal(err)
+	}
+	if len(vids.Videos) != 1 || vids.Videos[0].Title != "Ep One" || vids.Videos[0].HasMedia {
+		t.Fatalf("videos=%v", vids.Videos)
+	}
+	if vids.Videos[0].SpecialFeature != "episode" {
+		t.Fatalf("special_feature=%q want episode", vids.Videos[0].SpecialFeature)
 	}
 }

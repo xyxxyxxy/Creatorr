@@ -20,12 +20,13 @@ const videoDownloadOrderOldest = `(v.upload_date IS NULL OR v.upload_date = '') 
 const videoSelectCols = `id, series_id, source_id, remote_id, title, upload_date, source_url,
 		       status, season, episode, COALESCE(description,''), thumbnail_url,
 		       COALESCE(media_type,''), duration_seconds, width, height, fps,
-		       download_format_selector, download_remux_container, import_src,
+		       download_format_selector, download_remux_container,
 		       acquired_via, acquired_at, sidecars_acquired_at,
 		       COALESCE(sorttitle,''), COALESCE(originaltitle,''), COALESCE(studio,''),
 		       COALESCE(genres,'[]'), COALESCE(tags,'[]'),
 		       COALESCE(uniqueid_type,''), COALESCE(uniqueid_value,''), COALESCE(actors,'[]'),
-		       COALESCE(tagline,''), COALESCE(country,''), COALESCE(mpaa,'')`
+		       COALESCE(tagline,''), COALESCE(country,''), COALESCE(mpaa,''),
+		       COALESCE(special_feature,'')`
 
 // Video is an indexed instance within a series.
 type Video struct {
@@ -48,7 +49,6 @@ type Video struct {
 	FPS                           sql.NullFloat64
 	DownloadFormatSelector        sql.NullString
 	DownloadRemuxContainer        sql.NullString
-	ImportSrc                     sql.NullString
 	AcquiredVia                   sql.NullString
 	AcquiredAt                    sql.NullString
 	SidecarsAcquiredAt            sql.NullString
@@ -63,16 +63,18 @@ type Video struct {
 	Tagline                       string
 	Country                       string
 	MPAA                          string
+	PackRole                      string // episode | special_episode | feature kind folder name
 }
 
 // VideoListFilter scopes series video lists by title, status, source, media type,
-// upload calendar year, and upload calendar day (UTC).
+// upload calendar year, special kind, and upload calendar day (UTC).
 type VideoListFilter struct {
 	Title     string   // case-insensitive substring; empty = any title
 	Statuses  []string // empty = all statuses
-	SourceID  int64    // 0 = all sources
+	SourceID  int64    // 0 = all sources; VideoSourceImport = source_id IS NULL
 	MediaType string   // non-empty exact match; empty query = all
 	Year      int      // UTC calendar year of upload_date; 0 = any; VideoYearUnknown = undated
+	PackRole  string   // empty = any; episode = regular; special = any special; else exact special_feature
 	FromDay   string   // YYYY-MM-DD inclusive; empty = no lower bound
 	ToDay     string   // YYYY-MM-DD inclusive; empty = no upper bound
 }
@@ -80,9 +82,19 @@ type VideoListFilter struct {
 // VideoYearUnknown selects videos with missing/empty upload_date (?year=unknown).
 const VideoYearUnknown = -1
 
+// VideoSourceImport filters videos with source_id IS NULL (?source=import).
+// Covers Import-created rows and Add-video indexed rows until they gain a feed source_id.
+const VideoSourceImport int64 = -1
+
+// VideoSourceImportQuery is the HTTP/query sentinel for VideoSourceImport.
+const VideoSourceImportQuery = "import"
+
+// VideoPackRoleAnySpecial is the list-filter value for every non-regular special_feature.
+const VideoPackRoleAnySpecial = "special"
+
 // Active reports whether any filter constraint is set.
 func (f VideoListFilter) Active() bool {
-	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID > 0 || strings.TrimSpace(f.MediaType) != "" || f.Year != 0 || f.FromDay != "" || f.ToDay != ""
+	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID != 0 || strings.TrimSpace(f.MediaType) != "" || f.Year != 0 || strings.TrimSpace(f.PackRole) != "" || f.FromDay != "" || f.ToDay != ""
 }
 
 func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter) {
@@ -96,7 +108,10 @@ func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter
 			*args = append(*args, st)
 		}
 	}
-	if f.SourceID > 0 {
+	switch {
+	case f.SourceID == VideoSourceImport:
+		b.WriteString(` AND source_id IS NULL`)
+	case f.SourceID > 0:
 		b.WriteString(` AND source_id = ?`)
 		*args = append(*args, f.SourceID)
 	}
@@ -112,6 +127,17 @@ func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter
 		b.WriteString(` AND upload_date IS NOT NULL AND trim(upload_date) != ''`)
 		b.WriteString(` AND CAST(strftime('%Y', upload_date) AS INTEGER) = ?`)
 		*args = append(*args, f.Year)
+	}
+	switch role := strings.TrimSpace(f.PackRole); role {
+	case "":
+		// any kind
+	case PackRoleRegular:
+		b.WriteString(` AND ` + SQLPackRoleRegularPred)
+	case VideoPackRoleAnySpecial:
+		b.WriteString(` AND NOT (` + SQLPackRoleRegularPred + `)`)
+	default:
+		b.WriteString(` AND special_feature = ?`)
+		*args = append(*args, NormalizePackRole(role))
 	}
 	if f.FromDay == "" && f.ToDay == "" {
 		return
@@ -438,6 +464,15 @@ func (s *Store) DistinctVideoYears(seriesID int64) (years []int, unknown bool, e
 	return years, unknown, rows.Err()
 }
 
+// CountVideosWithNullSource returns how many videos on the series have source_id IS NULL.
+func (s *Store) CountVideosWithNullSource(seriesID int64) (int, error) {
+	var n int
+	err := s.DB.SQL.QueryRow(`
+		SELECT COUNT(*) FROM videos WHERE series_id = ? AND source_id IS NULL
+	`, seriesID).Scan(&n)
+	return n, err
+}
+
 // CountVideosBySource returns video counts keyed by source_id for a series.
 func (s *Store) CountVideosBySource(seriesID int64) (map[int64]int, error) {
 	rows, err := s.DB.SQL.Query(`
@@ -486,14 +521,15 @@ func scanVideo(scanner interface {
 		&v.UploadDate, &v.SourceURL, &v.Status, &v.Season, &v.Episode,
 		&v.Description, &v.ThumbnailURL, &v.MediaType,
 		&v.DurationSeconds, &v.Width, &v.Height, &v.FPS,
-		&v.DownloadFormatSelector, &v.DownloadRemuxContainer, &v.ImportSrc, &v.AcquiredVia, &v.AcquiredAt, &v.SidecarsAcquiredAt,
+		&v.DownloadFormatSelector, &v.DownloadRemuxContainer, &v.AcquiredVia, &v.AcquiredAt, &v.SidecarsAcquiredAt,
 		&v.SortTitle, &v.OriginalTitle, &v.Studio,
 		&genresRaw, &tagsRaw, &v.UniqueIDType, &v.UniqueIDValue, &actorsRaw,
-		&v.Tagline, &v.Country, &v.MPAA,
+		&v.Tagline, &v.Country, &v.MPAA, &v.PackRole,
 	)
 	v.Genres = decodeStringSlice(genresRaw)
 	v.Tags = decodeStringSlice(tagsRaw)
 	v.Actors = decodeActors(actorsRaw)
+	v.PackRole = NormalizePackRole(v.PackRole)
 	return v, err
 }
 

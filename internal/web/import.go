@@ -19,14 +19,12 @@ func (h *Handler) importPage(w http.ResponseWriter, r *http.Request) {
 
 	render(w, "import", struct {
 		pageBase
-		ImportPath          string
 		Roots               []library.RootFolder
 		Profiles            []library.QualityProfile
 		ScanCronDescriptors []string
 		ImportBusy          bool
 	}{
 		pageBase:            newPage("Import", "import", nil),
-		ImportPath:          h.Library.ImportRoot,
 		Roots:               roots,
 		Profiles:            profiles,
 		ScanCronDescriptors: scanCronDescriptors(),

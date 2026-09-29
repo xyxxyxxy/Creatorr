@@ -27,6 +27,7 @@ type seriesVideoRow struct {
 	ThumbURL            string
 	DomainActive        bool
 	DomainDisabledTitle string
+	PackRoleBadge       string
 }
 
 // buildSeriesVideoRows enriches videos for video_list_row (series, source, history).
@@ -108,6 +109,7 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 			ThumbURL:            thumbURL,
 			DomainActive:        dAct,
 			DomainDisabledTitle: disTitle,
+			PackRoleBadge:       library.PackRoleBadgeLabel(v.PackRole),
 		})
 	}
 	return videos
@@ -210,7 +212,15 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 			Selected: st == sel,
 		})
 	}
-	srcOpts := make([]listFilterOpt, 0, len(ser.Sources))
+	srcOpts := make([]listFilterOpt, 0, len(ser.Sources)+1)
+	nullImportCount, _ := h.Library.CountVideosWithNullSource(id)
+	if nullImportCount > 0 {
+		srcOpts = append(srcOpts, listFilterOpt{
+			Value:    library.VideoSourceImportQuery,
+			Label:    "Import",
+			Selected: filter.SourceID == library.VideoSourceImport,
+		})
+	}
 	for _, src := range ser.Sources {
 		srcOpts = append(srcOpts, listFilterOpt{
 			Value:    strconv.FormatInt(src.ID, 10),
@@ -218,9 +228,21 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 			Selected: filter.SourceID == src.ID,
 		})
 	}
+	kindOpts := []listFilterOpt{
+		{Value: library.PackRoleRegular, Label: "regular episode", Selected: filter.PackRole == library.PackRoleRegular},
+		{Value: library.VideoPackRoleAnySpecial, Label: "any special", Selected: filter.PackRole == library.VideoPackRoleAnySpecial},
+	}
+	for _, opt := range library.PackRoleSelectOptions() {
+		kindOpts = append(kindOpts, listFilterOpt{
+			Value:    opt.Value,
+			Label:    opt.Label,
+			Selected: filter.PackRole == opt.Value,
+		})
+	}
 	videoFilter.Selects = append(videoFilter.Selects,
 		listFilterSelect{Name: "source", AriaLabel: "Source", EmptyLabel: "All sources", Options: srcOpts},
 		listFilterSelect{Name: "year", AriaLabel: "Year", EmptyLabel: "All years", Options: yearOpts},
+		listFilterSelect{Name: "kind", AriaLabel: "Kind", EmptyLabel: "Any kind", Options: kindOpts},
 		listFilterSelect{Name: "status", AriaLabel: "Status", EmptyLabel: "Any status", Options: statusOpts},
 	)
 
@@ -258,7 +280,7 @@ func (h *Handler) seriesVideosLive(w http.ResponseWriter, r *http.Request) {
 	render(w, "series_videos_live", data)
 }
 
-// parseSeriesVideoListFilter reads ?q= (title), ?year=, ?status=…, ?source=<id>, and optional ?from=&to= (YYYY-MM-DD UTC).
+// parseSeriesVideoListFilter reads ?q= (title), ?year=, ?kind=, ?status=…, ?source=<id>, and optional ?from=&to= (YYYY-MM-DD UTC).
 func parseSeriesVideoListFilter(r *http.Request, sources []library.Source) library.VideoListFilter {
 	f := library.VideoListFilter{
 		Title:   strings.TrimSpace(r.URL.Query().Get("q")),
@@ -270,6 +292,18 @@ func parseSeriesVideoListFilter(r *http.Request, sources []library.Source) libra
 			f.Year = library.VideoYearUnknown
 		} else if y, err := strconv.Atoi(raw); err == nil && y >= 1900 && y <= 2100 {
 			f.Year = y
+		}
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("kind")); raw != "" {
+		switch raw {
+		case library.PackRoleRegular:
+			f.PackRole = library.PackRoleRegular
+		case library.VideoPackRoleAnySpecial:
+			f.PackRole = library.VideoPackRoleAnySpecial
+		default:
+			if err := library.ValidatePackRole(raw); err == nil && library.IsSpecialPackRole(raw) {
+				f.PackRole = library.NormalizePackRole(raw)
+			}
 		}
 	}
 	seen := map[string]struct{}{}
@@ -285,8 +319,9 @@ func parseSeriesVideoListFilter(r *http.Request, sources []library.Source) libra
 		f.Statuses = append(f.Statuses, st)
 	}
 	if raw := strings.TrimSpace(r.URL.Query().Get("source")); raw != "" {
-		sid, err := strconv.ParseInt(raw, 10, 64)
-		if err == nil && sid > 0 {
+		if strings.EqualFold(raw, library.VideoSourceImportQuery) {
+			f.SourceID = library.VideoSourceImport
+		} else if sid, err := strconv.ParseInt(raw, 10, 64); err == nil && sid > 0 {
 			for _, src := range sources {
 				if src.ID == sid {
 					f.SourceID = sid
@@ -325,8 +360,13 @@ func seriesVideoFilterQuery(filter library.VideoListFilter, page int) string {
 	for _, st := range filter.Statuses {
 		q.Add("status", st)
 	}
-	if filter.SourceID > 0 {
+	if filter.SourceID == library.VideoSourceImport {
+		q.Set("source", library.VideoSourceImportQuery)
+	} else if filter.SourceID > 0 {
 		q.Set("source", strconv.FormatInt(filter.SourceID, 10))
+	}
+	if role := strings.TrimSpace(filter.PackRole); role != "" {
+		q.Set("kind", role)
 	}
 	if filter.FromDay != "" {
 		q.Set("from", filter.FromDay)

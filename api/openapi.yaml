@@ -1308,14 +1308,15 @@ paths:
     get:
       tags: [library]
       operationId: getImportPicker
-      summary: Series and video catalog for Import Match UI
+      summary: Series catalog for Import Match UI
       description: >
-        Returns every series (id, title, poster_url) and every indexed video row used by
-        the Import Match modal. Loaded asynchronously after the Import page shell paints;
-        poster_url is always set to the series art path (no disk check).
+        Returns every series (id, title, poster_url) for Import inline dropdowns and the
+        Maintenance series scope picker. Videos are loaded on demand via GET /api/import/picker/videos.
+        Loaded asynchronously after the Import page shell paints; poster_url is always set to
+        the series art path (no disk check).
       responses:
         "200":
-          description: Picker catalog
+          description: Series catalog
           content:
             application/json:
               schema:
@@ -1327,31 +1328,85 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/import/scan:
-    post:
+  /api/import/picker/videos:
+    get:
       tags: [library]
-      operationId: scanImport
-      summary: Scan import inbox or one library root for untracked files
+      operationId: getImportPickerVideos
+      summary: Video rows for Import Match dropdowns
       description: >
-        Lists every untracked file under the chosen path (not already in the files table):
-        media, sidecars (nfo/json/thumb/sub), and other files. With no root_id, scans the
-        import inbox only. With root_id, scans that online library root for unmanaged
-        (orphan) files. Media match existing videos by id/title; orphan sidecars match by
-        filename stem beside a tracked video. Library hits bind in place (no move); inbox
-        media move into the series folder. Nothing binds until POST /api/import/manual
-        (or POST /api/import/confirm when creating series from tvshow.nfo trees).
-        Folders containing tvshow.nfo are returned in series_folders; descendant media
-        are locked to that series (known series_id or draft_key for confirm).
+        Returns a capped list of indexed videos for Import inline episode dropdowns.
+        Pass series_id and/or q to search; ids to hydrate known picks; has_media
+        to restrict to packed library media (sidecar attach). With no series_id,
+        q, ids, or has_media filter the response is an empty videos array.
       parameters:
-        - name: root_id
+        - name: series_id
           in: query
           required: false
           schema:
             type: integer
             format: int64
-          description: >
-            When set, scan only this library root for untracked files. When omitted, scan
-            the import inbox only.
+            minimum: 1
+          description: Restrict to one series
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Title / series title substring (case-insensitive)
+        - name: has_media
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: When true, only videos with a packed kind=video files row
+        - name: ids
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: integer
+              format: int64
+            maxItems: 200
+          style: form
+          explode: true
+          description: Hydrate specific video ids (ignores series_id / q; still honors has_media)
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+          description: Max rows (ignored when ids is set; ids are capped at 200)
+      responses:
+        "200":
+          description: Video rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportPickerVideosResponse"
+        "500":
+          description: Query failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/import/scan:
+    post:
+      tags: [library]
+      operationId: scanImport
+      summary: Scan import inbox for untracked files
+      description: >
+        Lists every untracked file under the import inbox (not already in the files table):
+        media, sidecars (nfo/json/thumb/sub), and other files. Media match existing videos by
+        id/title; orphan sidecars match by filename stem beside a tracked video. Confirm moves
+        inbox media into the series folder via POST /api/import/manual (or POST /api/import/confirm
+        when creating series from tvshow.nfo trees). Folders containing tvshow.nfo are returned in
+        series_folders; descendant media are locked to that series (known series_id or draft_key
+        for confirm).
       responses:
         "200":
           description: Candidates with suggestions
@@ -1360,7 +1415,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportScanResponse"
         "400":
-          description: Import root missing, invalid, or library root offline/unknown
+          description: Import root missing or invalid
           content:
             application/json:
               schema:
@@ -1370,13 +1425,13 @@ paths:
     post:
       tags: [library]
       operationId: importManual
-      summary: Confirm bind or create unmatched video - enqueue import task
+      summary: Confirm import or create unmatched video - enqueue import task
       description: >
-        With video_id, binds an existing indexed video (inbox move or library in-place) for media,
+        With video_id, packs an existing indexed video from the import inbox for media,
         or attaches sidecar file(s) when the path is a sidecar / paths lists sidecars (video must
         already have media). With series_id (and no video_id), creates a new video from
-        supplied/sidecar metadata then enqueues install (inbox) or in-place bind (library orphan).
-        Media bind to a video that already has packed media requires replace=true (deletes
+        supplied/sidecar metadata then enqueues pack from the inbox.
+        Media import to a video that already has packed media requires replace=true (deletes
         existing library media then imports).
       requestBody:
         required: true
@@ -1414,12 +1469,12 @@ paths:
     post:
       tags: [library]
       operationId: importConfirm
-      summary: Confirm series-folder + video import plan - enqueue one import_plan task
+      summary: Confirm import plan - enqueue one import_plan task
       description: >
-        Used when the scan found unknown tvshow.nfo trees. Creates series (with operator
-        defaults), applies tvshow.nfo metadata and series art, then imports each job.
-        No series rows or file moves until the worker runs. When series is empty, clients
-        should use POST /api/import/manual per job instead.
+        Always used by the Import Match UI confirm path. Creates series drafts (nfo_folder and/or bare),
+        then binds or creates videos per job, one series unit at a time. series may be empty when every
+        job targets an existing series_id (bind or create). Resumes on process restart via payload cursors;
+        logical failures leave the task failed. N× POST /api/import/manual remains an API escape hatch only.
       requestBody:
         required: true
         content:
@@ -1635,18 +1690,25 @@ components:
 
     ImportConfirmSeries:
       type: object
-      required: [draft_key, folder_path, root_id, quality_profile_id]
+      required: [draft_key, root_id, quality_profile_id]
       properties:
         draft_key:
           type: string
-          description: Stable key from scan series_folders (absolute folder path)
+          description: Stable key (absolute folder path for nfo_folder, or client draft id for bare)
+        kind:
+          type: string
+          enum: [nfo_folder, bare]
+          description: >
+            nfo_folder (default when omitted) requires folder_path with tvshow.nfo.
+            bare creates from title only (Import plus series draft).
         folder_path:
           type: string
-          description: Absolute path of the tvshow.nfo folder
+          description: Absolute path of the tvshow.nfo folder (required for nfo_folder)
         title:
           type: string
           description: >
-            Optional and ignored for naming. Server uses tvshow.nfo title, else the folder basename.
+            Required for bare. For nfo_folder, defaults from tvshow.nfo / folder basename;
+            operator may rename for uniqueness.
         root_id:
           type: integer
           format: int64
@@ -1656,10 +1718,10 @@ components:
         delivery_mode:
           type: string
           enum: [video, audio]
-          description: Defaults to video when omitted
+          description: Defaults to video when omitted (Import UI uses this default; no confirm control)
         monitored:
           type: boolean
-          description: Operator choice from Import summary (shared across series in one confirm)
+          description: Defaults to true when omitted (Import UI uses this default; no confirm control)
 
     ImportConfirmJob:
       type: object
@@ -1721,7 +1783,7 @@ components:
       properties:
         path:
           type: string
-          description: Absolute path under the import inbox or an online library root
+          description: Absolute path under the import inbox
         paths:
           type: array
           items:
@@ -1807,16 +1869,12 @@ components:
 
     ImportCandidate:
       type: object
-      required: [path, filename, source, role, ids, video_suggestions, series_suggestions]
+      required: [path, filename, role, ids, video_suggestions, series_suggestions]
       properties:
         path:
           type: string
         filename:
           type: string
-        source:
-          type: string
-          enum: [inbox, library]
-          description: inbox = import folder (move on confirm for media); library = under a root (bind in place)
         role:
           type: string
           enum: [video, nfo, json, thumb, sub, other]
@@ -1871,7 +1929,7 @@ components:
         series_folder_locked:
           type: boolean
           description: >
-            True when a tvshow.nfo tree owns this path; Match UI must not change series.
+            True when a tvshow.nfo tree owns this path (scan auto-selects that series; Match joins stay editable).
 
     ImportSeriesFolderParsed:
       type: object
@@ -1946,7 +2004,7 @@ components:
       properties:
         import_path:
           type: string
-          description: Absolute path that was scanned (import inbox or the chosen library root)
+          description: Absolute path of the import inbox that was scanned
         candidates:
           type: array
           items:
@@ -1959,20 +2017,24 @@ components:
 
     ImportPickerSeries:
       type: object
-      required: [id, title]
+      required: [id, title, root_id]
       properties:
         id:
           type: integer
           format: int64
         title:
           type: string
+        root_id:
+          type: integer
+          format: int64
+          description: Root folder id (for Import series-title uniqueness checks)
         poster_url:
           type: string
           description: Series poster path (`/series/{id}/art/poster`); always set, no disk probe
 
     ImportPickerVideo:
       type: object
-      required: [id, series_id, title, series_title, status, has_media, has_thumb]
+      required: [id, series_id, title, series_title, status, has_media, has_thumb, special_feature]
       properties:
         id:
           type: integer
@@ -1992,15 +2054,23 @@ components:
         has_thumb:
           type: boolean
           description: True when a kind=thumb files row exists
+        special_feature:
+          type: string
+          description: Pack role (episode, special_episode, or feature kind)
 
     ImportPickerResponse:
       type: object
-      required: [series, videos]
+      required: [series]
       properties:
         series:
           type: array
           items:
             $ref: "#/components/schemas/ImportPickerSeries"
+
+    ImportPickerVideosResponse:
+      type: object
+      required: [videos]
+      properties:
         videos:
           type: array
           items:
@@ -2146,7 +2216,7 @@ components:
 
     RootFolder:
       type: object
-      required: [id, name, path, episode_format]
+      required: [id, name, path, episode_format, special_episode_format, special_feature_format]
       properties:
         id:
           type: integer
@@ -2157,7 +2227,13 @@ components:
           type: string
         episode_format:
           type: string
-          description: Relative path under the series folder for packed episodes (no extension).
+          description: Relative path under the series folder for packed regular episodes (no extension).
+        special_episode_format:
+          type: string
+          description: Stem after locked S00E{episode:04} under series-level Specials/ (no path separators).
+        special_feature_format:
+          type: string
+          description: Stem under series-level extras kind folders (no path separators).
         retention_ttl_seconds:
           type: integer
           format: int64
@@ -2176,7 +2252,13 @@ components:
           description: Absolute path on disk (relative paths are rejected).
         episode_format:
           type: string
-          description: Relative path under the series folder for packed episodes (no extension). Empty uses the default.
+          description: Relative path under the series folder for packed regular episodes (no extension). Empty uses the default.
+        special_episode_format:
+          type: string
+          description: Stem after locked S00E under Specials/. Empty uses the default.
+        special_feature_format:
+          type: string
+          description: Stem under extras kind folders. Empty uses the default.
         retention_ttl_seconds:
           type: integer
           format: int64
@@ -2191,7 +2273,13 @@ components:
           type: string
         episode_format:
           type: string
-          description: Relative path under the series folder for packed episodes (no extension).
+          description: Relative path under the series folder for packed regular episodes (no extension).
+        special_episode_format:
+          type: string
+          description: Stem after locked S00E under Specials/.
+        special_feature_format:
+          type: string
+          description: Stem under extras kind folders.
         retention_ttl_seconds:
           type: integer
           format: int64
@@ -2748,6 +2836,12 @@ components:
           nullable: true
           items:
             $ref: "#/components/schemas/SeriesActor"
+        special_feature:
+          type: string
+          nullable: true
+          description: >
+            Pack role for all selected videos: episode (regular), special_episode, or a feature kind
+            folder name (extras, trailers, …). Omitted = unchanged.
 
     CreateSeriesRequest:
       type: object

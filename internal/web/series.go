@@ -299,6 +299,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	nullImportCount, _ := h.Library.CountVideosWithNullSource(id)
 	metaForm = h.withMetaSuggestions(metaForm)
 	metaFiles := seriesMetaFileViews(h.Library, ser)
 	videoTotal, _ := h.Library.CountVideos(id)
@@ -309,6 +310,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		Sources             []sourceRow
 		SourcesPage         PageInfo
 		SourceURLs          []string
+		ImportNullCount     int
 		VideosLive          seriesVideosLiveData
 		HasVideos           bool
 		MetaFiles           []seriesMetaFileView
@@ -323,6 +325,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		FolderRenameBusy    bool
 		EditSettings        map[string]any
 		MetaForm            seriesMetadataView
+		PackRoleOptions     []struct{ Value, Label string }
 		Deleting            bool
 	}{
 		pageBase:            newPage(ser.Title, "series", flashFromQuery(r)),
@@ -330,6 +333,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		Sources:             pageSrc,
 		SourcesPage:         sourcesPage,
 		SourceURLs:          sourceURLs,
+		ImportNullCount:     nullImportCount,
 		VideosLive:          videosLive,
 		HasVideos:           videoTotal > 0,
 		MetaFiles:           metaFiles,
@@ -344,6 +348,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		FolderRenameBusy:    folderRenameBusy,
 		EditSettings:        editSettings,
 		MetaForm:            metaForm,
+		PackRoleOptions:     library.PackRoleSelectOptions(),
 		Deleting:            seriesDeleting,
 	})
 }
