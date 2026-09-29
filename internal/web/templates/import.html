@@ -1784,12 +1784,14 @@ function importTotalPages(list) {
   return Math.max(1, Math.ceil(n / PAGE_SIZE));
 }
 
-/** True when item has no ready video/create target (includes non-importable). */
+/** True when row is not clean success: unmatched, warning, error, or non-importable. */
 function bundleUnmatched(b) {
   if (b.kind === 'other') return true;
   const st = defaultStateForBundle(b);
-  const kind = b.kind === 'sidecars' ? 'sidecar' : 'media';
-  return !itemReady(kind, st);
+  if (b.kind === 'sidecars') {
+    return !itemReady('sidecar', st);
+  }
+  return mediaRowTone(st, bundleStateKey(b)) !== 'success';
 }
 
 function unmatchedFilterOn() {
@@ -2036,9 +2038,9 @@ function folderSeriesPickersHTML(folderPath) {
   const seriesTip = !catalogReady ? 'Loading library index' : 'Pick series';
 
   const joinInner = `
-  <div class="join join-horizontal shrink-0 max-w-full" data-folder-path="${escapeHtml(path)}">
+  <div class="join join-horizontal min-w-0 max-w-full" data-folder-path="${escapeHtml(path)}">
     <details class="dropdown dropdown-bottom js-import-folder-series-dd"${createSeriesAllowed ? ' data-import-allow-create="1"' : ''}>
-      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden shrink-0${seriesDisabled ? ' btn-disabled' : ''}" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ''}>
+      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden min-w-0${seriesDisabled ? ' btn-disabled' : ''}" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ''}>
         ${seriesTriggerInnerHTML(st)}
       </summary>
       <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300">

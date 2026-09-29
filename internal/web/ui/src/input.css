@@ -109,34 +109,30 @@
   min-width: 0;
   max-width: 100%;
 }
-#import-list .import-match-joins > .join > details.dropdown,
-#import-list .import-match-joins > .import-join-tip > .join > details.dropdown {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-/* Anchor open panels to the full join (summary + Clear), not the details alone. */
 #import-list .import-match-joins > .join,
 #import-list .import-match-joins > .import-join-tip > .join,
 #import-list .import-folder .join {
   position: relative;
 }
+/* Folder series join: half row width (same share as one match join). */
+#import-list .import-folder .join {
+  width: 50%;
+  min-width: 0;
+  max-width: 100%;
+}
 #import-list .import-match-joins > .join > details.dropdown,
 #import-list .import-match-joins > .import-join-tip > .join > details.dropdown,
 #import-list .import-folder .join > details.dropdown {
   position: static;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 #import-list .import-match-joins .js-import-series-dd > summary.btn,
-#import-list .import-match-joins .js-import-video-dd > summary.btn {
+#import-list .import-match-joins .js-import-video-dd > summary.btn,
+#import-list .js-import-folder-series-dd > summary.btn {
   width: 100%;
   min-width: 0;
   max-width: none;
-}
-/* Folder series join keeps a fixed trigger width. */
-#import-list .js-import-folder-series-dd > summary.btn {
-  width: 18rem;
-  min-width: 18rem;
-  max-width: 18rem;
-  flex-shrink: 0;
 }
 /* Match + folder pick panels: same width as join (trigger + Clear). */
 #import-list .import-match-joins .js-import-series-dd > .dropdown-content,
