@@ -915,8 +915,11 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "list-panel") {
 				t.Fatalf("%s missing list-panel", path)
 			}
-			if !strings.Contains(body, "maintenance-scope-choose") || !strings.Contains(body, "modal-library-picker") {
-				t.Fatalf("%s missing scope picker chrome", path)
+			if !strings.Contains(body, "maintenance-scope-chips") || !strings.Contains(body, "js-maintenance-series-dd") {
+				t.Fatalf("%s missing maintenance series scope picker", path)
+			}
+			if strings.Contains(body, "modal-library-picker") || strings.Contains(body, "maintenance-scope-choose") {
+				t.Fatalf("%s still has removed library picker / Choose scope", path)
 			}
 			if !strings.Contains(body, "modal-maintenance-confirm") {
 				t.Fatalf("%s missing maintenance confirm modal", path)

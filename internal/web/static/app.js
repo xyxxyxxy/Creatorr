@@ -1325,16 +1325,17 @@
     "sync_files",
   ]);
 
-  /** Persistent across HTMX refresh of #maintenance-live. */
+  /** Persistent across HTMX refresh of #maintenance-live. Series-only scope. */
   let maintenanceScope = {
     seriesIds: [],
-    videoIds: [],
-    seriesTitle: "",
     seriesTitles: [],
-    videoTitles: [],
   };
   /** Selected action values; restored after HTMX busy refresh. Cleared on Run. */
   let maintenanceSelectedActions = new Set();
+  /** Series catalog for scope picker (GET /api/import/picker). */
+  let maintenanceSeriesCatalog = [];
+  let maintenanceSeriesCatalogReady = false;
+  let maintenanceSeriesCatalogPromise = null;
 
   const maintenanceActionLabels = {
     apply_episode_naming: "Apply episode format",
@@ -1352,25 +1353,147 @@
       .replace(/"/g, "&quot;");
   }
 
-  function maintenanceScopeLabel() {
-    const nS = maintenanceScope.seriesIds.length;
-    const nV = maintenanceScope.videoIds.length;
-    if (nV > 0) {
-      const title = maintenanceScope.seriesTitle || "Series";
-      return nV === 1 ? "1 video (" + title + ")" : nV + " videos (" + title + ")";
-    }
-    if (nS > 0) return nS === 1 ? "1 series" : nS + " series";
-    return "All series";
+  function clearMaintenanceScope() {
+    maintenanceScope = { seriesIds: [], seriesTitles: [] };
   }
 
-  function clearMaintenanceScope() {
-    maintenanceScope = {
-      seriesIds: [],
-      videoIds: [],
-      seriesTitle: "",
-      seriesTitles: [],
-      videoTitles: [],
-    };
+  function ensureMaintenanceSeriesCatalog() {
+    if (maintenanceSeriesCatalogReady) return Promise.resolve();
+    if (maintenanceSeriesCatalogPromise) return maintenanceSeriesCatalogPromise;
+    maintenanceSeriesCatalogPromise = fetch("/api/import/picker", {
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("picker " + res.status);
+        return res.json();
+      })
+      .then((data) => {
+        maintenanceSeriesCatalog = Array.isArray(data.series) ? data.series : [];
+        maintenanceSeriesCatalogReady = true;
+      })
+      .catch(() => {
+        maintenanceSeriesCatalog = [];
+        maintenanceSeriesCatalogReady = false;
+      })
+      .finally(() => {
+        maintenanceSeriesCatalogPromise = null;
+      });
+    return maintenanceSeriesCatalogPromise;
+  }
+
+  function maintenanceSeriesById(id) {
+    const n = Number(id);
+    return maintenanceSeriesCatalog.find((s) => Number(s.id) === n) || null;
+  }
+
+  function maintenanceSeriesPosterHTML(s) {
+    const fallback =
+      '<span class="bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></span>';
+    if (!s || !s.poster_url) return fallback;
+    return (
+      '<img class="size-8 rounded-full object-cover shrink-0" src="' +
+      escapeMaintenanceHtml(s.poster_url) +
+      '" alt="" width="32" height="32" loading="lazy" />'
+    );
+  }
+
+  /** Same row as scope chips; omit remove for confirm modal. */
+  function maintenanceSeriesScopeRowHTML(id, titleHint, withRemove) {
+    const s = id != null ? maintenanceSeriesById(id) : null;
+    const title =
+      (s && s.title) || titleHint || (id != null ? "Series #" + id : "All series");
+    let html =
+      '<li class="flex items-center gap-2 min-w-0 rounded-box border border-base-300 bg-base-100 px-2 py-1.5">' +
+      maintenanceSeriesPosterHTML(s) +
+      '<span class="truncate grow min-w-0 text-sm font-medium">' +
+      escapeMaintenanceHtml(title) +
+      "</span>";
+    if (withRemove && id != null) {
+      html +=
+        '<button type="button" class="btn btn-soft btn-error btn-square btn-sm shrink-0" data-maintenance-remove-series="' +
+        escapeMaintenanceHtml(String(id)) +
+        '" aria-label="Remove">' +
+        '<i data-lucide="x" class="size-4" aria-hidden="true"></i>' +
+        "</button>";
+    }
+    return html + "</li>";
+  }
+
+  function lucideRefreshMaintenance(root) {
+    if (!root || !window.lucide || typeof window.lucide.createIcons !== "function") return;
+    window.lucide.createIcons({ root: root, attrs: { "stroke-width": 1.75, "aria-hidden": "true" } });
+  }
+
+  function renderMaintenanceScopeChips() {
+    const host = document.getElementById("maintenance-scope-chips");
+    if (!host) return;
+    if (!maintenanceScope.seriesIds.length) {
+      host.innerHTML = "";
+      return;
+    }
+    host.innerHTML = maintenanceScope.seriesIds
+      .map((id, i) =>
+        maintenanceSeriesScopeRowHTML(id, maintenanceScope.seriesTitles[i], true)
+      )
+      .join("");
+    lucideRefreshMaintenance(host);
+  }
+
+  function fillMaintenanceSeriesPickList(q) {
+    const ul = document.querySelector(".js-maintenance-series-list");
+    if (!ul) return;
+    const needle = String(q || "").trim().toLowerCase();
+    const selected = new Set(maintenanceScope.seriesIds.map(Number));
+    const rows = maintenanceSeriesCatalog.filter((s) => {
+      if (selected.has(Number(s.id))) return false;
+      if (!needle) return true;
+      return String(s.title || "").toLowerCase().includes(needle);
+    });
+    if (!maintenanceSeriesCatalogReady) {
+      ul.innerHTML = '<li class="list-row opacity-60 text-sm">Loading series…</li>';
+      return;
+    }
+    if (!rows.length) {
+      ul.innerHTML =
+        '<li class="list-row opacity-60 text-sm">' +
+        (needle ? "No matches" : "No series left to add") +
+        "</li>";
+      return;
+    }
+    ul.innerHTML = rows
+      .map((s) => {
+        return (
+          '<li class="list-row cursor-pointer" data-maintenance-pick-series="' +
+          escapeMaintenanceHtml(String(s.id)) +
+          '" role="option">' +
+          '<div class="relative shrink-0">' +
+          maintenanceSeriesPosterHTML(s) +
+          "</div>" +
+          '<div class="list-col-grow min-w-0 font-medium truncate">' +
+          escapeMaintenanceHtml(s.title || "") +
+          "</div></li>"
+        );
+      })
+      .join("");
+  }
+
+  function addMaintenanceSeries(id) {
+    const n = Number(id);
+    if (!(n > 0) || maintenanceScope.seriesIds.includes(n)) return;
+    const s = maintenanceSeriesById(n);
+    maintenanceScope.seriesIds.push(n);
+    maintenanceScope.seriesTitles.push((s && s.title) || "Series #" + n);
+    refreshMaintenanceScopeUI();
+  }
+
+  function removeMaintenanceSeries(id) {
+    const n = Number(id);
+    const i = maintenanceScope.seriesIds.indexOf(n);
+    if (i < 0) return;
+    maintenanceScope.seriesIds.splice(i, 1);
+    maintenanceScope.seriesTitles.splice(i, 1);
+    refreshMaintenanceScopeUI();
   }
 
   function syncMaintenanceScopeFields() {
@@ -1384,21 +1507,7 @@
       inp.value = String(id);
       host.appendChild(inp);
     });
-    maintenanceScope.videoIds.forEach((id) => {
-      const inp = document.createElement("input");
-      inp.type = "hidden";
-      inp.name = "video_ids";
-      inp.value = String(id);
-      host.appendChild(inp);
-    });
-    const label = document.getElementById("maintenance-scope-label");
-    if (label) label.textContent = maintenanceScopeLabel();
-    const clearBtn = document.getElementById("maintenance-scope-clear");
-    if (clearBtn) {
-      const has =
-        maintenanceScope.seriesIds.length > 0 || maintenanceScope.videoIds.length > 0;
-      clearBtn.classList.toggle("hidden", !has);
-    }
+    renderMaintenanceScopeChips();
   }
 
   function readMaintenanceActionChecks() {
@@ -1488,7 +1597,7 @@
 
   function wireMaintenanceScope() {
     if (!onMaintenancePage()) return;
-    refreshMaintenanceScopeUI();
+    ensureMaintenanceSeriesCatalog().then(() => refreshMaintenanceScopeUI());
   }
 
   function selectedMaintenanceActionLabels() {
@@ -1541,34 +1650,24 @@
       )
       .join("");
     const nS = maintenanceScope.seriesIds.length;
-    const nV = maintenanceScope.videoIds.length;
     let lead = "";
-    let items = [];
-    if (nV > 0) {
-      const seriesName = maintenanceScope.seriesTitle || "Series";
-      lead =
-        nV === 1
-          ? "1 video in " + seriesName + ":"
-          : nV + " videos in " + seriesName + ":";
-      items = (maintenanceScope.videoTitles || []).slice();
-      while (items.length < nV) items.push("Video #" + maintenanceScope.videoIds[items.length]);
-    } else if (nS > 0) {
+    if (nS > 0) {
       lead = nS === 1 ? "1 series:" : nS + " series:";
-      items = (maintenanceScope.seriesTitles || []).slice();
-      while (items.length < nS) items.push("Series #" + maintenanceScope.seriesIds[items.length]);
+      listEl.className =
+        "flex flex-col gap-1.5 w-full min-w-0 list-none p-0 m-0 max-h-60 overflow-y-auto mb-2";
+      listEl.innerHTML = maintenanceScope.seriesIds
+        .map((id, i) =>
+          maintenanceSeriesScopeRowHTML(id, maintenanceScope.seriesTitles[i], false)
+        )
+        .join("");
     } else {
       lead = "Whole library:";
-      items = ["All series"];
+      listEl.className =
+        "flex flex-col gap-1.5 w-full min-w-0 list-none p-0 m-0 max-h-60 overflow-y-auto mb-2";
+      listEl.innerHTML = maintenanceSeriesScopeRowHTML(null, "All series", false);
     }
     leadEl.textContent = lead;
-    listEl.innerHTML = items
-      .map(
-        (name) =>
-          '<li class="list-row py-2 px-3"><span class="list-col-grow min-w-0 truncate">' +
-          escapeMaintenanceHtml(name) +
-          "</span></li>"
-      )
-      .join("");
+    lucideRefreshMaintenance(listEl);
     affectedEl.textContent = "Counting packed videos…";
     externalBox.classList.add("hidden");
     externalText.textContent = "";
@@ -1633,30 +1732,19 @@
     document.documentElement.dataset.maintenanceScopeDelegated = "1";
     document.addEventListener("click", (ev) => {
       if (!onMaintenancePage()) return;
-      if (ev.target.closest("#maintenance-scope-choose")) {
-        if (typeof window.openLibraryPicker !== "function") return;
-        window.openLibraryPicker({
-          mode: "multi",
-          packedOnly: true,
-          initialSeriesIds: maintenanceScope.seriesIds.slice(),
-          initialVideoIds: maintenanceScope.videoIds.slice(),
-          subtitle: "Scope for selected maintenance actions",
-          onConfirm: (result) => {
-            maintenanceScope = {
-              seriesIds: (result.seriesIds || []).map(Number).filter((n) => n > 0),
-              videoIds: (result.videoIds || []).map(Number).filter((n) => n > 0),
-              seriesTitle: result.seriesTitle || "",
-              seriesTitles: Array.isArray(result.seriesTitles) ? result.seriesTitles.slice() : [],
-              videoTitles: Array.isArray(result.videoTitles) ? result.videoTitles.slice() : [],
-            };
-            refreshMaintenanceScopeUI();
-          },
-        });
+      const removeBtn = ev.target.closest("[data-maintenance-remove-series]");
+      if (removeBtn) {
+        removeMaintenanceSeries(removeBtn.getAttribute("data-maintenance-remove-series"));
         return;
       }
-      if (ev.target.closest("#maintenance-scope-clear")) {
-        clearMaintenanceScope();
-        refreshMaintenanceScopeUI();
+      const pick = ev.target.closest("[data-maintenance-pick-series]");
+      if (pick) {
+        ev.preventDefault();
+        const dd = pick.closest("details.js-maintenance-series-dd");
+        addMaintenanceSeries(pick.getAttribute("data-maintenance-pick-series"));
+        if (dd) dd.open = false;
+        const qEl = document.querySelector(".js-maintenance-series-q");
+        if (qEl) qEl.value = "";
         return;
       }
       if (ev.target.closest("#maintenance-preview-rename")) {
@@ -1675,6 +1763,29 @@
         form.dataset.maintenanceConfirmed = "1";
         if (typeof form.requestSubmit === "function") form.requestSubmit();
         else form.submit();
+      }
+    });
+    document.addEventListener("toggle", (ev) => {
+      if (!onMaintenancePage()) return;
+      const dd = ev.target;
+      if (!(dd instanceof HTMLDetailsElement) || !dd.open) return;
+      if (!dd.classList.contains("js-maintenance-series-dd")) return;
+      const qEl = dd.querySelector(".js-maintenance-series-q");
+      ensureMaintenanceSeriesCatalog().then(() => {
+        fillMaintenanceSeriesPickList(qEl ? qEl.value : "");
+        queueMicrotask(() => qEl && qEl.focus({ preventScroll: true }));
+      });
+    }, true);
+    document.addEventListener("pointerdown", (ev) => {
+      if (!onMaintenancePage()) return;
+      document.querySelectorAll("details.js-maintenance-series-dd[open]").forEach((dd) => {
+        if (!dd.contains(ev.target)) dd.open = false;
+      });
+    }, true);
+    document.addEventListener("input", (ev) => {
+      if (!onMaintenancePage()) return;
+      if (ev.target && ev.target.classList && ev.target.classList.contains("js-maintenance-series-q")) {
+        fillMaintenanceSeriesPickList(ev.target.value);
       }
     });
     document.addEventListener("change", (ev) => {

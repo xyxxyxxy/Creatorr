@@ -1311,7 +1311,7 @@ paths:
       summary: Series catalog for Import Match UI
       description: >
         Returns every series (id, title, poster_url) for Import inline dropdowns and the
-        Maintenance library picker. Videos are loaded on demand via GET /api/import/picker/videos.
+        Maintenance series scope picker. Videos are loaded on demand via GET /api/import/picker/videos.
         Loaded asynchronously after the Import page shell paints; poster_url is always set to
         the series art path (no disk check).
       responses:
@@ -1332,11 +1332,11 @@ paths:
     get:
       tags: [library]
       operationId: getImportPickerVideos
-      summary: Video rows for Import / Maintenance pickers
+      summary: Video rows for Import Match dropdowns
       description: >
-        Returns a capped list of indexed videos for Import inline dropdowns and the Maintenance
-        library picker. Pass series_id and/or q to search; ids to hydrate known picks; has_media
-        to restrict to packed library media (sidecar attach / Maintenance). With no series_id,
+        Returns a capped list of indexed videos for Import inline episode dropdowns.
+        Pass series_id and/or q to search; ids to hydrate known picks; has_media
+        to restrict to packed library media (sidecar attach). With no series_id,
         q, ids, or has_media filter the response is an empty videos array.
       parameters:
         - name: series_id

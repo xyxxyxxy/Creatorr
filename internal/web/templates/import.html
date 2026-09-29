@@ -113,8 +113,6 @@
 <script type="application/json" id="import-roots-json">{{toJSON .Roots}}</script>
 <script type="application/json" id="import-profiles-json">{{toJSON .Profiles}}</script>
 
-{{template "library_picker_modal"}}
-
 <script>
 let SERIES = [];
 /** Growing cache of videos fetched for dropdowns / labels (not a full-library dump). */
@@ -202,9 +200,6 @@ async function loadImportPicker() {
       if (!importPageAlive()) return;
       SERIES = Array.isArray(data.series) ? data.series : [];
       importPickerReady = true;
-      if (typeof window.setLibraryPickerCatalog === 'function') {
-        window.setLibraryPickerCatalog(SERIES);
-      }
       await hydratePickedVideos();
       if (!importPageAlive()) return;
       // Scrub picks that need has_media now that suggested rows are cached.
@@ -613,10 +608,12 @@ function packRoleBadgeLabel(role) {
   return r;
 }
 
-function packRoleBadgeHTML(role) {
+function packRoleBadgeHTML(role, tipSide) {
   const label = packRoleBadgeLabel(role);
   if (!label) return '';
-  return `<span class="badge badge-secondary badge-sm shrink-0 tooltip tooltip-top" data-tip="Special kind: ${escapeHtml(label)}">${escapeHtml(label)}</span>`;
+  // List rows sit in overflow-y panels: tip left stays inside the row (top clips).
+  const side = tipSide === 'left' ? 'tooltip-left' : 'tooltip-top';
+  return `<span class="badge badge-secondary badge-sm shrink-0 tooltip ${side}" data-tip="Special kind: ${escapeHtml(label)}">${escapeHtml(label)}</span>`;
 }
 
 /** Row chrome: neutral folders/other, warning unmatched, success matched. */
@@ -698,11 +695,9 @@ function videoTriggerInnerHTML(st) {
     const img = thumb
       ? `<img class="js-import-video-thumb" src="${escapeHtml(thumb)}" alt="" width="56" height="32" loading="lazy" />`
       : `<span class="js-import-video-thumb bg-base-200 flex items-center justify-center" aria-hidden="true"><i data-lucide="square-play" class="size-4 opacity-40"></i></span>`;
-    const badge = v ? packRoleBadgeHTML(v.special_feature) : '';
     return `<span class="inline-flex items-center gap-2 min-w-0">
       ${img}
       <span class="truncate">${escapeHtml(videoPickLabel(st))}</span>
-      ${badge}
     </span>`;
   }
   return `<span class="opacity-60">Select episode</span>`;
@@ -716,26 +711,55 @@ function seriesOptionRowHTML(s, selectedId) {
   </li>`;
 }
 
+/** Match web.videoStatusLabel for import pick rows. */
+function importVideoStatusLabel(status) {
+  switch (String(status || '')) {
+    case 'wanted': return 'wanted';
+    case 'wanted_download_error': return 'wanted (download error)';
+    case 'wanted_archive': return 'wanted (Web Archive)';
+    case 'integrity_check_failed': return 'verify failed';
+    case 'downloaded': return 'downloaded';
+    case 'missing': return 'missing';
+    case 'deleted': return 'deleted';
+    case 'ignored': return 'ignored';
+    default: return String(status || '-');
+  }
+}
+
 function videoOptionRowHTML(v, selectedId) {
   const sel = selectedId && Number(selectedId) === Number(v.id);
   const thumb = videoThumbURL(v);
   const img = thumb
     ? `<img class="size-full rounded object-cover" src="${escapeHtml(thumb)}" alt="" loading="lazy" />`
     : `<div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true"><i data-lucide="square-play" class="size-5 opacity-40"></i></div>`;
-  let suffix = '';
-  if (v.has_media) suffix = ' · has media';
-  const meta = escapeHtml(v.series_title) + suffix;
-  const badge = packRoleBadgeHTML(v.special_feature);
+  const badge = packRoleBadgeHTML(v.special_feature, 'left');
+  const series = escapeHtml(v.series_title || '');
+  const status = escapeHtml(importVideoStatusLabel(v.status));
   return `<li class="list-row cursor-pointer ${sel ? 'bg-base-200' : ''}" data-import-pick-video="${v.id}" role="option">
     <div class="relative shrink-0 w-20 aspect-video">${img}</div>
     <div class="list-col-grow min-w-0">
       <div class="flex items-center gap-2 min-w-0">
-        <div class="font-medium truncate">${escapeHtml(v.title)}</div>
+        <div class="font-medium truncate min-w-0">${escapeHtml(v.title)}</div>
         ${badge}
       </div>
-      <div class="text-xs opacity-60 truncate">${meta}</div>
+      <div class="text-xs opacity-60 truncate">${series}</div>
+      <div class="text-xs opacity-60 truncate">${status}</div>
     </div>
   </li>`;
+}
+
+/** Join icon action: tip stays on the btn; aria-disabled (not :disabled) so hover tip works. */
+function importJoinActionBtnHTML(jsClass, tip, icon, off, softError) {
+  const soft = softError ? ' btn-soft btn-error' : '';
+  const cls = `btn btn-square${soft} join-item ${jsClass} tooltip tooltip-top${off ? ' btn-disabled cursor-not-allowed' : ''}`;
+  const offAttr = off ? ' aria-disabled="true" tabindex="-1"' : '';
+  return `<button type="button" class="${cls}"${offAttr} data-tip="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}">
+      <i data-lucide="${icon}" class="size-5" aria-hidden="true"></i>
+    </button>`;
+}
+
+function importActionIsOff(el) {
+  return !el || el.getAttribute('aria-disabled') === 'true' || el.disabled;
 }
 
 function matchPickersHTML(st, kind) {
@@ -754,12 +778,21 @@ function matchPickersHTML(st, kind) {
   const seriesTip = !catalogReady ? 'Loading library index'
     : (st.seriesLockReason || (treeLocked ? 'Locked by tvshow.nfo' : folderLocked ? 'Locked by parent folder' : 'Select series'));
   const videoTip = !catalogReady ? 'Loading library index'
-    : (st.videoLockReason || (treeLocked ? 'Locked by tvshow.nfo folder' : 'Select episode'));
+    : (st.videoLockReason || (treeLocked
+      ? (isDraftSeriesId(st.seriesId) ? 'Unknown tvshow.nfo: new videos only' : 'Locked by tvshow.nfo')
+      : 'Select episode'));
 
-  const seriesJoinInner = `
-  <div class="join join-horizontal shrink-0 max-w-full ${seriesDisabled ? 'pointer-events-none opacity-60' : ''}">
+  const seriesLockTip = seriesDisabled
+    ? ` tooltip tooltip-top" data-tip="${escapeHtml(seriesTip)}"`
+    : '"';
+  const videoLockTip = videoDisabled
+    ? ` tooltip tooltip-top" data-tip="${escapeHtml(videoTip)}"`
+    : '"';
+
+  return `<div class="flex flex-wrap items-center gap-2">
+  <div class="join join-horizontal shrink-0 max-w-full${seriesDisabled ? ' import-join-locked' : ''}">
     <details class="dropdown dropdown-bottom js-import-series-dd">
-      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden shrink-0" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ''}>
+      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden shrink-0${seriesLockTip} aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ''}>
         ${seriesTriggerInnerHTML(st)}
       </summary>
       <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-80">
@@ -767,41 +800,23 @@ function matchPickersHTML(st, kind) {
         <ul class="list bg-base-100 max-h-64 overflow-y-auto js-import-series-list" role="listbox" aria-label="Series"></ul>
       </div>
     </details>
-    <button type="button" class="btn btn-square join-item js-import-create-series tooltip tooltip-top" data-tip="Create new" aria-label="Create new" ${createSeriesDisabled ? 'disabled' : ''}>
-      <i data-lucide="plus" class="size-5" aria-hidden="true"></i>
-    </button>
-    <button type="button" class="btn btn-soft btn-error btn-square join-item js-import-reset-series tooltip tooltip-top" data-tip="Clear" aria-label="Clear" ${seriesResetDisabled ? 'disabled' : ''}>
-      <i data-lucide="unlink" class="size-5" aria-hidden="true"></i>
-    </button>
-  </div>`;
-
-  const videoJoinInner = `
-  <div class="join join-horizontal shrink-0 max-w-full ${videoDisabled ? 'pointer-events-none opacity-60' : ''}">
+    ${importJoinActionBtnHTML('js-import-create-series', 'Create new', 'plus', createSeriesDisabled, false)}
+    ${importJoinActionBtnHTML('js-import-reset-series', 'Clear', 'unlink', seriesResetDisabled, true)}
+  </div>
+  <div class="join join-horizontal shrink-0 max-w-full${videoDisabled ? ' import-join-locked' : ''}">
     <details class="dropdown dropdown-bottom js-import-video-dd">
-      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden shrink-0" aria-label="${escapeHtml(videoTip)}" ${videoDisabled ? 'aria-disabled="true"' : ''}>
+      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden shrink-0${videoLockTip} aria-label="${escapeHtml(videoTip)}" ${videoDisabled ? 'aria-disabled="true"' : ''}>
         ${videoTriggerInnerHTML(st)}
       </summary>
-      <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-96">
+      <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 js-import-video-panel">
         <input type="search" class="input input-bordered input-sm w-full mb-2 js-import-video-q" placeholder="Filter" aria-label="Filter" autocomplete="off" />
-        <ul class="list bg-base-100 max-h-64 overflow-y-auto js-import-video-list" role="listbox" aria-label="Videos"></ul>
+        <ul class="list bg-base-100 max-h-64 overflow-y-auto overflow-x-hidden py-1 js-import-video-list" role="listbox" aria-label="Videos"></ul>
       </div>
     </details>
-    <button type="button" class="btn btn-square join-item js-import-create-video tooltip tooltip-top" data-tip="Create new" aria-label="Create new" ${createVideoDisabled ? 'disabled' : ''}>
-      <i data-lucide="plus" class="size-5" aria-hidden="true"></i>
-    </button>
-    <button type="button" class="btn btn-soft btn-error btn-square join-item js-import-reset-video tooltip tooltip-top" data-tip="Clear" aria-label="Clear" ${videoResetDisabled ? 'disabled' : ''}>
-      <i data-lucide="unlink" class="size-5" aria-hidden="true"></i>
-    </button>
+    ${importJoinActionBtnHTML('js-import-create-video', 'Create new', 'plus', createVideoDisabled, false)}
+    ${importJoinActionBtnHTML('js-import-reset-video', 'Clear', 'unlink', videoResetDisabled, true)}
+  </div>
   </div>`;
-
-  const seriesJoin = seriesDisabled
-    ? `<span class="tooltip tooltip-top inline-flex max-w-full" data-tip="${escapeHtml(seriesTip)}">${seriesJoinInner}</span>`
-    : seriesJoinInner;
-  const videoJoin = videoDisabled
-    ? `<span class="tooltip tooltip-top inline-flex max-w-full" data-tip="${escapeHtml(videoTip)}">${videoJoinInner}</span>`
-    : videoJoinInner;
-
-  return `<div class="flex flex-wrap items-center gap-2">${seriesJoin}${videoJoin}</div>`;
 }
 
 function fillSeriesPickList(ul, st, q) {
@@ -1020,9 +1035,6 @@ function addSeriesToImportPicker(ser) {
   if (idx >= 0) SERIES[idx] = { ...SERIES[idx], ...row };
   else SERIES.push(row);
   SERIES.sort((a, b) => String(a.title).localeCompare(String(b.title)));
-  if (typeof window.setLibraryPickerCatalog === 'function') {
-    window.setLibraryPickerCatalog(SERIES);
-  }
 }
 
 function openAddSeriesForImportMatch() {
@@ -1409,10 +1421,21 @@ function displayPathUnderFolder(absPath, parentDir) {
   return p || String(absPath || '');
 }
 
+/** Relative path in the tree; absolute path on hover when they differ. */
+function pathCodeHTML(shown, absPath) {
+  const tip = normImportPath(absPath) || String(absPath || '');
+  const label = shown || tip;
+  if (!label) return '';
+  const code = `<code class="text-xs break-all">${escapeHtml(label)}</code>`;
+  if (!tip || tip === label) return code;
+  return `<span class="tooltip tooltip-top inline-flex max-w-full" data-tip="${escapeHtml(tip)}">${code}</span>`;
+}
+
 function fileCell(c, parentDir) {
   const raw = (c && (c.path || c.filename)) || '';
-  const shown = parentDir != null ? displayPathUnderFolder(raw, parentDir) : raw;
-  return `<code class="text-xs break-all">${escapeHtml(shown)}</code>`;
+  const abs = normImportPath(raw) || String(raw || '');
+  const shown = parentDir != null ? displayPathUnderFolder(raw, parentDir) : abs;
+  return pathCodeHTML(shown, abs);
 }
 
 function seriesFolderAt(folderPath) {
@@ -1432,23 +1455,21 @@ function artRoleAsImportRole(role) {
   }
 }
 
-/** tvshow.nfo + series art marks beside a folder path (same shape as media sidecars). */
+/** Series art marks beside a tvshow.nfo path (nfo is on the path line, not counted here). */
 function folderMetaMarksHTML(folderPath) {
   const f = seriesFolderAt(folderPath);
   if (!f) return '';
-  const marks = [];
-  const dir = normImportPath(folderPath);
-  marks.push({ role: 'nfo', path: dir + '/tvshow.nfo', filename: 'tvshow.nfo' });
   const paths = f.art_paths || [];
   const roles = f.art_roles || [];
-  paths.forEach((p, i) => {
+  if (!paths.length) return '';
+  const marks = paths.map((p, i) => {
     const path = String(p || '').replace(/\\/g, '/');
     const base = path.split('/').pop() || roles[i] || 'art';
-    marks.push({
+    return {
       role: artRoleAsImportRole(roles[i]),
       path,
       filename: base,
-    });
+    };
   });
   let html = `<span class="opacity-50 px-0.5" aria-hidden="true">+</span>`;
   html += `<span class="opacity-60">${marks.length} sidecar${marks.length === 1 ? '' : 's'}</span>`;
@@ -1463,11 +1484,16 @@ function folderPathLabel(folderPath, parentPath) {
   const p = normImportPath(folderPath);
   if (!p) return '/';
   const parent = normImportPath(parentPath);
+  let label;
   if (parent && (p === parent || p.startsWith(parent + '/'))) {
     const rel = p === parent ? '' : p.slice(parent.length + 1);
-    return (rel || p.slice(p.lastIndexOf('/') + 1) || p) + '/';
+    label = (rel || p.slice(p.lastIndexOf('/') + 1) || p) + '/';
+  } else {
+    label = p + '/';
   }
-  return p + '/';
+  // tvshow.nfo trees: NFO is the primary path (art listed as sidecars).
+  if (seriesFolderAt(folderPath)) label += 'tvshow.nfo';
+  return label;
 }
 
 /** Leaf folder with exactly one media/sidecar row and no nfo: fold into the file row. */
@@ -1566,24 +1592,26 @@ function applySeriesFolderLockToState(st, c) {
     st.seriesId = DRAFT_PREFIX + c.series_folder_draft_key;
     st.seriesFolderLocked = true;
     st.folderSeriesLocked = false;
-    st.seriesLockReason = 'Locked by tvshow.nfo';
-    st.videoLockReason = 'Locked by tvshow.nfo folder';
-    // Unknown series: never keep a catalog video pick (belongs to another series).
-    if (st.videoId && String(st.videoId) !== CREATE) st.videoId = CREATE;
+    st.seriesLockReason = 'Unknown tvshow.nfo: create series on import';
+    st.videoLockReason = 'Unknown tvshow.nfo: new videos only';
+    // Unknown series: catalog matches are never allowed under this tree.
+    st.videoId = CREATE;
     return;
   }
   if (c.series_folder_locked) {
     st.seriesFolderLocked = true;
     st.folderSeriesLocked = false;
     st.seriesLockReason = 'Locked by tvshow.nfo';
-    st.videoLockReason = 'Locked by tvshow.nfo folder';
+    st.videoLockReason = 'Locked by tvshow.nfo';
     if (c.suggested_series_id) {
       st.seriesId = String(c.suggested_series_id);
     } else {
       const nfo = nfoFolderForPath(dirOfImportPath(c.path));
       if (nfo) st.seriesId = nfoSeriesId(nfo);
     }
-    if (st.videoId && String(st.videoId) !== CREATE) {
+    if (!st.videoId) {
+      st.videoId = CREATE;
+    } else if (String(st.videoId) !== CREATE) {
       if (isDraftSeriesId(st.seriesId)) {
         st.videoId = CREATE;
       } else {
@@ -1875,12 +1903,14 @@ function folderLockInfo(folderPath) {
   const nfo = nfoFolderForPath(dir);
   if (nfo) {
     const nfoPath = normImportPath(nfo.folder_path || nfo.draft_key);
+    const seriesId = nfoSeriesId(nfo);
+    const unknown = !!nfo.unknown || isDraftSeriesId(seriesId);
     return {
       nfo,
       nfoPath,
-      seriesId: nfoSeriesId(nfo),
-      seriesReason: 'Locked by tvshow.nfo',
-      videoReason: 'Locked by tvshow.nfo folder',
+      seriesId,
+      seriesReason: unknown ? 'Unknown tvshow.nfo: create series on import' : 'Locked by tvshow.nfo',
+      videoReason: unknown ? 'Unknown tvshow.nfo: new videos only' : 'Locked by tvshow.nfo',
       parentPick: null,
     };
   }
@@ -1910,11 +1940,14 @@ function folderOwnSeriesState(folderPath) {
   const root = importRootPath();
   const nfoHere = (importSeriesFolders || []).find((f) => normImportPath(f.folder_path || f.draft_key) === path);
   if (nfoHere) {
+    const unknown = !!nfoHere.unknown || isDraftSeriesId(nfoSeriesId(nfoHere));
     return {
       seriesId: nfoSeriesId(nfoHere),
       seriesFolderLocked: true,
       folderSeriesLocked: false,
-      seriesLockReason: 'Locked by tvshow.nfo',
+      seriesLockReason: unknown
+        ? 'Unknown tvshow.nfo: create series on import'
+        : 'Locked by tvshow.nfo',
       nfo: true,
     };
   }
@@ -1922,11 +1955,14 @@ function folderOwnSeriesState(folderPath) {
   const nfoAnc = nfoFolderForPath(path);
   const nfoAncPath = nfoAnc ? normImportPath(nfoAnc.folder_path || nfoAnc.draft_key) : '';
   if (nfoAnc && nfoAncPath && nfoAncPath !== path) {
+    const unknown = !!nfoAnc.unknown || isDraftSeriesId(nfoSeriesId(nfoAnc));
     return {
       seriesId: nfoSeriesId(nfoAnc),
       seriesFolderLocked: true,
       folderSeriesLocked: true,
-      seriesLockReason: 'Locked by tvshow.nfo',
+      seriesLockReason: unknown
+        ? 'Unknown tvshow.nfo: create series on import'
+        : 'Locked by tvshow.nfo',
       nfo: false,
     };
   }
@@ -2008,10 +2044,13 @@ function folderSeriesPickersHTML(folderPath) {
   const seriesTip = !catalogReady ? 'Loading library index'
     : (own.seriesLockReason || 'Select series');
 
-  const joinInner = `
-  <div class="join join-horizontal shrink-0 max-w-full ${seriesDisabled ? 'pointer-events-none opacity-60' : ''}" data-folder-path="${escapeHtml(path)}">
+  const seriesLockTip = seriesDisabled
+    ? ` tooltip tooltip-top" data-tip="${escapeHtml(seriesTip)}"`
+    : '"';
+  return `
+  <div class="join join-horizontal shrink-0 max-w-full${seriesDisabled ? ' import-join-locked' : ''}" data-folder-path="${escapeHtml(path)}">
     <details class="dropdown dropdown-bottom js-import-folder-series-dd">
-      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden shrink-0" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ''}>
+      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden shrink-0${seriesLockTip} aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ''}>
         ${seriesTriggerInnerHTML(st)}
       </summary>
       <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-80">
@@ -2019,17 +2058,9 @@ function folderSeriesPickersHTML(folderPath) {
         <ul class="list bg-base-100 max-h-64 overflow-y-auto js-import-series-list" role="listbox" aria-label="Series"></ul>
       </div>
     </details>
-    <button type="button" class="btn btn-square join-item js-import-create-folder-series tooltip tooltip-top" data-tip="Create new" aria-label="Create new" ${createSeriesDisabled ? 'disabled' : ''}>
-      <i data-lucide="plus" class="size-5" aria-hidden="true"></i>
-    </button>
-    <button type="button" class="btn btn-soft btn-error btn-square join-item js-import-reset-folder-series tooltip tooltip-top" data-tip="Clear" aria-label="Clear" ${seriesResetDisabled ? 'disabled' : ''}>
-      <i data-lucide="unlink" class="size-5" aria-hidden="true"></i>
-    </button>
+    ${importJoinActionBtnHTML('js-import-create-folder-series', 'Create new', 'plus', createSeriesDisabled, false)}
+    ${importJoinActionBtnHTML('js-import-reset-folder-series', 'Clear', 'unlink', seriesResetDisabled, true)}
   </div>`;
-  if (seriesDisabled) {
-    return `<span class="tooltip tooltip-top inline-flex max-w-full" data-tip="${escapeHtml(seriesTip)}">${joinInner}</span>`;
-  }
-  return joinInner;
 }
 
 /**
@@ -2157,12 +2188,15 @@ function buildFolderRow(node, guideOpts, parentPath) {
   li.className = 'import-folder py-1';
   li.dataset.folderPath = node.path;
   const label = folderPathLabel(node.path, parentPath);
-  const icon = node.depth === 0 ? 'inbox' : 'folder';
+  const abs = normImportPath(node.path) || String(node.path || '');
+  const tip = seriesFolderAt(node.path) ? (abs ? abs + '/tvshow.nfo' : '') : (abs ? abs + '/' : '');
+  const nfoFolder = !!seriesFolderAt(node.path);
+  const icon = node.depth === 0 ? 'inbox' : (nfoFolder ? 'file-text' : 'folder');
   const body = `
     <div class="${importRowBoxClass('neutral')}">
       <div class="flex flex-wrap items-center gap-1.5 text-xs min-w-0">
         <i data-lucide="${icon}" class="size-4 opacity-70 shrink-0" aria-hidden="true"></i>
-        <span class="min-w-0"><code class="text-xs break-all">${escapeHtml(label)}</code></span>
+        <span class="min-w-0">${pathCodeHTML(label, tip || abs)}</span>
         ${folderMetaMarksHTML(node.path)}
       </div>
       ${folderSeriesPickersHTML(node.path)}
@@ -3034,6 +3068,13 @@ if (importListRoot) {
     }
     applyVideoPick(key, kind, vid.getAttribute('data-import-pick-video'));
   });
+  // Locked summary: block native details open (aria-disabled alone does not).
+  importListRoot.addEventListener('click', (ev) => {
+    const summary = ev.target.closest('summary.btn');
+    if (summary && summary.getAttribute('aria-disabled') === 'true' && importListRoot.contains(summary)) {
+      ev.preventDefault();
+    }
+  }, true);
   importListRoot.addEventListener('click', (ev) => {
     const folderJoin = ev.target.closest('[data-folder-path]');
     if (folderJoin) {
@@ -3042,12 +3083,14 @@ if (importListRoot) {
         ev.preventDefault();
         return;
       }
-      if (ev.target.closest('.js-import-create-folder-series')) {
-        startCreateSeriesForFolder(path);
+      const createFolder = ev.target.closest('.js-import-create-folder-series');
+      if (createFolder) {
+        if (!importActionIsOff(createFolder)) startCreateSeriesForFolder(path);
         return;
       }
-      if (ev.target.closest('.js-import-reset-folder-series')) {
-        resetFolderSeriesPick(path);
+      const resetFolder = ev.target.closest('.js-import-reset-folder-series');
+      if (resetFolder) {
+        if (!importActionIsOff(resetFolder)) resetFolderSeriesPick(path);
         return;
       }
     }
@@ -3060,20 +3103,24 @@ if (importListRoot) {
       ev.preventDefault();
       return;
     }
-    if (ev.target.closest('.js-import-create-series')) {
-      startCreateSeriesForRow(key, kind);
+    const createSeries = ev.target.closest('.js-import-create-series');
+    if (createSeries) {
+      if (!importActionIsOff(createSeries)) startCreateSeriesForRow(key, kind);
       return;
     }
-    if (ev.target.closest('.js-import-create-video')) {
-      startCreateVideoForRow(key, kind);
+    const createVideo = ev.target.closest('.js-import-create-video');
+    if (createVideo) {
+      if (!importActionIsOff(createVideo)) startCreateVideoForRow(key, kind);
       return;
     }
-    if (ev.target.closest('.js-import-reset-series')) {
-      resetSeriesPick(key);
+    const resetSeries = ev.target.closest('.js-import-reset-series');
+    if (resetSeries) {
+      if (!importActionIsOff(resetSeries)) resetSeriesPick(key);
       return;
     }
-    if (ev.target.closest('.js-import-reset-video')) {
-      resetVideoPick(key, kind);
+    const resetVideo = ev.target.closest('.js-import-reset-video');
+    if (resetVideo) {
+      if (!importActionIsOff(resetVideo)) resetVideoPick(key, kind);
     }
   });
 }

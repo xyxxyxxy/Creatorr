@@ -13,7 +13,6 @@
 @source "../../templates/**/*.html";
 @source "../../partials/**/*.html";
 @source "../../static/app.js";
-@source "../../static/library_picker.js";
 
 /*
   Exception (approved): daisyUI .modal-box uses overflow-y:auto, which clips tooltip
@@ -38,8 +37,8 @@
 }
 
 /*
-  Notifications + flash toasts above .modal (z-index 1200) so the Select series/video
-  library picker does not trap the bell menu or toasts under the backdrop.
+  Notifications + flash toasts above .modal (z-index 1200) so dialogs do not trap the
+  bell menu or toasts under the backdrop.
   daisyUI .toast-top defaults to top:1rem (over sticky navbar bell/user); offset below
   min-h-14 header + small gap.
 */
@@ -59,6 +58,13 @@
 #import-list .tooltip:is(:hover, :focus-within),
 #import-summary-tree .tooltip:is(:hover, :focus-within) {
   z-index: 40;
+}
+/* Episode pick list: Special kind tip must clear the scroll panel chrome. */
+#import-list details.dropdown[open] .js-import-video-list .tooltip:is(:hover, :focus-within) {
+  z-index: 60;
+}
+#import-list details.dropdown[open] .dropdown-content {
+  overflow: visible;
 }
 
 /*
@@ -85,6 +91,14 @@
   max-width: 18rem;
   flex-shrink: 0;
 }
+/* Episode pick panel: wider than summary so title + Special kind badge fit; no x-scroll. */
+#import-list .js-import-video-dd > .js-import-video-panel {
+  width: 28rem;
+  max-width: min(28rem, calc(100vw - 2rem));
+}
+#import-list .js-import-video-list {
+  overflow-x: hidden;
+}
 /* Episode trigger thumb: same height as series size-8 poster, 16:9 width. */
 #import-list .js-import-video-thumb {
   height: 2rem;
@@ -101,6 +115,21 @@
 #import-list .import-row-warn {
   border-color: color-mix(in oklab, var(--color-warning) 50%, transparent);
   background-color: color-mix(in oklab, var(--color-warning) 10%, transparent);
+}
+/*
+  Locked Match joins: mute without opacity on the join (opacity lets warn/ok
+  row fill bleed through the btn and look orange/green).
+*/
+#import-list .import-join-locked > .btn,
+#import-list .import-join-locked > details > summary.btn {
+  background-color: var(--color-base-100);
+  color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+  border-color: var(--color-base-300);
+  opacity: 1;
+}
+#import-list .import-join-locked .btn-soft.btn-error {
+  background-color: var(--color-base-100);
+  color: color-mix(in oklab, var(--color-base-content) 40%, transparent);
 }
 /* Flat list tree rail (│ ├ └). */
 #import-list .import-tree-guide {
