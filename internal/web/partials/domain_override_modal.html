@@ -14,11 +14,19 @@
 {{$listID := printf "%s-datalist" $id}}
 {{$flareOn := and (eq .FlareOverride "on") .FlareConfigured}}
 {{$flareOK := .FlareConfigured}}
+{{$cookieContent := ""}}{{with .CookieContent}}{{$cookieContent = .}}{{end}}
+{{$hasCookies := ne $cookieContent ""}}
+{{/* Exclusive Access: Flare XOR non-empty jar. Legacy both-set leaves both editable; Save rejects. */}}
+{{$flareExclusiveDisabled := and $hasCookies (not $flareOn)}}
+{{$cookiesExclusiveReadonly := and $flareOn (not $hasCookies)}}
+{{$flareDisabled := or (not $flareOK) $flareExclusiveDisabled}}
+{{$flareDisabledTitle := "Set CREATORR_FLARESOLVERR_URL first (Compose default http://creatorr-flaresolverr:8191). See 'Settings → Connect'."}}
+{{if and $flareOK $flareExclusiveDisabled}}{{$flareDisabledTitle = "Clear the cookie jar first. FlareSolverr and account cookies cannot both be set: Flare merges anonymous cookies over the jar and would overwrite session cookies."}}{{end}}
 <input type="checkbox" id="{{$id}}" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box max-w-3xl w-11/12">
     <h3 class="font-bold text-lg mb-2">{{if $edit}}Edit {{.Domain}} domain overrides{{else}}Add domain override{{end}}</h3>
-    <form method="post" action="/actions/upsert-domain-override" class="space-y-3 js-domain-override-form" novalidate>
+    <form method="post" action="/actions/upsert-domain-override" class="space-y-3 js-domain-override-form" novalidate{{if .FlareConfigured}} data-flare-configured="1"{{end}}>
       <input type="hidden" name="redirect" value="{{.Redirect}}" />
       <div class="grid gap-3">
         <fieldset class="fieldset">
@@ -84,22 +92,25 @@
         <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
           <legend class="fieldset-legend">Access</legend>
           {{template "cookie_jar_field" (dict
-            "Value" .CookieContent
+            "Value" $cookieContent
             "ShowGuide" true
+            "Readonly" $cookiesExclusiveReadonly
+            "DisabledTitle" "Turn off Use FlareSolverr first. Flare and account cookies cannot both be set: Flare merges anonymous cookies over the jar and would overwrite session cookies."
           )}}
           {{template "checkbox_field" (dict
             "Name" "cookies_after_fail"
-            "Label" "Use cookies only as fallback for failed downloads"
+            "Label" "Use cookies only as fallback after failure"
             "Checked" .CookiesAfterFail
-            "Hint" "Tries download without the cookies first and retries once with cookies on failure, unless the error is clearly unrelated to login (rate limit, live broadcast, removed video). While enabled, scan / metadata / sidecar yt-dlp calls never use the stored jar. Keeps the logged-in session off most traffic and lowers ban risk."
+            "Hint" "First try without the jar; on failures where cookies might help (age gate, login/cookie errors, generic resolve/download fails), retry once with cookies. Skip retry for rate limit, live broadcast, removed video. Applies to scan, metadata, sidecars, and download. Mostly-public channels benefit most; always-auth / age-gated-only hosts still pay a double invoke before cookies attach - leave Off there if you want the jar on the first try."
           )}}
           {{template "checkbox_field" (dict
             "Name" "use_flaresolverr"
             "Label" "Use FlareSolverr"
             "Checked" $flareOn
-            "Disabled" (not $flareOK)
-            "DisabledTitle" "Set CREATORR_FLARESOLVERR_URL first (Compose default http://creatorr-flaresolverr:8191). See 'Settings → Connect'."
-            "Hint" "Pre-solve CloudFlare challenges for this domain. Requires CREATORR_FLARESOLVERR_URL ('Settings → Connect')."
+            "InputClass" "js-domain-flare"
+            "Disabled" $flareDisabled
+            "DisabledTitle" $flareDisabledTitle
+            "Hint" "Pre-solve CloudFlare challenges for this domain. Mutually exclusive with a non-empty cookie jar (Flare merges anonymous cookies over the jar). Requires CREATORR_FLARESOLVERR_URL ('Settings → Connect')."
           )}}
           {{template "domain_credentials_field" (dict
             "Override" true

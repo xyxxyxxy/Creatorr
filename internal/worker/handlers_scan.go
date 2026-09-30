@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
-	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
@@ -58,19 +58,6 @@ func ScanHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
-		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, src.URL)
-		if err != nil {
-			mode := library.SourceHistModeScan
-			if !src.FullScanDone {
-				mode = library.SourceHistModeFull
-			}
-			_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, err.Error(), map[string]any{
-				"mode": mode,
-				"code": apperrors.CodeCookieInvalid,
-			}, t.ID)
-			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
-		}
-
 		domain := queue.DomainFromURL(src.URL)
 		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
 
@@ -81,8 +68,16 @@ func ScanHandler(d Deps) TaskHandler {
 			mode = library.SourceHistModeFull
 			playlistEnd = src.FullScanLimit
 		}
-		entries, err := listEntries(ctx, d, src.URL, jar, playlistEnd, lim)
+		entries, attach, err := listEntriesWithCookieFallback(ctx, d, work, src.URL, playlistEnd, lim)
+		persistCookieAttach(d, t.ID, attach)
 		if err != nil {
+			if apperrors.ErrorCode(err) == apperrors.CodeCookieInvalid && strings.Contains(err.Error(), "cookie jar failed") {
+				_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, err.Error(), map[string]any{
+					"mode": mode,
+					"code": apperrors.CodeCookieInvalid,
+				}, t.ID)
+				return err
+			}
 			code, msg := classify(err)
 			_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, msg+": "+err.Error(), map[string]any{
 				"mode": mode,

@@ -378,7 +378,7 @@ type DomainQueueRow struct {
 	UseFlareSolverr     bool // effective resolved flare (defaults + override)
 	HasCookies          bool
 	CookieContent       string // Netscape jar text for edit modal
-	CookiesAfterFail    bool   // omit stored jar until download retry
+	CookiesAfterFail    bool   // omit stored jar until failure; one cookie retry on yt-dlp invokes
 	HasCredentials              bool   // host row sets non-empty username
 	CredentialsUsername         string // host override username for edit modal
 	CredentialsInherit          bool   // host row username NULL (inherit default)

@@ -12,7 +12,7 @@ import (
 // DetailKeyCookieAttach is the tasks.detail JSON key for CookieAttachStatus.
 const DetailKeyCookieAttach = "cookie-attach"
 
-// Cookie attach outcome states for download task detail / Stages.
+// Cookie attach outcome states for task detail / Stages.
 const (
 	CookieAttachOff       = "off"       // no stored jar
 	CookieAttachAnonymous = "anonymous" // download succeeded without account jar
@@ -72,16 +72,6 @@ func SetCookiesAfterFail(database *db.DB, domain string, on bool) error {
 	return err
 }
 
-// AllowStoredJar reports whether the stored Netscape jar may be attached.
-// When cookies_after_fail is off, always allow. When on, allow only on the
-// download retry pass (downloadRetryPass true).
-func AllowStoredJar(cookiesAfterFail, downloadRetryPass bool) bool {
-	if !cookiesAfterFail {
-		return true
-	}
-	return downloadRetryPass
-}
-
 // CookieAttachStage is one Stages note derived from cookie-attach detail.
 type CookieAttachStage struct {
 	Event    string
@@ -89,7 +79,7 @@ type CookieAttachStage struct {
 	HasError bool
 }
 
-// SplitDownloadAttempts reports whether Stages should show two download nodes
+// SplitDownloadAttempts reports whether Stages should show two attempt nodes
 // (anonymous failure, then cookie retry) under cookies-after-fail.
 func (s CookieAttachStatus) SplitDownloadAttempts() bool {
 	return s.AfterFail && s.State == CookieAttachRetried

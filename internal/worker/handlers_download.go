@@ -80,27 +80,13 @@ func DownloadHandler(d Deps) TaskHandler {
 		if archiveLane {
 			cookieURL = "https://archive.org/"
 		}
-		var jar string
-		var hadStored bool
-		var afterFail bool
-		persistCookieAttach := func(st domains.CookieAttachStatus) {
-			if d.Library.Queue == nil {
-				return
-			}
-			_ = d.Library.Queue.MergeDetailJSON(t.ID, map[string]any{domains.DetailKeyCookieAttach: st})
+		persistCookieAttachFn := func(st domains.CookieAttachStatus) {
+			persistCookieAttach(d, t.ID, st)
 		}
 		if archiveLane {
 			progress("Web Archive download…", nil)
 		} else {
 			progress("Resolving cookies…", nil)
-		}
-		afterFail, err = domains.CookiesAfterFailForURL(d.Library.DB, cookieURL)
-		if err != nil {
-			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
-		}
-		jar, hadStored, err = domains.StoredJarForURL(d.Library.DB, work, cookieURL, domains.AllowStoredJar(afterFail, false))
-		if err != nil {
-			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
 		}
 
 		audioOnly := dlctx.DeliveryMode == library.DeliveryAudio
@@ -130,7 +116,21 @@ func DownloadHandler(d Deps) TaskHandler {
 			}
 		}
 
-		if !archiveLane {
+		var media string
+		var attach domains.CookieAttachStatus
+		if archiveLane {
+			media, err = downloadMedia(ctx, d, dlOpts(""))
+			attach = domains.CookieAttachStatus{State: domains.CookieAttachOff}
+			_ = ytdlp.TakePOTAttempt(ctx)
+		} else {
+			afterFail, aerr := domains.CookiesAfterFailForURL(d.Library.DB, cookieURL)
+			if aerr != nil {
+				return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), aerr.Error())
+			}
+			jar, hadStored, jerr := domains.StoredJarForURL(d.Library.DB, work, cookieURL, domains.AllowStoredJar(afterFail, false))
+			if jerr != nil {
+				return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), jerr.Error())
+			}
 			if afterFail && hadStored {
 				progress("Downloading without account cookies…", nil)
 			} else if jar != "" {
@@ -138,30 +138,19 @@ func DownloadHandler(d Deps) TaskHandler {
 			} else {
 				progress("Downloading…", nil)
 			}
-		}
-		media, err := downloadMedia(ctx, d, dlOpts(jar))
-		usedCookies := jar != ""
-		retried := false
-		retryReason := ""
-		_ = ytdlp.TakePOTAttempt(ctx)
-		if err != nil && afterFail && hadStored && !apperrors.CookieRetryWorthless(err) {
-			retryReason = apperrors.ErrorCode(err)
-			if retryReason == "" {
-				retryReason = apperrors.CodeDownloadFailed
-			}
-			progress(fmt.Sprintf("Failure without cookies (%s); retrying with account cookies…", retryReason), nil)
-			jar2, _, jerr := domains.StoredJarForURL(d.Library.DB, work, cookieURL, true)
-			if jerr != nil {
-				return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), jerr.Error())
-			}
-			if !archiveLane {
+			media, attach, err = domains.InvokeWithCookieFallback(afterFail, hadStored, jar, func() (string, error) {
+				path, _, e := domains.StoredJarForURL(d.Library.DB, work, cookieURL, true)
+				return path, e
+			}, func(cookiesPath string) (string, error) {
+				out, e := downloadMedia(ctx, d, dlOpts(cookiesPath))
+				_ = ytdlp.TakePOTAttempt(ctx)
+				return out, e
+			}, func(reason string) {
+				progress(fmt.Sprintf("Failure without cookies (%s); retrying with account cookies…", reason), nil)
 				progress("Downloading with account cookies…", nil)
-			}
-			media, err = downloadMedia(ctx, d, dlOpts(jar2))
-			usedCookies = true
-			retried = true
-			_ = ytdlp.TakePOTAttempt(ctx)
+			})
 		}
+		persistCookieAttachFn(attach)
 		if err != nil {
 			if !archiveLane && apperrors.DetectVideoUnavailable(err.Error()) {
 				on, _ := settings.ArchiveFallbackEnabled(d.Library.DB)
@@ -177,45 +166,8 @@ func DownloadHandler(d Deps) TaskHandler {
 					)
 				}
 			}
-			// Persist cookie path even on failure so Stages/Details stay accurate.
-			st := domains.CookieAttachStatus{AfterFail: afterFail}
-			switch {
-			case !hadStored:
-				st.State = domains.CookieAttachOff
-			case retried:
-				st.State = domains.CookieAttachRetried
-				st.RetryReason = retryReason
-				st.Detail = "cookie retry failed"
-			case afterFail:
-				st.State = domains.CookieAttachAnonymous
-				st.Detail = "download failed without account cookies"
-			case usedCookies:
-				st.State = domains.CookieAttachCookies
-			default:
-				st.State = domains.CookieAttachOff
-			}
-			persistCookieAttach(st)
 			return err
 		}
-		st := domains.CookieAttachStatus{AfterFail: afterFail}
-		switch {
-		case !hadStored:
-			st.State = domains.CookieAttachOff
-		case retried:
-			st.State = domains.CookieAttachRetried
-			st.RetryReason = retryReason
-			st.Detail = "succeeded after cookie retry"
-		case afterFail:
-			st.State = domains.CookieAttachAnonymous
-			st.Detail = "succeeded without account cookies"
-		case usedCookies:
-			st.State = domains.CookieAttachCookies
-			st.Detail = "account cookies attached"
-		default:
-			st.State = domains.CookieAttachOff
-		}
-		persistCookieAttach(st)
-
 		if st, _ := d.Library.Queue.TaskStatus(t.ID); st == queue.StatusCancelled {
 			return context.Canceled
 		}

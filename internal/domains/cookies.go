@@ -81,6 +81,9 @@ func SetCookies(database *db.DB, domain, content string) error {
 	if strings.TrimSpace(content) == "" {
 		return ClearCookies(database, domain)
 	}
+	if err := RejectCookiesWhileFlareOn(database, domain, content); err != nil {
+		return err
+	}
 	if err := EnsureHost(database, domain); err != nil {
 		return err
 	}

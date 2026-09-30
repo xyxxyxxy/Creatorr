@@ -55,7 +55,7 @@
             class="textarea w-full{{$vClass}} {{if .Mono}}font-mono{{end}} {{.InputClass}}"
             {{if .Rows}}rows="{{.Rows}}"{{end}}
             {{if not .NoPlaceholder}}placeholder="{{$ph}}"{{end}}
-            {{if .Required}}required{{end}}>{{.Value}}</textarea>
+            {{if .Required}}required{{end}} {{if .Readonly}}readonly{{end}}>{{.Value}}</textarea>
   {{if $validator}}<p class="validator-hint hidden">{{$vHint}}</p>{{end}}
   {{end}}
   {{else if eq $type "select"}}

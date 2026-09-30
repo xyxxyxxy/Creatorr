@@ -447,7 +447,7 @@ func (d *DB) migrateTo13() error {
 	return nil
 }
 
-// migrateTo14 adds domains.cookies_after_fail (omit stored jar until download retry).
+// migrateTo14 adds domains.cookies_after_fail (omit stored jar until failure; cookie retry).
 func (d *DB) migrateTo14() error {
 	has, err := d.tableHasColumn("domains", "cookies_after_fail")
 	if err != nil {

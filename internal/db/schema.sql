@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS domain_runtime (
 -- Host rows: NULL task_cooldown_seconds / max_download_queue / max_parallel_tasks / download_rate_limit / sleep_requests / use_flaresolverr → use domain=default.
 -- domain=default limit columns + use_flaresolverr must be non-NULL. Domains are never auto-deleted when sources go away.
 -- Access (host overrides): cookies (Netscape jar text; NULL/empty = none), username/password (NULL/empty = none). No default-jar fallback.
--- cookies_after_fail: when 1, omit stored jar except download retry after a non-worthless failure.
+-- cookies_after_fail: when 1, omit stored jar until failure; one cookie retry on yt-dlp invokes unless CookieRetryWorthless.
 CREATE TABLE IF NOT EXISTS domains (
   domain TEXT PRIMARY KEY,
   active INTEGER NOT NULL DEFAULT 1,

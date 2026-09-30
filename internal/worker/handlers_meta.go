@@ -51,11 +51,7 @@ func RefreshSidecarsHandler(d Deps) TaskHandler {
 		defer func() { _ = os.RemoveAll(work) }()
 
 		progress("Resolving cookies…", ptrFloat(0.1))
-		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, url)
-		if err != nil {
-			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
-		}
-		if err := refreshSidecars(ctx, d, work, jar, url, t.Domain, t.VideoID.Int64, t.ID, progress, false); err != nil {
+		if err := refreshSidecars(ctx, d, work, url, t.Domain, t.VideoID.Int64, t.ID, progress, false); err != nil {
 			return err
 		}
 		if library.TaskPayloadMaturity(t.Payload) {
@@ -112,19 +108,16 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 	defer func() { _ = os.RemoveAll(work) }()
 
 	progress("Fetching metadata…", ptrFloat(0.05))
-	jar, err := domains.TempJarForNonDownload(d.Library.DB, work, url)
-	if err != nil {
-		return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
-	}
 	flare, err := domains.FlareSolverrURL(d.Library.DB, t.Domain)
 	if err != nil {
 		return err
 	}
 	lim, _ := settings.LimitsForDomain(d.Library.DB, t.Domain)
-	e, err := resolveEntry(ctx, d, ytdlp.ResolveOpts{
-		URL: url, CookiesPath: jar, FlareSolverrURL: flare,
+	e, attach, err := resolveEntryWithCookieFallback(ctx, d, work, ytdlp.ResolveOpts{
+		URL: url, FlareSolverrURL: flare,
 		LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 	})
+	persistCookieAttach(d, t.ID, attach)
 	if err != nil {
 		return err
 	}
@@ -146,14 +139,14 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 		_ = d.Library.SoftFillVideoFromEntry(vid, e, t.ID)
 	}
 	progress("Refreshing sidecars…", ptrFloat(0.7))
-	if err := refreshSidecars(ctx, d, work, jar, url, t.Domain, vid, t.ID, progress, library.TaskPayloadGapFill(t.Payload)); err != nil {
+	if err := refreshSidecars(ctx, d, work, url, t.Domain, vid, t.ID, progress, library.TaskPayloadGapFill(t.Payload)); err != nil {
 		return err
 	}
 	progress("Done", ptrFloat(1))
 	return nil
 }
 
-func refreshSidecars(ctx context.Context, d Deps, work, jar, url, domain string, videoID, taskID int64, progress func(msg string, pct *float64), gapFill bool) error {
+func refreshSidecars(ctx context.Context, d Deps, work, url, domain string, videoID, taskID int64, progress func(msg string, pct *float64), gapFill bool) error {
 	_, hasFile, err := d.Library.HasPackAnchor(videoID)
 	if err != nil {
 		return err
@@ -170,11 +163,12 @@ func refreshSidecars(ctx context.Context, d Deps, work, jar, url, domain string,
 	if progress != nil {
 		progress("Fetching sidecars…", ptrFloat(0.4))
 	}
-	infoPath, thumbPath, subPaths, err := fetchSidecars(ctx, d, ytdlp.SidecarsOpts{
-		URL: url, CookiesPath: jar, OutDir: sideWork,
+	infoPath, thumbPath, subPaths, attach, err := fetchSidecarsWithCookieFallback(ctx, d, work, ytdlp.SidecarsOpts{
+		URL: url, OutDir: sideWork,
 		LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 		SubLangs: subOpts.Langs, SubAuto: subOpts.Auto,
 	})
+	persistCookieAttach(d, taskID, attach)
 	if err != nil {
 		return err
 	}
@@ -217,20 +211,16 @@ func metadataRescanSeries(ctx context.Context, d Deps, t *queue.Task, progress f
 		}
 		progress(fmt.Sprintf("Listing source %d/%d: %s", i+1, n, label), ptrFloat(float64(i)/float64(n)))
 
-		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, src.URL)
-		if err != nil {
-			_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, err.Error(), map[string]any{
-				"mode": library.SourceHistModeRescanMetadata,
-				"code": apperrors.CodeCookieInvalid,
-			}, t.ID)
-			lastErr = apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
-			continue
-		}
 		domain := queue.DomainFromURL(src.URL)
 		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
-		entries, err := listEntries(ctx, d, src.URL, jar, 0, lim)
+		entries, attach, err := listEntriesWithCookieFallback(ctx, d, work, src.URL, 0, lim)
+		persistCookieAttach(d, t.ID, attach)
 		if err != nil {
 			code, msg := classify(err)
+			if apperrors.ErrorCode(err) == apperrors.CodeCookieInvalid {
+				code = apperrors.CodeCookieInvalid
+				msg = err.Error()
+			}
 			_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, msg+": "+err.Error(), map[string]any{
 				"mode": library.SourceHistModeRescanMetadata,
 				"code": code,
@@ -262,7 +252,7 @@ func metadataRescanSeries(ctx context.Context, d Deps, t *queue.Task, progress f
 				continue
 			}
 			url = library.DownloadURL(url, e.ID)
-			if err := refreshSidecars(ctx, d, work, jar, url, domain, vid, t.ID, progress, false); err != nil {
+			if err := refreshSidecars(ctx, d, work, url, domain, vid, t.ID, progress, false); err != nil {
 				lastErr = err
 				continue
 			}
@@ -316,19 +306,16 @@ func PrefetchSeriesMetaHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
-		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, fetchURL)
-		if err != nil {
-			return err
-		}
 		domain := queue.DomainFromURL(fetchURL)
 		flare, err := domains.FlareSolverrURL(d.Library.DB, domain)
 		if err != nil {
 			return err
 		}
 		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
-		info, err := dumpPlaylistInfo(ctx, d, ytdlp.ListOpts{
-			URL: fetchURL, CookiesPath: jar, PlaylistEnd: 1, FlareSolverrURL: flare,
+		info, attach, err := dumpPlaylistInfoWithCookieFallback(ctx, d, work, ytdlp.ListOpts{
+			URL: fetchURL, PlaylistEnd: 1, FlareSolverrURL: flare,
 		})
+		persistCookieAttach(d, t.ID, attach)
 		if err != nil {
 			draft := library.PrefetchDraft{Error: err.Error(), ArtFiles: map[string]string{}}
 			_ = d.Library.WritePrefetchDraft(t.SeriesID.Int64, t.ID, draft)
@@ -390,19 +377,14 @@ func ProbeSourceTitleHandler(d Deps) TaskHandler {
 			return err
 		}
 		defer func() { _ = os.RemoveAll(work) }()
-		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, fetchURL)
-		if err != nil {
-			jar = ""
-		}
 		flare, err := domains.FlareSolverrURL(d.Library.DB, queue.DomainFromURL(fetchURL))
 		if err != nil {
 			return err
 		}
-		authUser, authPass := ytdlpAuth(d.Library.DB, fetchURL)
-		e, err := d.YtDlp.Resolve(ctx, ytdlp.ResolveOpts{
-			URL: fetchURL, CookiesPath: jar, Username: authUser, Password: authPass,
-			FlareSolverrURL: flare,
+		e, attach, err := resolveEntryWithCookieFallback(ctx, d, work, ytdlp.ResolveOpts{
+			URL: fetchURL, FlareSolverrURL: flare,
 		})
+		persistCookieAttach(d, t.ID, attach)
 		if err != nil {
 			return err
 		}
@@ -446,10 +428,6 @@ func PrefetchAddSeriesHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
-		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, fetchURL)
-		if err != nil {
-			jar = ""
-		}
 		domain := queue.DomainFromURL(fetchURL)
 		flare, err := domains.FlareSolverrURL(d.Library.DB, domain)
 		if err != nil {
@@ -458,9 +436,10 @@ func PrefetchAddSeriesHandler(d Deps) TaskHandler {
 			return err
 		}
 		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
-		info, err := dumpPlaylistInfo(ctx, d, ytdlp.ListOpts{
-			URL: fetchURL, CookiesPath: jar, PlaylistEnd: 1, FlareSolverrURL: flare,
+		info, attach, err := dumpPlaylistInfoWithCookieFallback(ctx, d, work, ytdlp.ListOpts{
+			URL: fetchURL, PlaylistEnd: 1, FlareSolverrURL: flare,
 		})
+		persistCookieAttach(d, t.ID, attach)
 		if err != nil {
 			draft := library.PrefetchDraft{Error: err.Error(), ArtFiles: map[string]string{}}
 			_ = d.Library.WriteAddSeriesDraft(token, draft)
@@ -508,12 +487,6 @@ func PrefetchAddVideoHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
-		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, fetchURL)
-		if err != nil {
-			draft := library.AddVideoDraft{Error: err.Error()}
-			_ = d.Library.WriteAddVideoDraft(token, draft)
-			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
-		}
 		domain := queue.DomainFromURL(fetchURL)
 		flare, err := domains.FlareSolverrURL(d.Library.DB, domain)
 		if err != nil {
@@ -522,9 +495,10 @@ func PrefetchAddVideoHandler(d Deps) TaskHandler {
 			return err
 		}
 		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
-		e, err := resolveEntry(ctx, d, ytdlp.ResolveOpts{
-			URL: fetchURL, CookiesPath: jar, FlareSolverrURL: flare,
+		e, attach, err := resolveEntryWithCookieFallback(ctx, d, work, ytdlp.ResolveOpts{
+			URL: fetchURL, FlareSolverrURL: flare,
 		})
+		persistCookieAttach(d, t.ID, attach)
 		if err != nil {
 			draft := library.AddVideoDraft{Error: err.Error()}
 			_ = d.Library.WriteAddVideoDraft(token, draft)
@@ -569,21 +543,16 @@ func PrefetchVideoMetaHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
-		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, fetchURL)
-		if err != nil {
-			draft := library.VideoPrefetchDraft{Error: err.Error()}
-			_ = d.Library.WriteVideoPrefetchDraft(videoID, t.ID, draft)
-			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
-		}
 		domain := queue.DomainFromURL(fetchURL)
 		flare, err := domains.FlareSolverrURL(d.Library.DB, domain)
 		if err != nil {
 			return err
 		}
 		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
-		e, err := resolveEntry(ctx, d, ytdlp.ResolveOpts{
-			URL: fetchURL, CookiesPath: jar, FlareSolverrURL: flare,
+		e, attach, err := resolveEntryWithCookieFallback(ctx, d, work, ytdlp.ResolveOpts{
+			URL: fetchURL, FlareSolverrURL: flare,
 		})
+		persistCookieAttach(d, t.ID, attach)
 		if err != nil {
 			draft := library.VideoPrefetchDraft{Error: err.Error()}
 			_ = d.Library.WriteVideoPrefetchDraft(videoID, t.ID, draft)

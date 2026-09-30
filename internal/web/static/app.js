@@ -4039,14 +4039,55 @@
     return msg;
   }
 
+  /** Flare XOR non-empty jar while editing (server also rejects both-set). */
+  function syncDomainFlareCookieExclusive(form) {
+    if (!form || !form.classList.contains("js-domain-override-form")) return;
+    const cookies = form.querySelector(".js-domain-cookies");
+    const flare = form.querySelector(".js-domain-flare");
+    if (!cookies || !flare) return;
+    const hasCookies = String(cookies.value || "").trim().length > 0;
+    const flareOn = !!flare.checked;
+    const flareUrlOk = form.getAttribute("data-flare-configured") === "1";
+    // Legacy both-set: leave both editable; Save rejects with explanation.
+    if (hasCookies && flareOn) {
+      cookies.readOnly = false;
+      if (flareUrlOk) flare.disabled = false;
+      return;
+    }
+    if (hasCookies) {
+      cookies.readOnly = false;
+      flare.checked = false;
+      flare.disabled = true;
+      return;
+    }
+    if (flareOn) {
+      cookies.readOnly = true;
+      if (flareUrlOk) flare.disabled = false;
+      return;
+    }
+    cookies.readOnly = false;
+    if (flareUrlOk) flare.disabled = false;
+    else flare.disabled = true;
+  }
+
   document.body.addEventListener("input", (ev) => {
     const input = ev.target.closest(".js-domain-override-domain");
-    if (!input) return;
-    syncDomainOverrideForm(input.closest("form"));
+    if (input) syncDomainOverrideForm(input.closest("form"));
+    const form = ev.target.closest(".js-domain-override-form");
+    if (form && (ev.target.closest(".js-domain-cookies") || ev.target.closest(".js-domain-flare"))) {
+      syncDomainFlareCookieExclusive(form);
+    }
+  });
+  document.body.addEventListener("change", (ev) => {
+    const form = ev.target.closest(".js-domain-override-form");
+    if (form && (ev.target.closest(".js-domain-cookies") || ev.target.closest(".js-domain-flare"))) {
+      syncDomainFlareCookieExclusive(form);
+    }
   });
   document.body.addEventListener("submit", (ev) => {
     const form = ev.target.closest(".js-domain-override-form");
     if (!form) return;
+    syncDomainFlareCookieExclusive(form);
     const domainMsg = syncDomainOverrideForm(form);
     if (domainMsg) {
       ev.preventDefault();
@@ -4056,6 +4097,19 @@
           input.focus();
           if (typeof input.select === "function") input.select();
         }
+      } catch (_) {}
+      return;
+    }
+    const cookies = form.querySelector(".js-domain-cookies");
+    const flare = form.querySelector(".js-domain-flare");
+    if (cookies && flare && String(cookies.value || "").trim() && flare.checked && !flare.disabled) {
+      ev.preventDefault();
+      setControlValidity(
+        cookies,
+        "Cannot enable Use FlareSolverr with a non-empty cookie jar: Flare merges anonymous cookies over the jar and would overwrite session cookies. Clear the jar or turn Flare off."
+      );
+      try {
+        cookies.focus();
       } catch (_) {}
       return;
     }

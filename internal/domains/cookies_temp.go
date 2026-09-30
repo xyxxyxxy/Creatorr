@@ -46,8 +46,9 @@ func TempJarForURL(database *db.DB, dir, rawURL string, allowStored bool) (strin
 	return WriteTempJar(dir, host, content)
 }
 
-// TempJarForNonDownload materializes the stored jar unless cookies_after_fail is on
-// (scan / meta / sidecars never use the account jar in that mode).
+// TempJarForNonDownload materializes the stored jar for the first yt-dlp pass.
+// When cookies_after_fail is on, returns empty path (anonymous first); use
+// InvokeWithCookieFallback for the retry-with-jar path.
 func TempJarForNonDownload(database *db.DB, dir, rawURL string) (string, error) {
 	afterFail, err := CookiesAfterFailForURL(database, rawURL)
 	if err != nil {

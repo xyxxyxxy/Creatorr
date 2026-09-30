@@ -429,7 +429,7 @@ paths:
         "204":
           description: Saved
         "400":
-          description: Invalid (including domain=default)
+          description: Invalid domain, empty/invalid body, or FlareSolverr On with a non-empty jar (mutually exclusive)
           content:
             application/json:
               schema:

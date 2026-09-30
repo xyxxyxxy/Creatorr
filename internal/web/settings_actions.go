@@ -299,10 +299,17 @@ func (h *Handler) actionUpsertDomainOverride(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	flareStr := "default"
+	flareOn := false
 	if strings.TrimSpace(h.FlareSolverrURL) != "" {
 		if v := strings.TrimSpace(r.FormValue("use_flaresolverr")); v == "1" || strings.EqualFold(v, "on") || strings.EqualFold(v, "true") {
 			flareStr = "on"
+			flareOn = true
 		}
+	}
+	cookieContent := r.FormValue("cookies")
+	if err := domains.RejectFlareWithCookies(flareOn, cookieContent); err != nil {
+		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
+		return
 	}
 	if err := domains.UpdateHostOverrides(h.Queue.DB, domain,
 		r.FormValue("task_cooldown_seconds"),
@@ -315,7 +322,7 @@ func (h *Handler) actionUpsertDomainOverride(w http.ResponseWriter, r *http.Requ
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
-	if err := h.saveDomainCookies(domain, r.FormValue("cookies")); err != nil {
+	if err := h.saveDomainCookies(domain, cookieContent); err != nil {
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
