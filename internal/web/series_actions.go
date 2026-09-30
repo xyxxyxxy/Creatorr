@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
-	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
@@ -382,22 +381,6 @@ func (h *Handler) actionRetrySourceErrors(w http.ResponseWriter, r *http.Request
 		return
 	}
 	http.Redirect(w, r, appendQuery(redir, "ok=retry&n="+strconv.FormatInt(int64(n), 10)), http.StatusSeeOther)
-}
-
-func (h *Handler) actionResetSourceCookieSmart(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	srcID, _ := strconv.ParseInt(r.FormValue("source_id"), 10, 64)
-	redir := seriesSourceRedirect(r, sid, srcID)
-	if _, err := h.Library.GetSource(sid, srcID); err != nil {
-		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	if err := domains.ResetCookieSmart(h.Library.DB, srcID); err != nil {
-		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, appendQuery(redir, "ok=cookie-smart-reset"), http.StatusSeeOther)
 }
 
 func (h *Handler) actionIgnoreVideo(w http.ResponseWriter, r *http.Request) {

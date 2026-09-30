@@ -1336,9 +1336,6 @@ func TestSourceDetailCookieSmartStatus(t *testing.T) {
 	if !strings.Contains(body, "Cookie learning") || !strings.Contains(body, "4 fallback") {
 		t.Fatalf("missing cookie learning: %s", truncate(body, 800))
 	}
-	if !strings.Contains(body, "Reset learning") {
-		t.Fatalf("missing reset: %s", truncate(body, 400))
-	}
 }
 
 func TestStaticCSS(t *testing.T) {
