@@ -16,17 +16,18 @@
 {{$flareOK := .FlareConfigured}}
 {{$cookieContent := ""}}{{with .CookieContent}}{{$cookieContent = .}}{{end}}
 {{$hasCookies := ne $cookieContent ""}}
-{{/* Exclusive Access: Flare XOR non-empty jar. Legacy both-set leaves both editable; Save rejects. */}}
-{{$flareExclusiveDisabled := and $hasCookies (not $flareOn)}}
-{{$cookiesExclusiveReadonly := and $flareOn (not $hasCookies)}}
-{{$flareDisabled := or (not $flareOK) $flareExclusiveDisabled}}
+{{/* Exclusive Access: Flare XOR non-empty jar. Cookie exclusivity is JS-only (daisyUI tips); server Disabled only when Flare URL unset. Legacy both-set: Flare stays editable; Save clears jar (disabled cookies omit POST). */}}
+{{$flareExclusiveLocked := and $hasCookies (not $flareOn)}}
+{{$cookiesExclusiveDisabled := $flareOn}}
+{{$flareDisabled := not $flareOK}}
 {{$flareDisabledTitle := "Set CREATORR_FLARESOLVERR_URL first (Compose default http://creatorr-flaresolverr:8191). See 'Settings → Connect'."}}
-{{if and $flareOK $flareExclusiveDisabled}}{{$flareDisabledTitle = "Clear the cookie jar first. FlareSolverr and account cookies cannot both be set: Flare merges anonymous cookies over the jar and would overwrite session cookies."}}{{end}}
+{{$flareCookieLockTip := "Clear the cookie jar first. FlareSolverr and account cookies cannot both be set: Flare merges anonymous cookies over the jar and would overwrite session cookies."}}
+{{$cookiesDisabledTitle := "Turn off Use FlareSolverr first. Flare and account cookies cannot both be set: Flare merges anonymous cookies over the jar and would overwrite session cookies."}}
 <input type="checkbox" id="{{$id}}" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box max-w-3xl w-11/12">
     <h3 class="font-bold text-lg mb-2">{{if $edit}}Edit {{.Domain}} domain overrides{{else}}Add domain override{{end}}</h3>
-    <form method="post" action="/actions/upsert-domain-override" class="space-y-3 js-domain-override-form" novalidate{{if .FlareConfigured}} data-flare-configured="1"{{end}}>
+    <form method="post" action="/actions/upsert-domain-override" class="space-y-3 js-domain-override-form" novalidate{{if .FlareConfigured}} data-flare-configured="1"{{end}}{{if $cookiesExclusiveDisabled}} data-cookies-locked="1"{{end}}{{if $flareExclusiveLocked}} data-flare-cookie-locked="1"{{end}} data-cookies-lock-tip="{{$cookiesDisabledTitle}}" data-flare-cookie-lock-tip="{{$flareCookieLockTip}}">
       <input type="hidden" name="redirect" value="{{.Redirect}}" />
       <div class="grid gap-3">
         <fieldset class="fieldset">
@@ -91,17 +92,23 @@
 
         <fieldset class="fieldset gap-3 bg-base-200 border border-base-300 rounded-box p-4">
           <legend class="fieldset-legend">Access</legend>
+          {{template "domain_credentials_field" (dict
+            "Override" true
+            "DefaultUsername" .DefaultUsername
+            "CredentialsUsername" .CredentialsUsername
+            "CredentialsInherit" .CredentialsInherit
+            "CredentialsHasStoredPassword" .CredentialsHasStoredPassword
+            "ShowGuide" true
+          )}}
           {{template "cookie_jar_field" (dict
             "Value" $cookieContent
             "ShowGuide" true
-            "Readonly" $cookiesExclusiveReadonly
-            "DisabledTitle" "Turn off Use FlareSolverr first. Flare and account cookies cannot both be set: Flare merges anonymous cookies over the jar and would overwrite session cookies."
           )}}
           {{template "checkbox_field" (dict
             "Name" "smart_cookies"
             "Label" "Smart cookie usage"
             "Checked" .SmartCookies
-            "Hint" "Learn per source whether the jar is needed. Start without cookies and retry once on failure; when fallbacks are common, prefer cookies first and probe without cookies every few runs to recover. Applies to scan, metadata, sidecars, and download."
+            "Hint" "Learn per source whether the jar is needed. Start without cookies and retry once on failure; when fallbacks are common, prefer cookies first and probe without cookies every few runs to recover."
           )}}
           {{template "checkbox_field" (dict
             "Name" "use_flaresolverr"
@@ -110,15 +117,7 @@
             "InputClass" "js-domain-flare"
             "Disabled" $flareDisabled
             "DisabledTitle" $flareDisabledTitle
-            "Hint" "Pre-solve CloudFlare challenges for this domain. Mutually exclusive with a non-empty cookie jar (Flare merges anonymous cookies over the jar). Requires CREATORR_FLARESOLVERR_URL ('Settings → Connect')."
-          )}}
-          {{template "domain_credentials_field" (dict
-            "Override" true
-            "DefaultUsername" .DefaultUsername
-            "CredentialsUsername" .CredentialsUsername
-            "CredentialsInherit" .CredentialsInherit
-            "CredentialsHasStoredPassword" .CredentialsHasStoredPassword
-            "ShowGuide" true
+            "Hint" "Turn on for Cloudflare-protected pages that block plain yt-dlp. Requires CREATORR_FLARESOLVERR_URL ('Settings → Connect')."
           )}}
         </fieldset>
       </div>

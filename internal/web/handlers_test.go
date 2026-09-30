@@ -850,8 +850,11 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "Use FlareSolverr") || !strings.Contains(body, `name="use_flaresolverr"`) {
 				t.Fatalf("%s missing FlareSolverr control in override modal", path)
 			}
-			if !strings.Contains(body, "Use FlareSolverr (disabled)") || !strings.Contains(body, "CREATORR_FLARESOLVERR_URL") {
+			if !strings.Contains(body, "Use FlareSolverr") || !strings.Contains(body, "CREATORR_FLARESOLVERR_URL") {
 				t.Fatalf("%s Use FlareSolverr should be disabled when Flare URL unset", path)
+			}
+			if strings.Contains(body, "Use FlareSolverr (disabled)") {
+				t.Fatalf("%s Use FlareSolverr label must not append (disabled)", path)
 			}
 			if !strings.Contains(body, "list-panel") {
 				t.Fatalf("%s missing list-panel", path)

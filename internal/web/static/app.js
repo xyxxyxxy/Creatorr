@@ -4039,7 +4039,7 @@
     return msg;
   }
 
-  /** Flare XOR non-empty jar while editing (server also rejects both-set). */
+  /** Flare XOR non-empty jar while editing (server also rejects both-set). daisyUI tips only (never native title). */
   function syncDomainFlareCookieExclusive(form) {
     if (!form || !form.classList.contains("js-domain-override-form")) return;
     const cookies = form.querySelector(".js-domain-cookies");
@@ -4048,26 +4048,93 @@
     const hasCookies = String(cookies.value || "").trim().length > 0;
     const flareOn = !!flare.checked;
     const flareUrlOk = form.getAttribute("data-flare-configured") === "1";
-    // Legacy both-set: leave both editable; Save rejects with explanation.
-    if (hasCookies && flareOn) {
+    const cookiesLockTip =
+      form.getAttribute("data-cookies-lock-tip") ||
+      "Turn off Use FlareSolverr first. Flare and account cookies cannot both be set: Flare merges anonymous cookies over the jar and would overwrite session cookies.";
+    const flareCookieLockTip =
+      form.getAttribute("data-flare-cookie-lock-tip") ||
+      "Clear the cookie jar first. FlareSolverr and account cookies cannot both be set: Flare merges anonymous cookies over the jar and would overwrite session cookies.";
+
+    function setCookiesLocked(locked) {
+      const tipHost = cookies.closest(".js-domain-cookies-tip") || cookies;
+      cookies.disabled = !!locked;
       cookies.readOnly = false;
-      if (flareUrlOk) flare.disabled = false;
+      if (locked) {
+        cookies.classList.add("pointer-events-none", "opacity-60");
+        tipHost.classList.add("tooltip", "tooltip-top");
+        tipHost.setAttribute("data-tip", cookiesLockTip);
+      } else {
+        cookies.classList.remove("pointer-events-none", "opacity-60");
+        tipHost.classList.remove("tooltip", "tooltip-top");
+        tipHost.removeAttribute("data-tip");
+      }
+    }
+
+    function setFlareCookieLocked(locked) {
+      // URL unset: server Disabled + tip; do not rewrite that wrap.
+      if (!flareUrlOk) return;
+      const label = flare.closest("label");
+      const labelText = label && label.querySelector(".label-text");
+      let tipHost = flare.closest(".js-domain-flare-tip");
+      if (locked) {
+        flare.disabled = true;
+        if (labelText) labelText.classList.add("opacity-60");
+        if (label) {
+          label.classList.remove("cursor-pointer");
+          label.classList.add("cursor-not-allowed");
+        }
+        if (!tipHost && label && label.parentNode) {
+          tipHost = document.createElement("span");
+          tipHost.className = "tooltip tooltip-top inline-flex w-fit max-w-full js-domain-flare-tip";
+          label.parentNode.insertBefore(tipHost, label);
+          tipHost.appendChild(label);
+        }
+        if (tipHost) {
+          tipHost.classList.add("tooltip", "tooltip-top");
+          tipHost.setAttribute("data-tip", flareCookieLockTip);
+        }
+      } else {
+        flare.disabled = false;
+        if (labelText) labelText.classList.remove("opacity-60");
+        if (label) {
+          label.classList.add("cursor-pointer");
+          label.classList.remove("cursor-not-allowed");
+        }
+        if (tipHost) {
+          tipHost.removeAttribute("data-tip");
+          tipHost.classList.remove("tooltip", "tooltip-top");
+          const parent = tipHost.parentNode;
+          if (parent) {
+            while (tipHost.firstChild) parent.insertBefore(tipHost.firstChild, tipHost);
+            parent.removeChild(tipHost);
+          }
+        }
+      }
+    }
+
+    // Legacy both-set: keep Flare editable; lock jar so Save drops cookies (disabled omit POST).
+    if (hasCookies && flareOn) {
+      setCookiesLocked(true);
+      setFlareCookieLocked(false);
       return;
     }
     if (hasCookies) {
-      cookies.readOnly = false;
+      setCookiesLocked(false);
       flare.checked = false;
-      flare.disabled = true;
+      setFlareCookieLocked(true);
       return;
     }
     if (flareOn) {
-      cookies.readOnly = true;
-      if (flareUrlOk) flare.disabled = false;
+      setCookiesLocked(true);
+      setFlareCookieLocked(false);
       return;
     }
-    cookies.readOnly = false;
-    if (flareUrlOk) flare.disabled = false;
-    else flare.disabled = true;
+    setCookiesLocked(false);
+    setFlareCookieLocked(false);
+  }
+
+  function syncAllDomainFlareCookieExclusive() {
+    document.querySelectorAll("form.js-domain-override-form").forEach(syncDomainFlareCookieExclusive);
   }
 
   document.body.addEventListener("input", (ev) => {
@@ -4079,11 +4146,23 @@
     }
   });
   document.body.addEventListener("change", (ev) => {
+    const t = ev.target;
+    if (t && t.classList && t.classList.contains("modal-toggle") && t.checked) {
+      const modal = t.nextElementSibling;
+      if (modal && modal.classList.contains("modal")) {
+        modal.querySelectorAll("form.js-domain-override-form").forEach(syncDomainFlareCookieExclusive);
+      }
+    }
     const form = ev.target.closest(".js-domain-override-form");
     if (form && (ev.target.closest(".js-domain-cookies") || ev.target.closest(".js-domain-flare"))) {
       syncDomainFlareCookieExclusive(form);
     }
   });
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", syncAllDomainFlareCookieExclusive);
+  } else {
+    syncAllDomainFlareCookieExclusive();
+  }
   document.body.addEventListener("submit", (ev) => {
     const form = ev.target.closest(".js-domain-override-form");
     if (!form) return;
@@ -4102,7 +4181,8 @@
     }
     const cookies = form.querySelector(".js-domain-cookies");
     const flare = form.querySelector(".js-domain-flare");
-    if (cookies && flare && String(cookies.value || "").trim() && flare.checked && !flare.disabled) {
+    // Disabled jar is omitted from POST (clears cookies); only block when both editable.
+    if (cookies && flare && !cookies.disabled && String(cookies.value || "").trim() && flare.checked && !flare.disabled) {
       ev.preventDefault();
       setControlValidity(
         cookies,

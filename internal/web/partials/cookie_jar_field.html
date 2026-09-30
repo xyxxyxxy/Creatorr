@@ -3,11 +3,12 @@
   Netscape cookie jar textarea for Domains modals.
   Optional: Label, Value, Info, Hint, EmptyHelp (alias→Hint for empty jar),
   ShowGuide (bool - cookies.txt how-to; show on Domain override Access),
-  Readonly, DisabledTitle (when jar locked while Flare On).
+  DisabledTitle unused here (JS daisyUI tip on .js-domain-cookies-tip when Flare On).
 */}}
 {{$label := .Label}}{{if not $label}}{{$label = "Cookies (Netscape jar)"}}{{end}}
 {{$hint := .Hint}}{{if not $hint}}{{$hint = .EmptyHelp}}{{end}}
 <div class="w-full">
+  <span class="js-domain-cookies-tip block w-full">
   {{template "field_input" (dict
     "Name" "cookies"
     "Label" $label
@@ -17,26 +18,22 @@
     "Hint" $hint
     "Mono" true
     "InputClass" "h-28 js-domain-cookies"
-    "Readonly" .Readonly
-    "DisabledTitle" .DisabledTitle
   )}}
+  </span>
   {{if .ShowGuide}}
   <details class="collapse collapse-arrow bg-base-100 border border-base-300 mt-1">
     <summary class="collapse-title font-medium text-sm min-h-0 py-3">How to export cookies</summary>
     <div class="collapse-content text-sm space-y-1">
       <p>
-        Extension:
+        Firefox:
         <a class="link link-primary" href="https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/" target="_blank" rel="noopener noreferrer">cookies.txt</a>
-        (Firefox). Paste Netscape format only.
+        (Netscape format only).
       </p>
       <ol class="list-decimal list-inside space-y-1">
-        <li>Install cookies.txt and enable it in private windows.</li>
-        <li>Open a new private window, navigate to the video provider, and log in.</li>
-        <li>Open a gated video once in that session (age gate / “sign in to confirm”) so the account is verified.</li>
-        <li>Export cookies for the <strong>video host and any related login/SSO host</strong> (not only “Current container” / current site - those often omit SSO cookies the extractor needs).</li>
-        <li>Paste the Netscape jar here. Re-export after the browser rotates the session (yt-dlp warns when cookies are no longer valid).</li>
-        <li>Keep <strong>Use FlareSolverr</strong> Off on this host when relying on account cookies: Flare and a non-empty jar are mutually exclusive (Flare merges anonymous cookies over the jar and would overwrite session cookies).</li>
-        <li><strong>Smart cookie usage</strong> (On): learn per source when the jar is needed; start without cookies and retry once on failure; when fallbacks are common, prefer cookies first and probe without cookies periodically. Prefer Off for always-auth hosts if you want the jar on every first try.</li>
+        <li>Install cookies.txt, open the site, and log in.</li>
+        <li>Open a gated video once so age / “sign in to confirm” is cleared.</li>
+        <li>Export the <strong>video host and related login/SSO hosts</strong> (not only the current site).</li>
+        <li>Paste here. Re-export when the session expires (yt-dlp warns).</li>
       </ol>
     </div>
   </details>
