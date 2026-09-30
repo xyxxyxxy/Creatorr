@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
@@ -207,7 +208,7 @@ func ScanHandler(d Deps) TaskHandler {
 		_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanned, scanMsg, histDetail, t.ID)
 
 		msg := scanMsg
-		detailBytes, _ := json.Marshal(map[string]any{
+		detail := map[string]any{
 			"created":                      created,
 			"updated":                      updated,
 			"created_ids":                  createdIDs,
@@ -219,7 +220,9 @@ func ScanHandler(d Deps) TaskHandler {
 			"full":                         fullScan,
 			"hit_known":                    hitKnown,
 			"full_scan_limit":              playlistEnd,
-		})
+			domains.DetailKeyCookieAttach:  attach,
+		}
+		detailBytes, _ := json.Marshal(detail)
 		_ = d.Library.Queue.UpdateProgress(t.ID, msg, ptrFloat(1))
 		_ = d.Library.Queue.SetDetail(t.ID, string(detailBytes))
 		progress(msg, ptrFloat(1))
