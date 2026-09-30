@@ -4,16 +4,7 @@
   Expects: Value, Action, IDName, ID (int64 or string).
 */}}
 {{template "list_panel"}}
-<div class="list-header flex flex-wrap items-start justify-between gap-3">
-  <div class="min-w-0 flex-1">
-    <h2 class="text-lg font-semibold inline-flex items-center gap-2">
-      <i data-lucide="sticky-note" class="size-5 shrink-0"></i>
-      <span>Notes</span>
-    </h2>
-    <p class="text-sm opacity-60 mt-0.5">Operator notes; not written to NFO or packed files.</p>
-  </div>
-  <span class="js-notes-status text-xs opacity-60 shrink-0 min-h-5" aria-live="polite"></span>
-</div>
+{{template "list_header" (dict "level" "section" "title" "Notes" "icon" "sticky-note" "help" "Operator notes; not written to files.")}}
 <textarea name="notes"
           class="textarea w-full js-notes-autosave"
           rows="3"
