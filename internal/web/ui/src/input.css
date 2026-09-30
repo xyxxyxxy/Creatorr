@@ -174,7 +174,7 @@ form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
   two clicks here: open + pick).
   Fixed summary widths live here: Tailwind does not emit utilities that only
   appear inside <script> template strings in import.html.
-  Open pick panels match the full join width (trigger + Clear).
+  Open pick panels match the full join width (trigger only).
 */
 #import-list .dropdown:focus-within,
 #import-list .dropdown:has(:focus),
@@ -234,7 +234,7 @@ form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
   min-width: 0;
   max-width: none;
 }
-/* Match + folder pick panels: same width as join (trigger + Clear). */
+/* Match + folder pick panels: same width as join (trigger). */
 #import-list .import-match-joins .js-import-series-dd > .dropdown-content,
 #import-list .import-match-joins .js-import-video-dd > .dropdown-content,
 #import-list .js-import-folder-series-dd > .dropdown-content {
