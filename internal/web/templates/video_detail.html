@@ -212,6 +212,8 @@
   </section>
 </div>
 
+{{template "notes_editor" (dict "Value" .Video.Notes "Action" "/actions/save-video-notes" "IDName" "video_id" "ID" .Video.ID)}}
+
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Files" "icon" "files")}}
 {{if not .Files}}

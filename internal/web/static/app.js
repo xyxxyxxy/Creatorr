@@ -1098,7 +1098,11 @@
     if (!m) return;
     const pageVid = Number(m[2]);
     if (!pageVid || !data.video_id || Number(data.video_id) !== pageVid) return;
-    location.reload();
+    Promise.resolve(flushNotesAutosave())
+      .catch(() => {})
+      .finally(() => {
+        location.reload();
+      });
   }
 
   function refreshTaskIndicators() {
@@ -3337,6 +3341,141 @@
     if (next && form.contains(next)) return;
     clearListFilterSearchTimer();
     submitListFilters(form);
+  });
+
+  // Operator notes (js-notes-autosave): same pause as list-filter search; flush on blur,
+  // pagehide, and before video-detail task reload.
+  const notesAutosaveTimers = new WeakMap();
+  const notesAutosaveState = new WeakMap();
+  function notesStatusEl(ta) {
+    const panel = ta && ta.closest(".list-panel");
+    return panel ? panel.querySelector(".js-notes-status") : null;
+  }
+  function setNotesStatus(ta, text, isError) {
+    const el = notesStatusEl(ta);
+    if (!el) return;
+    el.textContent = text || "";
+    el.classList.toggle("text-error", !!isError);
+    el.classList.toggle("opacity-60", !isError);
+  }
+  function notesState(ta) {
+    let st = notesAutosaveState.get(ta);
+    if (!st) {
+      st = {
+        saved: ta.value,
+        dirty: false,
+        inFlight: null,
+      };
+      notesAutosaveState.set(ta, st);
+    }
+    return st;
+  }
+  function clearNotesTimer(ta) {
+    const t = notesAutosaveTimers.get(ta);
+    if (t != null) {
+      window.clearTimeout(t);
+      notesAutosaveTimers.delete(ta);
+    }
+  }
+  function postNotesAutosave(ta, opts) {
+    const keepalive = !!(opts && opts.keepalive);
+    const st = notesState(ta);
+    const action = ta.getAttribute("data-autosave-action") || "";
+    const idName = ta.getAttribute("data-id-name") || "";
+    const idValue = ta.getAttribute("data-id-value") || "";
+    if (!action || !idName) return Promise.resolve();
+    const value = ta.value;
+    if (value === st.saved && !st.dirty) return Promise.resolve();
+    if (st.inFlight) {
+      st.dirty = true;
+      return st.inFlight;
+    }
+    st.dirty = true;
+    if (!keepalive) setNotesStatus(ta, "Saving…", false);
+    const body = new URLSearchParams();
+    body.set(idName, idValue);
+    body.set("notes", value);
+    const p = fetch(action, {
+      method: "POST",
+      body: body.toString(),
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "HX-Request": "true",
+      },
+      credentials: "same-origin",
+      keepalive: keepalive,
+    })
+      .then(async (resp) => {
+        const text = await resp.text().catch(() => "");
+        if (text) applySettingsOOB(text);
+        if (!resp.ok) {
+          const tooLong = resp.status === 422;
+          const msg = tooLong ? "Notes too long." : "Save failed.";
+          if (!keepalive) {
+            setNotesStatus(ta, msg, true);
+            if (!text) window.showFlashToast(msg, { error: true });
+          }
+          throw new Error(msg);
+        }
+        st.saved = value;
+        st.dirty = ta.value !== st.saved;
+        if (!keepalive) setNotesStatus(ta, "Saved", false);
+      })
+      .finally(() => {
+        st.inFlight = null;
+        if (ta.value !== st.saved) {
+          st.dirty = true;
+          postNotesAutosave(ta, opts);
+        }
+      });
+    st.inFlight = p;
+    return p;
+  }
+  function scheduleNotesAutosave(ta) {
+    if (!ta || !ta.classList.contains("js-notes-autosave")) return;
+    const st = notesState(ta);
+    if (ta.value === st.saved) {
+      st.dirty = false;
+      clearNotesTimer(ta);
+      return;
+    }
+    st.dirty = true;
+    clearNotesTimer(ta);
+    notesAutosaveTimers.set(
+      ta,
+      window.setTimeout(() => {
+        notesAutosaveTimers.delete(ta);
+        postNotesAutosave(ta);
+      }, LIST_FILTER_SEARCH_MS)
+    );
+  }
+  function flushNotesAutosave(opts) {
+    const nodes = document.querySelectorAll("textarea.js-notes-autosave");
+    const jobs = [];
+    nodes.forEach((ta) => {
+      clearNotesTimer(ta);
+      const st = notesState(ta);
+      if (ta.value !== st.saved || st.dirty || st.inFlight) {
+        jobs.push(postNotesAutosave(ta, opts));
+      }
+    });
+    if (!jobs.length) return Promise.resolve();
+    return Promise.allSettled(jobs);
+  }
+  document.body.addEventListener("input", (ev) => {
+    const ta = ev.target;
+    if (!ta || ta.tagName !== "TEXTAREA" || !ta.classList.contains("js-notes-autosave")) return;
+    scheduleNotesAutosave(ta);
+  });
+  document.body.addEventListener("focusout", (ev) => {
+    const ta = ev.target;
+    if (!ta || ta.tagName !== "TEXTAREA" || !ta.classList.contains("js-notes-autosave")) return;
+    clearNotesTimer(ta);
+    const st = notesState(ta);
+    if (ta.value !== st.saved || st.dirty) postNotesAutosave(ta);
+  });
+  window.addEventListener("pagehide", () => {
+    flushNotesAutosave({ keepalive: true });
   });
 
   // Cancel discards draft; closing via toggle (not backdrop - inert) keeps form state.

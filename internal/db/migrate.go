@@ -96,6 +96,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo20(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 21:
+			if err := d.migrateTo21(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -589,6 +593,29 @@ func (d *DB) migrateTo19() error {
 	}
 	if _, err := d.SQL.Exec(`ALTER TABLE videos DROP COLUMN import_src`); err != nil {
 		return fmt.Errorf("drop videos.import_src: %w", err)
+	}
+	return nil
+}
+
+// migrateTo21 adds operator-only notes on series and videos (not NFO / packed files).
+func (d *DB) migrateTo21() error {
+	for _, ddl := range []struct {
+		table string
+		sql   string
+	}{
+		{"series", `ALTER TABLE series ADD COLUMN notes TEXT NOT NULL DEFAULT ''`},
+		{"videos", `ALTER TABLE videos ADD COLUMN notes TEXT NOT NULL DEFAULT ''`},
+	} {
+		has, err := d.tableHasColumn(ddl.table, "notes")
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := d.SQL.Exec(ddl.sql); err != nil {
+			return fmt.Errorf("add %s.notes: %w", ddl.table, err)
+		}
 	}
 	return nil
 }

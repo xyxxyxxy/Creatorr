@@ -75,6 +75,7 @@ type Series struct {
 	Monitored          bool
 	DeliveryMode       string // video | audio
 	AddedAt            string
+	Notes              string // operator-only; not NFO
 	Meta               SeriesMeta
 	RootName           string
 	QualityProfileName string
@@ -324,6 +325,7 @@ func (s *Store) GetSeries(id int64, withVideos bool) (*Series, error) {
 	var mon int
 	err := s.DB.SQL.QueryRow(`
 		SELECT s.id, s.title, s.root_id, s.quality_profile_id, s.monitored, s.delivery_mode, s.added_at,
+		       COALESCE(s.notes,''),
 		       s.plot, s.sorttitle, s.originaltitle, s.studio, s.genres, s.tags,
 		       s.uniqueid_type, s.uniqueid_value, s.actors, s.tagline, s.country, s.mpaa, s.premiered,
 		       r.name, q.name,
@@ -336,6 +338,7 @@ func (s *Store) GetSeries(id int64, withVideos bool) (*Series, error) {
 		WHERE s.id = ?
 	`, id).Scan(
 		&ser.ID, &ser.Title, &ser.RootID, &ser.QualityProfileID, &mon, &ser.DeliveryMode, &ser.AddedAt,
+		&ser.Notes,
 		&ser.Meta.Plot, &ser.Meta.SortTitle, &ser.Meta.OriginalTitle, &ser.Meta.Studio, &genresJSON, &tagsJSON,
 		&ser.Meta.UniqueIDType, &ser.Meta.UniqueIDValue, &actorsJSON, &ser.Meta.Tagline, &ser.Meta.Country, &ser.Meta.MPAA, &ser.Meta.Premiered,
 		&ser.RootName, &ser.QualityProfileName,

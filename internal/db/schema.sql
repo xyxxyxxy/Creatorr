@@ -50,7 +50,9 @@ CREATE TABLE IF NOT EXISTS series (
   tagline TEXT NOT NULL DEFAULT '',
   country TEXT NOT NULL DEFAULT '',
   mpaa TEXT NOT NULL DEFAULT '',
-  premiered TEXT NOT NULL DEFAULT ''
+  premiered TEXT NOT NULL DEFAULT '',
+  -- Operator-only scratch notes (app UI); never written to NFO or packed files.
+  notes TEXT NOT NULL DEFAULT ''
 );
 
 -- cookie_smart_*: per-source learning when domains.smart_cookies is on (prefer jar / probe anon).
@@ -108,6 +110,8 @@ CREATE TABLE IF NOT EXISTS videos (
   country TEXT NOT NULL DEFAULT '',
   mpaa TEXT NOT NULL DEFAULT '',
   special_feature TEXT NOT NULL DEFAULT 'episode',
+  -- Operator-only scratch notes (app UI); never written to NFO or packed files.
+  notes TEXT NOT NULL DEFAULT '',
   UNIQUE(series_id, remote_id)
 );
 

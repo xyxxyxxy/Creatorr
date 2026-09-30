@@ -1,0 +1,26 @@
+{{define "notes_editor"}}
+{{/*
+  Operator notes autosave block.
+  Expects: Value, Action, IDName, ID (int64 or string).
+*/}}
+{{template "list_panel"}}
+<div class="list-header flex flex-wrap items-start justify-between gap-3">
+  <div class="min-w-0 flex-1">
+    <h2 class="text-lg font-semibold inline-flex items-center gap-2">
+      <i data-lucide="sticky-note" class="size-5 shrink-0"></i>
+      <span>Notes</span>
+    </h2>
+    <p class="text-sm opacity-60 mt-0.5">Operator notes; not written to NFO or packed files.</p>
+  </div>
+  <span class="js-notes-status text-xs opacity-60 shrink-0 min-h-5" aria-live="polite"></span>
+</div>
+<textarea name="notes"
+          class="textarea w-full js-notes-autosave"
+          rows="3"
+          maxlength="65536"
+          data-autosave-action="{{.Action}}"
+          data-id-name="{{.IDName}}"
+          data-id-value="{{.ID}}"
+          placeholder="Notes">{{.Value}}</textarea>
+{{template "list_panel_end"}}
+{{end}}

@@ -26,7 +26,7 @@ const videoSelectCols = `id, series_id, source_id, remote_id, title, upload_date
 		       COALESCE(genres,'[]'), COALESCE(tags,'[]'),
 		       COALESCE(uniqueid_type,''), COALESCE(uniqueid_value,''), COALESCE(actors,'[]'),
 		       COALESCE(tagline,''), COALESCE(country,''), COALESCE(mpaa,''),
-		       COALESCE(special_feature,'')`
+		       COALESCE(special_feature,''), COALESCE(notes,'')`
 
 // Video is an indexed instance within a series.
 type Video struct {
@@ -64,6 +64,7 @@ type Video struct {
 	Country                       string
 	MPAA                          string
 	PackRole                      string // episode | special_episode | feature kind folder name
+	Notes                         string // operator-only; not NFO
 }
 
 // VideoListFilter scopes series video lists by title, status, source, media type,
@@ -524,7 +525,7 @@ func scanVideo(scanner interface {
 		&v.DownloadFormatSelector, &v.DownloadRemuxContainer, &v.AcquiredVia, &v.AcquiredAt, &v.SidecarsAcquiredAt,
 		&v.SortTitle, &v.OriginalTitle, &v.Studio,
 		&genresRaw, &tagsRaw, &v.UniqueIDType, &v.UniqueIDValue, &actorsRaw,
-		&v.Tagline, &v.Country, &v.MPAA, &v.PackRole,
+		&v.Tagline, &v.Country, &v.MPAA, &v.PackRole, &v.Notes,
 	)
 	v.Genres = decodeStringSlice(genresRaw)
 	v.Tags = decodeStringSlice(tagsRaw)

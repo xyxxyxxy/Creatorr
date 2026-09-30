@@ -107,6 +107,8 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/series-metadata-prefetch", h.actionSeriesMetadataPrefetch)
 	r.Post("/actions/save-video-metadata", h.actionSaveVideoMetadata)
 	r.Post("/actions/video-metadata-prefetch", h.actionVideoMetadataPrefetch)
+	r.Post("/actions/save-video-notes", h.actionSaveVideoNotes)
+	r.Post("/actions/save-series-notes", h.actionSaveSeriesNotes)
 	r.Post("/actions/add-source", h.actionAddSource)
 	r.Post("/actions/update-source", h.actionUpdateSource)
 	r.Post("/actions/delete-source", h.actionDeleteSource)
