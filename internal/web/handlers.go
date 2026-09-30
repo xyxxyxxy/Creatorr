@@ -123,6 +123,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/set-series-monitored", h.actionSetSeriesMonitored)
 	r.Post("/actions/download-video", h.actionDownloadVideo)
 	r.Post("/actions/retry-source-errors", h.actionRetrySourceErrors)
+	r.Post("/actions/reset-source-cookie-smart", h.actionResetSourceCookieSmart)
 	r.Post("/actions/ignore-video", h.actionIgnoreVideo)
 	r.Post("/actions/delete-video", h.actionDeleteVideo)
 	r.Post("/actions/delete-video-sidecar", h.actionDeleteVideoSidecar)

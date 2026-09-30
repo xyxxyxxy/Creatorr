@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS series (
   premiered TEXT NOT NULL DEFAULT ''
 );
 
+-- cookie_smart_*: per-source learning when domains.smart_cookies is on (prefer jar / probe anon).
 CREATE TABLE IF NOT EXISTS sources (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   series_id INTEGER NOT NULL REFERENCES series(id) ON DELETE CASCADE,
@@ -65,6 +66,9 @@ CREATE TABLE IF NOT EXISTS sources (
   title_regexp_exclude TEXT,
   full_scan_limit INTEGER NOT NULL DEFAULT 0,
   full_scan_done INTEGER NOT NULL DEFAULT 0,
+  cookie_smart_prefer INTEGER NOT NULL DEFAULT 0,
+  cookie_smart_ring TEXT NOT NULL DEFAULT '[]',
+  cookie_smart_n INTEGER NOT NULL DEFAULT 0,
   UNIQUE(series_id, url)
 );
 
@@ -152,7 +156,7 @@ CREATE TABLE IF NOT EXISTS domain_runtime (
 -- Host rows: NULL task_cooldown_seconds / max_download_queue / max_parallel_tasks / download_rate_limit / sleep_requests / use_flaresolverr → use domain=default.
 -- domain=default limit columns + use_flaresolverr must be non-NULL. Domains are never auto-deleted when sources go away.
 -- Access (host overrides): cookies (Netscape jar text; NULL/empty = none), username/password (NULL/empty = none). No default-jar fallback.
--- cookies_after_fail: when 1, omit stored jar until failure; one cookie retry on yt-dlp invokes unless CookieRetryWorthless.
+-- smart_cookies: when 1, per-source learn when jar is needed (anon-first + fallback, then prefer jar with probes).
 CREATE TABLE IF NOT EXISTS domains (
   domain TEXT PRIMARY KEY,
   active INTEGER NOT NULL DEFAULT 1,
@@ -163,7 +167,7 @@ CREATE TABLE IF NOT EXISTS domains (
   sleep_requests REAL,
   use_flaresolverr INTEGER,
   cookies TEXT,
-  cookies_after_fail INTEGER NOT NULL DEFAULT 0,
+  smart_cookies INTEGER NOT NULL DEFAULT 0,
   username TEXT,
   password TEXT,
   updated_at TEXT NOT NULL

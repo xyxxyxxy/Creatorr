@@ -385,7 +385,7 @@ func TestTaskStagesCookieAttach(t *testing.T) {
 	created := "2026-09-06T11:56:00Z"
 	started := "2026-09-06T11:57:00Z"
 	ca := &domains.CookieAttachStatus{
-		State: domains.CookieAttachRetried, RetryReason: "AgeRestricted", AfterFail: true,
+		State: domains.CookieAttachRetried, RetryReason: "AgeRestricted", Smart: true,
 	}
 	events := []library.VideoHistoryEvent{
 		{VideoID: 7, Event: "download_failed", Message: "Download failed", CreatedAt: "2026-09-06T11:58:00Z"},
@@ -438,7 +438,7 @@ func TestTaskStagesCookieAttach(t *testing.T) {
 	// Always-attach: cookies mentioned when used; PO when present.
 	got = taskStages(taskStagesInput{
 		Events: events, Now: now, Created: created, Status: "failed", Origin: queue.OriginManual,
-		CookieAttach: &domains.CookieAttachStatus{State: domains.CookieAttachCookies, AfterFail: false},
+		CookieAttach: &domains.CookieAttachStatus{State: domains.CookieAttachCookies, Smart: false},
 		POT:          &ytdlp.POTStatus{State: ytdlp.POTSkipped},
 	})
 	var one *taskStageView
@@ -474,7 +474,7 @@ func TestTaskStagesPOTUnderDownload(t *testing.T) {
 	}
 	got := taskStages(taskStagesInput{
 		Events: events, Now: now, Created: created, Status: "done", Origin: queue.OriginManual,
-		CookieAttach: &domains.CookieAttachStatus{State: domains.CookieAttachCookies, AfterFail: false},
+		CookieAttach: &domains.CookieAttachStatus{State: domains.CookieAttachCookies, Smart: false},
 		POT:          &ytdlp.POTStatus{State: ytdlp.POTIssued},
 	})
 	var dl *taskStageView

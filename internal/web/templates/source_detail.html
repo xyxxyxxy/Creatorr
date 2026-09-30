@@ -119,6 +119,17 @@
   {{else}}
   {{template "detail_row" (dict "Label" "Last error" "TdClass" "text-xs")}}
   {{end}}
+  {{if .CookieSmart.Enabled}}
+  <tr><th class="w-40">Cookie policy</th><td class="text-xs">{{.CookieSmart.PolicyLabel}}</td></tr>
+  <tr><th class="w-40">Cookie learning</th><td class="text-xs">{{.CookieSmart.RingSummary}} · next probe {{.CookieSmart.NextProbe}}
+    <form method="post" action="/actions/reset-source-cookie-smart" class="inline-block ml-2">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <input type="hidden" name="source_id" value="{{.Source.ID}}" />
+      <input type="hidden" name="redirect" value="{{.SelfPath}}" />
+      <button type="submit" class="btn btn-ghost btn-xs">Reset learning</button>
+    </form>
+  </td></tr>
+  {{end}}
 </tbody>
 {{template "list_table_end"}}
   </div>

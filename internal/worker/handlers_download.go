@@ -123,22 +123,35 @@ func DownloadHandler(d Deps) TaskHandler {
 			attach = domains.CookieAttachStatus{State: domains.CookieAttachOff}
 			_ = ytdlp.TakePOTAttempt(ctx)
 		} else {
-			afterFail, aerr := domains.CookiesAfterFailForURL(d.Library.DB, cookieURL)
+			smart, aerr := domains.SmartCookiesForURL(d.Library.DB, cookieURL)
 			if aerr != nil {
 				return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), aerr.Error())
 			}
-			jar, hadStored, jerr := domains.StoredJarForURL(d.Library.DB, work, cookieURL, domains.AllowStoredJar(afterFail, false))
+			srcID := int64(0)
+			if dlctx.Video.SourceID.Valid {
+				srcID = dlctx.Video.SourceID.Int64
+			}
+			cookiesFirst, probe, prefer, cerr := domains.ClaimCookieSmart(d.Library.DB, srcID, smart)
+			if cerr != nil {
+				return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), cerr.Error())
+			}
+			anonFirst := smart && !cookiesFirst
+			jar, hadStored, jerr := domains.StoredJarForURL(d.Library.DB, work, cookieURL, domains.AllowStoredJar(anonFirst, false))
 			if jerr != nil {
 				return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), jerr.Error())
 			}
-			if afterFail && hadStored {
-				progress("Downloading without account cookies…", nil)
+			if anonFirst && hadStored {
+				if probe {
+					progress("Probing without account cookies…", nil)
+				} else {
+					progress("Downloading without account cookies…", nil)
+				}
 			} else if jar != "" {
 				progress("Downloading with account cookies…", nil)
 			} else {
 				progress("Downloading…", nil)
 			}
-			media, attach, err = domains.InvokeWithCookieFallback(afterFail, hadStored, jar, func() (string, error) {
+			media, attach, err = domains.InvokeWithCookieFallback(anonFirst, hadStored, jar, func() (string, error) {
 				path, _, e := domains.StoredJarForURL(d.Library.DB, work, cookieURL, true)
 				return path, e
 			}, func(cookiesPath string) (string, error) {
@@ -149,6 +162,17 @@ func DownloadHandler(d Deps) TaskHandler {
 				progress(fmt.Sprintf("Failure without cookies (%s); retrying with account cookies…", reason), nil)
 				progress("Downloading with account cookies…", nil)
 			})
+			attach.Smart = smart
+			attach.PreferCookies = prefer
+			attach.Probe = probe
+			if err == nil && smart && hadStored && srcID > 0 {
+				if outcome := domains.OutcomeFromAttach(attach, probe); outcome != "" {
+					_ = domains.RecordCookieSmartOutcome(d.Library.DB, srcID, outcome)
+				}
+			}
+			if err != nil && smart && hadStored && srcID > 0 && attach.State == domains.CookieAttachRetried {
+				_ = domains.RecordCookieSmartOutcome(d.Library.DB, srcID, domains.CookieOutcomeFallback)
+			}
 		}
 		persistCookieAttachFn(attach)
 		if err != nil {

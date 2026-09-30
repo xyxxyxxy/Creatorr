@@ -51,7 +51,11 @@ func RefreshSidecarsHandler(d Deps) TaskHandler {
 		defer func() { _ = os.RemoveAll(work) }()
 
 		progress("Resolving cookies…", ptrFloat(0.1))
-		if err := refreshSidecars(ctx, d, work, url, t.Domain, t.VideoID.Int64, t.ID, progress, false); err != nil {
+		srcID := int64(0)
+		if v.SourceID.Valid {
+			srcID = v.SourceID.Int64
+		}
+		if err := refreshSidecars(ctx, d, work, url, t.Domain, t.VideoID.Int64, srcID, t.ID, progress, false); err != nil {
 			return err
 		}
 		if library.TaskPayloadMaturity(t.Payload) {
@@ -113,7 +117,11 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 		return err
 	}
 	lim, _ := settings.LimitsForDomain(d.Library.DB, t.Domain)
-	e, attach, err := resolveEntryWithCookieFallback(ctx, d, work, ytdlp.ResolveOpts{
+	srcID := int64(0)
+	if v.SourceID.Valid {
+		srcID = v.SourceID.Int64
+	}
+	e, attach, err := resolveEntryWithCookieFallback(ctx, d, work, srcID, ytdlp.ResolveOpts{
 		URL: url, FlareSolverrURL: flare,
 		LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 	})
@@ -123,10 +131,6 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 	}
 	if e.ID == "" {
 		e.ID = v.RemoteID
-	}
-	srcID := int64(0)
-	if v.SourceID.Valid {
-		srcID = v.SourceID.Int64
 	}
 	vid, ok, err := d.Library.RefreshListed(v.SeriesID, library.EntryFromYtDlp(e, srcID), t.ID)
 	if err != nil {
@@ -139,14 +143,14 @@ func metadataRescanOne(ctx context.Context, d Deps, t *queue.Task, progress func
 		_ = d.Library.SoftFillVideoFromEntry(vid, e, t.ID)
 	}
 	progress("Refreshing sidecars…", ptrFloat(0.7))
-	if err := refreshSidecars(ctx, d, work, url, t.Domain, vid, t.ID, progress, library.TaskPayloadGapFill(t.Payload)); err != nil {
+	if err := refreshSidecars(ctx, d, work, url, t.Domain, vid, srcID, t.ID, progress, library.TaskPayloadGapFill(t.Payload)); err != nil {
 		return err
 	}
 	progress("Done", ptrFloat(1))
 	return nil
 }
 
-func refreshSidecars(ctx context.Context, d Deps, work, url, domain string, videoID, taskID int64, progress func(msg string, pct *float64), gapFill bool) error {
+func refreshSidecars(ctx context.Context, d Deps, work, url, domain string, videoID, sourceID, taskID int64, progress func(msg string, pct *float64), gapFill bool) error {
 	_, hasFile, err := d.Library.HasPackAnchor(videoID)
 	if err != nil {
 		return err
@@ -163,7 +167,7 @@ func refreshSidecars(ctx context.Context, d Deps, work, url, domain string, vide
 	if progress != nil {
 		progress("Fetching sidecars…", ptrFloat(0.4))
 	}
-	infoPath, thumbPath, subPaths, attach, err := fetchSidecarsWithCookieFallback(ctx, d, work, ytdlp.SidecarsOpts{
+	infoPath, thumbPath, subPaths, attach, err := fetchSidecarsWithCookieFallback(ctx, d, work, sourceID, ytdlp.SidecarsOpts{
 		URL: url, OutDir: sideWork,
 		LimitRate: lim.DownloadRateLimit, SleepRequests: lim.SleepRequests,
 		SubLangs: subOpts.Langs, SubAuto: subOpts.Auto,
@@ -213,7 +217,7 @@ func metadataRescanSeries(ctx context.Context, d Deps, t *queue.Task, progress f
 
 		domain := queue.DomainFromURL(src.URL)
 		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
-		entries, attach, err := listEntriesWithCookieFallback(ctx, d, work, src.URL, 0, lim)
+		entries, attach, err := listEntriesWithCookieFallback(ctx, d, work, src.URL, src.ID, 0, lim)
 		persistCookieAttach(d, t.ID, attach)
 		if err != nil {
 			code, msg := classify(err)
@@ -252,7 +256,7 @@ func metadataRescanSeries(ctx context.Context, d Deps, t *queue.Task, progress f
 				continue
 			}
 			url = library.DownloadURL(url, e.ID)
-			if err := refreshSidecars(ctx, d, work, url, domain, vid, t.ID, progress, false); err != nil {
+			if err := refreshSidecars(ctx, d, work, url, domain, vid, src.ID, t.ID, progress, false); err != nil {
 				lastErr = err
 				continue
 			}
@@ -312,7 +316,7 @@ func PrefetchSeriesMetaHandler(d Deps) TaskHandler {
 			return err
 		}
 		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
-		info, attach, err := dumpPlaylistInfoWithCookieFallback(ctx, d, work, ytdlp.ListOpts{
+		info, attach, err := dumpPlaylistInfoWithCookieFallback(ctx, d, work, 0, ytdlp.ListOpts{
 			URL: fetchURL, PlaylistEnd: 1, FlareSolverrURL: flare,
 		})
 		persistCookieAttach(d, t.ID, attach)
@@ -381,7 +385,7 @@ func ProbeSourceTitleHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
-		e, attach, err := resolveEntryWithCookieFallback(ctx, d, work, ytdlp.ResolveOpts{
+		e, attach, err := resolveEntryWithCookieFallback(ctx, d, work, 0, ytdlp.ResolveOpts{
 			URL: fetchURL, FlareSolverrURL: flare,
 		})
 		persistCookieAttach(d, t.ID, attach)
@@ -436,7 +440,7 @@ func PrefetchAddSeriesHandler(d Deps) TaskHandler {
 			return err
 		}
 		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
-		info, attach, err := dumpPlaylistInfoWithCookieFallback(ctx, d, work, ytdlp.ListOpts{
+		info, attach, err := dumpPlaylistInfoWithCookieFallback(ctx, d, work, 0, ytdlp.ListOpts{
 			URL: fetchURL, PlaylistEnd: 1, FlareSolverrURL: flare,
 		})
 		persistCookieAttach(d, t.ID, attach)
@@ -495,7 +499,7 @@ func PrefetchAddVideoHandler(d Deps) TaskHandler {
 			return err
 		}
 		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
-		e, attach, err := resolveEntryWithCookieFallback(ctx, d, work, ytdlp.ResolveOpts{
+		e, attach, err := resolveEntryWithCookieFallback(ctx, d, work, 0, ytdlp.ResolveOpts{
 			URL: fetchURL, FlareSolverrURL: flare,
 		})
 		persistCookieAttach(d, t.ID, attach)
@@ -549,7 +553,7 @@ func PrefetchVideoMetaHandler(d Deps) TaskHandler {
 			return err
 		}
 		// Interactive: no download_rate_limit / sleep_requests (operator-facing form fetch).
-		e, attach, err := resolveEntryWithCookieFallback(ctx, d, work, ytdlp.ResolveOpts{
+		e, attach, err := resolveEntryWithCookieFallback(ctx, d, work, 0, ytdlp.ResolveOpts{
 			URL: fetchURL, FlareSolverrURL: flare,
 		})
 		persistCookieAttach(d, t.ID, attach)

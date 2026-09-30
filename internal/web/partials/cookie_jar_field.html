@@ -36,7 +36,7 @@
         <li>Export cookies for the <strong>video host and any related login/SSO host</strong> (not only “Current container” / current site - those often omit SSO cookies the extractor needs).</li>
         <li>Paste the Netscape jar here. Re-export after the browser rotates the session (yt-dlp warns when cookies are no longer valid).</li>
         <li>Keep <strong>Use FlareSolverr</strong> Off on this host when relying on account cookies: Flare and a non-empty jar are mutually exclusive (Flare merges anonymous cookies over the jar and would overwrite session cookies).</li>
-        <li><strong>Use cookies only as fallback after failure</strong> (On): first invoke omits the jar; eligible failures retry once with cookies on scan, metadata, sidecars, and download. Prefer Off for always-auth / age-gated-only hosts if you want the jar on the first try.</li>
+        <li><strong>Smart cookie usage</strong> (On): learn per source when the jar is needed; start without cookies and retry once on failure; when fallbacks are common, prefer cookies first and probe without cookies periodically. Prefer Off for always-auth hosts if you want the jar on every first try.</li>
       </ol>
     </div>
   </details>

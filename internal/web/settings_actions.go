@@ -326,7 +326,7 @@ func (h *Handler) actionUpsertDomainOverride(w http.ResponseWriter, r *http.Requ
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}
-	if err := domains.SetCookiesAfterFail(h.Queue.DB, domain, domains.ValidateCookiesAfterFailForm(r.FormValue("cookies_after_fail"))); err != nil {
+	if err := domains.SetSmartCookies(h.Queue.DB, domain, domains.ValidateSmartCookiesForm(r.FormValue("smart_cookies"))); err != nil {
 		redirectSettings(w, r, "/settings/queue", "err="+urlQuery(err.Error()))
 		return
 	}

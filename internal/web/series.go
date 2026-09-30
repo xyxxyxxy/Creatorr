@@ -526,6 +526,7 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 	cronLabel := cronexpr.DescribeScan(src.ScanCron)
 	scanActive, _ := h.Library.HasActiveScanForSource(src.ID)
 	selfPath := fmt.Sprintf("/series/%d/sources/%d", seriesID, sourceID)
+	cookieSmart, _ := domains.CookieSmartDisplayForSource(h.Library.DB, src.ID, src.URL)
 	render(w, "source_detail", struct {
 		pageBase
 		Series              *library.Series
@@ -547,6 +548,7 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 		ScanCronDescriptors []string
 		HasRetryable        bool
 		VideoCount          int
+		CookieSmart         domains.CookieSmartDisplay
 		History             []videoHistoryView
 		HistoryPage         PageInfo
 	}{
@@ -570,6 +572,7 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 		ScanCronDescriptors: scanCronDescriptors(),
 		HasRetryable:        retryable,
 		VideoCount:          videoTotal,
+		CookieSmart:         cookieSmart,
 		History:             histViews,
 		HistoryPage:         histPageInfo,
 	})

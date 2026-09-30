@@ -21,7 +21,7 @@ func TestInvokeWithCookieFallback_OffAlwaysJar(t *testing.T) {
 	if err != nil || out != "ok" {
 		t.Fatalf("out=%q err=%v", out, err)
 	}
-	if st.State != domains.CookieAttachCookies || st.AfterFail {
+	if st.State != domains.CookieAttachCookies {
 		t.Fatalf("status=%+v", st)
 	}
 	if len(calls) != 1 || calls[0] != "/jar.txt" {

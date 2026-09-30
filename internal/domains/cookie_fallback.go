@@ -5,32 +5,32 @@ import (
 )
 
 // AllowStoredJar reports whether the stored Netscape jar may be attached.
-// When cookies_after_fail is off, always allow. When on, allow only on the
-// cookie retry pass (retryPass true).
-func AllowStoredJar(cookiesAfterFail, retryPass bool) bool {
-	if !cookiesAfterFail {
+// When anonFirst is false (always-jar / cookies-first), always allow.
+// When anonFirst is true, allow only on the cookie retry pass (retryPass true).
+func AllowStoredJar(anonFirst, retryPass bool) bool {
+	if !anonFirst {
 		return true
 	}
 	return retryPass
 }
 
-// InvokeWithCookieFallback runs invoke with the jar policy for cookies_after_fail.
+// InvokeWithCookieFallback runs invoke with the jar policy for smart cookie usage.
 //
-// Flag off (or no stored jar): invoke(initialJar) once.
-// Flag on with a stored jar: invoke("") first; on failure that is not
+// anonFirst false (or no stored jar): invoke(initialJar) once.
+// anonFirst true with a stored jar: invoke("") first; on failure that is not
 // CookieRetryWorthless, materializeRetry and invoke once with that path.
 // onRetry is optional and called with the first-failure code before the cookie pass.
 //
 // Soft-pause / alerts use the returned (final) error only.
 func InvokeWithCookieFallback[T any](
-	afterFail, hadStored bool,
+	anonFirst, hadStored bool,
 	initialJar string,
 	materializeRetry func() (string, error),
 	invoke func(cookiesPath string) (T, error),
 	onRetry func(reason string),
 ) (T, CookieAttachStatus, error) {
 	var zero T
-	st := CookieAttachStatus{AfterFail: afterFail}
+	st := CookieAttachStatus{}
 
 	if !hadStored {
 		st.State = CookieAttachOff
@@ -38,7 +38,7 @@ func InvokeWithCookieFallback[T any](
 		return out, st, err
 	}
 
-	if !afterFail {
+	if !anonFirst {
 		st.State = CookieAttachCookies
 		st.Detail = "account cookies attached"
 		out, err := invoke(initialJar)
@@ -48,7 +48,7 @@ func InvokeWithCookieFallback[T any](
 		return out, st, err
 	}
 
-	// afterFail && hadStored: anonymous first.
+	// anonFirst && hadStored: anonymous first.
 	out, err := invoke("")
 	if err == nil {
 		st.State = CookieAttachAnonymous

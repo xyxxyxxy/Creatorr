@@ -193,6 +193,8 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Sidecar deleted.")
 	case "retry":
 		return flashOK("Source errors cleared; videos set to wanted.")
+	case "cookie-smart-reset":
+		return flashOK("Cookie learning reset for this source.")
 	case "deleted":
 		return flashOK("Series deleted.")
 	case "saved":

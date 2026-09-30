@@ -69,7 +69,7 @@ func ScanHandler(d Deps) TaskHandler {
 			mode = library.SourceHistModeFull
 			playlistEnd = src.FullScanLimit
 		}
-		entries, attach, err := listEntriesWithCookieFallback(ctx, d, work, src.URL, playlistEnd, lim)
+		entries, attach, err := listEntriesWithCookieFallback(ctx, d, work, src.URL, src.ID, playlistEnd, lim)
 		persistCookieAttach(d, t.ID, attach)
 		if err != nil {
 			if apperrors.ErrorCode(err) == apperrors.CodeCookieInvalid && strings.Contains(err.Error(), "cookie jar failed") {

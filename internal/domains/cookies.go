@@ -70,6 +70,7 @@ func getCookiesExact(database *db.DB, domain string) (string, error) {
 
 // SetCookies stores Netscape jar text on a host domains override.
 // Rejects domain=default (Access jars are host-only). Empty content clears the jar.
+// Wipes source cookie learning for the host when jar content changes.
 func SetCookies(database *db.DB, domain, content string) error {
 	domain = settings.NormalizeDomain(domain)
 	if domain == "" {
@@ -87,30 +88,48 @@ func SetCookies(database *db.DB, domain, content string) error {
 	if err := EnsureHost(database, domain); err != nil {
 		return err
 	}
+	prev, err := GetCookies(database, domain)
+	if err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := database.SQL.Exec(`
+	_, err = database.SQL.Exec(`
 		UPDATE domains SET cookies = ?, updated_at = ? WHERE domain = ?
 	`, content, now, domain)
 	if err != nil {
 		return err
 	}
 	_, _ = database.SQL.Exec(`UPDATE domains SET cookies = NULL, updated_at = ? WHERE domain = ?`, now, "www."+domain)
+	if prev != content {
+		_ = WipeCookieSmartForHost(database, domain)
+	}
 	return nil
 }
 
 // ClearCookies clears domains.cookies on a host (and legacy www. key).
 // Also clears domain=default for legacy cleanup. Does not delete the domains row.
+// Wipes source cookie learning for the host when a jar was present.
 func ClearCookies(database *db.DB, domain string) error {
 	domain = settings.NormalizeDomain(domain)
 	if domain == "" {
 		return nil
 	}
+	had, err := GetCookies(database, domain)
+	if err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := database.SQL.Exec(`
+	_, err = database.SQL.Exec(`
 		UPDATE domains SET cookies = NULL, updated_at = ?
 		WHERE domain = ? OR domain = ?
 	`, now, domain, "www."+domain)
-	return err
+	if err != nil {
+		return err
+	}
+	if had != "" && domain != settings.DomainDefault {
+		_ = WipeCookieSmartForHost(database, domain)
+	}
+	return nil
 }
 
 // CookiesApply reports whether a cookie jar would be passed for this hostname.
