@@ -66,7 +66,7 @@ func (s *Store) CancelWithReason(id int64, reason string) (prevStatus string, er
 	}
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
 	res, err := s.DB.SQL.Exec(`
-		UPDATE tasks SET status = ?, finished_at = ?, message = ?
+		UPDATE tasks SET status = ?, finished_at = ?, message = ?, progress = NULL
 		WHERE id = ? AND status IN (?, ?)
 	`, StatusCancelled, finished, message, id, StatusPending, StatusRunning)
 	if err != nil {
@@ -130,7 +130,7 @@ func (s *Store) CancelDownloadsForVideo(videoID int64, reason string) ([]Task, e
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, t := range out {
 		_, err := s.DB.SQL.Exec(`
-			UPDATE tasks SET status = ?, finished_at = ?, message = ?
+			UPDATE tasks SET status = ?, finished_at = ?, message = ?, progress = NULL
 			WHERE id = ? AND status IN (?, ?)
 		`, StatusCancelled, finished, message, t.ID, StatusPending, StatusRunning)
 		if err != nil {
@@ -182,7 +182,7 @@ func (s *Store) CancelAll() ([]Task, error) {
 	}
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = s.DB.SQL.Exec(`
-		UPDATE tasks SET status = ?, finished_at = ?, message = ?
+		UPDATE tasks SET status = ?, finished_at = ?, message = ?, progress = NULL
 		WHERE status = ?
 	`, StatusCancelled, finished, message, StatusPending)
 	if err != nil {
@@ -258,7 +258,7 @@ func (s *Store) cancelDomain(domain, reason string, statuses ...string) ([]Task,
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, t := range out {
 		_, err := s.DB.SQL.Exec(`
-			UPDATE tasks SET status = ?, finished_at = ?, message = ?
+			UPDATE tasks SET status = ?, finished_at = ?, message = ?, progress = NULL
 			WHERE id = ? AND status IN (?, ?)
 		`, StatusCancelled, finished, message, t.ID, StatusPending, StatusRunning)
 		if err != nil {
@@ -352,7 +352,7 @@ func (s *Store) cancelPendingScans(where, reason string, args ...any) (int64, er
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, id := range ids {
 		_, err := s.DB.SQL.Exec(`
-			UPDATE tasks SET status = ?, finished_at = ?, message = ?
+			UPDATE tasks SET status = ?, finished_at = ?, message = ?, progress = NULL
 			WHERE id = ? AND status = ?
 		`, StatusCancelled, finished, message, id, StatusPending)
 		if err != nil {

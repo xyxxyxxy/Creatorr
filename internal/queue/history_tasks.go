@@ -22,7 +22,7 @@ func (s *Store) Finish(id int64, status, message, errCode, errMsg string) error 
 	}
 	finished := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.DB.SQL.Exec(`
-		UPDATE tasks SET status = ?, finished_at = ?, message = ?, error_code = NULLIF(?, ''), error_message = NULLIF(?, '')
+		UPDATE tasks SET status = ?, finished_at = ?, message = ?, error_code = NULLIF(?, ''), error_message = NULLIF(?, ''), progress = NULL
 		WHERE id = ? AND status = ?
 	`, status, finished, message, errCode, errMsg, id, StatusRunning)
 	if err != nil {
@@ -34,13 +34,36 @@ func (s *Store) Finish(id int64, status, message, errCode, errMsg string) error 
 
 // UpdateProgress sets in-memory message/progress for a running task (not written to SQLite).
 // When progress is nil, live progress is cleared (message-only / spinner UI).
-// Final message is persisted on Finish/Cancel. Restart requeues running tasks anyway.
+// Final message is persisted on Finish/Cancel. Call PersistLive before clearing Live on
+// interrupt so RequeueStaleRunning can keep the last percent for the operator.
 func (s *Store) UpdateProgress(id int64, message string, progress *float64) error {
 	if s == nil || id <= 0 {
 		return nil
 	}
 	s.Live.Set(id, message, progress)
 	return nil
+}
+
+// PersistLive writes the in-memory message/progress to SQLite for restart recovery.
+// No-op when Live has no entry. Used on graceful interrupt before Live.Clear.
+func (s *Store) PersistLive(id int64) error {
+	if s == nil || id <= 0 || s.Live == nil {
+		return nil
+	}
+	msg, pct, ok := s.Live.Get(id)
+	if !ok {
+		return nil
+	}
+	if pct == nil {
+		_, err := s.DB.SQL.Exec(`
+			UPDATE tasks SET message = ?, progress = NULL WHERE id = ? AND status = ?
+		`, msg, id, StatusRunning)
+		return err
+	}
+	_, err := s.DB.SQL.Exec(`
+		UPDATE tasks SET message = ?, progress = ? WHERE id = ? AND status = ?
+	`, msg, *pct, id, StatusRunning)
+	return err
 }
 
 // UpdatePayload replaces the JSON payload on a running or pending task (cursor resume).
@@ -165,9 +188,10 @@ func (s *Store) taskKind(id int64) string {
 }
 
 // RequeueStaleRunning marks interrupted running tasks as pending after process restart.
+// Keeps tasks.progress when PersistLive ran on interrupt so the UI still shows last %.
 func (s *Store) RequeueStaleRunning() (int64, error) {
 	res, err := s.DB.SQL.Exec(`
-		UPDATE tasks SET status = ?, started_at = NULL, message = 'Requeued after restart', progress = NULL
+		UPDATE tasks SET status = ?, started_at = NULL, message = 'Requeued after restart'
 		WHERE status = ?
 	`, StatusPending, StatusRunning)
 	if err != nil {

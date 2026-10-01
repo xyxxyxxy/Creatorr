@@ -86,3 +86,40 @@ func TestVerifyAllMediaPassSkipsEmpty(t *testing.T) {
 		t.Fatalf("verified=%d skipped=%d failed=%d", res.IntegrityChecked, res.Skipped, res.Failed)
 	}
 }
+
+func TestVerifyAllMediaPassReportsCumulativeProgressOnResume(t *testing.T) {
+	s := openLib(t)
+	id, err := s.EnqueueVerifyAllMedia(queue.OriginManual)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Queue.UpdatePayload(id, map[string]any{
+		"cursor":              42,
+		"integrity_checked":   800,
+		"partial":             2,
+		"skipped":             5,
+		"failed":              1,
+		"skipped_busy":        0,
+		"skipped_profile_off": 0,
+		"skipped_no_media":    0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	task, err := s.Queue.GetTask(id)
+	if err != nil || task == nil {
+		t.Fatalf("get: %v", err)
+	}
+	var msgs []string
+	res, err := s.VerifyAllMediaPass(context.Background(), task, func(msg string, _ *float64) {
+		msgs = append(msgs, msg)
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IntegrityChecked != 800 || res.Partial != 2 || res.Skipped != 5 || res.Failed != 1 {
+		t.Fatalf("counters=%+v", res)
+	}
+	if len(msgs) < 1 || msgs[0] != "Integrity check 808…" {
+		t.Fatalf("want first live msg with cumulative 808, got %v", msgs)
+	}
+}
