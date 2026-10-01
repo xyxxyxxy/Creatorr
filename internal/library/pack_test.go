@@ -113,10 +113,13 @@ func TestPackMediaCopiesSidecars(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(nfoBody)
-	for _, want := range []string{"<plot>plot text</plot>", "<showtitle>Show</showtitle>", "<aired>2024-01-15</aired>", "Ep"} {
+	for _, want := range []string{"<plot>plot text</plot>", "<aired>2024-01-15</aired>", "Ep"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("nfo missing %q in %s", want, body)
 		}
+	}
+	if strings.Contains(body, "<showtitle>") {
+		t.Fatalf("episode NFO must omit showtitle: %s", body)
 	}
 }
 

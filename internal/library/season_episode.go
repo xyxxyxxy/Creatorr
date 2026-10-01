@@ -2,10 +2,12 @@ package library
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 
 	epyear "github.com/xyxxyxxy/Creatorr/internal/library/episode"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 // seriesRenameMu serializes two-phase peer renames per series (single-process).
@@ -121,14 +123,14 @@ type yearPeer struct {
 	Status     string
 }
 
-// packedVideoIDs filters video IDs to those with packed media (downloaded / integrity_check_failed).
+// packedVideoIDs filters video IDs to those with packed media (downloaded / downloaded_integrity_failed).
 func (s *Store) packedVideoIDs(videoIDs []int64) ([]int64, error) {
 	ids := uniqInt64(videoIDs)
 	if len(ids) == 0 {
 		return nil, nil
 	}
 	q := `SELECT id FROM videos WHERE id IN (` + sqlIntPlaceholders(len(ids)) + `)
-		AND status IN ('downloaded', 'integrity_check_failed')`
+		AND status IN ('downloaded', 'downloaded_integrity_failed')`
 	args := make([]any, len(ids))
 	for i, id := range ids {
 		args[i] = id
@@ -163,6 +165,10 @@ func (s *Store) EnqueueApplyForPackedEpisodeChanges(changed []int64) (taskID int
 		return 0, false, nil
 	}
 	tid, err := s.EnqueueRenameEpisodesVideos(packed)
+	if errors.Is(err, queue.ErrDuplicate) {
+		// series_move open: its final ApplySeriesEpisodeNaming covers these peers.
+		return 0, false, nil
+	}
 	if err != nil {
 		return 0, false, err
 	}

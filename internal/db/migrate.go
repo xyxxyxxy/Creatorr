@@ -100,6 +100,14 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo21(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 22:
+			if err := d.migrateTo22(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
+		case 23:
+			if err := d.migrateTo23(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -620,6 +628,54 @@ func (d *DB) migrateTo21() error {
 	return nil
 }
 
+// migrateTo22 removes legacy delete_sidecar bookkeeping tasks and sidecar_deleted history.
+func (d *DB) migrateTo22() error {
+	if _, err := d.SQL.Exec(`
+		UPDATE tasks SET parent_task_id = NULL
+		WHERE parent_task_id IN (SELECT id FROM tasks WHERE kind = 'delete_sidecar')
+	`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") && !strings.Contains(err.Error(), "no such column") {
+			return fmt.Errorf("clear delete_sidecar parent refs: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`
+		DELETE FROM notifications
+		WHERE task_id IN (SELECT id FROM tasks WHERE kind = 'delete_sidecar')
+	`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") && !strings.Contains(err.Error(), "no such column") {
+			return fmt.Errorf("delete delete_sidecar notifications: %w", err)
+		}
+	}
+	hasTaskID, err := d.tableHasColumn("video_history", "task_id")
+	if err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return err
+		}
+		hasTaskID = false
+	}
+	if hasTaskID {
+		if _, err := d.SQL.Exec(`
+			DELETE FROM video_history
+			WHERE event = 'sidecar_deleted'
+			   OR task_id IN (SELECT id FROM tasks WHERE kind = 'delete_sidecar')
+		`); err != nil {
+			if !strings.Contains(err.Error(), "no such table") {
+				return fmt.Errorf("delete sidecar_deleted history: %w", err)
+			}
+		}
+	} else if _, err := d.SQL.Exec(`DELETE FROM video_history WHERE event = 'sidecar_deleted'`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("delete sidecar_deleted history: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`DELETE FROM tasks WHERE kind = 'delete_sidecar'`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("delete delete_sidecar tasks: %w", err)
+		}
+	}
+	return nil
+}
+
 // migrateTo20 renames domains.cookies_after_fail → smart_cookies and adds sources cookie_smart_* learning cols.
 func (d *DB) migrateTo20() error {
 	hasOld, err := d.tableHasColumn("domains", "cookies_after_fail")
@@ -722,3 +778,13 @@ func (d *DB) tableHasColumn(table, column string) (bool, error) {
 func quoteIdent(name string) string {
 	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }
+
+// migrateTo23 renames video status integrity_check_failed → downloaded_integrity_failed
+// (file kept; downloaded subgroup). Notify/history event names stay integrity_check_failed.
+func (d *DB) migrateTo23() error {
+	if _, err := d.SQL.Exec(`UPDATE videos SET status = 'downloaded_integrity_failed' WHERE status = 'integrity_check_failed'`); err != nil {
+		return fmt.Errorf("rename integrity_check_failed status: %w", err)
+	}
+	return nil
+}
+

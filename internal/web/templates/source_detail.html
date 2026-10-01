@@ -75,7 +75,7 @@
   {{if .Source.Label.Valid}}
   <tr><th class="w-40">Name</th><td>{{.Source.Label.String}}</td></tr>
   {{else}}
-  {{template "detail_row" (dict "Label" "Name")}}
+  {{template "detail_row" (dict "Label" "Name" "EmptyText" "-")}}
   {{end}}
   {{if ne .Source.Kind "single"}}
   <tr><th class="w-40">Scan</th><td class="text-sm">{{.ScanCronLabel}}</td></tr>

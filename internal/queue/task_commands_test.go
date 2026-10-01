@@ -63,6 +63,9 @@ func TestPersistCommandsOnStatus(t *testing.T) {
 	if !PersistCommandsOnStatus(KindRenameEpisodes, StatusFailed) {
 		t.Fatal("rename failed should persist")
 	}
+	if PersistCommandsOnStatus(KindSeriesMove, StatusDone) || !PersistCommandsOnStatus(KindSeriesMove, StatusFailed) {
+		t.Fatal("series_move persists commands only on failure")
+	}
 	if PersistCommandsOnStatus(KindSyncFiles, StatusCancelled) {
 		t.Fatal("sync cancel should not persist")
 	}

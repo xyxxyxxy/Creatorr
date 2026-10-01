@@ -152,6 +152,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		StatusTaskID        int64
 		StatusTaskKind      string
 		StatusTaskPrefix    string
+		StatusLabel         string
 		IntegrityTaskID     int64
 		IntegrityTaskKind   string
 		IntegrityTaskPrefix string
@@ -186,6 +187,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		StatusTaskID:        statusTaskID,
 		StatusTaskKind:      statusTaskKind,
 		StatusTaskPrefix:    statusTaskPrefix,
+		StatusLabel:         videoStatusLabel(video.Status),
 		IntegrityTaskID:     integrityTaskID,
 		IntegrityTaskKind:   integrityTaskKind,
 		IntegrityTaskPrefix: integrityTaskPrefix,

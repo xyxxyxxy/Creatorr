@@ -195,22 +195,7 @@ func nullInt64(v int64) any {
 
 // AddVideoHistory appends a timeline event. taskID is required (must reference tasks.id).
 func (s *Store) AddVideoHistory(videoID int64, event, message string, detail map[string]any, taskID int64) error {
-	if taskID <= 0 {
-		return fmt.Errorf("%w: video history requires task_id", ErrInvalid)
-	}
-	raw := "{}"
-	if detail != nil {
-		b, err := json.Marshal(detail)
-		if err != nil {
-			return err
-		}
-		raw = string(b)
-	}
-	_, err := s.DB.SQL.Exec(`
-		INSERT INTO video_history (video_id, created_at, event, message, detail, task_id)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, videoID, nowRFC3339(), event, message, raw, taskID)
-	return err
+	return s.insertHistory("video_history", "video_id", "video", videoID, event, message, detail, taskID)
 }
 
 // ListSources returns all sources for a series (no source-level monitored gate).

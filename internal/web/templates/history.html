@@ -23,12 +23,15 @@
 {{template "list_empty" "No notifications yet."}}
 {{end}}
 {{else}}
-{{template "list_table"}}
-<thead><tr><th class="w-10"></th><th>Event</th><th>When</th><th>Title</th></tr></thead>
+{{/* table-fixed: long Title/When stay inside the panel */}}
+<div class="list-table-wrap rounded-box border border-base-300">
+  <table class="table table-sm list-table w-full table-fixed">
+<thead><tr><th class="w-10"></th><th class="w-40">Event</th><th class="w-24">When</th><th>Title</th></tr></thead>
 <tbody>
   {{range .Notifications}}{{template "notification_row" .}}{{end}}
 </tbody>
-{{template "list_table_end"}}
+  </table>
+</div>
 {{template "pagination" .NotifyPage}}
 {{end}}
 </div>
@@ -52,12 +55,15 @@
 {{template "list_empty" "No task history yet."}}
 {{end}}
 {{else}}
-{{template "list_table"}}
-<thead><tr><th>Domain</th><th>Kind</th><th>Origin</th><th>When</th><th>Message</th></tr></thead>
+{{/* table-fixed: long Message truncates instead of widening the page */}}
+<div class="list-table-wrap rounded-box border border-base-300">
+  <table class="table table-sm list-table w-full table-fixed">
+<thead><tr><th class="w-28">Kind</th><th class="w-36">Domain</th><th class="w-24">Origin</th><th class="w-24">When</th><th>Message</th></tr></thead>
 <tbody>
   {{range .Items}}{{template "history_row" .}}{{end}}
 </tbody>
-{{template "list_table_end"}}
+  </table>
+</div>
 {{template "pagination" .Page}}
 {{end}}
 </div>

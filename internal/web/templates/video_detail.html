@@ -68,10 +68,12 @@
       "DomainDisabledTitle" .DomainDisabledTitle
       "DownloadRunning" .DownloadRunning
       "Redirect" (printf "/series/%d/videos/%d" .Series.ID .Video.ID)
-      "Class" "btn"
+      "Icons" true
+      "Class" "btn btn-square"
       "DeleteClass" "btn btn-soft btn-error btn-square"
     }}
     {{template "video_delivery_actions" $delivery}}
+    {{template "clear_download_error_button" $wantIgnore}}
     {{template "want_ignore_button" $wantIgnore}}
     {{end}}
   </div>
@@ -164,10 +166,11 @@
     <td>
       <div class="inline-flex items-center gap-2 flex-nowrap whitespace-nowrap">
         {{template "task_indicator" .TaskInd}}
+        {{if .StatusLabel}}<span class="text-sm">{{.StatusLabel}}</span>{{end}}
         {{if .StatusTaskID}}
         <span class="text-xs opacity-60">{{.StatusTaskPrefix}}</span>
         <a class="link link-hover text-xs" href="/task/{{.StatusTaskID}}">{{.StatusTaskKind}}</a>
-        {{else if or (eq .Video.Status "wanted_download_error") (eq .Video.Status "wanted_archive") (eq .Video.Status "integrity_check_failed")}}
+        {{else if or (eq .Video.Status "wanted_download_error") (eq .Video.Status "wanted_archive") (eq .Video.Status "downloaded_integrity_failed")}}
         {{if .ErrorHistoryID}}
         <a class="link link-hover text-error text-xs" href="/task/{{.ErrorHistoryID}}">Open task for details</a>
         {{end}}

@@ -168,10 +168,7 @@ func (s *Store) BulkEditVideosPass(ctx context.Context, task *queue.Task, progre
 			return updated, skipped, failed, err
 		}
 		vid := ids[i]
-		if progress != nil {
-			pct := float64(i) / float64(n) * 100
-			progress(fmt.Sprintf("Updating %d/%d", i+1, n), &pct)
-		}
+		bulkEditProgressStep(progress, i, n)
 		if err := s.applyBulkEditVideoOne(vid, p); err != nil {
 			if errors.Is(err, ErrNotFound) {
 				skipped++
@@ -184,10 +181,7 @@ func (s *Store) BulkEditVideosPass(ctx context.Context, task *queue.Task, progre
 		updated++
 		_ = s.persistBulkEditVideosCursor(task.ID, i+1, p)
 	}
-	if progress != nil {
-		pct := 100.0
-		progress(BulkEditSeriesMessage(updated, skipped, failed), &pct)
-	}
+	bulkEditProgressDone(progress, updated, skipped, failed)
 	return updated, skipped, failed, nil
 }
 
@@ -244,19 +238,8 @@ func (s *Store) applyBulkEditVideoOne(videoID int64, p bulkEditVideosPayload) er
 }
 
 func (s *Store) persistBulkEditVideosCursor(taskID int64, index int, p bulkEditVideosPayload) error {
-	if s.Queue == nil {
-		return nil
-	}
 	p.Index = index
-	b, err := json.Marshal(p)
-	if err != nil {
-		return err
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		return err
-	}
-	return s.Queue.UpdatePayload(taskID, m)
+	return s.persistBulkEditPayload(taskID, p)
 }
 
 // WantVideosBulk sets wanted on eligible videos. Skips wrong status / missing.
@@ -274,7 +257,7 @@ func (s *Store) WantVideosBulk(ids []int64) (updated, skipped int, err error) {
 	return updated, skipped, nil
 }
 
-// IgnoreVideosBulk marks eligible videos ignored. Skips downloaded/integrity_check_failed / missing.
+// IgnoreVideosBulk marks eligible videos ignored. Skips downloaded/downloaded_integrity_failed / missing.
 func (s *Store) IgnoreVideosBulk(ids []int64) (updated, skipped int, err error) {
 	for _, id := range uniqPositive(ids) {
 		if _, err := s.IgnoreVideo(id); err != nil {
@@ -332,7 +315,7 @@ func (s *Store) EnqueueBulkDeleteVideos(ids []int64) (taskID int64, queued, skip
 			return 0, 0, skipped, gerr
 		}
 		switch v.Status {
-		case "downloaded", "missing":
+		case StatusDownloaded, StatusMissing:
 			if ok, qerr := s.VideoQueuedForDelete(id); qerr != nil {
 				return 0, 0, skipped, qerr
 			} else if ok {

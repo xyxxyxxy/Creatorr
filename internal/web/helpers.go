@@ -150,7 +150,7 @@ func flashFromQuery(r *http.Request) *flash {
 	case "updated":
 		return flashOK("Series updated.")
 	case "series-rename":
-		return flashOK("Series updated. File rename queued.")
+		return flashOK("Series updated. Folder move queued.")
 	case "bulk_edit_queued":
 		return flashOK("Bulk edit queued.")
 	case "bulk_monitored":
@@ -159,6 +159,12 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Bulk delete queued.")
 	case "bulk_want":
 		return flashOK("Want updated.")
+	case "bulk_want_unmonitored":
+		return flashOK("Want updated. Series is unmonitored - no download queued. Use Download now or turn on monitored.")
+	case "want":
+		return flashOK("Marked wanted.")
+	case "want-unmonitored":
+		return flashOK("Marked wanted. Series is unmonitored - no download queued. Use Download now or turn on monitored.")
 	case "bulk_ignore":
 		return flashOK("Ignore updated.")
 	case "bulk_refresh_sidecars":
@@ -191,6 +197,11 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Video delete queued - files remove in the background.")
 	case "sidecar-deleted":
 		return flashOK("Sidecar deleted.")
+	case "clear-error":
+		if n := r.URL.Query().Get("n"); n != "" && n != "1" {
+			return flashOK("Cleared " + n + " download errors.")
+		}
+		return flashOK("Download error cleared.")
 	case "retry":
 		return flashOK("Source errors cleared; videos set to wanted.")
 	case "deleted":

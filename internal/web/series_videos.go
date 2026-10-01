@@ -24,6 +24,7 @@ type seriesVideoRow struct {
 	ResolutionLabel     string
 	DurationLabel       string
 	MediaTypeLabel      string
+	StatusLabel         string
 	ThumbURL            string
 	DomainActive        bool
 	DomainDisabledTitle string
@@ -103,9 +104,10 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 			DeliveryQueued:      videoDeliveryQueued(tasks),
 			Deleting:            taskIsFileDelete(best),
 			SizeLabel:           sizeLabel,
-			ResolutionLabel:     h.Library.ResolveResolutionLabel(v.ID, v.Width, v.Height, jsonPaths[v.ID]),
-			DurationLabel:       formatDurationClock(h.Library.ResolveDurationSeconds(v.ID, v.DurationSeconds, jsonPaths[v.ID])),
+			ResolutionLabel:     library.PeekResolutionLabel(v.Width, v.Height, jsonPaths[v.ID]),
+			DurationLabel:       formatDurationClock(library.PeekDurationSeconds(v.DurationSeconds, jsonPaths[v.ID])),
 			MediaTypeLabel:      mediaTypeLabel,
+			StatusLabel:         videoStatusLabel(v.Status),
 			ThumbURL:            thumbURL,
 			DomainActive:        dAct,
 			DomainDisabledTitle: disTitle,
@@ -124,9 +126,10 @@ type seriesVideosLiveData struct {
 	ProgressTotal   int64
 	DownloadedCount int64
 	ErrorCount      int64
-	WantedCount     int64
-	Monitored       bool
-	VideoFilter     struct {
+	WantedCount        int64
+	Monitored          bool
+	DownloadErrorCount int
+	VideoFilter        struct {
 		Query            string
 		QueryPlaceholder string
 		AriaLabel        string
@@ -247,19 +250,21 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 	)
 
 	bulkBusy, _ := h.Library.BulkEditVideosBusy()
+	dlErrCount, _ := h.Library.CountSeriesDownloadErrors(id)
 	return seriesVideosLiveData{
-		SeriesID:        id,
-		Videos:          videos,
-		VideosPage:      videosPageInfo,
-		FilterTotal:     videoTotal,
-		BulkEditBusy:    bulkBusy,
-		ProgressTotal:   ser.ProgressTotal(),
-		DownloadedCount: ser.DownloadedCount,
-		ErrorCount:      ser.ErrorCount(),
-		WantedCount:     ser.WantedCount,
-		Monitored:       ser.Monitored,
-		VideoFilter:     videoFilter,
-		FilterActive:    filter.Active(),
+		SeriesID:           id,
+		Videos:             videos,
+		VideosPage:         videosPageInfo,
+		FilterTotal:        videoTotal,
+		BulkEditBusy:       bulkBusy,
+		ProgressTotal:      ser.ProgressTotal(),
+		DownloadedCount:    ser.DownloadedCount,
+		ErrorCount:         ser.ErrorCount(),
+		WantedCount:        ser.WantedCount,
+		Monitored:          ser.Monitored,
+		DownloadErrorCount: dlErrCount,
+		VideoFilter:        videoFilter,
+		FilterActive:       filter.Active(),
 	}, nil
 }
 

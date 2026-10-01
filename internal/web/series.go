@@ -268,7 +268,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
-	folderRenameBusy, _ := h.Library.SeriesHasBusyMediaTasks(id)
+	folderRenameBusy, _ := h.Library.SeriesHasBlockingTasks(id)
 	metaForm := seriesMetadataView{
 		Series:      ser,
 		Art:         h.seriesArtFlags(ser),
@@ -300,6 +300,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	nullImportCount, _ := h.Library.CountVideosWithNullSource(id)
+	downloadErrorCount, _ := h.Library.CountSeriesDownloadErrors(id)
 	metaForm = h.withMetaSuggestions(metaForm)
 	metaFiles := seriesMetaFileViews(h.Library, ser)
 	videoTotal, _ := h.Library.CountVideos(id)
@@ -327,6 +328,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		MetaForm            seriesMetadataView
 		PackRoleOptions     []struct{ Value, Label string }
 		Deleting            bool
+		DownloadErrorCount  int
 	}{
 		pageBase:            newPage(ser.Title, "series", flashFromQuery(r)),
 		Series:              ser,
@@ -350,6 +352,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		MetaForm:            metaForm,
 		PackRoleOptions:     library.PackRoleSelectOptions(),
 		Deleting:            seriesDeleting,
+		DownloadErrorCount:  downloadErrorCount,
 	})
 }
 
@@ -440,7 +443,7 @@ func (h *Handler) seriesTaskIndicators(w http.ResponseWriter, r *http.Request) {
 
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
-	folderBusy, _ := h.Library.SeriesHasBusyMediaTasks(id)
+	folderBusy, _ := h.Library.SeriesHasBlockingTasks(id)
 
 	render(w, "task_indicators_oob", struct {
 		Indicators   []taskIndicatorView
@@ -503,19 +506,7 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	histViews := make([]videoHistoryView, 0, len(histItems))
 	for _, e := range histItems {
-		abs, ago := createdAgoPair(e.CreatedAt, now)
-		v := videoHistoryView{
-			CreatedAt: abs, CreatedAgo: ago,
-			Event: historyEventLabel(e.Event, e.Detail), Message: historyMessageWithDetail(e.Message, e.Detail), Detail: e.Detail,
-			HasError: historyEventError(e.Event),
-			Neutral:  historyEventNeutral(e.Event),
-		}
-		if e.TaskID > 0 {
-			v.HasTask = true
-			v.TaskID = e.TaskID
-			v.HistoryID = e.TaskID
-		}
-		histViews = append(histViews, v)
+		histViews = append(histViews, sourceHistoryToView(e, now))
 	}
 
 	title := DisplayURL(src.URL)
@@ -596,6 +587,17 @@ func createdAgoPairShort(createdAt string, now time.Time) (absolute, ago string)
 	if t, ok := parseActivityTime(createdAt); ok {
 		absolute = formatAbsoluteTip(t)
 		ago = formatAgoShort(t, now)
+	}
+	return absolute, ago
+}
+
+// createdAgoPairCompact is like createdAgoPair but uses compact units ("1 h 2 min").
+func createdAgoPairCompact(createdAt string, now time.Time) (absolute, ago string) {
+	absolute = createdAt
+	ago = createdAt
+	if t, ok := parseActivityTime(createdAt); ok {
+		absolute = formatAbsoluteTip(t)
+		ago = formatAgoCompact(t, now)
 	}
 	return absolute, ago
 }

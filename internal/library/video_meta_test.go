@@ -1,6 +1,11 @@
 package library
 
-import "testing"
+import (
+	"database/sql"
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestResolutionLabel(t *testing.T) {
 	cases := []struct {
@@ -47,3 +52,29 @@ func TestVideoResolutionLabel(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestPeekResolutionAndDurationReadOnly(t *testing.T) {
+	dir := t.TempDir()
+	info := filepath.Join(dir, "ep.info.json")
+	body := `{"width":1280,"height":720,"duration":125.5}`
+	if err := os.WriteFile(info, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := PeekResolutionLabel(sql.NullInt64{}, sql.NullInt64{}, info); got != "720p" {
+		t.Fatalf("peek res=%q", got)
+	}
+	if got := PeekDurationSeconds(sql.NullInt64{}, info); got != 126 {
+		t.Fatalf("peek dur=%d", got)
+	}
+	// Column wins without reading file.
+	w := sql.NullInt64{Valid: true, Int64: 1920}
+	h := sql.NullInt64{Valid: true, Int64: 1080}
+	if got := PeekResolutionLabel(w, h, info); got != "1080p" {
+		t.Fatalf("col res=%q", got)
+	}
+	d := sql.NullInt64{Valid: true, Int64: 90}
+	if got := PeekDurationSeconds(d, info); got != 90 {
+		t.Fatalf("col dur=%d", got)
+	}
+}
+

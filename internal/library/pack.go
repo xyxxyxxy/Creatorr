@@ -99,7 +99,7 @@ func FindDownloadSidecars(mediaPath string) (infoPath, thumbPath string, subPath
 }
 
 // PackMedia moves media into the series folder and writes a full episode NFO
-// (title, showtitle, S/E, plot, aired, uniqueid) via WriteEpisodeNFO.
+// (title, S/E, plot, aired, uniqueid; no showtitle) via WriteEpisodeNFO.
 // Copies optional info.json, thumbnail, and subtitle sidecars when sources exist (soft-ok if absent).
 // Subtitle dest names keep the yt-dlp language suffix (e.g. .en.srt or .en.auto.srt).
 // When the ideal media path is occupied, installs under PrimaryBase_N and returns pathSuffix N > 0.

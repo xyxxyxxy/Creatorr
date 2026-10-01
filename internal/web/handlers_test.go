@@ -152,8 +152,11 @@ func TestSeriesListAudioQualityShowsBest(t *testing.T) {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "best · 0 sources") {
+	if !strings.Contains(body, "best") {
 		t.Fatalf("audio series should show best quality, got: %s", truncate(body, 800))
+	}
+	if strings.Contains(body, "0 sources") {
+		t.Fatalf("series line2 must not show source count: %s", truncate(body, 800))
 	}
 	if strings.Contains(body, library.Profile480Name+" ·") {
 		t.Fatalf("audio series must not show assigned profile name: %s", truncate(body, 800))
@@ -206,8 +209,14 @@ func TestImportPageWithoutSeries(t *testing.T) {
 	if !strings.Contains(body, `id="btn-import"`) || !strings.Contains(body, "File matching") {
 		t.Fatalf("import UI should render with no series: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, "modal-add-series") || !strings.Contains(body, "data-import-allow-create") {
-		t.Fatalf("expected add-series modal + inline create join with no series: %s", truncate(body, 400))
+	if !strings.Contains(body, "modal-add-series") || !strings.Contains(body, `src="/static/import.js"`) {
+		t.Fatalf("expected add-series modal + import.js script with no series: %s", truncate(body, 400))
+	}
+	// Inline create join markup lives in the import picker script (bundled from ui/src/js/import.js).
+	jsRec := httptest.NewRecorder()
+	web.StaticHandler().ServeHTTP(jsRec, httptest.NewRequest(http.MethodGet, "/static/import.js", nil))
+	if jsRec.Code != 200 || !strings.Contains(jsRec.Body.String(), "data-import-allow-create") {
+		t.Fatalf("import.js missing inline create join: status %d", jsRec.Code)
 	}
 	if !strings.Contains(body, "modal-add-video") || !strings.Contains(body, "js-add-video-form") {
 		t.Fatalf("expected add-video modal with no series: %s", truncate(body, 400))
@@ -256,8 +265,8 @@ func TestImportPageWithoutSeries(t *testing.T) {
 	if strings.Contains(body2, "Create a series first") {
 		t.Fatalf("empty-series gate should be gone: %s", truncate(body2, 400))
 	}
-	if !strings.Contains(body2, "modal-add-series") || !strings.Contains(body2, "data-import-allow-create") {
-		t.Fatalf("expected add-series modal + inline create join when series exist: %s", truncate(body2, 400))
+	if !strings.Contains(body2, "modal-add-series") || !strings.Contains(body2, `src="/static/import.js"`) {
+		t.Fatalf("expected add-series modal + import.js script when series exist: %s", truncate(body2, 400))
 	}
 	if !strings.Contains(body2, "modal-add-video") || !strings.Contains(body2, "js-add-video-form") {
 		t.Fatalf("expected add-video modal when series exist: %s", truncate(body2, 400))

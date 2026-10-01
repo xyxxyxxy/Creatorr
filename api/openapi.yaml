@@ -1158,7 +1158,7 @@ paths:
     post:
       tags: [library]
       operationId: bulkIgnoreVideos
-      summary: Ignore many videos (skips downloaded / integrity_check_failed)
+      summary: Ignore many videos (skips downloaded / downloaded_integrity_failed)
       requestBody:
         required: true
         content:
@@ -2528,7 +2528,7 @@ components:
           description: Video page URL (watch/clip); never the feed channel/playlist URL
         status:
           type: string
-          description: wanted, wanted_archive, wanted_download_error, downloaded, integrity_check_failed, missing, deleted, ignored
+          description: wanted, wanted_archive, wanted_download_error, downloaded, downloaded_integrity_failed, missing, deleted, ignored
         acquired_via:
           type: string
           nullable: true
@@ -2628,11 +2628,11 @@ components:
         downloaded_count:
           type: integer
           format: int64
-          description: Videos with status downloaded (successful only; excludes integrity_check_failed).
+          description: Videos with status downloaded (successful only; excludes downloaded_integrity_failed).
         wanted_count:
           type: integer
           format: int64
-          description: Videos with status wanted or wanted_archive (excludes wanted_download_error and integrity_check_failed).
+          description: Videos with status wanted or wanted_archive (excludes wanted_download_error and downloaded_integrity_failed).
         source_count:
           type: integer
           format: int64

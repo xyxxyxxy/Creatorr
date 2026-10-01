@@ -54,13 +54,12 @@ func (s *Store) nfoDiskMatchesVideo(videoID int64) (match bool, path string, err
 	return nfoMatchesExpected(b, meta), nfoPath, nil
 }
 
-// episodeNFOXMLCompare extends import decode with season/showtitle for integrity.
+// episodeNFOXMLCompare extends import decode with season for integrity.
 type episodeNFOXMLCompare struct {
 	XMLName           xml.Name `xml:"episodedetails"`
 	Title             string   `xml:"title"`
 	SortTitle         string   `xml:"sorttitle"`
 	OriginalTitle     string   `xml:"originaltitle"`
-	ShowTitle         string   `xml:"showtitle"`
 	Season            int      `xml:"season"`
 	Episode           int      `xml:"episode"`
 	Plot              string   `xml:"plot"`
@@ -100,9 +99,6 @@ func episodeNFOXMLEqual(a, b episodeNFOXMLCompare) bool {
 		return false
 	}
 	if strings.TrimSpace(a.OriginalTitle) != strings.TrimSpace(b.OriginalTitle) {
-		return false
-	}
-	if strings.TrimSpace(a.ShowTitle) != strings.TrimSpace(b.ShowTitle) {
 		return false
 	}
 	if a.Season != b.Season || a.Episode != b.Episode {
@@ -228,7 +224,7 @@ func actorsEqual(a, b episodeNFOXMLCompare) bool {
 
 var nfoAllowedElems = map[string]map[string]struct{}{
 	"episodedetails": {
-		"title": {}, "sorttitle": {}, "originaltitle": {}, "showtitle": {},
+		"title": {}, "sorttitle": {}, "originaltitle": {}, "showtitle": {}, // showtitle: legacy on disk; not emitted
 		"season": {}, "episode": {}, "plot": {}, "tagline": {}, "studio": {},
 		"genre": {}, "tag": {}, "aired": {}, "runtime": {}, "country": {}, "mpaa": {},
 		"uniqueid": {}, "actor": {}, "fileinfo": {},

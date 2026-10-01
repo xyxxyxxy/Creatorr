@@ -302,11 +302,15 @@ func TestDeleteVideoSidecar(t *testing.T) {
 	if n != 0 {
 		t.Fatal("files row should be gone")
 	}
-	var histEvent string
-	if err := s.DB.SQL.QueryRow(`
-		SELECT event FROM video_history WHERE video_id = ? AND event = 'sidecar_deleted' ORDER BY id DESC LIMIT 1
-	`, videoID).Scan(&histEvent); err != nil {
-		t.Fatal(err)
+	var histN int
+	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM video_history WHERE video_id = ? AND event = 'sidecar_deleted'`, videoID).Scan(&histN)
+	if histN != 0 {
+		t.Fatal("sidecar delete must not write history")
+	}
+	var taskN int
+	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = 'delete_sidecar'`).Scan(&taskN)
+	if taskN != 0 {
+		t.Fatal("sidecar delete must not create tasks")
 	}
 
 	// Reject nfo

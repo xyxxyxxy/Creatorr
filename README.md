@@ -184,7 +184,7 @@ make vet
 make lint       # golangci-lint in Docker (version pinned in Makefile; needs Docker)
 make generate   # after editing api/openapi.yaml
 make openapi-check
-make css        # after Tailwind/daisyUI class or ECharts vendor changes
+make css        # after Tailwind/daisyUI class, JS module (ui/src/js), or ECharts vendor changes
 make sbom       # CycloneDX SBOM (needs syft); CI also license-gates it
 ```
 

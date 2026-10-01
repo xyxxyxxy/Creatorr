@@ -324,8 +324,8 @@ func TestFormatFileSyncIssuesBody(t *testing.T) {
 	if !strings.Contains(body, "- S2 / Changed (thumb: ep-thumb.jpg)") {
 		t.Fatalf("changed sidecar detail: %q", body)
 	}
-	if !strings.Contains(body, "integrity_check_failed") || !strings.Contains(body, "sidecar") {
-		t.Fatalf("want integrity_check_failed + sidecar hint: %q", body)
+	if !strings.Contains(body, "downloaded_integrity_failed") || !strings.Contains(body, "sidecar") {
+		t.Fatalf("want downloaded_integrity_failed + sidecar hint: %q", body)
 	}
 }
 
@@ -468,7 +468,7 @@ func TestYtDlpFailedKeepsDetailTail(t *testing.T) {
 	if !strings.HasPrefix(body, "Domain example.com: task failed.\n\n") {
 		t.Fatalf("want clearer lead, got %q", body)
 	}
-	if items[0].Title != "yt-dlp failure (example.com)" {
+	if items[0].Title != "yt-dlp / site failure (example.com)" {
 		t.Fatalf("title=%q", items[0].Title)
 	}
 	if !strings.Contains(body, suffix) {

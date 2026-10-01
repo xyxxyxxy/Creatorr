@@ -3,7 +3,6 @@ package library
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"time"
 )
 
@@ -45,25 +44,7 @@ type SourceScanStatus struct {
 
 // AddSourceHistory appends a timeline event. taskID is required.
 func (s *Store) AddSourceHistory(sourceID int64, event, message string, detail map[string]any, taskID int64) error {
-	if taskID <= 0 {
-		return fmt.Errorf("%w: source history requires task_id", ErrInvalid)
-	}
-	if sourceID <= 0 {
-		return fmt.Errorf("%w: source history requires source_id", ErrInvalid)
-	}
-	raw := "{}"
-	if detail != nil {
-		b, err := json.Marshal(detail)
-		if err != nil {
-			return err
-		}
-		raw = string(b)
-	}
-	_, err := s.DB.SQL.Exec(`
-		INSERT INTO source_history (source_id, created_at, event, message, detail, task_id)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, sourceID, nowRFC3339(), event, message, raw, taskID)
-	return err
+	return s.insertHistory("source_history", "source_id", "source", sourceID, event, message, detail, taskID)
 }
 
 // ListSourceHistoryPage returns newest-first history. limit<=0 returns all rows.

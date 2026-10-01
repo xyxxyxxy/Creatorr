@@ -77,7 +77,7 @@ type verifyAllMediaPayload struct {
 // VerifyAllMediaFail is one failed video from VerifyAllMediaPass (for notify).
 type VerifyAllMediaFail = integrity.VerifyAllMediaFail
 
-// VerifyAllMediaPass runs integrity check on packed downloaded/integrity_check_failed media
+// VerifyAllMediaPass runs integrity check on packed downloaded/downloaded_integrity_failed media
 // with a cursor for resume. Skips videos whose quality profile has File integrity off.
 // onFail is optional; called after MarkVerifyFailed for each failure.
 func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64), onFail func(VerifyAllMediaFail)) (*VerifyAllMediaResult, error) {
@@ -133,9 +133,21 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 		return s.Queue.UpdatePayload(task.ID, m)
 	}
 
+	// Cumulative across resumes (payload counters), not this-run-only.
+	reportLive := func() {
+		if progress == nil {
+			return
+		}
+		done := res.IntegrityChecked + res.Partial + res.Skipped + res.Failed
+		pct := float64(done%1000) / 1000.0
+		progress(fmt.Sprintf("Integrity check %d…", done), &pct)
+	}
+	if res.IntegrityChecked+res.Partial+res.Skipped+res.Failed > 0 {
+		reportLive()
+	}
+
 	const batchSize = 50
 	const persistEvery = 10
-	processed := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -147,7 +159,7 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 		q := `
 		SELECT v.id
 		FROM videos v
-		WHERE v.status IN ('downloaded', 'integrity_check_failed')
+		WHERE v.status IN ('downloaded', 'downloaded_integrity_failed')
 		  AND v.id > ?
 		  AND EXISTS (
 		    SELECT 1 FROM files f
@@ -197,14 +209,7 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 				return res, ctx.Err()
 			default:
 			}
-			p.Cursor = id
-			processed++
 			dirty := false
-			if progress != nil {
-				// Indeterminate across batches: show count processed so far.
-				pct := float64(processed%1000) / 1000.0
-				progress(fmt.Sprintf("Integrity check %d…", processed), &pct)
-			}
 
 			busy, berr := s.videoBusyForRename(id, task.ID)
 			if berr != nil {
@@ -254,6 +259,7 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 						})
 						if verr != nil {
 							if ctx.Err() != nil {
+								// Leave cursor before this id so resume retries the interrupted video.
 								_ = persist()
 								return res, ctx.Err()
 							}
@@ -289,7 +295,11 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 					}
 				}
 			}
-			if dirty && (processed%persistEvery == 0 || i == len(ids)-1) {
+			// Advance cursor only after this id is fully handled (skip/ok/fail).
+			p.Cursor = id
+			reportLive()
+			done := res.IntegrityChecked + res.Partial + res.Skipped + res.Failed
+			if dirty && (done%persistEvery == 0 || i == len(ids)-1) {
 				_ = persist()
 			}
 		}

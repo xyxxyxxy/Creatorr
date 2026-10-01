@@ -13,8 +13,8 @@ func TestIntegrityIndicatorState(t *testing.T) {
 		verify, hash, schedule bool
 		want                   string
 	}{
-		{"failed overrides all", "integrity_check_failed", true, true, true, integrityIndFailed},
-		{"failed even verify off", "integrity_check_failed", false, false, false, integrityIndFailed},
+		{"failed overrides all", "downloaded_integrity_failed", true, true, true, integrityIndFailed},
+		{"failed even verify off", "downloaded_integrity_failed", false, false, false, integrityIndFailed},
 		{"wanted off", "wanted", true, true, true, integrityIndOff},
 		{"missing off", "missing", true, true, true, integrityIndOff},
 		{"downloaded verify off", "downloaded", false, true, true, integrityIndOff},

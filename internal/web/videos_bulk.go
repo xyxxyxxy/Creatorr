@@ -76,11 +76,31 @@ func (h *Handler) actionBulkWantVideos(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, seriesVideosRedirect(sid, r, "", "", err.Error()), http.StatusSeeOther)
 		return
 	}
+	ok := "bulk_want"
+	if ser, serr := h.Library.GetSeries(sid, false); serr == nil && !ser.Monitored {
+		ok = "bulk_want_unmonitored"
+	}
 	msg := "updated=" + strconv.Itoa(updated)
 	if skipped > 0 {
 		msg += " skipped=" + strconv.Itoa(skipped)
 	}
-	http.Redirect(w, r, seriesVideosRedirect(sid, r, "bulk_want", msg, ""), http.StatusSeeOther)
+	http.Redirect(w, r, seriesVideosRedirect(sid, r, ok, msg, ""), http.StatusSeeOther)
+}
+
+func (h *Handler) actionBulkClearVideoDownloadErrors(w http.ResponseWriter, r *http.Request) {
+	ids := parseVideoIDList(r)
+	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
+	if len(ids) == 0 || sid <= 0 {
+		http.Redirect(w, r, "/series?err="+urlQuery("select at least one video"), http.StatusSeeOther)
+		return
+	}
+	updated, _, err := h.Library.ClearVideoDownloadErrorsBulk(ids)
+	if err != nil {
+		http.Redirect(w, r, seriesVideosRedirect(sid, r, "", "", err.Error()), http.StatusSeeOther)
+		return
+	}
+	redir := seriesVideosRedirect(sid, r, "clear-error", "", "")
+	http.Redirect(w, r, appendQuery(redir, "n="+strconv.Itoa(updated)), http.StatusSeeOther)
 }
 
 func (h *Handler) actionBulkIgnoreVideos(w http.ResponseWriter, r *http.Request) {

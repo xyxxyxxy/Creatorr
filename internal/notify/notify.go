@@ -178,7 +178,7 @@ func DomainAlert(ctx context.Context, database *db.DB, taskID int64, domain, rea
 // YtDlpFailed notifies a yt-dlp (or media-task remux/pack) failure that is not cookie/rate.
 func YtDlpFailed(ctx context.Context, database *db.DB, taskID int64, domain, detail string) error {
 	detail = truncateDetailTail(detail)
-	title := fmt.Sprintf("yt-dlp failure (%s)", domain)
+	title := fmt.Sprintf("yt-dlp / site failure (%s)", domain)
 	body := fmt.Sprintf("Domain %s: task failed.\n\n%s", domain, detail)
 	return SendEvent(ctx, database, EventYtDlpFailed, title, body, taskID)
 }
@@ -195,7 +195,7 @@ func VerifyFailed(ctx context.Context, database *db.DB, taskID int64, series, ti
 		vt = "video"
 	}
 	nTitle := fmt.Sprintf("Integrity check failed (%s)", label)
-	body := fmt.Sprintf("%s: %s failed Integrity check. File kept; status integrity_check_failed. Re-download to retry.\n\n%s", label, vt, detail)
+	body := fmt.Sprintf("%s: %s failed Integrity check. File kept; status downloaded_integrity_failed. Re-download to retry.\n\n%s", label, vt, detail)
 	return SendEvent(ctx, database, EventVerifyFailed, nTitle, body, taskID)
 }
 
@@ -392,7 +392,7 @@ func FormatFileSyncIssuesBody(missing, changed []FileSyncIssueItem) string {
 	writeSection("Size changed", changed)
 	body := strings.TrimSpace(b.String())
 	if body != "" {
-		body += "\n\nFiles kept where present. Media size mismatches set status integrity_check_failed; sidecar issues keep video status. Re-download or regenerate manually to replace. No automatic re-download."
+		body += "\n\nFiles kept where present. Media size mismatches set status downloaded_integrity_failed; sidecar issues keep video status. Re-download or regenerate manually to replace. No automatic re-download."
 	}
 	return body
 }

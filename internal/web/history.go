@@ -60,15 +60,60 @@ func taskWhen(t queue.Task) string {
 	return t.CreatedAt
 }
 
+// historyListMessage is the History → Tasks row text. Failed rows prefer a short
+// root-cause line from error_message when the stored message is generic.
+// Always one line (no embedded newlines), capped for the table cell.
+func historyListMessage(t queue.Task) string {
+	msg := strings.TrimSpace(t.Message)
+	if t.Status != queue.StatusFailed {
+		return firstErrorLine(msg)
+	}
+	detail := firstErrorLine(t.ErrorMessage)
+	if detail == "" {
+		return firstErrorLine(msg)
+	}
+	if msg == "" || isGenericFailMessage(msg) {
+		return detail
+	}
+	if strings.Contains(strings.ToLower(msg), strings.ToLower(detail)) {
+		return firstErrorLine(msg)
+	}
+	return firstErrorLine(msg + ": " + detail)
+}
+
+func isGenericFailMessage(msg string) bool {
+	switch strings.ToLower(strings.TrimSpace(msg)) {
+	case "download failed", "remux failed", "pack failed", "scan failed", "failed":
+		return true
+	default:
+		return false
+	}
+}
+
+func firstErrorLine(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = strings.TrimSpace(s[:i])
+	}
+	const max = 160
+	if len(s) > max {
+		return s[:max-1] + "…"
+	}
+	return s
+}
+
 func taskToHistoryView(t queue.Task, now time.Time) historyView {
-	abs, ago := createdAgoPair(taskWhen(t), now)
+	abs, ago := createdAgoPairCompact(taskWhen(t), now)
 	v := historyView{
 		ID:           t.ID,
 		CreatedAt:    abs,
 		CreatedAgo:   ago,
 		Kind:         t.Kind,
 		Status:       t.Status,
-		Message:      t.Message,
+		Message:      historyListMessage(t),
 		Domain:       t.Domain,
 		Code:         t.ErrorCode,
 		ErrorMessage: t.ErrorMessage,
@@ -87,7 +132,7 @@ func taskToHistoryView(t queue.Task, now time.Time) historyView {
 }
 
 func notificationToView(n notify.Notification, now time.Time) notifyHistoryView {
-	abs, ago := createdAgoPair(n.CreatedAt, now)
+	abs, ago := createdAgoPairCompact(n.CreatedAt, now)
 	label := notify.EventLabels[n.Event]
 	if label == "" {
 		label = n.Event

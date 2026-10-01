@@ -13,6 +13,7 @@
 @source "../../templates/**/*.html";
 @source "../../partials/**/*.html";
 @source "../../static/app.js";
+@source "../../static/import.js";
 
 /*
   Exception (approved): daisyUI .modal-box uses overflow-y:auto, which clips tooltip
@@ -65,6 +66,14 @@
 }
 #import-list details.dropdown[open] .dropdown-content {
   overflow: visible;
+}
+
+/*
+  List tables: same daisyUI tip stacking issue as Import. Raise the tip host on
+  hover so tooltip-top clears the next row / neighboring cells.
+*/
+.list-table .tooltip:is(:hover, :focus-within) {
+  z-index: 40;
 }
 
 /*

@@ -560,6 +560,11 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 	if cur.Status == "downloaded" {
 		return 0, fmt.Errorf("%w: video already present", ErrInvalid)
 	}
+	if open, err := s.SeriesHasOpenMove(cur.SeriesID); err != nil {
+		return 0, err
+	} else if open {
+		return 0, ErrSeriesMoveBusy
+	}
 	if !downloadNow {
 		ok, err := s.SeriesIsMonitored(cur.SeriesID)
 		if err != nil {
@@ -618,9 +623,9 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 		}
 	}
 	switch cur.Status {
-	case "ignored", "deleted", "missing", "wanted_download_error", "integrity_check_failed", StatusWantedArchive:
+	case StatusIgnored, StatusDeleted, StatusMissing, StatusWantedDownloadError, StatusDownloadedIntegrityFailed, StatusWantedArchive:
 		_ = s.CancelArchiveDownloadsForVideo(videoID)
-		_, _ = s.DB.SQL.Exec(`UPDATE videos SET status = 'wanted' WHERE id = ?`, videoID)
+		_, _ = s.DB.SQL.Exec(`UPDATE videos SET status = ? WHERE id = ?`, StatusWanted, videoID)
 	}
 	params := enqueueDownloadParams(videoID, cur.SeriesID, domain, queue.OriginManual)
 	if downloadNow {
@@ -649,10 +654,10 @@ func (s *Store) IgnoreVideo(videoID int64) ([]queue.Task, error) {
 		return nil, err
 	}
 	switch cur.Status {
-	case "downloaded", "integrity_check_failed":
+	case StatusDownloaded, StatusDownloadedIntegrityFailed:
 		return nil, fmt.Errorf("cannot ignore %s video; delete library files instead", cur.Status)
 	}
-	_, err = s.DB.SQL.Exec(`UPDATE videos SET status = 'ignored' WHERE id = ?`, videoID)
+	_, err = s.DB.SQL.Exec(`UPDATE videos SET status = ? WHERE id = ?`, StatusIgnored, videoID)
 	if err != nil {
 		return nil, err
 	}
@@ -813,7 +818,7 @@ func (s *Store) ListVideoHistoryByTaskID(taskID int64) ([]VideoHistoryEvent, err
 	return out, rows.Err()
 }
 
-// WantVideo sets status to wanted from ignored, deleted, missing, or integrity_check_failed.
+// WantVideo sets status to wanted from ignored, deleted, missing, or downloaded_integrity_failed.
 // Does not enqueue a download - download_wanted_cron or Download now picks it up.
 func (s *Store) WantVideo(id int64) (*Video, error) {
 	cur, err := s.GetVideo(id)
@@ -821,12 +826,12 @@ func (s *Store) WantVideo(id int64) (*Video, error) {
 		return nil, err
 	}
 	switch cur.Status {
-	case "ignored", "deleted", "missing", "integrity_check_failed":
+	case StatusIgnored, StatusDeleted, StatusMissing, StatusDownloadedIntegrityFailed:
 		// ok
 	default:
-		return nil, fmt.Errorf("%w: want only from ignored, deleted, missing, or integrity_check_failed (got %s)", ErrInvalid, cur.Status)
+		return nil, fmt.Errorf("%w: want only from ignored, deleted, missing, or downloaded_integrity_failed (got %s)", ErrInvalid, cur.Status)
 	}
-	_, err = s.DB.SQL.Exec(`UPDATE videos SET status = 'wanted' WHERE id = ?`, id)
+	_, err = s.DB.SQL.Exec(`UPDATE videos SET status = ? WHERE id = ?`, StatusWanted, id)
 	if err != nil {
 		return nil, err
 	}

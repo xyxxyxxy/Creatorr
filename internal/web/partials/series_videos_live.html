@@ -2,6 +2,7 @@
 <div id="series-videos-live" {{if .OOB}}hx-swap-oob="true"{{end}}
      data-filter-total="{{.FilterTotal}}"
      data-series-id="{{.SeriesID}}"
+     data-download-error-count="{{.DownloadErrorCount}}"
      data-bulk-busy="{{if .BulkEditBusy}}1{{else}}0{{end}}"
      data-bulk-mode="0">
 {{template "list_panel"}}
@@ -74,6 +75,9 @@
           <i data-lucide="file-pen" class="size-4"></i>
           Edit metadata
         </button>
+        <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-video-bulk-clear-errors data-tip="Clear selected" aria-label="Clear selected" disabled>
+          <i data-lucide="badge-x" class="size-4"></i>
+        </button>
         <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-video-bulk-want data-tip="Want" aria-label="Want" disabled>
           <i data-lucide="eye" class="size-4"></i>
         </button>
@@ -94,6 +98,7 @@
     "ID" .ID
     "Title" .Title
     "Status" .Status
+    "StatusLabel" .StatusLabel
     "UploadDate" .UploadDate
     "SizeLabel" .SizeLabel
     "ResolutionLabel" .ResolutionLabel

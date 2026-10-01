@@ -6,9 +6,29 @@ import (
 	"time"
 )
 
+// agoISOAfter: past times older than this show as YYYY-MM-DD instead of relative prose.
+const agoISOAfter = 7 * 24 * time.Hour
+
+// agoISODate returns YYYY-MM-DD when then is more than one week before now.
+func agoISODate(then, now time.Time) (string, bool) {
+	then = then.UTC()
+	now = now.UTC()
+	if then.After(now) {
+		then, now = now, then
+	}
+	if now.Sub(then) > agoISOAfter {
+		return then.Format("2006-01-02"), true
+	}
+	return "", false
+}
+
 // formatAgo returns a static relative past time using at most two units.
 // Smallest unit is minutes; under one minute → "just now" (no live UI updates).
+// Older than 7 days → ISO date (YYYY-MM-DD).
 func formatAgo(then, now time.Time) string {
+	if iso, ok := agoISODate(then, now); ok {
+		return iso
+	}
 	then = then.UTC()
 	now = now.UTC()
 	if then.After(now) {
@@ -81,8 +101,12 @@ func formatAgo(then, now time.Time) string {
 }
 
 // formatAgoShort returns a relative past time using only the largest unit, spelled out.
-// Examples: "just now", "3 minutes ago", "1 hour ago", "1 day ago", "7 days ago", "1 year ago".
+// Older than 7 days → ISO date (YYYY-MM-DD).
+// Examples: "just now", "3 minutes ago", "1 hour ago", "7 days ago", "2025-03-18".
 func formatAgoShort(then, now time.Time) string {
+	if iso, ok := agoISODate(then, now); ok {
+		return iso
+	}
 	then = then.UTC()
 	now = now.UTC()
 	if then.After(now) {
@@ -142,6 +166,20 @@ func formatAgoShort(then, now time.Time) string {
 		label = p.one
 	}
 	return fmt.Sprintf("%d %s ago", p.n, label)
+}
+
+// formatAgoCompact is formatInShort-style for the past within one week.
+// Older than 7 days → ISO date (YYYY-MM-DD). Tip still carries the absolute time.
+// Examples: "just now", "3 min", "1 h 2 min", "7 d", "2026-07-10".
+func formatAgoCompact(then, now time.Time) string {
+	if iso, ok := agoISODate(then, now); ok {
+		return iso
+	}
+	s := formatInShort(then, now)
+	if s == "now" {
+		return "just now"
+	}
+	return s
 }
 
 // formatInShort returns a compact relative future span (at most two units).

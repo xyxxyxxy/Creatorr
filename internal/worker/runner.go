@@ -182,8 +182,14 @@ func (r *Runner) execute(ctx context.Context, log *slog.Logger, task *queue.Task
 	if errors.Is(runErr, context.Canceled) {
 		if queue.KindResumableOnShutdown(task.Kind) {
 			// Process shutdown: leave status=running so boot RequeueStaleRunning can resume.
-			if r.Queue.Live != nil {
-				r.Queue.Live.Clear(task.ID)
+			// Flush last Live % to SQLite before Clear so requeue keeps operator progress.
+			if r.Queue != nil {
+				if err := r.Queue.PersistLive(task.ID); err != nil {
+					log.Warn("persist live progress on interrupt", "task", task.ID, "err", err)
+				}
+				if r.Queue.Live != nil {
+					r.Queue.Live.Clear(task.ID)
+				}
 			}
 			log.Info("task interrupted (left running for requeue)", "id", task.ID, "kind", task.Kind)
 			return
@@ -410,5 +416,6 @@ func StubHandlers() map[string]TaskHandler {
 		queue.KindYtDlpUpdate:        stub(queue.KindYtDlpUpdate),
 		queue.KindBulkEditSeries:     stub(queue.KindBulkEditSeries),
 		queue.KindBulkEditVideos:     stub(queue.KindBulkEditVideos),
+		queue.KindSeriesMove:         stub(queue.KindSeriesMove),
 	}
 }

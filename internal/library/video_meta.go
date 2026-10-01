@@ -182,8 +182,17 @@ func (s *Store) FillMediaColumnsFromInfoJSON(videoID int64, infoPath string) err
 	return err
 }
 
+// PeekDurationSeconds returns duration from the column, else packed info.json.
+// Read-only: never writes SQLite. Use on list/GET paths.
+func PeekDurationSeconds(durationCol sql.NullInt64, infoJSONPath string) int {
+	if durationCol.Valid && durationCol.Int64 > 0 {
+		return int(durationCol.Int64)
+	}
+	return DurationSecondsFromInfoJSON(infoJSONPath)
+}
+
 // ResolveDurationSeconds returns duration from the column, else packed info.json.
-// When found only in info.json, backfills duration_seconds.
+// When found only in info.json, backfills duration_seconds (pack/download paths).
 func (s *Store) ResolveDurationSeconds(videoID int64, durationCol sql.NullInt64, infoJSONPath string) int {
 	if durationCol.Valid && durationCol.Int64 > 0 {
 		return int(durationCol.Int64)
@@ -196,16 +205,13 @@ func (s *Store) ResolveDurationSeconds(videoID int64, durationCol sql.NullInt64,
 	return sec
 }
 
-// ResolveResolutionLabel returns the resolution bucket from columns, else packed info.json.
-// Soft-fills empty media columns (dims + media_type) from info.json when present.
-func (s *Store) ResolveResolutionLabel(videoID int64, width, height sql.NullInt64, infoJSONPath string) string {
-	if infoJSONPath != "" && videoID >= 1 {
-		_ = s.FillMediaColumnsFromInfoJSON(videoID, infoJSONPath)
-	}
+// PeekResolutionLabel returns the resolution bucket from columns, else packed info.json.
+// Read-only: never writes SQLite. Use on list/GET paths.
+func PeekResolutionLabel(width, height sql.NullInt64, infoJSONPath string) string {
 	if label := ResolutionLabelFromCols(width, height); label != "" {
 		return label
 	}
-	if infoJSONPath == "" || videoID < 1 {
+	if infoJSONPath == "" {
 		return ""
 	}
 	m := MediaMetaFromInfoJSON(infoJSONPath)
@@ -213,6 +219,15 @@ func (s *Store) ResolveResolutionLabel(videoID int64, width, height sql.NullInt6
 		return ""
 	}
 	return ResolutionLabel(m.Width, m.Height)
+}
+
+// ResolveResolutionLabel returns the resolution bucket from columns, else packed info.json.
+// Soft-fills empty media columns (dims + media_type) from info.json when present (pack/download).
+func (s *Store) ResolveResolutionLabel(videoID int64, width, height sql.NullInt64, infoJSONPath string) string {
+	if infoJSONPath != "" && videoID >= 1 {
+		_ = s.FillMediaColumnsFromInfoJSON(videoID, infoJSONPath)
+	}
+	return PeekResolutionLabel(width, height, infoJSONPath)
 }
 
 // ResolutionLabelFromCols returns the bucket when both dimensions are positive.

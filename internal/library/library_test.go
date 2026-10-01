@@ -92,7 +92,7 @@ func TestSeriesCRUDAndScan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated, err := s.UpdateSeries(ser.ID, library.UpdateSeriesParams{
+	out, err := s.UpdateSeriesDetailed(ser.ID, library.UpdateSeriesParams{
 		Title:            &newTitle,
 		RootID:           &r2.ID,
 		QualityProfileID: &p2.ID,
@@ -100,8 +100,16 @@ func TestSeriesCRUDAndScan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Title != newTitle || updated.RootID != r2.ID || updated.QualityProfileID != p2.ID {
-		t.Fatalf("update: title=%q root=%d profile=%d", updated.Title, updated.RootID, updated.QualityProfileID)
+	// Title/root change is queued as series_move; quality applies now.
+	updated := out.Series
+	if !out.MoveQueued || updated.Title != "Demo" || updated.RootID != rootID || updated.QualityProfileID != p2.ID {
+		t.Fatalf("update: queued=%v title=%q root=%d profile=%d", out.MoveQueued, updated.Title, updated.RootID, updated.QualityProfileID)
+	}
+	if _, err := s.DB.SQL.Exec(`UPDATE tasks SET status = 'cancelled' WHERE kind = ?`, queue.KindSeriesMove); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`UPDATE series SET title = ?, root_id = ? WHERE id = ?`, newTitle, r2.ID, ser.ID); err != nil {
+		t.Fatal(err)
 	}
 
 	// create already enqueued a scan; second should conflict
@@ -569,7 +577,7 @@ func TestSeriesProgressCountsErrorsAsPending(t *testing.T) {
 			(?, ?, 'd5', 'Done5', 'downloaded'),
 			(?, ?, 'd6', 'Done6', 'downloaded'),
 			(?, ?, 'e1', 'Err', 'wanted_download_error'),
-			(?, ?, 'v1', 'Verify', 'integrity_check_failed'),
+			(?, ?, 'v1', 'Verify', 'downloaded_integrity_failed'),
 			(?, ?, 'ig1', 'Skip', 'ignored')
 	`, ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID,
 		ser.ID, src.ID, ser.ID, src.ID, ser.ID, src.ID); err != nil {
@@ -1982,7 +1990,7 @@ func TestMarkDownloadFailedStage(t *testing.T) {
 			continue
 		}
 		found = true
-		if e.Message != "Remux failed" {
+		if e.Message != "Remux failed: ffmpeg boom" {
 			t.Fatalf("message=%q", e.Message)
 		}
 		var detail map[string]any

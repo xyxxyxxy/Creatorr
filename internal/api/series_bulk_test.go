@@ -5,17 +5,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/xyxxyxxy/Creatorr/internal/api"
 	"github.com/xyxxyxxy/Creatorr/internal/api/gen"
-	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
+	"github.com/xyxxyxxy/Creatorr/internal/testutil"
 )
 
 func mountAPI(t *testing.T, lib *library.Store, q *queue.Store) http.Handler {
@@ -27,14 +25,7 @@ func mountAPI(t *testing.T, lib *library.Store, q *queue.Store) http.Handler {
 }
 
 func TestBulkEditSeriesAPI(t *testing.T) {
-	d, err := db.Open(filepath.Join(t.TempDir(), "api.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = d.Close() }()
-	_ = settings.SeedDefaults(d)
-	q := queue.NewStore(d)
-	lib := library.NewStore(d, q)
+	_, q, lib := testutil.OpenStores(t)
 	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -83,14 +74,7 @@ func TestBulkEditSeriesAPI(t *testing.T) {
 }
 
 func TestBulkSetSeriesMonitoredAPI(t *testing.T) {
-	d, err := db.Open(filepath.Join(t.TempDir(), "api.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = d.Close() }()
-	_ = settings.SeedDefaults(d)
-	q := queue.NewStore(d)
-	lib := library.NewStore(d, q)
+	_, q, lib := testutil.OpenStores(t)
 	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)

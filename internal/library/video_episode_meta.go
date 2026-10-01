@@ -99,6 +99,27 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (Sav
 		}
 	}
 
+	dayChanged := newDay != oldDay
+	timeChangedSameDay := false
+	if !dayChanged && newDay != "" && hasTime {
+		prevNorm := ""
+		if v.UploadDate.Valid {
+			prevNorm = NormalizeUploadTime(v.UploadDate.String)
+		}
+		if prevNorm != normalized {
+			timeChangedSameDay = true
+		}
+	}
+	roleChanged := prevRole != packRole
+	// Path-affecting edits would enqueue rename_episodes, which series_move excludes.
+	if title != prevTitle || roleChanged || dayChanged || timeChangedSameDay {
+		if open, err := s.SeriesHasOpenMove(v.SeriesID); err != nil {
+			return out, err
+		} else if open {
+			return out, ErrSeriesMoveBusy
+		}
+	}
+
 	_, err = s.DB.SQL.Exec(`
 		UPDATE videos SET
 		  title = ?, description = ?,
@@ -117,19 +138,7 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (Sav
 		return out, err
 	}
 
-	dayChanged := newDay != oldDay
-	timeChangedSameDay := false
-	if !dayChanged && newDay != "" && hasTime {
-		prevNorm := ""
-		if v.UploadDate.Valid {
-			prevNorm = NormalizeUploadTime(v.UploadDate.String)
-		}
-		if prevNorm != normalized {
-			timeChangedSameDay = true
-		}
-	}
 	var renameIDs []int64
-	roleChanged := prevRole != packRole
 	if roleChanged {
 		if _, err := s.ReindexPackRoleBucket(v.SeriesID, prevRole); err != nil {
 			return out, err
