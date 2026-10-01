@@ -86,7 +86,7 @@ func (s *Store) SeriesWarnLevels(seriesIDs []int64) (map[int64]SeriesWarnLevel, 
 	errRows, err := s.DB.SQL.Query(`
 		SELECT DISTINCT series_id FROM videos
 		WHERE series_id IN (`+ph+`)
-		  AND status IN ('wanted_download_error', 'integrity_check_failed')
+		  AND status IN `+sqlVideoErrorStatuses+`
 	`, args...)
 	if err != nil {
 		return nil, err
@@ -148,11 +148,11 @@ func (s *Store) SeriesVideoErrorFlagsMap(seriesIDs []int64) (map[int64]SeriesVid
 	}
 	rows, err := s.DB.SQL.Query(`
 		SELECT series_id,
-		       SUM(CASE WHEN status = 'wanted_download_error' THEN 1 ELSE 0 END),
-		       SUM(CASE WHEN status = 'integrity_check_failed' THEN 1 ELSE 0 END)
+		       SUM(CASE WHEN status = '`+StatusWantedDownloadError+`' THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN status = '`+StatusIntegrityCheckFailed+`' THEN 1 ELSE 0 END)
 		FROM videos
 		WHERE series_id IN (`+sqlIntPlaceholders(len(args))+`)
-		  AND status IN ('wanted_download_error', 'integrity_check_failed')
+		  AND status IN `+sqlVideoErrorStatuses+`
 		GROUP BY series_id
 	`, args...)
 	if err != nil {
@@ -183,7 +183,7 @@ func (s *Store) CountSeriesWithError() (int, error) {
 	err := s.DB.SQL.QueryRow(`
 		SELECT COUNT(*) FROM (
 			SELECT series_id FROM videos
-			WHERE status IN ('wanted_download_error', 'integrity_check_failed')
+			WHERE status IN `+sqlVideoErrorStatuses+`
 			UNION
 			SELECT DISTINCT src.series_id
 			FROM sources src

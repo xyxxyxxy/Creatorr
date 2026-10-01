@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -13,21 +12,12 @@ import (
 
 	"github.com/xyxxyxxy/Creatorr/internal/api"
 	"github.com/xyxxyxxy/Creatorr/internal/api/gen"
-	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
-	"github.com/xyxxyxxy/Creatorr/internal/queue"
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
+	"github.com/xyxxyxxy/Creatorr/internal/testutil"
 )
 
 func TestCreateSeriesVideo(t *testing.T) {
-	d, err := db.Open(filepath.Join(t.TempDir(), "api.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = d.Close() }()
-	_ = settings.SeedDefaults(d)
-	q := queue.NewStore(d)
-	lib := library.NewStore(d, q)
+	_, q, lib := testutil.OpenStores(t)
 	root, err := lib.CreateRoot("archive", t.TempDir(), "", nil)
 	if err != nil {
 		t.Fatal(err)

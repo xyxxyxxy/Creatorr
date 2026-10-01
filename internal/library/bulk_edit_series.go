@@ -224,10 +224,7 @@ func (s *Store) BulkEditSeriesPass(ctx context.Context, task *queue.Task, progre
 			return updated, skipped, failed, err
 		}
 		sid := ids[i]
-		if progress != nil {
-			pct := float64(i) / float64(n) * 100
-			progress(fmt.Sprintf("Updating %d/%d", i+1, n), &pct)
-		}
+		bulkEditProgressStep(progress, i, n)
 		ser, gerr := s.GetSeries(sid, false)
 		if gerr != nil {
 			if errors.Is(gerr, ErrNotFound) {
@@ -246,10 +243,7 @@ func (s *Store) BulkEditSeriesPass(ctx context.Context, task *queue.Task, progre
 		updated++
 		_ = s.persistBulkEditCursor(task.ID, i+1, p)
 	}
-	if progress != nil {
-		pct := 100.0
-		progress(BulkEditSeriesMessage(updated, skipped, failed), &pct)
-	}
+	bulkEditProgressDone(progress, updated, skipped, failed)
 	return updated, skipped, failed, nil
 }
 
@@ -341,31 +335,8 @@ func normalizeActorsList(actors []SeriesActor) []SeriesActor {
 }
 
 func (s *Store) persistBulkEditCursor(taskID int64, index int, p bulkEditSeriesPayload) error {
-	if s.Queue == nil {
-		return nil
-	}
 	p.Index = index
-	b, err := json.Marshal(p)
-	if err != nil {
-		return err
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		return err
-	}
-	return s.Queue.UpdatePayload(taskID, m)
-}
-
-// BulkEditSeriesMessage summarizes a finished bulk edit pass.
-func BulkEditSeriesMessage(updated, skipped, failed int) string {
-	parts := []string{fmt.Sprintf("Updated %d", updated)}
-	if skipped > 0 {
-		parts = append(parts, fmt.Sprintf("skipped %d", skipped))
-	}
-	if failed > 0 {
-		parts = append(parts, fmt.Sprintf("failed %d", failed))
-	}
-	return strings.Join(parts, ", ")
+	return s.persistBulkEditPayload(taskID, p)
 }
 
 // CommonMetaString is a bulk-metadata field that is either unanimous or mixed.

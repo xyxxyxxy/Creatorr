@@ -24,7 +24,7 @@ func BulkEditSeriesHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
-		msg := library.BulkEditSeriesMessage(updated, skipped, failed)
+		msg := library.BulkEditMessage(updated, skipped, failed)
 		progress(msg, ptrFloat(1))
 		detail, _ := json.Marshal(map[string]any{
 			"updated": updated, "skipped": skipped, "failed": failed,
@@ -44,7 +44,7 @@ func BulkEditVideosHandler(d Deps) TaskHandler {
 		if err != nil {
 			return err
 		}
-		msg := library.BulkEditSeriesMessage(updated, skipped, failed)
+		msg := library.BulkEditMessage(updated, skipped, failed)
 		progress(msg, ptrFloat(1))
 		detail, _ := json.Marshal(map[string]any{
 			"updated": updated, "skipped": skipped, "failed": failed,

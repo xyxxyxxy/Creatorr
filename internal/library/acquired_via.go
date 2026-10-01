@@ -9,9 +9,6 @@ const (
 	AcquiredViaImport  = "import"
 )
 
-// StatusWantedArchive means live fetch was unavailable; eligible for archive.org lane download.
-const StatusWantedArchive = "wanted_archive"
-
 // ArchiveOrgDomain is the queue lane hostname for ytarchive: fallback downloads.
 const ArchiveOrgDomain = "archive.org"
 

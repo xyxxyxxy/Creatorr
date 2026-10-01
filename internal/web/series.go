@@ -503,19 +503,7 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	histViews := make([]videoHistoryView, 0, len(histItems))
 	for _, e := range histItems {
-		abs, ago := createdAgoPair(e.CreatedAt, now)
-		v := videoHistoryView{
-			CreatedAt: abs, CreatedAgo: ago,
-			Event: historyEventLabel(e.Event, e.Detail), Message: historyMessageWithDetail(e.Message, e.Detail), Detail: e.Detail,
-			HasError: historyEventError(e.Event),
-			Neutral:  historyEventNeutral(e.Event),
-		}
-		if e.TaskID > 0 {
-			v.HasTask = true
-			v.TaskID = e.TaskID
-			v.HistoryID = e.TaskID
-		}
-		histViews = append(histViews, v)
+		histViews = append(histViews, sourceHistoryToView(e, now))
 	}
 
 	title := DisplayURL(src.URL)

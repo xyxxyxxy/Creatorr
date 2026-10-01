@@ -9,24 +9,35 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
-func videoHistoryToView(e library.VideoHistoryEvent, now time.Time) videoHistoryView {
-	abs, ago := createdAgoPairShort(e.CreatedAt, now)
+// historyViewBase maps fields shared by video and source history rows.
+func historyViewBase(abs, ago, event, message, detail string, taskID int64) videoHistoryView {
 	v := videoHistoryView{
 		CreatedAt:  abs,
 		CreatedAgo: ago,
-		Event:      historyEventLabel(e.Event, e.Detail),
-		Message:    historyMessageWithDetail(e.Message, e.Detail),
-		Detail:     e.Detail,
-		HasError:   historyEventError(e.Event),
-		Neutral:    historyEventNeutral(e.Event),
-		VideoID:    e.VideoID,
+		Event:      historyEventLabel(event, detail),
+		Message:    historyMessageWithDetail(message, detail),
+		Detail:     detail,
+		HasError:   historyEventError(event),
+		Neutral:    historyEventNeutral(event),
 	}
-	if e.TaskID.Valid {
+	if taskID > 0 {
 		v.HasTask = true
-		v.TaskID = e.TaskID.Int64
-		v.HistoryID = e.TaskID.Int64
+		v.TaskID = taskID
+		v.HistoryID = taskID
 	}
 	return v
+}
+
+func videoHistoryToView(e library.VideoHistoryEvent, now time.Time) videoHistoryView {
+	abs, ago := createdAgoPairShort(e.CreatedAt, now)
+	v := historyViewBase(abs, ago, e.Event, e.Message, e.Detail, e.TaskID.Int64)
+	v.VideoID = e.VideoID
+	return v
+}
+
+func sourceHistoryToView(e library.SourceHistoryEvent, now time.Time) videoHistoryView {
+	abs, ago := createdAgoPair(e.CreatedAt, now)
+	return historyViewBase(abs, ago, e.Event, e.Message, e.Detail, e.TaskID)
 }
 
 // fillVideoHistoryTaskKinds sets TaskKind from tasks.kind for each task_id on the page.
