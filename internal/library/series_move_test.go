@@ -1,6 +1,7 @@
 package library_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -156,6 +157,49 @@ func TestSeriesMovePassHappyPath(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(newRoot.Path, "New Name", "tvshow.nfo")); err != nil {
 		t.Fatalf("tvshow.nfo: %v", err)
+	}
+}
+
+func TestSeriesMovePassLeavesEpisodeNFOBytes(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, vid, media := seedDownloadedSeries(t, s, rootID, profileID)
+	root, _ := s.GetRoot(rootID)
+	nfoPath := media[:len(media)-len(filepath.Ext(media))] + ".nfo"
+	legacy := []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<episodedetails>
+  <title>Ep</title>
+  <showtitle>Old</showtitle>
+  <season>2024</season>
+  <episode>1</episode>
+  <plot>Ep</plot>
+</episodedetails>
+`)
+	if err := os.WriteFile(nfoPath, legacy, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`INSERT INTO files (video_id, kind, path, acquired_at) VALUES (?, 'nfo', ?, ?)`,
+		vid, nfoPath, "2024-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.SQL.Exec(`UPDATE tasks SET status = 'cancelled' WHERE status IN ('pending', 'running')`); err != nil {
+		t.Fatal(err)
+	}
+	tid, err := s.EnqueueSeriesMove(ser.ID, "New Name", rootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, _ := s.Queue.GetTask(tid)
+	if _, _, _, err := s.SeriesMovePass(context.Background(), task, nil); err != nil {
+		t.Fatal(err)
+	}
+	moved := filepath.Join(root.Path, "New Name", "S2024", "S2024E0001 [v1].nfo")
+	got, err := os.ReadFile(moved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, legacy) {
+		t.Fatalf("episode NFO rewritten on move:\n%s", got)
 	}
 }
 

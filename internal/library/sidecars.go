@@ -61,9 +61,7 @@ func FormatEpisodeNFO(meta EpisodeNFO) []byte {
 	if ot := omitWhenEqualTitle(meta.OriginalTitle, meta.Title); ot != "" {
 		b.WriteString("  <originaltitle>" + xmlEscape(ot) + "</originaltitle>\n")
 	}
-	if meta.SeriesTitle != "" {
-		b.WriteString("  <showtitle>" + xmlEscape(meta.SeriesTitle) + "</showtitle>\n")
-	}
+	// Series name lives in the folder + tvshow.nfo; episode NFO omits <showtitle>.
 	fmt.Fprintf(&b, "  <season>%d</season>\n", meta.Season)
 	fmt.Fprintf(&b, "  <episode>%d</episode>\n", meta.Episode)
 	if IsSpecialEpisode(meta.PackRole) && meta.DisplaySeason > 0 {

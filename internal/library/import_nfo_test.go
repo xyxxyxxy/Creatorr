@@ -173,8 +173,8 @@ func TestApplyImportNFOUpdatesDBAndRegenerates(t *testing.T) {
 		t.Fatalf("regenerated nfo missing plot: %s", got)
 	}
 	// Regenerated NFO should be Creatorr format, not raw source-only tags.
-	if !strings.Contains(string(got), "<episodedetails>") || !strings.Contains(string(got), "<showtitle>") {
-		t.Fatalf("want Creatorr episode nfo, got %s", got)
+	if !strings.Contains(string(got), "<episodedetails>") || strings.Contains(string(got), "<showtitle>") {
+		t.Fatalf("want Creatorr episode nfo without showtitle, got %s", got)
 	}
 }
 

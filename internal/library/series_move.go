@@ -119,7 +119,8 @@ func (s *Store) SeriesHasBlockingTasks(seriesID int64) (bool, error) {
 }
 
 // SeriesMovePass runs a series_move task: update title/root, move the folder, write
-// tvshow.nfo, rewrite episode NFOs, then apply episode naming. All steps run in-process.
+// tvshow.nfo, then apply episode naming. All steps run in-process. Episode NFOs are not
+// rewritten (they omit showtitle; series name is folder + tvshow.nfo).
 // If the folder move fails the DB title/root are reverted; later failures leave disk as-is.
 func (s *Store) SeriesMovePass(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) (renamed, skippedBusy, failed int, err error) {
 	step := func(msg string, pct float64) {
@@ -172,11 +173,8 @@ func (s *Store) SeriesMovePass(ctx context.Context, task *queue.Task, progress f
 	if err := s.WriteSeriesNFODisk(p.SeriesID); err != nil {
 		return 0, 0, 0, fmt.Errorf("write series NFO after folder move: %w", err)
 	}
-	step("Rewriting episode NFOs", 0.6)
-	if _, _, err := s.RewriteSeriesEpisodeNFOs(p.SeriesID, task.ID); err != nil {
-		return 0, 0, 0, fmt.Errorf("rewrite episode NFOs after folder move: %w", err)
-	}
-	step("Applying episode naming", 0.8)
+	// Episode NFOs omit showtitle; folder rename already moved them. No rewrite here.
+	step("Applying episode naming", 0.7)
 	renamed, skippedBusy, failed, err = s.ApplySeriesEpisodeNaming(ctx, p.SeriesID, task.ID)
 	if err != nil {
 		return renamed, skippedBusy, failed, fmt.Errorf("apply episode naming after folder move: %w", err)
