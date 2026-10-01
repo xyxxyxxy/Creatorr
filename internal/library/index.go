@@ -131,6 +131,7 @@ func (s *Store) UpsertListed(seriesID int64, li ListedVideo, taskID int64) (Upse
 		if mt := NormalizeMediaType(li.MediaType); mt != "" {
 			_ = s.SetMediaType(id, mt)
 		}
+		_, _ = s.ApplySourceMetadataPreset(id)
 		if upload != "" {
 			changed, rerr := s.ReindexSeriesUTCYear(seriesID, SeasonYearFromUpload(upload))
 			if rerr != nil {
@@ -176,7 +177,7 @@ func (s *Store) insertListedVideo(seriesID int64, src any, li ListedVideo, uploa
 		  source_url, status, season, episode, description, thumbnail_url, media_type, special_feature
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, seriesID, src, li.RemoteID, li.Title, uploadVal, nullEmpty(li.WebpageURL),
-		status, season, episode, li.Description, thumb, mt, PackRoleRegular)
+		status, season, episode, li.Description, thumb, mt, PackRoleDBValue(""))
 }
 
 func nullEmpty(s string) any {

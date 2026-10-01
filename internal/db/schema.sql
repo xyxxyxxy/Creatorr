@@ -71,6 +71,14 @@ CREATE TABLE IF NOT EXISTS sources (
   cookie_smart_prefer INTEGER NOT NULL DEFAULT 0,
   cookie_smart_ring TEXT NOT NULL DEFAULT '[]',
   cookie_smart_n INTEGER NOT NULL DEFAULT 0,
+  -- Default catalog metadata SoftFilled onto videos from this source.
+  studio TEXT NOT NULL DEFAULT '',
+  country TEXT NOT NULL DEFAULT '',
+  mpaa TEXT NOT NULL DEFAULT '',
+  genres TEXT NOT NULL DEFAULT '[]',
+  tags TEXT NOT NULL DEFAULT '[]',
+  actors TEXT NOT NULL DEFAULT '[]',
+  special_feature TEXT,
   UNIQUE(series_id, url)
 );
 
@@ -109,7 +117,7 @@ CREATE TABLE IF NOT EXISTS videos (
   tagline TEXT NOT NULL DEFAULT '',
   country TEXT NOT NULL DEFAULT '',
   mpaa TEXT NOT NULL DEFAULT '',
-  special_feature TEXT NOT NULL DEFAULT 'episode',
+  special_feature TEXT,
   -- Operator-only scratch notes (app UI); never written to NFO or packed files.
   notes TEXT NOT NULL DEFAULT '',
   UNIQUE(series_id, remote_id)

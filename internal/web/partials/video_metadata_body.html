@@ -69,7 +69,7 @@
             <label class="select w-full">
               <span class="label shrink-0">Special kind</span>
               <select name="special_feature" class="grow min-w-0{{if $packNone}} opacity-60{{end}}" data-special-kind aria-label="Special kind">
-                <option value="episode" {{if $packNone}}selected{{end}}>none</option>
+                <option value="" {{if $packNone}}selected{{end}}>none</option>
                 {{range .PackRoleOptions}}
                 <option value="{{.Value}}" {{if eq .Value $packRole}}selected{{end}}>{{.Label}}</option>
                 {{end}}

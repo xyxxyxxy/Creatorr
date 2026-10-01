@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 type videoMetadataView struct {
@@ -78,8 +77,6 @@ func (h *Handler) applyVideoMetadataManagedLists(view *videoMetadataView, draftG
 	if h.Library == nil || view == nil || view.Video == nil {
 		return
 	}
-	_, _ = settings.MetadataDomainTagEnabled(h.Library.DB)
-	_, _ = settings.MetadataGenresFromCategoriesEnabled(h.Library.DB)
 	_ = draftGenres
 	// Metadata editor is operator-editable: show full current lists as removable items.
 	// Auto-fill remains in download/pack/prefetch flows, but modal rows are not locked.
@@ -134,12 +131,8 @@ func applyVideoPrefetchDraft(video *library.Video, d library.VideoPrefetchDraft,
 		if out.SourceURL.Valid {
 			sourceURL = out.SourceURL.String
 		}
-		domainOn, _ := settings.MetadataDomainTagEnabled(lib.DB)
-		if domainOn {
-			out.Tags = library.MergeDomainTag(out.Tags, sourceURL)
-		}
-		genresOn, _ := settings.MetadataGenresFromCategoriesEnabled(lib.DB)
-		if genresOn && len(d.Genres) > 0 {
+		out.Tags = library.MergeDomainTag(out.Tags, sourceURL)
+		if len(d.Genres) > 0 {
 			out.Genres = library.MergeCategoryGenres(out.Genres, d.Genres)
 		}
 	}

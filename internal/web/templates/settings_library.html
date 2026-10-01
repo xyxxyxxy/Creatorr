@@ -110,38 +110,6 @@
   </form>
 </section>
 
-<section class="card bg-base-100 border border-base-300 mb-4">
-  <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl js-settings-autosave">
-    <input type="hidden" name="redirect" value="/settings/library" />
-    <input type="hidden" name="metadata_settings" value="1" />
-    <h2 class="text-lg font-semibold">Metadata</h2>
-    <p class="text-sm opacity-60">Automatic enrichment updates tags/genres and is written into the episode NFO on pack and Save.</p>
-    <div class="space-y-3 w-full min-w-0">
-      {{template "checkbox_field" (dict
-        "Name" "metadata_domain_tag"
-        "Label" "Add source domain as video tag"
-        "Checked" .MetadataDomainTag
-        "Hint" "Prepend the source domain to video tags when source_url is known."
-        "AutosaveChange" true
-      )}}
-      {{template "checkbox_field" (dict
-        "Name" "metadata_genres_from_categories"
-        "Label" "Add genres from yt-dlp categories"
-        "Checked" .MetadataGenresFromCategories
-        "Hint" "Add yt-dlp categories as video genres when categories are known."
-        "AutosaveChange" true
-      )}}
-      {{template "checkbox_field" (dict
-        "Name" "archive_fallback"
-        "Label" "Web Archive fallback"
-        "Checked" .ArchiveFallback
-        "Hint" "When a cataloged video is gone at the live source, queue a Web Archive download (yt-dlp). Original source URL is kept. Operator is notified when archive media packs."
-        "AutosaveChange" true
-      )}}
-    </div>
-  </form>
-</section>
-
 <input type="checkbox" id="modal-add-root" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box max-w-3xl">

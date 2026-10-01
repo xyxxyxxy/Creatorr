@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -106,6 +107,10 @@ func (d *DB) migrate() error {
 			}
 		case 23:
 			if err := d.migrateTo23(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
+		case 24:
+			if err := d.migrateTo24(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
 		default:
@@ -788,3 +793,173 @@ func (d *DB) migrateTo23() error {
 	return nil
 }
 
+// migrateTo24: nullable videos.special_feature (regular=NULL), source catalog preset cols, seed domain into sources.tags.
+func (d *DB) migrateTo24() error {
+	if err := d.migrateVideosSpecialFeatureNullable(); err != nil {
+		return err
+	}
+	if err := d.migrateSourcesCatalogCols(); err != nil {
+		return err
+	}
+	return d.seedSourceDomainTags()
+}
+
+func (d *DB) migrateVideosSpecialFeatureNullable() error {
+	has, err := d.tableHasColumn("videos", "special_feature")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err := d.SQL.Exec(`ALTER TABLE videos ADD COLUMN special_feature TEXT`); err != nil {
+			return fmt.Errorf("add videos.special_feature: %w", err)
+		}
+		return nil
+	}
+	hasNew, err := d.tableHasColumn("videos", "special_feature_new")
+	if err != nil {
+		return err
+	}
+	if !hasNew {
+		if _, err := d.SQL.Exec(`ALTER TABLE videos ADD COLUMN special_feature_new TEXT`); err != nil {
+			return fmt.Errorf("add videos.special_feature_new: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`
+		UPDATE videos SET special_feature_new = NULLIF(TRIM(special_feature), '')
+		WHERE special_feature IS NOT NULL AND TRIM(special_feature) != '' AND TRIM(special_feature) != 'episode'
+	`); err != nil {
+		return fmt.Errorf("copy videos.special_feature_new: %w", err)
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE videos DROP COLUMN special_feature`); err != nil {
+		return fmt.Errorf("drop videos.special_feature: %w", err)
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE videos RENAME COLUMN special_feature_new TO special_feature`); err != nil {
+		return fmt.Errorf("rename special_feature_new: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) migrateSourcesCatalogCols() error {
+	cols := []struct {
+		name string
+		ddl  string
+	}{
+		{"studio", `ALTER TABLE sources ADD COLUMN studio TEXT NOT NULL DEFAULT ''`},
+		{"country", `ALTER TABLE sources ADD COLUMN country TEXT NOT NULL DEFAULT ''`},
+		{"mpaa", `ALTER TABLE sources ADD COLUMN mpaa TEXT NOT NULL DEFAULT ''`},
+		{"genres", `ALTER TABLE sources ADD COLUMN genres TEXT NOT NULL DEFAULT '[]'`},
+		{"tags", `ALTER TABLE sources ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'`},
+		{"actors", `ALTER TABLE sources ADD COLUMN actors TEXT NOT NULL DEFAULT '[]'`},
+		{"special_feature", `ALTER TABLE sources ADD COLUMN special_feature TEXT`},
+	}
+	for _, c := range cols {
+		has, err := d.tableHasColumn("sources", c.name)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := d.SQL.Exec(c.ddl); err != nil {
+			return fmt.Errorf("add sources.%s: %w", c.name, err)
+		}
+	}
+	return nil
+}
+
+func (d *DB) seedSourceDomainTags() error {
+	rows, err := d.SQL.Query(`SELECT id, url, COALESCE(tags, '[]') FROM sources`)
+	if err != nil {
+		return fmt.Errorf("list sources for domain tags: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	type row struct {
+		id   int64
+		url  string
+		tags string
+	}
+	var list []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.url, &r.tags); err != nil {
+			return err
+		}
+		list = append(list, r)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, r := range list {
+		host := hostnameFromURL(r.url)
+		if host == "" {
+			continue
+		}
+		merged := prependJSONStringTag(r.tags, host)
+		if merged == r.tags {
+			continue
+		}
+		if _, err := d.SQL.Exec(`UPDATE sources SET tags = ? WHERE id = ?`, merged, r.id); err != nil {
+			return fmt.Errorf("seed source %d domain tag: %w", r.id, err)
+		}
+	}
+	return nil
+}
+
+func hostnameFromURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	// Avoid importing net/url cycle concerns: light parse.
+	rest := raw
+	if i := strings.Index(rest, "://"); i >= 0 {
+		rest = rest[i+3:]
+	}
+	if i := strings.IndexAny(rest, "/?#"); i >= 0 {
+		rest = rest[:i]
+	}
+	if i := strings.Index(rest, "@"); i >= 0 {
+		rest = rest[i+1:]
+	}
+	if i := strings.LastIndex(rest, ":"); i >= 0 {
+		// strip port; keep IPv6 bracket form as-is if present
+		if !strings.HasPrefix(rest, "[") {
+			rest = rest[:i]
+		}
+	}
+	rest = strings.TrimPrefix(strings.ToLower(rest), "www.")
+	if rest == "" || rest == "localhost" || strings.HasSuffix(rest, ".local") {
+		return ""
+	}
+	return rest
+}
+
+func prependJSONStringTag(rawJSON, tag string) string {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return rawJSON
+	}
+	rawJSON = strings.TrimSpace(rawJSON)
+	if rawJSON == "" {
+		rawJSON = "[]"
+	}
+	var items []string
+	_ = json.Unmarshal([]byte(rawJSON), &items)
+	fold := strings.ToLower(tag)
+	out := []string{tag}
+	for _, it := range items {
+		it = strings.TrimSpace(it)
+		if it == "" || strings.ToLower(it) == fold {
+			continue
+		}
+		out = append(out, it)
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return rawJSON
+	}
+	return string(b)
+}

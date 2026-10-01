@@ -73,7 +73,7 @@ func (s *Store) ListImportPickerVideos(q ImportPickerVideoQuery) ([]ImportPicker
 	var b strings.Builder
 	args := make([]any, 0, 8)
 	b.WriteString(`
-		SELECT v.id, v.series_id, v.title, s.title, v.status, v.special_feature,
+		SELECT v.id, v.series_id, v.title, s.title, v.status, COALESCE(v.special_feature,''),
 		  EXISTS(SELECT 1 FROM files f WHERE f.video_id = v.id AND f.kind = 'video') AS has_media,
 		  EXISTS(SELECT 1 FROM files f WHERE f.video_id = v.id AND f.kind = 'thumb') AS has_thumb
 		FROM videos v

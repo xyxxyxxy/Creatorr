@@ -133,7 +133,7 @@ func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (Sav
 		encodeStringSlice(p.Genres), encodeStringSlice(p.Tags),
 		uidType, uidVal,
 		encodeActors(p.Actors), strings.TrimSpace(p.Tagline), strings.TrimSpace(p.Country),
-		strings.TrimSpace(p.MPAA), uploadVal, packRole, videoID)
+		strings.TrimSpace(p.MPAA), uploadVal, PackRoleDBValue(packRole), videoID)
 	if err != nil {
 		return out, err
 	}

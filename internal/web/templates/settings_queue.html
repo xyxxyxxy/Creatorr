@@ -62,6 +62,24 @@
   </form>
 </section>
 
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl js-settings-autosave">
+    <input type="hidden" name="redirect" value="/settings/queue" />
+    <input type="hidden" name="archive_fallback_settings" value="1" />
+    <h2 class="text-lg font-semibold">Download fallback</h2>
+    <p class="text-sm opacity-60">When live fetch fails for a gone cataloged video, optionally retry via Web Archive.</p>
+    <div class="space-y-3 w-full min-w-0">
+      {{template "checkbox_field" (dict
+        "Name" "archive_fallback"
+        "Label" "Web Archive fallback"
+        "Checked" .ArchiveFallback
+        "Hint" "When a cataloged video is gone at the live source, queue a Web Archive download (yt-dlp). Original source URL is kept. Operator is notified when archive media packs."
+        "AutosaveChange" true
+      )}}
+    </div>
+  </form>
+</section>
+
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Domain overrides" "help" "Per-domain limit and Access overrides. Empty limit fields inherit the default row." "add_modal" "modal-add-domain-override" "add_label" "Add override")}}
 {{template "list_table"}}

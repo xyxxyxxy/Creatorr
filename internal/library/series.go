@@ -53,6 +53,14 @@ type Source struct {
 	TitleRegexpExclude   string // empty = no exclude filter; matching titles are not indexed (wins over include)
 	FullScanLimit        int    // 0 = unlimited; yt-dlp --playlist-end on full scan only
 	FullScanDone         bool
+	// Default catalog SoftFilled onto videos from this source.
+	Studio         string
+	Country        string
+	MPAA           string
+	Genres         []string
+	Tags           []string
+	Actors         []SeriesActor
+	SpecialFeature string // empty/NULL = no kind override; else pack role
 }
 
 // IsSingle reports kind=single (one-shot index; no tip Scan).
@@ -112,9 +120,12 @@ func scanSource(scanner interface {
 	var src Source
 	var indexAsIgnored, fullScanDone int
 	var titleInclude, titleExclude sql.NullString
+	var genresRaw, tagsRaw, actorsRaw string
+	var specialFeature sql.NullString
 	err := scanner.Scan(
 		&src.ID, &src.SeriesID, &src.URL, &src.Label, &src.Kind,
 		&src.ScanCron, &indexAsIgnored, &titleInclude, &titleExclude, &src.FullScanLimit, &fullScanDone,
+		&src.Studio, &src.Country, &src.MPAA, &genresRaw, &tagsRaw, &actorsRaw, &specialFeature,
 	)
 	src.Kind = NormalizeSourceKind(src.Kind)
 	src.IndexAsIgnored = indexAsIgnored != 0
@@ -128,11 +139,20 @@ func scanSource(scanner interface {
 	if src.IsSingle() {
 		src.ScanCron = ""
 	}
+	src.Studio = strings.TrimSpace(src.Studio)
+	src.Country = strings.TrimSpace(src.Country)
+	src.MPAA = strings.TrimSpace(src.MPAA)
+	src.Genres = decodeStringSlice(genresRaw)
+	src.Tags = decodeStringSlice(tagsRaw)
+	src.Actors = decodeActors(actorsRaw)
+	src.SpecialFeature = scanNullPackRole(specialFeature)
 	return src, err
 }
 
 const sourceSelectCols = `id, series_id, url, label, kind, scan_cron, index_as_ignored,
-		       title_regexp_include, title_regexp_exclude, full_scan_limit, full_scan_done`
+		       title_regexp_include, title_regexp_exclude, full_scan_limit, full_scan_done,
+		       COALESCE(studio,''), COALESCE(country,''), COALESCE(mpaa,''),
+		       COALESCE(genres,'[]'), COALESCE(tags,'[]'), COALESCE(actors,'[]'), special_feature`
 
 func (s *Store) listSources(seriesID int64) ([]Source, error) {
 	rows, err := s.DB.SQL.Query(`
@@ -245,7 +265,7 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 	if p.IndexAsIgnored {
 		idx = 1
 	}
-	res, err := s.insertSource(seriesID, url, label, kind, scanCron, idx, titleIncludeVal, titleExcludeVal, limit)
+	res, err := s.insertSource(seriesID, url, label, kind, scanCron, idx, titleIncludeVal, titleExcludeVal, limit, SeedDomainIntoTags(nil, url))
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return nil, fmt.Errorf("%w: source URL already on this series", ErrConflict)
@@ -262,12 +282,12 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 	return s.GetSource(seriesID, id)
 }
 
-// insertSource writes a sources row.
-func (s *Store) insertSource(seriesID int64, url string, label any, kind, scanCron string, indexAsIgnored int, titleInclude, titleExclude any, fullScanLimit int) (sql.Result, error) {
+// insertSource writes a sources row (tags typically seeded with domain).
+func (s *Store) insertSource(seriesID int64, url string, label any, kind, scanCron string, indexAsIgnored int, titleInclude, titleExclude any, fullScanLimit int, tags []string) (sql.Result, error) {
 	return s.DB.SQL.Exec(`
-		INSERT INTO sources (series_id, url, label, kind, scan_cron, index_as_ignored, title_regexp_include, title_regexp_exclude, full_scan_limit)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, seriesID, url, label, kind, scanCron, indexAsIgnored, titleInclude, titleExclude, fullScanLimit)
+		INSERT INTO sources (series_id, url, label, kind, scan_cron, index_as_ignored, title_regexp_include, title_regexp_exclude, full_scan_limit, tags)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, seriesID, url, label, kind, scanCron, indexAsIgnored, titleInclude, titleExclude, fullScanLimit, encodeStringSlice(tags))
 }
 
 func (s *Store) GetSource(seriesID, sourceID int64) (*Source, error) {
@@ -294,6 +314,13 @@ type UpdateSourceParams struct {
 	TitleRegexpInclude   *string
 	TitleRegexpExclude   *string
 	FullScanLimit        *int
+	Studio               *string
+	Country              *string
+	MPAA                 *string
+	Genres               *[]string
+	Tags                 *[]string
+	Actors               *[]SeriesActor
+	SpecialFeature       *string // empty clears to NULL (no kind override)
 }
 
 func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*Source, error) {
@@ -307,6 +334,13 @@ func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*S
 	titleInclude := cur.TitleRegexpInclude
 	titleExclude := cur.TitleRegexpExclude
 	limit := cur.FullScanLimit
+	studio := cur.Studio
+	country := cur.Country
+	mpaa := cur.MPAA
+	genres := append([]string(nil), cur.Genres...)
+	tags := append([]string(nil), cur.Tags...)
+	actors := append([]SeriesActor(nil), cur.Actors...)
+	specialFeature := cur.SpecialFeature
 	if p.Label != nil {
 		if strings.TrimSpace(*p.Label) == "" {
 			label = sql.NullString{}
@@ -335,12 +369,42 @@ func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*S
 		}
 		limit = *p.FullScanLimit
 	}
+	if p.Studio != nil {
+		studio = strings.TrimSpace(*p.Studio)
+	}
+	if p.Country != nil {
+		country = strings.TrimSpace(*p.Country)
+	}
+	if p.MPAA != nil {
+		mpaa = strings.TrimSpace(*p.MPAA)
+	}
+	if p.Genres != nil {
+		genres = ParseStringListFields(*p.Genres)
+	}
+	if p.Tags != nil {
+		tags = ParseStringListFields(*p.Tags)
+	}
+	if p.Actors != nil {
+		actors = append([]SeriesActor(nil), *p.Actors...)
+	}
+	if p.SpecialFeature != nil {
+		sf := strings.TrimSpace(*p.SpecialFeature)
+		if sf == "" || NormalizePackRole(sf) == PackRoleRegular {
+			specialFeature = ""
+		} else {
+			if err := ValidatePackRole(sf); err != nil {
+				return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+			}
+			specialFeature = NormalizePackRole(sf)
+		}
+	}
 	if cur.IsSingle() {
 		scanCron = ""
 		limit = 0
 		indexAsIgnored = false
 		titleInclude = ""
 		titleExclude = ""
+		tags = ensureSourceDomainTagLocked(cur.Kind, cur.URL, tags)
 	} else {
 		if p.ScanCron != nil {
 			c := strings.TrimSpace(*p.ScanCron)
@@ -366,9 +430,12 @@ func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*S
 		idx = 1
 	}
 	_, err = s.DB.SQL.Exec(`
-		UPDATE sources SET label = ?, scan_cron = ?, index_as_ignored = ?, title_regexp_include = ?, title_regexp_exclude = ?, full_scan_limit = ?
+		UPDATE sources SET label = ?, scan_cron = ?, index_as_ignored = ?, title_regexp_include = ?, title_regexp_exclude = ?, full_scan_limit = ?,
+		  studio = ?, country = ?, mpaa = ?, genres = ?, tags = ?, actors = ?, special_feature = ?
 		WHERE id = ? AND series_id = ?
-	`, labelVal, scanCron, idx, titleIncludeVal, titleExcludeVal, limit, sourceID, seriesID)
+	`, labelVal, scanCron, idx, titleIncludeVal, titleExcludeVal, limit,
+		studio, country, mpaa, encodeStringSlice(genres), encodeStringSlice(tags), encodeActors(actors), PackRoleDBValue(specialFeature),
+		sourceID, seriesID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}

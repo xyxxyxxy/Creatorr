@@ -362,13 +362,10 @@ func finishArchivePack(
 	thumbSrc, cleanupThumb := library.MaterializeThumbSrc(thumbSrc, thumbURL)
 	defer cleanupThumb()
 
-	// Soft-fill empty genres from download-time info.json, then ensure domain tag, then build NFO.
+	// Soft-fill genres and tags from download-time info.json, then source preset, then build NFO.
 	_, _ = d.Library.SoftFillVideoGenresFromInfoJSON(t.VideoID.Int64, infoSrc)
-	sourceURL := dlctx.URL
-	if dlctx.Video.SourceURL.Valid && strings.TrimSpace(dlctx.Video.SourceURL.String) != "" {
-		sourceURL = dlctx.Video.SourceURL.String
-	}
-	_, _ = d.Library.EnsureVideoDomainTag(t.VideoID.Int64, sourceURL)
+	_, _ = d.Library.SoftFillVideoTagsFromInfoJSON(t.VideoID.Int64, infoSrc)
+	_, _ = d.Library.ApplySourceMetadataPreset(t.VideoID.Int64)
 	v := &dlctx.Video
 	if fresh, gerr := d.Library.GetVideo(t.VideoID.Int64); gerr == nil {
 		v = fresh

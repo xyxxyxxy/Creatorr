@@ -17,8 +17,6 @@ const (
 	KeySyncFilesCron                = "sync_files_cron"
 	KeyIntegrityCheckCron           = "integrity_check_cron"
 	KeyRetentionDeleteCron          = "retention_delete_cron"
-	KeyMetadataDomainTag            = "metadata_domain_tag"
-	KeyMetadataGenresFromCategories = "metadata_genres_from_categories"
 	KeyArchiveFallback              = "archive_fallback"
 	KeyYtDlpUpdateCron              = "ytdlp_update_cron"
 	KeyYtDlpUpdateChannel           = "ytdlp_update_channel"
@@ -36,8 +34,6 @@ var Help = map[string]string{
 	KeyRetentionDeleteCron:          "Deleting old data according to root folder retention ('Settings → Library').",
 	KeySubtitleLangs:                "Supports all, regex (en.*), and -TAG exclusions. Applies on next download, metadata rescan, or Refresh sidecars.",
 	KeySubtitleAuto:                 "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",
-	KeyMetadataDomainTag:            "On download and metadata rescan, prepend the source domain to video tags when source_url is known.",
-	KeyMetadataGenresFromCategories: "On download and metadata rescan, add yt-dlp categories as video genres when categories are known.",
 	KeyArchiveFallback:              "When a cataloged video is gone at the live source, queue a Web Archive download (yt-dlp). Original source URL is kept. Operator is notified when archive media packs.",
 	KeyYtDlpUpdateChannel:           "GitHub release channel for Update now and for automatic updates when a schedule is set.",
 	KeyYtDlpUpdateCron:              "When set, Creatorr checks GitHub on boot and on this schedule. Configure update channel under 'Settings → Connect'. Disabling skips boot and cron.",
@@ -59,8 +55,6 @@ var Labels = map[string]string{
 	KeyRetentionDeleteCron:          "Retention delete schedule",
 	KeySubtitleLangs:                "Subtitle languages",
 	KeySubtitleAuto:                 "Include auto-generated subtitles",
-	KeyMetadataDomainTag:            "Add source domain as video tag",
-	KeyMetadataGenresFromCategories: "Add genres from yt-dlp categories",
 	KeyArchiveFallback:              "Web Archive fallback",
 	KeyYtDlpUpdateChannel:           "yt-dlp update channel",
 	KeyYtDlpUpdateCron:              "yt-dlp update schedule",
@@ -130,8 +124,6 @@ func SeedDefaults(database *db.DB) error {
 		KeyRetentionDeleteCron:          "@daily",
 		KeySubtitleLangs:                DefaultSubtitleLangs,
 		KeySubtitleAuto:                 DefaultSubtitleAuto,
-		KeyMetadataDomainTag:            DefaultMetadataDomainTag,
-		KeyMetadataGenresFromCategories: DefaultMetadataGenresFromCategories,
 		KeyArchiveFallback:              DefaultArchiveFallback,
 		KeyYtDlpUpdateCron:              "@weekly",
 		KeyYtDlpUpdateChannel:           YtDlpChannelStable,
@@ -139,7 +131,7 @@ func SeedDefaults(database *db.DB) error {
 	allKeys := append([]string{}, generalOrder...)
 	allKeys = append(allKeys, schedulerOrder...)
 	allKeys = append(allKeys, libraryOrder...)
-	allKeys = append(allKeys, KeyMetadataDomainTag, KeyMetadataGenresFromCategories, KeyArchiveFallback)
+	allKeys = append(allKeys, KeyArchiveFallback)
 	allKeys = append(allKeys, KeyPotFetch, KeyYoutubePlayerClient, KeyYtDlpUpdateChannel)
 	for _, key := range allKeys {
 		val := defaults[key]
@@ -297,7 +289,7 @@ func Set(database *db.DB, key, value string) error {
 	if key == KeySubtitleAuto {
 		value = NormalizeSubtitleAuto(value)
 	}
-	if key == KeyMetadataDomainTag || key == KeyMetadataGenresFromCategories || key == KeyArchiveFallback {
+	if key == KeyArchiveFallback {
 		value = NormalizeMetadataFlag(value)
 	}
 	if key == KeyYtDlpUpdateChannel {
@@ -339,7 +331,7 @@ func SetMany(database *db.DB, values map[string]string) error {
 			v = NormalizeSubtitleAuto(v)
 			values[k] = v
 		}
-		if k == KeyMetadataDomainTag || k == KeyMetadataGenresFromCategories || k == KeyArchiveFallback {
+		if k == KeyArchiveFallback {
 			v = NormalizeMetadataFlag(v)
 			values[k] = v
 		}

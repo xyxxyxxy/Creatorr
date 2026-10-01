@@ -354,6 +354,27 @@ func (s *Server) UpdateSource(w http.ResponseWriter, r *http.Request, id gen.Ser
 		FullScanLimit:      body.FullScanLimit,
 		TitleRegexpInclude: body.TitleRegexpInclude,
 		TitleRegexpExclude: body.TitleRegexpExclude,
+		Studio:             body.Studio,
+		Country:            body.Country,
+		MPAA:               body.Mpaa,
+		Genres:             body.Genres,
+		Tags:               body.Tags,
+		SpecialFeature:     body.SpecialFeature,
+	}
+	if body.Actors != nil {
+		actors := make([]library.SeriesActor, 0, len(*body.Actors))
+		for _, a := range *body.Actors {
+			role := ""
+			if a.Role != nil {
+				role = *a.Role
+			}
+			order := 0
+			if a.Order != nil {
+				order = *a.Order
+			}
+			actors = append(actors, library.SeriesActor{Name: a.Name, Role: role, Order: order})
+		}
+		p.Actors = &actors
 	}
 	src, err := s.Library.UpdateSource(int64(id), int64(sourceId), p)
 	if err != nil {
@@ -467,6 +488,48 @@ func mapSource(lib *library.Store, src library.Source) gen.Source {
 	if src.TitleRegexpExclude != "" {
 		s := src.TitleRegexpExclude
 		out.TitleRegexpExclude = &s
+	}
+	if src.Studio != "" {
+		s := src.Studio
+		out.Studio = &s
+	}
+	if src.Country != "" {
+		s := src.Country
+		out.Country = &s
+	}
+	if src.MPAA != "" {
+		s := src.MPAA
+		out.Mpaa = &s
+	}
+	if len(src.Genres) > 0 {
+		g := append([]string(nil), src.Genres...)
+		out.Genres = &g
+	}
+	if len(src.Tags) > 0 {
+		t := append([]string(nil), src.Tags...)
+		out.Tags = &t
+	}
+	if len(src.Actors) > 0 {
+		actors := make([]gen.SeriesActor, 0, len(src.Actors))
+		for _, a := range src.Actors {
+			ga := gen.SeriesActor{Name: a.Name}
+			if a.Role != "" {
+				role := a.Role
+				ga.Role = &role
+			}
+			if a.Order > 0 {
+				order := a.Order
+				ga.Order = &order
+			}
+			actors = append(actors, ga)
+		}
+		out.Actors = &actors
+	}
+	if sf := strings.TrimSpace(src.SpecialFeature); sf != "" && library.NormalizePackRole(sf) != library.PackRoleRegular {
+		role := library.NormalizePackRole(sf)
+		out.SpecialFeature = &role
+	} else {
+		out.SpecialFeature = nil
 	}
 	if lib != nil {
 		st, _ := lib.LatestSourceScanStatus(src.ID)

@@ -2,8 +2,6 @@ package library
 
 import (
 	"strings"
-
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 // MergeDomainTag prepends NamingDomain(sourceURL) when missing; no-op when domain unknown.
@@ -15,35 +13,9 @@ func MergeDomainTag(tags []string, sourceURL string) []string {
 	return mergeStringListFirst(ParseStringListFields(tags), host)
 }
 
-// EnsureVideoDomainTag merges the source domain into videos.tags when the setting is on.
-func (s *Store) EnsureVideoDomainTag(videoID int64, sourceURL string) (bool, error) {
-	if videoID <= 0 {
-		return false, nil
-	}
-	enabled, err := settings.MetadataDomainTagEnabled(s.DB)
-	if err != nil || !enabled {
-		return false, err
-	}
-	host := NamingDomain(sourceURL)
-	if host == "" {
-		return false, nil
-	}
-	var raw string
-	err = s.DB.SQL.QueryRow(`SELECT COALESCE(tags, '[]') FROM videos WHERE id = ?`, videoID).Scan(&raw)
-	if err != nil {
-		return false, err
-	}
-	merged := MergeDomainTag(decodeStringSlice(raw), sourceURL)
-	encoded := encodeStringSlice(merged)
-	if encoded == raw {
-		return false, nil
-	}
-	res, err := s.DB.SQL.Exec(`UPDATE videos SET tags = ? WHERE id = ?`, encoded, videoID)
-	if err != nil {
-		return false, err
-	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
+// SeedDomainIntoTags prepends NamingDomain(url) into a tag list when missing.
+func SeedDomainIntoTags(tags []string, sourceURL string) []string {
+	return MergeDomainTag(tags, sourceURL)
 }
 
 // mergeStringListFirst prepends first when missing; moves to index 0 when present elsewhere.

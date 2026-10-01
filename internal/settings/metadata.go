@@ -6,11 +6,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 )
 
-const (
-	DefaultMetadataDomainTag            = "1"
-	DefaultMetadataGenresFromCategories = "1"
-	DefaultArchiveFallback              = "1"
-)
+const DefaultArchiveFallback = "1"
 
 // NormalizeMetadataFlag returns "1" or "0".
 func NormalizeMetadataFlag(raw string) string {
@@ -24,30 +20,6 @@ func NormalizeMetadataFlag(raw string) string {
 func validateMetadataFlag(value string) error {
 	_ = NormalizeMetadataFlag(value)
 	return nil
-}
-
-// MetadataDomainTagEnabled reports whether source domain tags are auto-managed.
-func MetadataDomainTagEnabled(database *db.DB) (bool, error) {
-	raw, err := Get(database, KeyMetadataDomainTag)
-	if err != nil {
-		return false, err
-	}
-	if strings.TrimSpace(raw) == "" {
-		return NormalizeMetadataFlag(DefaultMetadataDomainTag) == "1", nil
-	}
-	return NormalizeMetadataFlag(raw) == "1", nil
-}
-
-// MetadataGenresFromCategoriesEnabled reports whether yt-dlp categories are auto-managed as genres.
-func MetadataGenresFromCategoriesEnabled(database *db.DB) (bool, error) {
-	raw, err := Get(database, KeyMetadataGenresFromCategories)
-	if err != nil {
-		return false, err
-	}
-	if strings.TrimSpace(raw) == "" {
-		return NormalizeMetadataFlag(DefaultMetadataGenresFromCategories) == "1", nil
-	}
-	return NormalizeMetadataFlag(raw) == "1", nil
 }
 
 // ArchiveFallbackEnabled reports whether Web Archive download fallback is on.

@@ -20,6 +20,7 @@ type Entry struct {
 	IsLive       bool     `json:"is_live,omitempty"`
 	Duration     float64  `json:"duration,omitempty"` // seconds; omit when unknown
 	Categories   []string `json:"categories,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
 }
 
 // entriesFromInfo maps a yt-dlp -J dump (flat playlist or single video) to entries.
@@ -150,6 +151,7 @@ func entryFromMap(m map[string]any) Entry {
 		IsLive:       boolField(m, "is_live"),
 		Duration:     durationSeconds(m),
 		Categories:   stringListField(m, "categories"),
+		Tags:         stringListField(m, "tags"),
 	}
 }
 

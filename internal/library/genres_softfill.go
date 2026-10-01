@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
-
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 // MergeCategoryGenres ensures category genres are present and listed first.
@@ -28,27 +26,23 @@ func MergeCategoryGenres(genres, categories []string) []string {
 	return append(managed, tail...)
 }
 
-// SoftFillVideoGenresFromCategories merges yt-dlp categories into videos.genres when the setting is on.
+// SoftFillVideoGenresFromCategories merges yt-dlp categories into videos.genres (always on).
 // Returns true when the row was updated.
 func (s *Store) SoftFillVideoGenresFromCategories(videoID int64, categories []string) (bool, error) {
 	return s.EnsureVideoGenresFromCategories(videoID, categories)
 }
 
-// EnsureVideoGenresFromCategories merges category genres into videos.genres when the setting is on.
+// EnsureVideoGenresFromCategories merges category genres into videos.genres (always on).
 func (s *Store) EnsureVideoGenresFromCategories(videoID int64, categories []string) (bool, error) {
 	if videoID <= 0 {
 		return false, nil
-	}
-	enabled, err := settings.MetadataGenresFromCategoriesEnabled(s.DB)
-	if err != nil || !enabled {
-		return false, err
 	}
 	genres := ParseStringListFields(categories)
 	if len(genres) == 0 {
 		return false, nil
 	}
 	var raw string
-	err = s.DB.SQL.QueryRow(`SELECT COALESCE(genres, '[]') FROM videos WHERE id = ?`, videoID).Scan(&raw)
+	err := s.DB.SQL.QueryRow(`SELECT COALESCE(genres, '[]') FROM videos WHERE id = ?`, videoID).Scan(&raw)
 	if err != nil {
 		return false, err
 	}
