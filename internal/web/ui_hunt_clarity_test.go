@@ -129,6 +129,22 @@ func TestSeriesListProgressLabeledCounts(t *testing.T) {
 	if strings.Contains(body, "2 | 1 | 1") {
 		t.Fatalf("bare pipe counts still present: %s", truncate(body, 800))
 	}
+	const progressWrap = `flex flex-col gap-0.5 w-full min-w-0`
+	if !strings.Contains(body, progressWrap+`"`) {
+		t.Fatalf("monitored progress should not be muted: %s", truncate(body, 800))
+	}
+	if _, err := lib.DB.SQL.Exec(`UPDATE series SET monitored = 0 WHERE id = ?`, ser.ID); err != nil {
+		t.Fatal(err)
+	}
+	rec2 := httptest.NewRecorder()
+	r.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/series", nil))
+	if rec2.Code != 200 {
+		t.Fatalf("unmonitored status %d: %s", rec2.Code, truncate(rec2.Body.String(), 400))
+	}
+	body2 := rec2.Body.String()
+	if !strings.Contains(body2, progressWrap+` opacity-40"`) {
+		t.Fatalf("unmonitored progress should mute bar+labels: %s", truncate(body2, 800))
+	}
 }
 
 func TestBulkVideoMetadataModalStartsAtNoChange(t *testing.T) {

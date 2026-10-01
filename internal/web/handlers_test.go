@@ -152,8 +152,11 @@ func TestSeriesListAudioQualityShowsBest(t *testing.T) {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "best · 0 sources") {
+	if !strings.Contains(body, "best") {
 		t.Fatalf("audio series should show best quality, got: %s", truncate(body, 800))
+	}
+	if strings.Contains(body, "0 sources") {
+		t.Fatalf("series line2 must not show source count: %s", truncate(body, 800))
 	}
 	if strings.Contains(body, library.Profile480Name+" ·") {
 		t.Fatalf("audio series must not show assigned profile name: %s", truncate(body, 800))

@@ -129,15 +129,11 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 		if s.IsAudio() {
 			kindIcon, kindTip = "headphones", "Audio series"
 		}
-		srcLabel := fmt.Sprintf("%d sources", s.SourceCount)
-		if s.SourceCount == 1 {
-			srcLabel = "1 source"
-		}
 		qualityLabel := s.QualityProfileName
 		if s.IsAudio() {
 			qualityLabel = library.DefaultProfileName
 		}
-		line2Parts := []string{qualityLabel}
+		line2Parts := []string{}
 		if len(roots) > 1 {
 			rootLabel := strings.TrimSpace(s.RootName)
 			if rootLabel == "" {
@@ -147,7 +143,7 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 				line2Parts = append(line2Parts, rootLabel)
 			}
 		}
-		line2Parts = append(line2Parts, srcLabel)
+		line2Parts = append(line2Parts, qualityLabel)
 		var statusInd *seriesStatusView
 		if v, ok := buildSeriesHealthStatus(errFlags[s.ID], warnLevels[s.ID]); ok {
 			statusInd = &v
@@ -159,7 +155,7 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 			BulkEditBusy:       bulkBusy,
 			StatusInd:          statusInd,
 			PosterURL:          posterURL,
-			Line2:              strings.Join(line2Parts, " · "),
+			Line2:              strings.Join(line2Parts, " - "),
 			KindIcon:           kindIcon,
 			KindTip:            kindTip,
 			Redirect:           redir,

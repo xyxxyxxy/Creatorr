@@ -1,17 +1,26 @@
 {{define "series_progress"}}
 {{/* Dot: ProgressTotal, DownloadedCount, ErrorCount, WantedCount, Monitored.
-     Bar: downloaded (primary) | errors (error) | wanted.
-     Wanted: no fill when monitored (track shows through); grey when unmonitored.
-     Label: three slots - downloaded left, errors center, wanted right; omit zero text. */}}
+     Bar: downloaded (primary) | errors (error) | wanted (no fill; track shows through).
+     Unmonitored: whole widget muted (bar + labels).
+     Label: only non-zero segments; cols match count (1/2/3). downloaded left;
+     errors center when all three, else toward outer edge; wanted right. */}}
 {{$d := .DownloadedCount}}{{$e := .ErrorCount}}{{$w := .WantedCount}}
 {{$any := or (gt $d 0) (gt $e 0) (gt $w 0)}}
-<div class="flex flex-col gap-0.5 w-full min-w-0">
+{{$three := and (gt $d 0) (gt $e 0) (gt $w 0)}}
+{{$two := and (not $three) (or (and (gt $d 0) (gt $e 0)) (and (gt $d 0) (gt $w 0)) (and (gt $e 0) (gt $w 0)))}}
+<div class="flex flex-col gap-0.5 w-full min-w-0{{if not .Monitored}} opacity-40{{end}}">
   {{template "series_progress_bar" .}}
   {{if $any}}
-  <div class="grid grid-cols-3 gap-x-1 w-full text-xs tabular-nums opacity-80">
-    <span class="text-left whitespace-nowrap min-w-0 truncate">{{if gt $d 0}}{{$d}} downloaded{{end}}</span>
-    <span class="text-center whitespace-nowrap min-w-0 truncate">{{if gt $e 0}}{{$e}} errors{{end}}</span>
-    <span class="text-right whitespace-nowrap min-w-0 truncate">{{if gt $w 0}}{{$w}} wanted{{end}}</span>
+  <div class="grid gap-x-1 w-full text-xs tabular-nums opacity-80{{if $three}} grid-cols-3{{else if $two}} grid-cols-2{{else}} grid-cols-1{{end}}">
+    {{if gt $d 0}}
+    <span class="text-left whitespace-nowrap min-w-0 truncate">{{$d}} downloaded</span>
+    {{end}}
+    {{if gt $e 0}}
+    <span class="{{if $three}}text-center{{else if gt $w 0}}text-left{{else}}text-right{{end}} whitespace-nowrap min-w-0 truncate">{{$e}} errors</span>
+    {{end}}
+    {{if gt $w 0}}
+    <span class="text-right whitespace-nowrap min-w-0 truncate">{{$w}} wanted</span>
+    {{end}}
   </div>
   {{end}}
 </div>
@@ -32,11 +41,7 @@
   <div class="bg-error h-full min-w-0" style="flex: {{.ErrorCount}} 0 0"></div>
   {{end}}
   {{if gt .WantedCount 0}}
-  {{if .Monitored}}
   <div class="h-full min-w-0" style="flex: {{.WantedCount}} 0 0" aria-hidden="true"></div>
-  {{else}}
-  <div class="bg-base-content/40 h-full min-w-0" style="flex: {{.WantedCount}} 0 0"></div>
-  {{end}}
   {{end}}
 </div>
 {{else}}
