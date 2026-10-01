@@ -61,6 +61,7 @@
         "DeleteClass" "btn btn-soft btn-error btn-square"
       }}
       {{if ne .Status "downloaded"}}
+      {{template "clear_download_error_button" $wantIgnore}}
       {{template "want_ignore_button" $wantIgnore}}
       {{end}}
     </div>

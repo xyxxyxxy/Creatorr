@@ -377,6 +377,40 @@ func (h *Handler) actionDownloadVideo(w http.ResponseWriter, r *http.Request) {
 	h.finishVideoAction(w, r, sid, redir, err)
 }
 
+func (h *Handler) actionClearVideoDownloadError(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
+	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
+	redir := r.FormValue("redirect")
+	if redir == "" {
+		redir = fmt.Sprintf("/series/%d", sid)
+	}
+	if err := h.errIfVideoDeleting(vid); err != nil {
+		h.finishVideoAction(w, r, sid, redir, err)
+		return
+	}
+	err := h.Library.ClearVideoDownloadError(vid)
+	if err == nil {
+		redir = appendQuery(redir, "ok=clear-error")
+	}
+	h.finishVideoAction(w, r, sid, redir, err)
+}
+
+func (h *Handler) actionClearSeriesDownloadErrors(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
+	redir := fmt.Sprintf("/series/%d", sid)
+	if v := r.FormValue("redirect"); v != "" {
+		redir = v
+	}
+	n, err := h.Library.ClearSeriesDownloadErrors(sid)
+	if err != nil {
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, appendQuery(redir, "ok=clear-error&n="+strconv.FormatInt(int64(n), 10)), http.StatusSeeOther)
+}
+
 func (h *Handler) actionRetrySourceErrors(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)

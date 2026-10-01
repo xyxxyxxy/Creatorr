@@ -300,6 +300,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	nullImportCount, _ := h.Library.CountVideosWithNullSource(id)
+	hasDownloadErrors, _ := h.Library.SeriesHasDownloadErrors(id)
 	metaForm = h.withMetaSuggestions(metaForm)
 	metaFiles := seriesMetaFileViews(h.Library, ser)
 	videoTotal, _ := h.Library.CountVideos(id)
@@ -327,6 +328,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		MetaForm            seriesMetadataView
 		PackRoleOptions     []struct{ Value, Label string }
 		Deleting            bool
+		HasDownloadErrors   bool
 	}{
 		pageBase:            newPage(ser.Title, "series", flashFromQuery(r)),
 		Series:              ser,
@@ -350,6 +352,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		MetaForm:            metaForm,
 		PackRoleOptions:     library.PackRoleSelectOptions(),
 		Deleting:            seriesDeleting,
+		HasDownloadErrors:   hasDownloadErrors,
 	})
 }
 
