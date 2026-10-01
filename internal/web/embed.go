@@ -154,6 +154,18 @@ func templateFuncs() template.FuncMap {
 			}
 			return settings.FormatDownloadRateLimitDisplay(s)
 		},
+		"namingDomain": library.NamingDomain,
+		"domainTagList": func(domain string) []string {
+			domain = strings.TrimSpace(domain)
+			if domain == "" {
+				return nil
+			}
+			return []string{domain}
+		},
+		"operatorTagsExcept": func(tags []string, except string) []string {
+			return library.OperatorStringListItems(tags, []string{except})
+		},
+		"managedPipe": library.ManagedPipe,
 	}
 }
 

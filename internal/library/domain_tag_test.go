@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 func TestMergeDomainTag(t *testing.T) {
@@ -26,11 +25,11 @@ func TestMergeDomainTag(t *testing.T) {
 	}
 }
 
-func TestEnsureVideoDomainTag(t *testing.T) {
+func TestAddSourceSeedsDomainTag(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
-		Title:            "DomainTag",
+		Title:            "DomainSeed",
 		SourceURL:        "https://www.example.com/@d",
 		RootID:           rootID,
 		QualityProfileID: profileID,
@@ -39,34 +38,71 @@ func TestEnsureVideoDomainTag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
-		RemoteID: "d1", Title: "Ep", WebpageURL: "https://www.example.com/watch?v=d1",
-		SourceID: ser.Sources[0].ID,
-	}, seedTaskID(t, s))
+	src := ser.Sources[0]
+	if len(src.Tags) != 1 || src.Tags[0] != "example.com" {
+		t.Fatalf("create series source tags=%v", src.Tags)
+	}
+	added, err := s.AddSource(ser.ID, library.AddSourceParams{
+		URL:  "https://cdn.example.org/feed",
+		Kind: library.SourceKindFeed,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ok, err := s.EnsureVideoDomainTag(res.VideoID, "https://www.example.com/watch?v=d1")
-	if err != nil || !ok {
-		t.Fatalf("ensure: ok=%v err=%v", ok, err)
+	if len(added.Tags) != 1 || added.Tags[0] != "cdn.example.org" {
+		t.Fatalf("add source tags=%v", added.Tags)
 	}
-	v, err := s.GetVideo(res.VideoID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(v.Tags) != 1 || v.Tags[0] != "example.com" {
-		t.Fatalf("tags=%v", v.Tags)
-	}
+}
 
-	if err := settings.Set(s.DB, settings.KeyMetadataDomainTag, "0"); err != nil {
-		t.Fatal(err)
-	}
-	_, err = s.DB.SQL.Exec(`UPDATE videos SET tags = '[]' WHERE id = ?`, res.VideoID)
+func TestUpdateSourceSingleLocksDomainTag(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title:            "SingleLock",
+		RootID:           rootID,
+		QualityProfileID: profileID,
+		Monitored:        true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ok, err = s.EnsureVideoDomainTag(res.VideoID, "https://www.example.com/watch?v=d1")
-	if err != nil || ok {
-		t.Fatalf("disabled: ok=%v err=%v", ok, err)
+	src, err := s.AddSource(ser.ID, library.AddSourceParams{
+		URL:  "https://www.example.com/watch?v=abc",
+		Kind: library.SourceKindSingle,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := []string{"custom"}
+	updated, err := s.UpdateSource(ser.ID, src.ID, library.UpdateSourceParams{Tags: &empty})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Tags) != 2 || updated.Tags[0] != "example.com" || updated.Tags[1] != "custom" {
+		t.Fatalf("single tags=%v want domain first", updated.Tags)
+	}
+}
+
+func TestUpdateSourceFeedCanDropDomainTag(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title:            "FeedDrop",
+		SourceURL:        "https://www.example.com/@f",
+		RootID:           rootID,
+		QualityProfileID: profileID,
+		Monitored:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := ser.Sources[0]
+	empty := []string{"only"}
+	updated, err := s.UpdateSource(ser.ID, src.ID, library.UpdateSourceParams{Tags: &empty})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Tags) != 1 || updated.Tags[0] != "only" {
+		t.Fatalf("feed tags=%v", updated.Tags)
 	}
 }

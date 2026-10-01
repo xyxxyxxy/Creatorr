@@ -1,0 +1,75 @@
+{{define "source_default_metadata"}}
+{{/*
+  Collapsed Default video metadata on source edit (feed + single).
+  Expects: Source (*library.Source or Source), Suggestions (MetaSuggestions),
+           PackRoleOptions, ListPrefix (unique id prefix for datalists).
+*/}}
+{{$src := .Source}}
+{{$domain := namingDomain $src.URL}}
+{{$locked := eq $src.Kind "single"}}
+{{$packRole := $src.SpecialFeature}}
+{{$packNone := or (eq $packRole "") (eq $packRole "episode")}}
+{{$sug := .Suggestions}}
+{{$prefix := .ListPrefix}}
+<details class="collapse collapse-arrow bg-base-200 border border-base-300 rounded-box w-full mt-4">
+  <summary class="collapse-title font-medium text-sm min-h-0 py-3">Default video metadata</summary>
+  <div class="collapse-content gap-3 flex flex-col">
+    <p class="text-sm opacity-60">Initial metadata for indexed videos. If a download brings more metadata, it is soft-merged with this.</p>
+    <fieldset class="fieldset w-full min-w-0 border-0 p-0 bg-transparent">
+      <label class="select w-full">
+        <span class="label shrink-0">Special kind</span>
+        <select name="special_feature" class="grow min-w-0{{if $packNone}} opacity-60{{end}}" data-special-kind>
+          <option value="" {{if $packNone}}selected{{end}}>none</option>
+          {{range .PackRoleOptions}}
+          <option value="{{.Value}}" {{if eq .Value $packRole}}selected{{end}}>{{.Label}}</option>
+          {{end}}
+        </select>
+      </label>
+    </fieldset>
+    <div class="grid gap-3 sm:grid-cols-2">
+      {{template "metadata_suggest_row" (dict "Name" "studio" "Label" "Studio" "Value" $src.Studio "ListID" (printf "%s-studio" $prefix) "Options" $sug.Studios)}}
+      {{template "metadata_suggest_row" (dict "Name" "country" "Label" "Country" "Value" $src.Country "ListID" (printf "%s-country" $prefix) "Options" $sug.Countries)}}
+    </div>
+    {{template "metadata_suggest_row" (dict "Name" "mpaa" "Label" "Content rating" "Value" $src.MPAA "ListID" (printf "%s-mpaa" $prefix) "Options" $sug.MPAAs)}}
+    {{template "metadata_actors_editor" (dict "Actors" $src.Actors "NameOptions" $sug.ActorNames "RoleOptions" $sug.ActorRoles "EmptyText" "none")}}
+    <div class="grid gap-3 sm:grid-cols-2">
+      {{template "metadata_string_list_editor" (dict
+        "Label" "Genres"
+        "Name" "genre"
+        "Singular" "genre"
+        "Items" $src.Genres
+        "Options" $sug.Genres
+        "ListID" (printf "%s-genres" $prefix)
+        "Placeholder" "Add a genre"
+        "EmptyText" "none"
+      )}}
+      {{if $locked}}
+      {{template "metadata_string_list_editor" (dict
+        "Label" "Tags"
+        "Name" "tag"
+        "Singular" "tag"
+        "Items" (operatorTagsExcept $src.Tags $domain)
+        "ManagedItems" (domainTagList $domain)
+        "ManagedPipe" (managedPipe (domainTagList $domain))
+        "Options" $sug.Tags
+        "ListID" (printf "%s-tags" $prefix)
+        "Placeholder" "Add a tag"
+        "EmptyText" "none"
+        "Hint" "Source domain tag is locked for single sources."
+      )}}
+      {{else}}
+      {{template "metadata_string_list_editor" (dict
+        "Label" "Tags"
+        "Name" "tag"
+        "Singular" "tag"
+        "Items" $src.Tags
+        "Options" $sug.Tags
+        "ListID" (printf "%s-tags" $prefix)
+        "Placeholder" "Add a tag"
+        "EmptyText" "none"
+      )}}
+      {{end}}
+    </div>
+  </div>
+</details>
+{{end}}

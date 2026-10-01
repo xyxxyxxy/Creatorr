@@ -49,17 +49,9 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 				vals[settings.KeySubtitleAuto] = "0"
 			}
 		}
-		if r.FormValue("metadata_settings") == "1" {
-			if r.FormValue(settings.KeyMetadataDomainTag) == "1" {
-				vals[settings.KeyMetadataDomainTag] = "1"
-			} else {
-				vals[settings.KeyMetadataDomainTag] = "0"
-			}
-			if r.FormValue(settings.KeyMetadataGenresFromCategories) == "1" {
-				vals[settings.KeyMetadataGenresFromCategories] = "1"
-			} else {
-				vals[settings.KeyMetadataGenresFromCategories] = "0"
-			}
+	}
+	if r.FormValue("redirect") == "/settings/queue" {
+		if r.FormValue("archive_fallback_settings") == "1" {
 			if r.FormValue(settings.KeyArchiveFallback) == "1" {
 				vals[settings.KeyArchiveFallback] = "1"
 			} else {

@@ -307,7 +307,7 @@ func (s *Store) SetVideoPackRole(videoID int64, packRole string) error {
 	if old == role {
 		return nil
 	}
-	if _, err := s.DB.SQL.Exec(`UPDATE videos SET special_feature = ? WHERE id = ?`, role, videoID); err != nil {
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET special_feature = ? WHERE id = ?`, PackRoleDBValue(role), videoID); err != nil {
 		return err
 	}
 	if _, err := s.ReindexPackRoleBucket(v.SeriesID, old); err != nil {

@@ -45,6 +45,7 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 	flareOK := strings.TrimSpace(h.FlareSolverrURL) != ""
 	// Access is override-only; Domain defaults Flare is always off for inherit display.
 	defLim.UseFlareSolverr = false
+	archiveFallback, _ := settings.ArchiveFallbackEnabled(h.Queue.DB)
 	render(w, "settings_queue", struct {
 		pageBase
 		DefaultLimits   settings.DomainLimits
@@ -53,6 +54,7 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 		Page            PageInfo
 		DomainDatalist  []string
 		FlareConfigured bool
+		ArchiveFallback bool
 	}{
 		pageBase:        newSettingsPage("Settings · Queue / Domains", "queue", flashFromQuery(r)),
 		DefaultLimits:   defLim,
@@ -61,6 +63,7 @@ func (h *Handler) settingsQueue(w http.ResponseWriter, r *http.Request) {
 		Page:            pageInfo,
 		DomainDatalist:  sourceDomains,
 		FlareConfigured: flareOK,
+		ArchiveFallback: archiveFallback,
 	})
 }
 
@@ -91,9 +94,6 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	metadataDomainTag, _ := settings.MetadataDomainTagEnabled(h.Queue.DB)
-	metadataGenresFromCategories, _ := settings.MetadataGenresFromCategoriesEnabled(h.Queue.DB)
-	archiveFallback, _ := settings.ArchiveFallbackEnabled(h.Queue.DB)
 	settingRows := make([]settingsRowView, 0, len(entries))
 	subtitleLangs := settings.ParseSubtitleLangsJSON(settings.DefaultSubtitleLangs)
 	subtitleAuto := false
@@ -116,38 +116,32 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 	render(w, "settings_library", struct {
 		pageBase
-		Settings                     []settingsRowView
-		NamingLocked                 bool
-		DefaultEpisodeFormat         string
-		DefaultSpecialEpisodeFormat  string
-		DefaultSpecialFeatureFormat  string
-		Roots                        []rootSettingsRow
-		RootsPage                    PageInfo
-		Profiles                     []profileSettingsRow
-		ProfilesPage                 PageInfo
-		SubtitleLangs                []string
-		SubtitleLangOptions          []string
-		SubtitleAuto                 bool
-		MetadataDomainTag            bool
-		MetadataGenresFromCategories bool
-		ArchiveFallback              bool
+		Settings                    []settingsRowView
+		NamingLocked                bool
+		DefaultEpisodeFormat        string
+		DefaultSpecialEpisodeFormat string
+		DefaultSpecialFeatureFormat string
+		Roots                       []rootSettingsRow
+		RootsPage                   PageInfo
+		Profiles                    []profileSettingsRow
+		ProfilesPage                PageInfo
+		SubtitleLangs               []string
+		SubtitleLangOptions         []string
+		SubtitleAuto                bool
 	}{
-		pageBase:                     newSettingsPage("Settings · Library", "library", flashFromQuery(r)),
-		Settings:                     settingRows,
-		NamingLocked:                 applyBusy,
-		DefaultEpisodeFormat:         library.DefaultEpisodeFormat,
-		DefaultSpecialEpisodeFormat:  settings.DefaultSpecialEpisodeFormat,
-		DefaultSpecialFeatureFormat:  settings.DefaultSpecialFeatureFormat,
-		Roots:                        rootRows,
-		RootsPage:                    rootsPage,
-		Profiles:                     profileRows,
-		ProfilesPage:                 profilesPage,
-		SubtitleLangs:                subtitleLangs,
-		SubtitleLangOptions:          settings.SubtitleLangSeed,
-		SubtitleAuto:                 subtitleAuto,
-		MetadataDomainTag:            metadataDomainTag,
-		MetadataGenresFromCategories: metadataGenresFromCategories,
-		ArchiveFallback:              archiveFallback,
+		pageBase:                    newSettingsPage("Settings · Library", "library", flashFromQuery(r)),
+		Settings:                    settingRows,
+		NamingLocked:                applyBusy,
+		DefaultEpisodeFormat:        library.DefaultEpisodeFormat,
+		DefaultSpecialEpisodeFormat: settings.DefaultSpecialEpisodeFormat,
+		DefaultSpecialFeatureFormat: settings.DefaultSpecialFeatureFormat,
+		Roots:                       rootRows,
+		RootsPage:                   rootsPage,
+		Profiles:                    profileRows,
+		ProfilesPage:                profilesPage,
+		SubtitleLangs:               subtitleLangs,
+		SubtitleLangOptions:         settings.SubtitleLangSeed,
+		SubtitleAuto:                subtitleAuto,
 	})
 }
 

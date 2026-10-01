@@ -35,7 +35,7 @@ var featureKindSet = func() map[string]struct{} {
 	return m
 }()
 
-// NormalizePackRole maps empty legacy values to episode; lowercases feature kinds.
+// NormalizePackRole maps empty/NULL legacy values and "episode" to PackRoleRegular; lowercases feature kinds.
 func NormalizePackRole(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == PackRoleRegular {
@@ -49,6 +49,16 @@ func NormalizePackRole(raw string) string {
 		return lower
 	}
 	return raw
+}
+
+// PackRoleDBValue returns the SQLite value for videos.special_feature / sources.special_feature.
+// Regular episodes are SQL NULL (not the literal "episode").
+func PackRoleDBValue(role string) any {
+	r := strings.TrimSpace(role)
+	if r == "" || NormalizePackRole(r) == PackRoleRegular {
+		return nil
+	}
+	return NormalizePackRole(r)
 }
 
 // ValidatePackRole accepts episode, special_episode, or a known feature kind.
@@ -167,6 +177,5 @@ func FirstPathSegment(format string) string {
 	return ""
 }
 
-// SQLPackRoleRegularPred is an SQL fragment matching regular (episode) videos.
-// Accepts legacy empty special_feature until all writers use episode.
+// SQLPackRoleRegularPred is an SQL fragment matching regular (NULL/empty/legacy episode) videos.
 const SQLPackRoleRegularPred = `(COALESCE(special_feature,'') = '' OR special_feature = 'episode')`

@@ -518,6 +518,7 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 	scanActive, _ := h.Library.HasActiveScanForSource(src.ID)
 	selfPath := fmt.Sprintf("/series/%d/sources/%d", seriesID, sourceID)
 	cookieSmart, _ := domains.CookieSmartDisplayForSource(h.Library.DB, src.ID, src.URL)
+	suggestions, _ := h.Library.ListMetaSuggestions()
 	render(w, "source_detail", struct {
 		pageBase
 		Series              *library.Series
@@ -542,6 +543,8 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 		CookieSmart         domains.CookieSmartDisplay
 		History             []videoHistoryView
 		HistoryPage         PageInfo
+		MetaSuggestions     library.MetaSuggestions
+		PackRoleOptions     []struct{ Value, Label string }
 	}{
 		pageBase:            newPage(title, "series", flashFromQuery(r)),
 		Series:              ser,
@@ -566,6 +569,8 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 		CookieSmart:         cookieSmart,
 		History:             histViews,
 		HistoryPage:         histPageInfo,
+		MetaSuggestions:     suggestions,
+		PackRoleOptions:     library.PackRoleSelectOptions(),
 	})
 }
 

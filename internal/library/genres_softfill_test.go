@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 func TestSoftFillVideoGenresFromCategories(t *testing.T) {
@@ -135,10 +134,6 @@ func TestSaveVideoMetadataClearedGenresStayCleared(t *testing.T) {
 	ok, err := s.SoftFillVideoGenresFromPackedInfo(res.VideoID)
 	if err != nil || !ok {
 		t.Fatalf("seed fill: ok=%v err=%v", ok, err)
-	}
-
-	if err := settings.Set(s.DB, settings.KeyMetadataGenresFromCategories, "0"); err != nil {
-		t.Fatal(err)
 	}
 
 	_, err = s.SaveVideoMetadata(res.VideoID, library.SaveVideoMetadataParams{

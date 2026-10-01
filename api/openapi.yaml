@@ -2449,6 +2449,35 @@ components:
           format: date-time
           nullable: true
           description: Derived from created_at of latest source_history scanned or scan_error
+        studio:
+          type: string
+          description: Default studio SoftFilled onto videos from this source
+        country:
+          type: string
+        mpaa:
+          type: string
+          description: Default content rating
+        genres:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+          description: >
+            Default tags SoftFilled onto videos. Create always seeds the source domain;
+            single sources keep the domain tag locked on update.
+        actors:
+          type: array
+          items:
+            $ref: "#/components/schemas/SeriesActor"
+        special_feature:
+          type: string
+          nullable: true
+          description: >
+            Default pack role SoftFilled when a video has none yet.
+            null or omitted = no kind override (regular).
 
     CreateSourceRequest:
       type: object
@@ -2499,6 +2528,41 @@ components:
           type: integer
           nullable: true
           description: Cap full-scan playlist entries; 0 = unlimited; ignored for kind=single
+        studio:
+          type: string
+          nullable: true
+          description: Default studio; empty clears
+        country:
+          type: string
+          nullable: true
+        mpaa:
+          type: string
+          nullable: true
+        genres:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: Replaces the full genres list when present
+        tags:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: >
+            Replaces the full tags list when present. Single sources always re-ensure the domain tag.
+        actors:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/SeriesActor"
+          description: Replaces the full actors list when present
+        special_feature:
+          type: string
+          nullable: true
+          description: >
+            Default pack role; null or empty clears (regular / no override).
+            Does not bulk-rewrite existing videos.
 
     Video:
       type: object

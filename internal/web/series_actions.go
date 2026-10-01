@@ -141,6 +141,20 @@ func (h *Handler) actionUpdateSource(w http.ResponseWriter, r *http.Request) {
 		off := false
 		p.IndexAsIgnored = &off
 	}
+	studio := strings.TrimSpace(r.FormValue("studio"))
+	country := strings.TrimSpace(r.FormValue("country"))
+	mpaa := strings.TrimSpace(r.FormValue("mpaa"))
+	genres := library.ParseStringListFields(r.Form["genre"])
+	tags := library.ParseStringListFields(r.Form["tag"])
+	actors := library.ParseActorsFromFields(r.Form["actor_name"], r.Form["actor_role"])
+	sf := strings.TrimSpace(r.FormValue("special_feature"))
+	p.Studio = &studio
+	p.Country = &country
+	p.MPAA = &mpaa
+	p.Genres = &genres
+	p.Tags = &tags
+	p.Actors = &actors
+	p.SpecialFeature = &sf
 	_, err = h.Library.UpdateSource(sid, srcID, p)
 	if err != nil {
 		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
