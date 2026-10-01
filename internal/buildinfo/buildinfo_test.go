@@ -9,11 +9,12 @@ func TestShortRevision(t *testing.T) {
 	cases := []struct {
 		in, want string
 	}{
-		{"", "unknown"},
-		{"  ", "unknown"},
+		{"", ""},
+		{"  ", ""},
 		{"abc1234", "abc1234"},
 		{"abcdef0123456789", "abcdef0"},
-		{"unknown", "unknown"},
+		{"unknown", ""},
+		{"Unknown", ""},
 		{"main", "main"},
 	}
 	for _, tc := range cases {

@@ -2,40 +2,16 @@
 {{/* Dot: ProgressTotal, DownloadedCount, ErrorCount, WantedCount, Monitored.
      Bar: downloaded (primary) | errors (error) | wanted.
      Wanted: no fill when monitored (track shows through); grey when unmonitored.
-     Label: omit zero counts. One non-zero status → `N name`, no tip.
-     Several → `N | N` (non-zero only, order Downloaded|Errors|Wanted) + tip with names. */}}
+     Label: omit zero counts; always named (downloaded / errors / wanted), never bare N | N. */}}
 {{$d := .DownloadedCount}}{{$e := .ErrorCount}}{{$w := .WantedCount}}
-{{$onlyD := and (gt $d 0) (eq $e 0) (eq $w 0)}}
-{{$onlyE := and (eq $d 0) (gt $e 0) (eq $w 0)}}
-{{$onlyW := and (eq $d 0) (eq $e 0) (gt $w 0)}}
-{{$single := or $onlyD $onlyE $onlyW}}
-{{$tip := ""}}{{$sep := ""}}
-{{if gt $d 0}}{{$tip = printf "%s%s%d downloaded" $tip $sep $d}}{{$sep = " · "}}{{end}}
-{{if gt $e 0}}{{$tip = printf "%s%s%d errors" $tip $sep $e}}{{$sep = " · "}}{{end}}
-{{if gt $w 0}}{{$tip = printf "%s%s%d wanted" $tip $sep $w}}{{end}}
-{{$nums := ""}}{{$nsep := ""}}
-{{if gt $d 0}}{{$nums = printf "%s%s%d" $nums $nsep $d}}{{$nsep = " | "}}{{end}}
-{{if gt $e 0}}{{$nums = printf "%s%s%d" $nums $nsep $e}}{{$nsep = " | "}}{{end}}
-{{if gt $w 0}}{{$nums = printf "%s%s%d" $nums $nsep $w}}{{end}}
-{{$label := $nums}}
-{{if $onlyD}}{{$label = printf "%d downloaded" $d}}{{else if $onlyE}}{{$label = printf "%d errors" $e}}{{else if $onlyW}}{{$label = printf "%d wanted" $w}}{{end}}
-{{if $single}}
+{{$label := ""}}{{$sep := ""}}
+{{if gt $d 0}}{{$label = printf "%s%s%d downloaded" $label $sep $d}}{{$sep = " · "}}{{end}}
+{{if gt $e 0}}{{$label = printf "%s%s%d errors" $label $sep $e}}{{$sep = " · "}}{{end}}
+{{if gt $w 0}}{{$label = printf "%s%s%d wanted" $label $sep $w}}{{end}}
 <div class="flex flex-col gap-0.5 w-full min-w-0 items-center">
   {{template "series_progress_bar" .}}
   {{if $label}}<span class="text-xs tabular-nums whitespace-nowrap opacity-80">{{$label}}</span>{{end}}
 </div>
-{{else if $tip}}
-<span class="tooltip tooltip-top block w-full min-w-0" data-tip="{{$tip}}">
-  <div class="flex flex-col gap-0.5 w-full min-w-0 items-center">
-    {{template "series_progress_bar" .}}
-    <span class="text-xs tabular-nums whitespace-nowrap opacity-80">{{$nums}}</span>
-  </div>
-</span>
-{{else}}
-<div class="flex flex-col gap-0.5 w-full min-w-0 items-center">
-  {{template "series_progress_bar" .}}
-</div>
-{{end}}
 {{end}}
 
 {{define "series_progress_bar"}}

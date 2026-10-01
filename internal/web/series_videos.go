@@ -24,6 +24,7 @@ type seriesVideoRow struct {
 	ResolutionLabel     string
 	DurationLabel       string
 	MediaTypeLabel      string
+	StatusLabel         string
 	ThumbURL            string
 	DomainActive        bool
 	DomainDisabledTitle string
@@ -106,6 +107,7 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 			ResolutionLabel:     h.Library.ResolveResolutionLabel(v.ID, v.Width, v.Height, jsonPaths[v.ID]),
 			DurationLabel:       formatDurationClock(h.Library.ResolveDurationSeconds(v.ID, v.DurationSeconds, jsonPaths[v.ID])),
 			MediaTypeLabel:      mediaTypeLabel,
+			StatusLabel:         videoStatusLabel(v.Status),
 			ThumbURL:            thumbURL,
 			DomainActive:        dAct,
 			DomainDisabledTitle: disTitle,

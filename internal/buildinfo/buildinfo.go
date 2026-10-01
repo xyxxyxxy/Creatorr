@@ -19,11 +19,12 @@ const GitHubURL = "https://github.com/xyxxyxxy/Creatorr"
 
 var shaRE = regexp.MustCompile(`(?i)^[0-9a-f]{7,40}$`)
 
-// ShortRevision returns the first 7 characters of Revision when long enough.
+// ShortRevision returns the first 7 characters of Revision when it looks like a sha.
+// Empty or the bake default "unknown" returns "" so the footer can omit the token.
 func ShortRevision() string {
 	r := strings.TrimSpace(Revision)
-	if r == "" {
-		return "unknown"
+	if r == "" || strings.EqualFold(r, "unknown") {
+		return ""
 	}
 	if len(r) > 7 && shaRE.MatchString(r) {
 		return r[:7]

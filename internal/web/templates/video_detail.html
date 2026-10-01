@@ -164,6 +164,7 @@
     <td>
       <div class="inline-flex items-center gap-2 flex-nowrap whitespace-nowrap">
         {{template "task_indicator" .TaskInd}}
+        {{if .StatusLabel}}<span class="text-sm">{{.StatusLabel}}</span>{{end}}
         {{if .StatusTaskID}}
         <span class="text-xs opacity-60">{{.StatusTaskPrefix}}</span>
         <a class="link link-hover text-xs" href="/task/{{.StatusTaskID}}">{{.StatusTaskKind}}</a>
