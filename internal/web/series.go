@@ -300,7 +300,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	nullImportCount, _ := h.Library.CountVideosWithNullSource(id)
-	hasDownloadErrors, _ := h.Library.SeriesHasDownloadErrors(id)
+	downloadErrorCount, _ := h.Library.CountSeriesDownloadErrors(id)
 	metaForm = h.withMetaSuggestions(metaForm)
 	metaFiles := seriesMetaFileViews(h.Library, ser)
 	videoTotal, _ := h.Library.CountVideos(id)
@@ -328,7 +328,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		MetaForm            seriesMetadataView
 		PackRoleOptions     []struct{ Value, Label string }
 		Deleting            bool
-		HasDownloadErrors   bool
+		DownloadErrorCount  int
 	}{
 		pageBase:            newPage(ser.Title, "series", flashFromQuery(r)),
 		Series:              ser,
@@ -352,7 +352,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		MetaForm:            metaForm,
 		PackRoleOptions:     library.PackRoleSelectOptions(),
 		Deleting:            seriesDeleting,
-		HasDownloadErrors:   hasDownloadErrors,
+		DownloadErrorCount:  downloadErrorCount,
 	})
 }
 
@@ -587,6 +587,17 @@ func createdAgoPairShort(createdAt string, now time.Time) (absolute, ago string)
 	if t, ok := parseActivityTime(createdAt); ok {
 		absolute = formatAbsoluteTip(t)
 		ago = formatAgoShort(t, now)
+	}
+	return absolute, ago
+}
+
+// createdAgoPairCompact is like createdAgoPair but uses compact units ("1 h 2 min").
+func createdAgoPairCompact(createdAt string, now time.Time) (absolute, ago string) {
+	absolute = createdAt
+	ago = createdAt
+	if t, ok := parseActivityTime(createdAt); ok {
+		absolute = formatAbsoluteTip(t)
+		ago = formatAgoCompact(t, now)
 	}
 	return absolute, ago
 }

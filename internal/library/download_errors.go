@@ -1,6 +1,7 @@
 package library
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -118,12 +119,18 @@ func (s *Store) ClearVideoDownloadError(videoID int64) error {
 
 // SeriesHasDownloadErrors is true when ClearSeriesDownloadErrors would change any video.
 func (s *Store) SeriesHasDownloadErrors(seriesID int64) (bool, error) {
+	n, err := s.CountSeriesDownloadErrors(seriesID)
+	return n > 0, err
+}
+
+// CountSeriesDownloadErrors returns how many videos on the series are wanted_download_error.
+func (s *Store) CountSeriesDownloadErrors(seriesID int64) (int, error) {
 	var n int
 	err := s.DB.SQL.QueryRow(`
 		SELECT COUNT(*) FROM videos
 		WHERE series_id = ? AND status = ?
 	`, seriesID, StatusWantedDownloadError).Scan(&n)
-	return n > 0, err
+	return n, err
 }
 
 // ClearSeriesDownloadErrors sets all wanted_download_error videos on the series to wanted.
@@ -141,4 +148,20 @@ func (s *Store) ClearSeriesDownloadErrors(seriesID int64) (int, error) {
 	}
 	n, err := res.RowsAffected()
 	return int(n), err
+}
+
+// ClearVideoDownloadErrorsBulk clears wanted_download_error → wanted for each id.
+// Skips wrong status / missing. Does not enqueue.
+func (s *Store) ClearVideoDownloadErrorsBulk(ids []int64) (updated, skipped int, err error) {
+	for _, id := range uniqPositive(ids) {
+		if err := s.ClearVideoDownloadError(id); err != nil {
+			if errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalid) {
+				skipped++
+				continue
+			}
+			return updated, skipped, err
+		}
+		updated++
+	}
+	return updated, skipped, nil
 }

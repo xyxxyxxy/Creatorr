@@ -2,15 +2,18 @@
 {{/* Dot: ProgressTotal, DownloadedCount, ErrorCount, WantedCount, Monitored.
      Bar: downloaded (primary) | errors (error) | wanted.
      Wanted: no fill when monitored (track shows through); grey when unmonitored.
-     Label: omit zero counts; always named (downloaded / errors / wanted), never bare N | N. */}}
+     Label: three slots - downloaded left, errors center, wanted right; omit zero text. */}}
 {{$d := .DownloadedCount}}{{$e := .ErrorCount}}{{$w := .WantedCount}}
-{{$label := ""}}{{$sep := ""}}
-{{if gt $d 0}}{{$label = printf "%s%s%d downloaded" $label $sep $d}}{{$sep = " · "}}{{end}}
-{{if gt $e 0}}{{$label = printf "%s%s%d errors" $label $sep $e}}{{$sep = " · "}}{{end}}
-{{if gt $w 0}}{{$label = printf "%s%s%d wanted" $label $sep $w}}{{end}}
-<div class="flex flex-col gap-0.5 w-full min-w-0 items-center">
+{{$any := or (gt $d 0) (gt $e 0) (gt $w 0)}}
+<div class="flex flex-col gap-0.5 w-full min-w-0">
   {{template "series_progress_bar" .}}
-  {{if $label}}<span class="text-xs tabular-nums whitespace-nowrap opacity-80">{{$label}}</span>{{end}}
+  {{if $any}}
+  <div class="grid grid-cols-3 gap-x-1 w-full text-xs tabular-nums opacity-80">
+    <span class="text-left whitespace-nowrap min-w-0 truncate">{{if gt $d 0}}{{$d}} downloaded{{end}}</span>
+    <span class="text-center whitespace-nowrap min-w-0 truncate">{{if gt $e 0}}{{$e}} errors{{end}}</span>
+    <span class="text-right whitespace-nowrap min-w-0 truncate">{{if gt $w 0}}{{$w}} wanted{{end}}</span>
+  </div>
+  {{end}}
 </div>
 {{end}}
 

@@ -18,8 +18,9 @@ func TestFormatAgo(t *testing.T) {
 		{now.Add(-2*time.Hour - 45*time.Minute), "2 hours and 45 minutes ago"},
 		{now.Add(-26 * time.Hour), "1 day and 2 hours ago"},
 		{now.AddDate(0, 0, -7), "7 days ago"},
-		{now.AddDate(-1, -4, 0), "1 year and 4 months ago"},
-		{now.AddDate(-2, 0, 0), "2 years ago"},
+		{now.AddDate(0, 0, -8), "2026-07-10"},
+		{now.AddDate(-1, -4, 0), "2025-03-18"},
+		{now.AddDate(-2, 0, 0), "2024-07-18"},
 	}
 	for _, tc := range cases {
 		got := formatAgo(tc.then, now)
@@ -42,13 +43,38 @@ func TestFormatAgoShort(t *testing.T) {
 		{now.Add(-9*time.Hour - 54*time.Minute), "9 hours ago"},
 		{now.Add(-26 * time.Hour), "1 day ago"},
 		{now.AddDate(0, 0, -7), "7 days ago"},
-		{now.AddDate(-1, -4, 0), "1 year ago"},
-		{now.AddDate(-2, 0, 0), "2 years ago"},
+		{now.AddDate(0, 0, -8), "2026-07-10"},
+		{now.AddDate(-1, -4, 0), "2025-03-18"},
+		{now.AddDate(-2, 0, 0), "2024-07-18"},
 	}
 	for _, tc := range cases {
 		got := formatAgoShort(tc.then, now)
 		if got != tc.want {
 			t.Fatalf("formatAgoShort(%v)=%q want %q", tc.then, got, tc.want)
+		}
+	}
+}
+
+func TestFormatAgoCompact(t *testing.T) {
+	now := time.Date(2026, 7, 18, 14, 0, 0, 0, time.UTC)
+	cases := []struct {
+		then time.Time
+		want string
+	}{
+		{now.Add(-30 * time.Second), "just now"},
+		{now.Add(-1 * time.Minute), "1 min"},
+		{now.Add(-3*time.Minute - 20*time.Second), "3 min"},
+		{now.Add(-1*time.Hour - 2*time.Minute), "1 h 2 min"},
+		{now.Add(-2*time.Hour - 3*time.Minute), "2 h 3 min"},
+		{now.Add(-26 * time.Hour), "1 d 2 h"},
+		{now.AddDate(0, 0, -7), "7 d"},
+		{now.AddDate(0, 0, -8), "2026-07-10"},
+		{time.Date(2026, 5, 29, 18, 1, 40, 0, time.UTC), "2026-05-29"},
+	}
+	for _, tc := range cases {
+		got := formatAgoCompact(tc.then, now)
+		if got != tc.want {
+			t.Fatalf("formatAgoCompact(%v)=%q want %q", tc.then, got, tc.want)
 		}
 	}
 }

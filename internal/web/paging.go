@@ -31,8 +31,10 @@ type PageInfo struct {
 	HasNext    bool
 	From       int
 	To         int
+	FirstHref  string
 	PrevHref   string
 	NextHref   string
+	LastHref   string
 	Show       bool // true when more than one page (pager UI visible)
 	// LiveTarget: when set (element id without #), pager links HTMX-get the
 	// same href, select/swap that id, and push the URL - no full reload.
@@ -91,10 +93,12 @@ func NewPageInfoSize(r *http.Request, param string, page, total, pageSize int) P
 	info.HasPrev = page > 1
 	info.HasNext = page < info.TotalPages
 	if info.HasPrev {
+		info.FirstHref = pageHref(r, param, 1)
 		info.PrevHref = pageHref(r, param, page-1)
 	}
 	if info.HasNext {
 		info.NextHref = pageHref(r, param, page+1)
+		info.LastHref = pageHref(r, param, info.TotalPages)
 	}
 	return info
 }

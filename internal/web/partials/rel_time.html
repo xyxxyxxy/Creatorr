@@ -1,5 +1,6 @@
 {{define "rel_time"}}
 {{/* Relative "… ago" with absolute tip. Dot: CreatedAt (tip), CreatedAgo (text).
-     tooltip-right: first table column tips are not clipped by the left edge / overflow wrap. */}}
-<span class="tooltip tooltip-right" data-tip="{{.CreatedAt}}">{{.CreatedAgo}}</span>
+     tooltip-top: tips open above so table cells / neighbors do not cover them.
+     Do not put overflow-hidden on the hosting td - it clips the tip. */}}
+<span class="tooltip tooltip-top" data-tip="{{.CreatedAt}}">{{.CreatedAgo}}</span>
 {{end}}

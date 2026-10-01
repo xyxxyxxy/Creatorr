@@ -1,5 +1,5 @@
 {{define "notification_row"}}
-<tr class="hover cursor-pointer{{if .Unread}} font-semibold{{end}}" onclick="location.href='/notification/{{.ID}}'">
+<tr class="hover{{if .Unread}} font-semibold{{end}}">
   <td class="w-10">
     {{if eq .Level "alert"}}
     <span class="inline-flex tooltip tooltip-top text-error" data-tip="alert" aria-label="alert">
@@ -15,8 +15,10 @@
     </span>
     {{end}}
   </td>
-  <td class="text-sm{{if .Unread}} text-error{{end}}">{{.EventLabel}}</td>
+  <td class="text-sm truncate"><a class="link link-hover{{if .Unread}} text-error{{end}}" href="/notification/{{.ID}}">{{.EventLabel}}</a></td>
   <td class="text-xs whitespace-nowrap">{{template "rel_time" .}}</td>
-  <td class="text-sm max-w-md truncate{{if .Unread}} text-error{{end}}">{{.Title}}</td>
+  <td class="text-sm min-w-0">
+    <span class="block truncate{{if .Unread}} text-error{{end}}" title="{{.Title}}">{{.Title}}</span>
+  </td>
 </tr>
 {{end}}

@@ -205,3 +205,42 @@ func TestClearSeriesDownloadErrors(t *testing.T) {
 		t.Fatalf("after clear HasDownloadErrors=%v err=%v", ok, err)
 	}
 }
+
+func TestClearVideoDownloadErrorsBulk(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "ClearBulk", SourceURL: "https://www.example.com/@cb", RootID: rootID,
+		QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcID := ser.Sources[0].ID
+	mk := func(rid string, fail bool) int64 {
+		t.Helper()
+		res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+			RemoteID: rid, Title: rid, WebpageURL: "https://www.example.com/watch?v=" + rid,
+			SourceID: srcID,
+		}, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fail {
+			if err := s.MarkDownloadFailed(res.VideoID, seedTaskID(t, s), apperrors.CodeDownloadFailed, "x"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return res.VideoID
+	}
+	errID := mk("e1", true)
+	wantID := mk("w1", false)
+	updated, skipped, err := s.ClearVideoDownloadErrorsBulk([]int64{errID, wantID})
+	if err != nil || updated != 1 || skipped != 1 {
+		t.Fatalf("updated=%d skipped=%d err=%v", updated, skipped, err)
+	}
+	v, _ := s.GetVideo(errID)
+	if v.Status != library.StatusWanted {
+		t.Fatalf("error video status=%q", v.Status)
+	}
+}

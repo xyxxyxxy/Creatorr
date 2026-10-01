@@ -99,6 +99,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/bulk-set-series-monitored", h.actionBulkSetSeriesMonitored)
 	r.Post("/actions/bulk-delete-series", h.actionBulkDeleteSeries)
 	r.Post("/actions/bulk-want-videos", h.actionBulkWantVideos)
+	r.Post("/actions/bulk-clear-video-download-errors", h.actionBulkClearVideoDownloadErrors)
 	r.Post("/actions/bulk-ignore-videos", h.actionBulkIgnoreVideos)
 	r.Post("/actions/bulk-refresh-sidecars-videos", h.actionBulkRefreshSidecarsVideos)
 	r.Post("/actions/bulk-edit-videos-metadata", h.actionBulkEditVideosMetadata)

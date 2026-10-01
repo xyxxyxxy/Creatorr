@@ -27,12 +27,6 @@
       <i data-lucide="file-pen" class="size-4"></i>
       Edit metadata
     </label>
-    {{if and .HasDownloadErrors (not .Deleting)}}
-    <label for="modal-clear-series-download-errors" class="btn btn-outline">
-      <i data-lucide="badge-x" class="size-4"></i>
-      Clear all errors
-    </label>
-    {{end}}
     {{if .Deleting}}
     <span class="tooltip tooltip-top" data-tip="Delete">
       <label for="modal-delete-series" class="btn btn-soft btn-error btn-square btn-disabled" aria-disabled="true" aria-label="Delete">
@@ -47,23 +41,6 @@
   </div>
 </div>
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
-{{if and .HasDownloadErrors (not .Deleting)}}
-<input type="checkbox" id="modal-clear-series-download-errors" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Clear all download errors</h3>
-    <p class="text-sm mb-4">Set wanted_download_error videos on this series back to wanted. Does not enqueue downloads. Does not change wanted_archive. You can Ignore videos afterward if they should not download.</p>
-    <form method="post" action="/actions/clear-series-download-errors">
-      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <div class="modal-action">
-        <label for="modal-clear-series-download-errors" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary">Clear all errors</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-{{end}}
 {{if and .ScanBlocked .Sources}}
 <div class="alert alert-warning mb-4"><span>{{.ScanBlocked}}</span></div>
 {{end}}
@@ -400,6 +377,27 @@
   </div>
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
+
+{{if not .Deleting}}
+<input type="checkbox" id="modal-bulk-clear-download-errors" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-video-bulk-clear-errors-title>Clear selected errors</h3>
+    <p class="text-sm mb-4">
+      Clear download errors among the selected videos. This will put those videos back into wanted so they can download on the download-wanted schedule. Videos that are not in an error state are skipped.
+    </p>
+    <form method="post" action="/actions/bulk-clear-video-download-errors" id="form-bulk-clear-download-errors">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <div data-bulk-video-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-clear-download-errors" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Clear selected</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
 
 <input type="checkbox" id="modal-bulk-ignore-videos" class="modal-toggle" />
 <div class="modal">

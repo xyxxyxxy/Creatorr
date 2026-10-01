@@ -24,6 +24,14 @@ func TestNewPageInfo(t *testing.T) {
 	if info.NextHref != "/history?page=3&status=failed" && info.NextHref != "/history?status=failed&page=3" {
 		t.Fatalf("NextHref=%q", info.NextHref)
 	}
+	if info.FirstHref != "/history?status=failed" && info.FirstHref != "/history?page=1&status=failed" {
+		if info.FirstHref != "/history?status=failed" {
+			t.Fatalf("FirstHref=%q", info.FirstHref)
+		}
+	}
+	if info.LastHref != "/history?page=3&status=failed" && info.LastHref != "/history?status=failed&page=3" {
+		t.Fatalf("LastHref=%q", info.LastHref)
+	}
 }
 
 func TestNewPageInfoSizeHistory(t *testing.T) {

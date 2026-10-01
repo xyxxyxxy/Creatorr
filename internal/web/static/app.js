@@ -5012,7 +5012,7 @@
       if (countEl) countEl.textContent = n + "/" + m;
       const busy = videoBulkBusy();
       bar.querySelectorAll(
-        "[data-video-bulk-want], [data-video-bulk-ignore], [data-video-bulk-refresh], [data-video-bulk-metadata], [data-video-bulk-delete]"
+        "[data-video-bulk-want], [data-video-bulk-ignore], [data-video-bulk-refresh], [data-video-bulk-metadata], [data-video-bulk-delete], [data-video-bulk-clear-errors]"
       ).forEach((btn) => {
         btn.disabled = busy || n === 0;
       });
@@ -5097,6 +5097,11 @@
     if (action === "want") {
       setTitle("[data-video-bulk-want-title]", "Want " + n + "/" + m + " videos");
       openVideoBulkModal("modal-bulk-want-videos");
+      return;
+    }
+    if (action === "clear-errors") {
+      setTitle("[data-video-bulk-clear-errors-title]", "Clear selected errors (" + n + "/" + m + ")");
+      openVideoBulkModal("modal-bulk-clear-download-errors");
       return;
     }
     if (action === "ignore") {
@@ -5193,6 +5198,12 @@
         selectAll.disabled = true;
         selectAllMatchingVideos().catch(() => {
         }).finally(() => syncVideoBulkUI());
+        return;
+      }
+      const clearErrors = ev.target.closest("[data-video-bulk-clear-errors]");
+      if (clearErrors) {
+        ev.preventDefault();
+        runVideoBulkAction("clear-errors");
         return;
       }
       const want = ev.target.closest("[data-video-bulk-want]");

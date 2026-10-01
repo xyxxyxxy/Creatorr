@@ -69,6 +69,14 @@
 }
 
 /*
+  List tables: same daisyUI tip stacking issue as Import. Raise the tip host on
+  hover so tooltip-top clears the next row / neighboring cells.
+*/
+.list-table .tooltip:is(:hover, :focus-within) {
+  z-index: 40;
+}
+
+/*
   Inline Import match dropdowns sit inside scrolling list rows. Raise open
   panels above the next row so search + rich options stay clickable.
   details[open] is the click-toggle path (focus-based div.dropdown needed
