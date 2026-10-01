@@ -1467,6 +1467,74 @@ func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
 	}
 }
 
+func TestVideosPageHasBulkSelect(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
+		SeriesID:   ser.ID,
+		Title:      "Ep One",
+		UploadDate: "2024-01-02T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/videos", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "data-video-bulk-mode") {
+		t.Fatalf("videos page missing video multi-select toggle: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, "modal-bulk-edit-videos-metadata") || !strings.Contains(body, "modal-bulk-delete-videos") {
+		t.Fatalf("videos page missing video bulk modals: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, `action="/actions/bulk-want-videos"`) {
+		t.Fatalf("videos page missing bulk want form: %s", truncate(body, 400))
+	}
+	if strings.Contains(body, `name="series_id"`) && strings.Contains(body, `id="form-bulk-want-videos"`) {
+		// Library-wide bulk forms omit series_id; series detail still includes it.
+		wantFormStart := strings.Index(body, `id="form-bulk-want-videos"`)
+		wantFormEnd := strings.Index(body[wantFormStart:], "</form>")
+		if wantFormStart >= 0 && wantFormEnd > 0 {
+			chunk := body[wantFormStart : wantFormStart+wantFormEnd]
+			if strings.Contains(chunk, `name="series_id"`) {
+				t.Fatalf("videos page bulk want form should omit series_id: %s", truncate(chunk, 300))
+			}
+		}
+	}
+
+	idsReq := httptest.NewRequest(http.MethodGet, "/videos/ids", nil)
+	idsRec := httptest.NewRecorder()
+	r.ServeHTTP(idsRec, idsReq)
+	if idsRec.Code != 200 {
+		t.Fatalf("videos/ids status %d: %s", idsRec.Code, idsRec.Body.String())
+	}
+	if !strings.Contains(idsRec.Body.String(), `"ids"`) {
+		t.Fatalf("videos/ids missing ids: %s", truncate(idsRec.Body.String(), 200))
+	}
+}
+
 func TestSeriesSourceScanButtons(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {

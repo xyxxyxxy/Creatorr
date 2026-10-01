@@ -15,6 +15,7 @@ type videosPageLiveData struct {
 	FilterActive bool
 	ViewMode     string
 	SeriesTitles map[int64]string
+	BulkEditBusy bool
 	OOB          bool
 }
 
@@ -24,12 +25,17 @@ func (h *Handler) videosPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	suggestions, _ := h.Library.ListMetaSuggestions()
 	render(w, "videos", struct {
 		pageBase
-		Live videosPageLiveData
+		Live            videosPageLiveData
+		Suggestions     library.MetaSuggestions
+		PackRoleOptions []struct{ Value, Label string }
 	}{
-		pageBase: newPage("Videos", "videos", flashFromQuery(r)),
-		Live:     data,
+		pageBase:        newPage("Videos", "videos", flashFromQuery(r)),
+		Live:            data,
+		Suggestions:     suggestions,
+		PackRoleOptions: library.PackRoleSelectOptions(),
 	})
 }
 
@@ -107,14 +113,15 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		ClearAllHref:     "",
 		LiveTarget:       "videos-list-live",
 		FormAction:       "/videos",
+		VideoBulkMode:    true,
 		DateClearHref:    dropQueryKeys(r, "from", "to", "page"),
-		UploadEmptyHref:  applyPresenceURL(r, true, library.PresenceUploadDate),
-		UploadFilledHref: applyPresenceURL(r, false, library.PresenceUploadDate),
 	}
+	annotateUploadPresence(r, &toolbar)
 	if filter.Active() {
 		toolbar.ClearAllHref = clearOperatorFiltersURL(r)
 	}
 
+	bulkBusy, _ := h.Library.BulkEditVideosBusy()
 	return videosPageLiveData{
 		Videos:       rows,
 		Page:         pageInfo,
@@ -123,5 +130,6 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		FilterActive: filter.Active(),
 		ViewMode:     viewMode,
 		SeriesTitles: titles,
+		BulkEditBusy: bulkBusy,
 	}, nil
 }

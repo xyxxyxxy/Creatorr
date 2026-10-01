@@ -25,7 +25,13 @@
 {{else}}
 {{template "list_empty" "No videos indexed yet. Run a scan."}}
 {{end}}
-{{else if eq .ViewMode "thumbs"}}
+{{else}}
+{{template "video_bulk_bar" (dict
+  "FilterTotal" .FilterTotal
+  "BulkEditBusy" .BulkEditBusy
+  "ShowSelectAll" .VideosPage.Show
+)}}
+{{if eq .ViewMode "thumbs"}}
 <ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" id="series-videos-rows">
   {{range .Videos}}
   {{template "video_thumb_card" (dict
@@ -52,63 +58,8 @@
   )}}
   {{end}}
 </ul>
-{{template "pagination" .VideosPage}}
 {{else}}
 <ul class="list bg-base-100 rounded-box border border-base-300" id="series-videos-rows">
-  <li id="video-bulk-bar"
-      class="list-row py-2 hidden"
-      data-video-bulk-bar
-      style="--list-grid-cols: max-content 1fr max-content">
-    <div class="self-center flex items-center gap-3">
-      <input type="checkbox" class="checkbox checkbox-sm" id="video-select-page"
-             aria-label="Select all on this page"
-             {{if .BulkEditBusy}}disabled{{end}} />
-      <div class="text-sm tabular-nums opacity-70 whitespace-nowrap">
-        <span data-video-bulk-count>0/{{.FilterTotal}}</span>
-        <span>selected</span>
-      </div>
-    </div>
-    <div class="list-col-grow min-w-0 flex flex-wrap items-center gap-2 self-center">
-      {{if .VideosPage.Show}}
-      <button type="button"
-              class="btn btn-ghost btn-sm"
-              data-video-select-all-matching
-              {{if .BulkEditBusy}}disabled{{end}}>
-        <i data-lucide="list-checks" class="size-4"></i>
-        Select all
-      </button>
-      {{end}}
-      {{if .BulkEditBusy}}
-      <span class="text-sm opacity-60">Bulk edit running…</span>
-      <a class="link link-hover text-sm" href="/tasks">Tasks</a>
-      {{end}}
-    </div>
-    {{if not .BulkEditBusy}}
-    <div class="self-center justify-self-end">
-      <div class="join">
-        <button type="button" class="btn join-item" data-video-bulk-refresh disabled>
-          <i data-lucide="refresh-cw" class="size-4"></i>
-          Refresh sidecars
-        </button>
-        <button type="button" class="btn join-item" data-video-bulk-metadata disabled>
-          <i data-lucide="file-pen" class="size-4"></i>
-          Edit metadata
-        </button>
-        <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-video-bulk-want data-tip="Want" aria-label="Want" disabled>
-          <i data-lucide="eye" class="size-4"></i>
-        </button>
-        <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-video-bulk-ignore data-tip="Ignore" aria-label="Ignore" disabled>
-          <i data-lucide="eye-off" class="size-4"></i>
-        </button>
-        <button type="button" class="btn btn-soft btn-error btn-square join-item tooltip tooltip-top" data-video-bulk-delete data-tip="Delete" aria-label="Delete" disabled>
-          <i data-lucide="trash-2" class="size-4"></i>
-        </button>
-      </div>
-    </div>
-    {{else}}
-    <div class="size-10 shrink-0" aria-hidden="true"></div>
-    {{end}}
-  </li>
   {{range .Videos}}
   {{template "video_list_row" (dict
     "ID" .ID
@@ -137,6 +88,7 @@
   )}}
   {{end}}
 </ul>
+{{end}}
 {{template "pagination" .VideosPage}}
 {{end}}
 {{template "list_panel_end"}}

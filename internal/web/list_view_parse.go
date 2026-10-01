@@ -420,6 +420,7 @@ func videoSortOpts(r *http.Request, current, curDir, defaultSort string) []listF
 		{Value: library.SortUpload, Label: "Upload date", Selected: cur == library.SortUpload, Icon: "calendar-days"},
 		{Value: library.SortAdded, Label: "Date added", Selected: cur == library.SortAdded, Icon: "calendar-plus"},
 		{Value: library.SortAcquired, Label: "Acquired", Selected: cur == library.SortAcquired, Icon: "download"},
+		{Value: library.SortDuration, Label: "Duration", Selected: cur == library.SortDuration, Icon: "timer"},
 		{Value: library.SortTitle, Label: "Title", Selected: cur == library.SortTitle, Icon: "type"},
 	}
 	annotateSortOpts(r, opts, defaultSort, curDir)
@@ -439,14 +440,8 @@ func qFieldOpts(current string) []listFilterOpt {
 }
 
 func searchByPlaceholder(qField string) string {
-	label := "Title"
-	for _, o := range qFieldOpts(qField) {
-		if o.Selected {
-			label = o.Label
-			break
-		}
-	}
-	return "Search by " + label
+	_ = qField
+	return "Search by..."
 }
 
 func viewOpts(r *http.Request, current string) []listFilterOpt {
@@ -466,6 +461,10 @@ func seriesSortOpts(r *http.Request, current, curDir string) []listFilterOpt {
 	opts := []listFilterOpt{
 		{Value: library.SortTitle, Label: "Title", Selected: cur == library.SortTitle, Icon: "type"},
 		{Value: library.SortAdded, Label: "Date added", Selected: cur == library.SortAdded, Icon: "calendar-plus"},
+		{Value: library.SortLastUpload, Label: "Last upload", Selected: cur == library.SortLastUpload, Icon: "calendar-days"},
+		{Value: library.SortDownloaded, Label: "Downloaded", Selected: cur == library.SortDownloaded, Icon: "download"},
+		{Value: library.SortWanted, Label: "Wanted", Selected: cur == library.SortWanted, Icon: "circle-dashed"},
+		{Value: library.SortErrors, Label: "Errors", Selected: cur == library.SortErrors, Icon: "circle-alert"},
 	}
 	annotateSortOpts(r, opts, library.SortTitle, curDir)
 	return opts

@@ -1,20 +1,28 @@
 import { fillBulkActors, fillBulkStringList, resetBulkMetadataForm } from "./series_bulk.js";
-import { onSeriesDetailPage } from "./series_live.js";
 
-// --- Series detail video list bulk selection ---
+// --- Video list bulk selection (series detail + library /videos) ---
 const videoBulkSelected = new Set();
 
 let videoBulkMode = false;
 
+// Row click target for list + thumbs on both live roots.
+const VIDEO_BULK_ROW = "#series-videos-rows > [data-video-id], #videos-list-rows > [data-video-id]";
+
+function videoBulkLive() {
+  return (
+    document.getElementById("series-videos-live") || document.getElementById("videos-list-live")
+  );
+}
+
 function videoBulkFilterTotal() {
-  const live = document.getElementById("series-videos-live");
+  const live = videoBulkLive();
   if (!live) return 0;
   const n = parseInt(live.getAttribute("data-filter-total") || "0", 10);
   return Number.isFinite(n) ? n : 0;
 }
 
 function videoBulkBusy() {
-  const live = document.getElementById("series-videos-live");
+  const live = videoBulkLive();
   return !!(live && live.getAttribute("data-bulk-busy") === "1");
 }
 
@@ -24,7 +32,9 @@ function videoBulkSeriesID() {
 }
 
 function videoBulkPageCheckboxes() {
-  return Array.from(document.querySelectorAll("#series-videos-live .js-video-select"));
+  const live = videoBulkLive();
+  if (!live) return [];
+  return Array.from(live.querySelectorAll(".js-video-select"));
 }
 
 function fillVideoBulkIDs(root) {
@@ -51,15 +61,16 @@ function toggleVideoBulkID(id) {
   if (!id || videoBulkBusy()) return;
   if (videoBulkSelected.has(id)) videoBulkSelected.delete(id);
   else videoBulkSelected.add(id);
-  const cb = document.querySelector(
-    '#series-videos-live .js-video-select[value="' + CSS.escape(id) + '"]'
-  );
+  const live = videoBulkLive();
+  const cb = live
+    ? live.querySelector('.js-video-select[value="' + CSS.escape(id) + '"]')
+    : null;
   if (cb) cb.checked = videoBulkSelected.has(id);
   syncVideoBulkUI();
 }
 
 function syncVideoBulkUI() {
-  const live = document.getElementById("series-videos-live");
+  const live = videoBulkLive();
   if (!live) return;
   live.setAttribute("data-bulk-mode", videoBulkMode ? "1" : "0");
   const modeBtn = live.querySelector("[data-video-bulk-mode]");
@@ -75,7 +86,9 @@ function syncVideoBulkUI() {
     wrap.classList.toggle("hidden", !videoBulkMode);
   });
   // Keep per-row actions visible in multi-select; disable so bulk bar is the only path.
+  // Tip lives on the wrap: disabled buttons + pointer-events-none children kill daisyUI tips.
   const rowActionsDisabled = videoBulkMode || videoBulkBusy();
+  const rowActionsTip = videoBulkBusy() ? "Bulk edit running…" : "Use the multi-select bar";
   live.querySelectorAll("[data-video-row-actions]").forEach((wrap) => {
     wrap.querySelectorAll("button").forEach((btn) => {
       if (rowActionsDisabled) {
@@ -106,8 +119,35 @@ function syncVideoBulkUI() {
         if (modalFor) el.setAttribute("for", modalFor);
       }
     });
+    if (rowActionsDisabled) {
+      wrap.classList.add("tooltip", "tooltip-top");
+      wrap.setAttribute("data-tip", rowActionsTip);
+      wrap.querySelectorAll("[data-tip]").forEach((el) => {
+        if (el === wrap) return;
+        if (!el.hasAttribute("data-bulk-prev-tip")) {
+          el.setAttribute("data-bulk-prev-tip", el.getAttribute("data-tip") || "");
+          el.setAttribute(
+            "data-bulk-prev-tooltip",
+            el.classList.contains("tooltip") ? "1" : "0"
+          );
+        }
+        el.removeAttribute("data-tip");
+        el.classList.remove("tooltip", "tooltip-top");
+      });
+    } else {
+      wrap.classList.remove("tooltip", "tooltip-top");
+      wrap.removeAttribute("data-tip");
+      wrap.querySelectorAll("[data-bulk-prev-tip]").forEach((el) => {
+        const prev = el.getAttribute("data-bulk-prev-tip");
+        const hadTip = el.getAttribute("data-bulk-prev-tooltip") === "1";
+        el.removeAttribute("data-bulk-prev-tip");
+        el.removeAttribute("data-bulk-prev-tooltip");
+        if (prev) el.setAttribute("data-tip", prev);
+        if (hadTip) el.classList.add("tooltip", "tooltip-top");
+      });
+    }
   });
-  live.querySelectorAll("#series-videos-rows > [data-video-id]").forEach((row) => {
+  live.querySelectorAll(VIDEO_BULK_ROW).forEach((row) => {
     row.classList.toggle("cursor-pointer", videoBulkMode);
     const id = row.getAttribute("data-video-id");
     const selected = videoBulkMode && videoBulkSelected.has(id);
@@ -133,6 +173,8 @@ function syncVideoBulkUI() {
   const bar = live.querySelector("[data-video-bulk-bar]");
   if (bar) {
     bar.classList.toggle("hidden", !videoBulkMode);
+    const wrap = document.getElementById("video-bulk-bar-wrap");
+    if (wrap) wrap.classList.toggle("hidden", !videoBulkMode);
     const n = videoBulkSelected.size;
     const m = videoBulkFilterTotal();
     const countEl = bar.querySelector("[data-video-bulk-count]");
@@ -175,6 +217,15 @@ function restoreVideoBulkCheckboxes() {
 function openVideoBulkModal(id) {
   const toggle = document.getElementById(id);
   if (toggle) toggle.checked = true;
+}
+
+/** Confirm modal only when selection exceeds this (≤5 submit immediately). */
+const VIDEO_BULK_CONFIRM_AFTER = 5;
+
+function submitVideoBulkForm(formId) {
+  fillVideoBulkIDs(document);
+  const form = document.getElementById(formId);
+  if (form) form.requestSubmit();
 }
 
 async function hydrateVideoBulkMetadataForm() {
@@ -231,33 +282,52 @@ function runVideoBulkAction(action) {
     const el = document.querySelector(sel);
     if (el) el.textContent = text;
   };
+  const needConfirm = n > VIDEO_BULK_CONFIRM_AFTER;
   if (action === "want") {
+    if (!needConfirm) {
+      submitVideoBulkForm("form-bulk-want-videos");
+      return;
+    }
     setTitle("[data-video-bulk-want-title]", "Want " + n + "/" + m + " videos");
     openVideoBulkModal("modal-bulk-want-videos");
     return;
   }
   if (action === "clear-errors") {
+    if (!needConfirm) {
+      submitVideoBulkForm("form-bulk-clear-download-errors");
+      return;
+    }
     setTitle("[data-video-bulk-clear-errors-title]", "Clear selected errors (" + n + "/" + m + ")");
     openVideoBulkModal("modal-bulk-clear-download-errors");
     return;
   }
   if (action === "ignore") {
+    if (!needConfirm) {
+      submitVideoBulkForm("form-bulk-ignore-videos");
+      return;
+    }
     setTitle("[data-video-bulk-ignore-title]", "Ignore " + n + "/" + m + " videos");
     openVideoBulkModal("modal-bulk-ignore-videos");
     return;
   }
   if (action === "refresh") {
+    if (!needConfirm) {
+      submitVideoBulkForm("form-bulk-refresh-sidecars-videos");
+      return;
+    }
     setTitle("[data-video-bulk-refresh-title]", "Refresh sidecars (" + n + "/" + m + ")");
     openVideoBulkModal("modal-bulk-refresh-sidecars-videos");
     return;
   }
   if (action === "metadata") {
+    // Edit form always opens (not a yes/no confirm).
     setTitle("[data-video-bulk-meta-title]", "Edit metadata (" + n + "/" + m + ")");
     openVideoBulkModal("modal-bulk-edit-videos-metadata");
     hydrateVideoBulkMetadataForm();
     return;
   }
   if (action === "delete") {
+    // Delete always confirms.
     setTitle("[data-video-bulk-delete-title]", "Delete downloaded files (" + n + "/" + m + ")");
     openVideoBulkModal("modal-bulk-delete-videos");
   }
@@ -265,9 +335,9 @@ function runVideoBulkAction(action) {
 
 async function selectAllMatchingVideos() {
   const sid = videoBulkSeriesID();
-  if (!sid) throw new Error("missing series id");
   const q = location.search || "";
-  const resp = await fetch("/series/" + sid + "/videos/ids" + q, {
+  const url = sid ? "/series/" + sid + "/videos/ids" + q : "/videos/ids" + q;
+  const resp = await fetch(url, {
     headers: { Accept: "application/json" },
   });
   if (!resp.ok) throw new Error("failed to load matching ids");
@@ -276,6 +346,10 @@ async function selectAllMatchingVideos() {
   videoBulkSelected.clear();
   ids.forEach((id) => videoBulkSelected.add(String(id)));
   restoreVideoBulkCheckboxes();
+}
+
+function onVideoBulkPage() {
+  return !!videoBulkLive();
 }
 
 export function bootVideoBulk() {
@@ -323,8 +397,8 @@ export function bootVideoBulk() {
       return;
     }
     if (videoBulkMode) {
-      //! pin: thumb+list bulk click #series-videos-rows > [data-video-id]
-      const row = ev.target.closest("#series-videos-rows > [data-video-id]");
+      //! pin: thumb+list bulk click #series-videos-rows > [data-video-id], #videos-list-rows > [data-video-id]
+      const row = ev.target.closest(VIDEO_BULK_ROW);
       if (
         row &&
         !ev.target.closest(".js-video-select, [data-video-select-wrap], [data-video-row-actions]")
@@ -383,12 +457,14 @@ export function bootVideoBulk() {
   });
 
   document.body.addEventListener("htmx:beforeRequest", (ev) => {
-    if (!onSeriesDetailPage() || !videoBulkMode) return;
+    if (!onVideoBulkPage() || !videoBulkMode) return;
     const elt = ev.detail && ev.detail.elt;
     if (!elt || !elt.closest) return;
+    const live = videoBulkLive();
+    if (!live) return;
     const form =
-      elt.closest("#series-videos-live form.js-list-filters") ||
-      (elt.matches && elt.matches("#series-videos-live form.js-list-filters") ? elt : null);
+      elt.closest("#" + live.id + " form.js-list-filters") ||
+      (elt.matches && elt.matches("#" + live.id + " form.js-list-filters") ? elt : null);
     if (!form) return;
     // Keep multi-select on; clear selection (filter result set changed).
     videoBulkSelected.clear();
@@ -397,11 +473,11 @@ export function bootVideoBulk() {
 
   document.body.addEventListener("htmx:afterSwap", (ev) => {
     const target = ev.detail && ev.detail.target;
-    if (!target || target.id !== "series-videos-live") return;
+    if (!target || (target.id !== "series-videos-live" && target.id !== "videos-list-live")) return;
     restoreVideoBulkCheckboxes();
   });
 
-  if (onSeriesDetailPage()) {
+  if (onVideoBulkPage()) {
     restoreVideoBulkCheckboxes();
   }
 }

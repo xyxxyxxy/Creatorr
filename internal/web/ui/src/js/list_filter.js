@@ -82,15 +82,6 @@ export function bootListFilter() {
     const form = el.closest("form.js-list-filters");
     if (!form) return;
     if (el.tagName === "SELECT") {
-      if (el.name === "q_field") {
-        const input = form.querySelector('input[type="search"][name="q"]');
-        const opt = el.options[el.selectedIndex];
-        if (input && opt) {
-          const ph = "Search by " + opt.text;
-          input.placeholder = ph;
-          input.setAttribute("aria-label", ph);
-        }
-      }
       submitListFilters(form);
       return;
     }

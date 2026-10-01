@@ -6,10 +6,15 @@ import (
 
 // List sort query values (empty = preset default).
 const (
-	SortUpload   = "upload"
-	SortAdded    = "added"
-	SortAcquired = "acquired"
-	SortTitle    = "title"
+	SortUpload     = "upload"
+	SortAdded      = "added"
+	SortAcquired   = "acquired"
+	SortTitle      = "title"
+	SortLastUpload = "last_upload" // series: newest video upload_date
+	SortDownloaded = "downloaded"  // series: downloaded video count
+	SortWanted     = "wanted"      // series: wanted + wanted_archive count
+	SortErrors     = "errors"      // series: download/integrity error count
+	SortDuration   = "duration"    // video: duration_seconds
 )
 
 // Sort direction query values (empty = DefaultSortDir for the active sort).
@@ -143,6 +148,12 @@ func videoOrderByClause(sort, dir string) string {
 			return `title COLLATE NOCASE DESC, id DESC`
 		}
 		return `title COLLATE NOCASE ASC, id ASC`
+	case SortDuration:
+		// Unknown / zero duration after known lengths.
+		if desc {
+			return `(duration_seconds IS NULL OR duration_seconds <= 0), duration_seconds DESC, id DESC`
+		}
+		return `(duration_seconds IS NULL OR duration_seconds <= 0), duration_seconds ASC, id ASC`
 	default: // upload
 		if desc {
 			return videoListOrderBy
@@ -163,6 +174,26 @@ func seriesOrderByClause(sort, dir string) string {
 			return `s.added_at DESC, s.id DESC`
 		}
 		return `s.added_at ASC, s.id ASC`
+	case SortLastUpload:
+		if desc {
+			return `vc.last_upload IS NULL, vc.last_upload DESC, s.id DESC`
+		}
+		return `vc.last_upload IS NULL, vc.last_upload ASC, s.id ASC`
+	case SortDownloaded:
+		if desc {
+			return `COALESCE(vc.downloaded_count, 0) DESC, s.id DESC`
+		}
+		return `COALESCE(vc.downloaded_count, 0) ASC, s.id ASC`
+	case SortWanted:
+		if desc {
+			return `COALESCE(vc.wanted_count, 0) DESC, s.id DESC`
+		}
+		return `COALESCE(vc.wanted_count, 0) ASC, s.id ASC`
+	case SortErrors:
+		if desc {
+			return `COALESCE(vc.error_count, 0) DESC, s.id DESC`
+		}
+		return `COALESCE(vc.error_count, 0) ASC, s.id ASC`
 	default: // title
 		if desc {
 			return `s.title COLLATE NOCASE DESC, s.id DESC`

@@ -76,7 +76,9 @@ const seriesListFromJoins = `
 				COUNT(*) AS video_count,
 				SUM(CASE WHEN status = 'downloaded' THEN 1 ELSE 0 END) AS downloaded_count,
 				SUM(CASE WHEN status IN ('wanted', 'wanted_archive') THEN 1 ELSE 0 END) AS wanted_count,
-				SUM(CASE WHEN status IN (` + seriesProgressOpenStatuses + `) THEN 1 ELSE 0 END) AS pending_count
+				SUM(CASE WHEN status IN (` + seriesProgressOpenStatuses + `) THEN 1 ELSE 0 END) AS pending_count,
+				SUM(CASE WHEN status IN ('wanted_download_error', 'downloaded_integrity_failed') THEN 1 ELSE 0 END) AS error_count,
+				MAX(CASE WHEN upload_date IS NOT NULL AND trim(upload_date) != '' THEN upload_date END) AS last_upload
 			FROM videos
 			GROUP BY series_id
 		) vc ON vc.series_id = s.id

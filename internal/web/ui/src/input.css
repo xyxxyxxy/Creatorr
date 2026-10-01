@@ -364,6 +364,23 @@
   align-items: stretch;
   overflow-x: hidden;
 }
+/* Has/No presence join sits on the category summary, end-aligned before the chevron. */
+.js-list-filters [data-list-filter-menu] summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.js-list-filters [data-list-filter-menu] .list-filter-presence {
+  margin-inline-start: auto;
+  position: relative;
+  z-index: 1;
+}
+/* Presence-only rows have no summary chevron - reserve that gutter so Has/No
+   line up with accordion categories. */
+.js-list-filters [data-list-filter-menu] .list-filter-presence--solo {
+  /* Accordion summaries keep ~14px before the chevron; match that gutter. */
+  margin-inline-end: 0.875rem;
+}
 .js-list-filters > .js-list-toolbar-dd.input:not(:focus-within):not(.dropdown-open) > .dropdown-content {
   display: none;
   opacity: 0;

@@ -147,9 +147,11 @@ type listViewToolbar struct {
 	ToDay            string
 	ShowDateRange    bool
 	DateClearHref    string
-	UploadEmptyHref  string
-	UploadFilledHref string
-	Selects          []listFilterSelect
+	UploadEmptyHref      string
+	UploadFilledHref     string
+	UploadEmptySelected  bool
+	UploadFilledSelected bool
+	Selects              []listFilterSelect
 	FilterActive     bool
 	Badges           []listViewBadge
 	ClearAllHref     string
@@ -217,9 +219,8 @@ func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, s
 		FormAction:       fmt.Sprintf("/series/%d", id),
 		VideoBulkMode:    true,
 		DateClearHref:    dropQueryKeys(r, "from", "to", "page"),
-		UploadEmptyHref:  applyPresenceURL(r, true, library.PresenceUploadDate),
-		UploadFilledHref: applyPresenceURL(r, false, library.PresenceUploadDate),
 	}
+	annotateUploadPresence(r, &videoFilter)
 	if filter.Active() {
 		videoFilter.ClearAllHref = clearOperatorFiltersURL(r)
 	}

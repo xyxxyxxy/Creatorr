@@ -116,7 +116,7 @@ func parseMultiQuery(q url.Values, name string) []string {
 
 func parseVideoSort(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case library.SortAdded, library.SortAcquired, library.SortTitle, library.SortUpload:
+	case library.SortAdded, library.SortAcquired, library.SortTitle, library.SortUpload, library.SortDuration:
 		return strings.ToLower(strings.TrimSpace(raw))
 	default:
 		return ""
@@ -125,7 +125,8 @@ func parseVideoSort(raw string) string {
 
 func parseSeriesSort(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case library.SortAdded, library.SortTitle:
+	case library.SortAdded, library.SortTitle, library.SortLastUpload,
+		library.SortDownloaded, library.SortWanted, library.SortErrors:
 		return strings.ToLower(strings.TrimSpace(raw))
 	default:
 		return ""
@@ -326,22 +327,55 @@ func annotateFilterSelect(r *http.Request, sel *listFilterSelect) {
 		} else {
 			sel.Options[i].Href = applySelectOptionURLClearingPresence(r, sel.Name, sel.Options[i].Value, sel.PresenceField)
 		}
-		// Presence fields: menu value copy matches active chip ("Country: 123").
-		if sel.PresenceField != "" {
-			sel.Options[i].Label = filterValueChipLabel(sel.Name, sel.Options[i].Value)
-		}
 	}
 	if sel.PresenceField != "" {
-		sel.PresenceEmptyHref = applyPresenceURL(r, true, sel.PresenceField)
-		sel.PresenceFilledHref = applyPresenceURL(r, false, sel.PresenceField)
 		sel.PresenceEmptyLabel = presenceBadgeLabel(sel.PresenceField, true)
 		sel.PresenceFilledLabel = presenceBadgeLabel(sel.PresenceField, false)
+		sel.PresenceEmptySelected = hasPresenceQuery(r, "empty", sel.PresenceField)
+		sel.PresenceFilledSelected = hasPresenceQuery(r, "not_empty", sel.PresenceField)
+		// Active Has/No clears that presence (toggle); inactive applies it.
+		if sel.PresenceEmptySelected {
+			sel.PresenceEmptyHref = dropQueryValue(r, "empty", sel.PresenceField)
+		} else {
+			sel.PresenceEmptyHref = applyPresenceURL(r, true, sel.PresenceField)
+		}
+		if sel.PresenceFilledSelected {
+			sel.PresenceFilledHref = dropQueryValue(r, "not_empty", sel.PresenceField)
+		} else {
+			sel.PresenceFilledHref = applyPresenceURL(r, false, sel.PresenceField)
+		}
 	}
 }
 
 func annotateFilterSelects(r *http.Request, selects []listFilterSelect) {
 	for i := range selects {
 		annotateFilterSelect(r, &selects[i])
+	}
+}
+
+func hasPresenceQuery(r *http.Request, key, field string) bool {
+	want := strings.TrimSpace(field)
+	for _, v := range r.URL.Query()[key] {
+		if strings.EqualFold(strings.TrimSpace(v), want) {
+			return true
+		}
+	}
+	return false
+}
+
+// annotateUploadPresence sets Has/No upload-date links on the toolbar (toggle when active).
+func annotateUploadPresence(r *http.Request, tb *listViewToolbar) {
+	tb.UploadEmptySelected = hasPresenceQuery(r, "empty", library.PresenceUploadDate)
+	tb.UploadFilledSelected = hasPresenceQuery(r, "not_empty", library.PresenceUploadDate)
+	if tb.UploadEmptySelected {
+		tb.UploadEmptyHref = dropQueryValue(r, "empty", library.PresenceUploadDate)
+	} else {
+		tb.UploadEmptyHref = applyPresenceURL(r, true, library.PresenceUploadDate)
+	}
+	if tb.UploadFilledSelected {
+		tb.UploadFilledHref = dropQueryValue(r, "not_empty", library.PresenceUploadDate)
+	} else {
+		tb.UploadFilledHref = applyPresenceURL(r, false, library.PresenceUploadDate)
 	}
 }
 

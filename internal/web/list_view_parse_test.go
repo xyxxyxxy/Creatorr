@@ -12,14 +12,11 @@ import (
 
 func TestSearchByPlaceholder(t *testing.T) {
 	t.Parallel()
-	if got := searchByPlaceholder(""); got != "Search by Title" {
+	if got := searchByPlaceholder(""); got != "Search by..." {
 		t.Fatalf("empty q_field: got %q", got)
 	}
-	if got := searchByPlaceholder(library.QFieldPlot); got != "Search by Plot" {
+	if got := searchByPlaceholder(library.QFieldPlot); got != "Search by..." {
 		t.Fatalf("plot: got %q", got)
-	}
-	if got := searchByPlaceholder(library.QFieldOriginalTitle); got != "Search by Original title" {
-		t.Fatalf("original title: got %q", got)
 	}
 }
 
@@ -103,10 +100,23 @@ func TestFilterValueChipLabel(t *testing.T) {
 		Options: []listFilterOpt{{Value: "123", Label: "123"}},
 	}
 	annotateFilterSelect(httptest.NewRequest(http.MethodGet, "/videos", nil), &sel)
-	if sel.Options[0].Label != "Country: 123" {
-		t.Fatalf("menu label: got %q", sel.Options[0].Label)
+	if sel.Options[0].Label != "123" {
+		t.Fatalf("menu label: got %q want bare value", sel.Options[0].Label)
 	}
 	if sel.PresenceFilledLabel != "Has country" || sel.PresenceEmptyLabel != "No country" {
 		t.Fatalf("presence labels: %q / %q", sel.PresenceFilledLabel, sel.PresenceEmptyLabel)
+	}
+
+	reqOn := httptest.NewRequest(http.MethodGet, "/videos?not_empty=country", nil)
+	annotateFilterSelect(reqOn, &sel)
+	if !sel.PresenceFilledSelected || sel.PresenceEmptySelected {
+		t.Fatalf("filled selected flags: filled=%v empty=%v", sel.PresenceFilledSelected, sel.PresenceEmptySelected)
+	}
+	u, err := url.Parse(sel.PresenceFilledHref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Query().Has("not_empty") {
+		t.Fatalf("active Has should clear not_empty, href=%q", sel.PresenceFilledHref)
 	}
 }

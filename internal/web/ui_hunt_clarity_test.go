@@ -226,9 +226,9 @@ func TestBulkThumbCardClickSelectsNotNavigates(t *testing.T) {
 	js := rec.Body.String()
 	for _, pin := range []string{
 		`#series-list-rows > [data-series-id]`,
-		`#series-videos-rows > [data-video-id]`,
+		`#series-videos-rows > [data-video-id], #videos-list-rows > [data-video-id]`,
 		`thumb+list bulk click #series-list-rows > [data-series-id]`,
-		`thumb+list bulk click #series-videos-rows > [data-video-id]`,
+		`thumb+list bulk click #series-videos-rows > [data-video-id], #videos-list-rows > [data-video-id]`,
 	} {
 		if !strings.Contains(js, pin) {
 			t.Fatalf("app.js missing bulk thumb click pin %q", pin)
@@ -239,6 +239,14 @@ func TestBulkThumbCardClickSelectsNotNavigates(t *testing.T) {
 	}
 	if strings.Contains(js, `#series-videos-rows > .list-row[data-video-id]`) {
 		t.Fatal("video bulk click still list-row-only; thumbs would navigate")
+	}
+	for _, tip := range []string{
+		`Use the multi-select bar`,
+		`VIDEO_BULK_CONFIRM_AFTER = 5`,
+	} {
+		if !strings.Contains(js, tip) {
+			t.Fatalf("app.js missing video bulk contract %q", tip)
+		}
 	}
 }
 

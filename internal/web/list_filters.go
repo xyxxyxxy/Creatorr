@@ -18,4 +18,6 @@ type listFilterSelect struct {
 	PresenceFilledHref          string
 	PresenceEmptyLabel          string
 	PresenceFilledLabel         string
+	PresenceEmptySelected       bool
+	PresenceFilledSelected      bool
 }

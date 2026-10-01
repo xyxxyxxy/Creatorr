@@ -112,6 +112,116 @@ func TestOrderByClauseDirection(t *testing.T) {
 	if library.DefaultSortDir(library.SortUpload) != library.SortDirDesc {
 		t.Fatal("upload default desc")
 	}
+	if library.DefaultSortDir(library.SortDuration) != library.SortDirDesc {
+		t.Fatal("duration default desc")
+	}
+	if library.DefaultSortDir(library.SortDownloaded) != library.SortDirDesc {
+		t.Fatal("downloaded default desc")
+	}
+}
+
+func TestSeriesListSortDownloadedAndLastUpload(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	few, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Few DL", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	many, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Many DL", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcFew, err := s.AddSource(few.ID, library.AddSourceParams{URL: "https://www.example.com/@fewdl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcMany, err := s.AddSource(many.ID, library.AddSourceParams{URL: "https://www.example.com/@manydl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := seedTaskID(t, s)
+	add := func(sid, sourceID int64, remote, upload string) int64 {
+		t.Helper()
+		res, err := s.UpsertListed(sid, library.ListedVideo{
+			RemoteID: remote, Title: remote, SourceID: sourceID, UploadDate: upload,
+		}, taskID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.VideoID
+	}
+	v1 := add(few.ID, srcFew.ID, "f1", "2024-01-01T00:00:00Z")
+	_ = add(many.ID, srcMany.ID, "m1", "2023-01-01T00:00:00Z")
+	v2 := add(many.ID, srcMany.ID, "m2", "2025-06-01T00:00:00Z")
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'downloaded' WHERE id IN (?, ?)`, v1, v2); err != nil {
+		t.Fatal(err)
+	}
+	// many: 1 downloaded; few: 1 downloaded - bump many with another download
+	v3 := add(many.ID, srcMany.ID, "m3", "2022-01-01T00:00:00Z")
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'downloaded' WHERE id = ?`, v3); err != nil {
+		t.Fatal(err)
+	}
+
+	byDL, err := s.ListSeriesFiltered(library.SeriesListFilter{Sort: library.SortDownloaded}, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byDL) < 2 || byDL[0].ID != many.ID {
+		t.Fatalf("downloaded desc: first=%v want Many DL", byDL)
+	}
+
+	byUpload, err := s.ListSeriesFiltered(library.SeriesListFilter{Sort: library.SortLastUpload}, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byUpload) < 2 || byUpload[0].ID != many.ID {
+		t.Fatalf("last_upload desc: first=%v want Many DL (2025)", byUpload)
+	}
+}
+
+func TestVideoListSortDuration(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "DurSort", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := s.AddSource(ser.ID, library.AddSourceParams{URL: "https://www.example.com/@dursort"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := seedTaskID(t, s)
+	short, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "short", Title: "Short", SourceID: src.ID, UploadDate: "2024-01-01T00:00:00Z",
+	}, taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	long, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "long", Title: "Long", SourceID: src.ID, UploadDate: "2024-02-01T00:00:00Z",
+	}, taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetDurationSeconds(short.VideoID, 30); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetDurationSeconds(long.VideoID, 600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{Sort: library.SortDuration}, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].RemoteID != "long" {
+		t.Fatalf("duration desc: %+v", got)
+	}
 }
 
 func TestSeriesListFilterPresenceAndStudio(t *testing.T) {

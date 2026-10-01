@@ -64,7 +64,19 @@
         {{if .ShowDateRange}}
         <li>
           <details>
-            <summary>Upload date</summary>
+            <summary>
+              <span class="grow truncate">Upload date</span>
+              <span class="join join-horizontal shrink-0 list-filter-presence"
+                    onmousedown="event.preventDefault(); event.stopPropagation()"
+                    onclick="event.stopPropagation()">
+                <a href="{{.UploadFilledHref}}" class="btn btn-xs join-item{{if .UploadFilledSelected}} btn-primary{{end}}"
+                   aria-label="Has upload date"{{if .UploadFilledSelected}} aria-pressed="true"{{end}}
+                   {{if $live}} hx-get="{{.UploadFilledHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>Has</a>
+                <a href="{{.UploadEmptyHref}}" class="btn btn-xs join-item{{if .UploadEmptySelected}} btn-primary{{end}}"
+                   aria-label="No upload date"{{if .UploadEmptySelected}} aria-pressed="true"{{end}}
+                   {{if $live}} hx-get="{{.UploadEmptyHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>No</a>
+              </span>
+            </summary>
             <ul class="p-1">
               <li class="menu-title"><span>Range</span></li>
               <li class="pointer-events-auto">
@@ -83,36 +95,50 @@
                   {{end}}
                 </div>
               </li>
-              {{if .UploadFilledHref}}
-              <li><a href="{{.UploadFilledHref}}"{{if $live}} hx-get="{{.UploadFilledHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>Has upload date</a></li>
-              {{end}}
-              {{if .UploadEmptyHref}}
-              <li><a href="{{.UploadEmptyHref}}"{{if $live}} hx-get="{{.UploadEmptyHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>No upload date</a></li>
-              {{end}}
             </ul>
           </details>
         </li>
         {{end}}
         {{range .Selects}}
         <li>
+          {{if .Options}}
           <details>
-            <summary>{{.AriaLabel}}</summary>
+            <summary>
+              <span class="grow truncate">{{.AriaLabel}}</span>
+              {{if .PresenceFilledHref}}
+              <span class="join join-horizontal shrink-0 list-filter-presence"
+                    onmousedown="event.preventDefault(); event.stopPropagation()"
+                    onclick="event.stopPropagation()">
+                <a href="{{.PresenceFilledHref}}" class="btn btn-xs join-item{{if .PresenceFilledSelected}} btn-primary{{end}}"
+                   aria-label="{{.PresenceFilledLabel}}"{{if .PresenceFilledSelected}} aria-pressed="true"{{end}}
+                   {{if $.LiveTarget}} hx-get="{{.PresenceFilledHref}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>Has</a>
+                <a href="{{.PresenceEmptyHref}}" class="btn btn-xs join-item{{if .PresenceEmptySelected}} btn-primary{{end}}"
+                   aria-label="{{.PresenceEmptyLabel}}"{{if .PresenceEmptySelected}} aria-pressed="true"{{end}}
+                   {{if $.LiveTarget}} hx-get="{{.PresenceEmptyHref}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>No</a>
+              </span>
+              {{end}}
+            </summary>
             <ul class="p-1">
-              {{if .Options}}
               {{range .Options}}
               <li>
                 <a href="{{.Href}}"{{if $.LiveTarget}} hx-get="{{.Href}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}{{if .Selected}} class="active"{{end}}>{{.Label}}</a>
               </li>
               {{end}}
-              {{end}}
-              {{if .PresenceFilledHref}}
-              <li><a href="{{.PresenceFilledHref}}"{{if $.LiveTarget}} hx-get="{{.PresenceFilledHref}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>{{.PresenceFilledLabel}}</a></li>
-              {{end}}
-              {{if .PresenceEmptyHref}}
-              <li><a href="{{.PresenceEmptyHref}}"{{if $.LiveTarget}} hx-get="{{.PresenceEmptyHref}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>{{.PresenceEmptyLabel}}</a></li>
-              {{end}}
             </ul>
           </details>
+          {{else if .PresenceFilledHref}}
+          <div class="pointer-events-auto flex items-center gap-2 min-h-8 px-3 py-1.5">
+            <span class="grow truncate">{{.AriaLabel}}</span>
+            <span class="join join-horizontal shrink-0 list-filter-presence list-filter-presence--solo">
+              <a href="{{.PresenceFilledHref}}" class="btn btn-xs join-item{{if .PresenceFilledSelected}} btn-primary{{end}}"
+                 aria-label="{{.PresenceFilledLabel}}"{{if .PresenceFilledSelected}} aria-pressed="true"{{end}}
+                 {{if $.LiveTarget}} hx-get="{{.PresenceFilledHref}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>Has</a>
+              <a href="{{.PresenceEmptyHref}}" class="btn btn-xs join-item{{if .PresenceEmptySelected}} btn-primary{{end}}"
+                 aria-label="{{.PresenceEmptyLabel}}"{{if .PresenceEmptySelected}} aria-pressed="true"{{end}}
+                 {{if $.LiveTarget}} hx-get="{{.PresenceEmptyHref}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>No</a>
+            </span>
+          </div>
+          {{end}}
         </li>
         {{end}}
       </ul>
