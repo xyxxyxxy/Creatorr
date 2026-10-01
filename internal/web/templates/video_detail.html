@@ -170,7 +170,7 @@
         {{if .StatusTaskID}}
         <span class="text-xs opacity-60">{{.StatusTaskPrefix}}</span>
         <a class="link link-hover text-xs" href="/task/{{.StatusTaskID}}">{{.StatusTaskKind}}</a>
-        {{else if or (eq .Video.Status "wanted_download_error") (eq .Video.Status "wanted_archive") (eq .Video.Status "integrity_check_failed")}}
+        {{else if or (eq .Video.Status "wanted_download_error") (eq .Video.Status "wanted_archive") (eq .Video.Status "downloaded_integrity_failed")}}
         {{if .ErrorHistoryID}}
         <a class="link link-hover text-error text-xs" href="/task/{{.ErrorHistoryID}}">Open task for details</a>
         {{end}}

@@ -77,7 +77,7 @@ type verifyAllMediaPayload struct {
 // VerifyAllMediaFail is one failed video from VerifyAllMediaPass (for notify).
 type VerifyAllMediaFail = integrity.VerifyAllMediaFail
 
-// VerifyAllMediaPass runs integrity check on packed downloaded/integrity_check_failed media
+// VerifyAllMediaPass runs integrity check on packed downloaded/downloaded_integrity_failed media
 // with a cursor for resume. Skips videos whose quality profile has File integrity off.
 // onFail is optional; called after MarkVerifyFailed for each failure.
 func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64), onFail func(VerifyAllMediaFail)) (*VerifyAllMediaResult, error) {
@@ -147,7 +147,7 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 		q := `
 		SELECT v.id
 		FROM videos v
-		WHERE v.status IN ('downloaded', 'integrity_check_failed')
+		WHERE v.status IN ('downloaded', 'downloaded_integrity_failed')
 		  AND v.id > ?
 		  AND EXISTS (
 		    SELECT 1 FROM files f

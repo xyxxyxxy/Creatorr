@@ -56,11 +56,11 @@ func (s *Store) RestoreDownloaded(videoID, taskID int64) error {
 	}, taskID)
 }
 
-// MarkExternallyChanged sets status integrity_check_failed when packed media size no longer
+// MarkExternallyChanged sets status downloaded_integrity_failed when packed media size no longer
 // matches files.size_bytes. Updates size_bytes to the on-disk size (idempotent for
 // later syncs). Does not enqueue download or media_verify.
 func (s *Store) MarkExternallyChanged(videoID, taskID, oldSize, newSize int64) error {
-	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'integrity_check_failed' WHERE id = ?`, videoID); err != nil {
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'downloaded_integrity_failed' WHERE id = ?`, videoID); err != nil {
 		return err
 	}
 	if _, err := s.DB.SQL.Exec(`

@@ -638,7 +638,7 @@
         return "wanted (download error)";
       case "wanted_archive":
         return "wanted (Web Archive)";
-      case "integrity_check_failed":
+      case "downloaded_integrity_failed":
         return "verify failed";
       case "downloaded":
         return "downloaded";

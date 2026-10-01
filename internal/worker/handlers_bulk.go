@@ -66,7 +66,7 @@ func RegenerateNFOHandler(d Deps) TaskHandler {
 	}
 }
 
-// VerifyAllMediaHandler null-decodes all packed downloaded/integrity_check_failed media (resumable).
+// VerifyAllMediaHandler null-decodes all packed downloaded/downloaded_integrity_failed media (resumable).
 func DeleteFilesHandler(d Deps) TaskHandler {
 	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
 		if err := d.Library.FileDeletePass(ctx, t, progress); err != nil {

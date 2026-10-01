@@ -10,7 +10,7 @@ import (
 // SeriesWarnLevels returns the strongest warn level per series ID.
 // incomplete: a source has unfinished full scan, no pending/running scan task, and no tip
 // schedule (single or empty scan_cron) - scheduled incomplete is left to the next cron tick.
-// error: any video in wanted_download_error / integrity_check_failed, or a source whose
+// error: any video in wanted_download_error / downloaded_integrity_failed, or a source whose
 // latest scan-related history event is scan_error.
 func (s *Store) SeriesWarnLevels(seriesIDs []int64) (map[int64]SeriesWarnLevel, error) {
 	out := make(map[int64]SeriesWarnLevel, len(seriesIDs))
@@ -121,7 +121,7 @@ func (s *Store) SeriesVideoErrorFlagsMap(seriesIDs []int64) (map[int64]SeriesVid
 	rows, err := s.DB.SQL.Query(`
 		SELECT series_id,
 		       SUM(CASE WHEN status = '`+StatusWantedDownloadError+`' THEN 1 ELSE 0 END),
-		       SUM(CASE WHEN status = '`+StatusIntegrityCheckFailed+`' THEN 1 ELSE 0 END)
+		       SUM(CASE WHEN status = '`+StatusDownloadedIntegrityFailed+`' THEN 1 ELSE 0 END)
 		FROM videos
 		WHERE series_id IN (`+sqlIntPlaceholders(len(args))+`)
 		  AND status IN `+sqlVideoErrorStatuses+`
@@ -148,7 +148,7 @@ func (s *Store) SeriesVideoErrorFlagsMap(seriesIDs []int64) (map[int64]SeriesVid
 }
 
 // CountSeriesWithError returns how many series have SeriesWarnError health
-// (video wanted_download_error / integrity_check_failed, or a source
+// (video wanted_download_error / downloaded_integrity_failed, or a source
 // whose latest scan-related history is scan_error). Incomplete full-scan is excluded.
 func (s *Store) CountSeriesWithError() (int, error) {
 	var n int

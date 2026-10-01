@@ -115,7 +115,7 @@ const notifyEventLabels = {
   ytdlp_failed: "yt-dlp / site failure",
   cookie_invalid: "Cookie / auth failure",
   rate_limited: "Rate limit / IP block",
-  integrity_check_failed: "Integrity check failed",
+  downloaded_integrity_failed: "Integrity check failed",
   file_sync_issues: "File sync issues",
   pot_provider: "PO token provider failure",
   path_collision: "Episode path collision",

@@ -495,7 +495,7 @@ func buildApplyNamingQuery(p applyNamingPayload) (string, []any) {
 		FROM videos v
 		JOIN series s ON s.id = v.series_id
 		JOIN root_folders r ON r.id = s.root_id
-		WHERE v.status IN ('downloaded', 'integrity_check_failed')
+		WHERE v.status IN ('downloaded', 'downloaded_integrity_failed')
 		  AND v.id > ?
 		  AND EXISTS (
 		    SELECT 1 FROM files f
@@ -577,7 +577,7 @@ func (s *Store) warnRemainingPathCollisions(ctx context.Context, taskID int64, p
 	}
 	ids := uniqInt64(videoIDs)
 	if len(ids) == 0 && (p.SeriesID > 0 || len(p.SeriesIDs) > 0) {
-		q := `SELECT id FROM videos WHERE status IN ('downloaded', 'integrity_check_failed')`
+		q := `SELECT id FROM videos WHERE status IN ('downloaded', 'downloaded_integrity_failed')`
 		var args []any
 		if p.SeriesID > 0 {
 			q += ` AND series_id = ?`
@@ -604,7 +604,7 @@ func (s *Store) warnRemainingPathCollisions(ctx context.Context, taskID int64, p
 	}
 	if len(ids) == 0 && p.isFullLibrary() {
 		rows, err := s.DB.SQL.Query(`
-			SELECT id FROM videos WHERE status IN ('downloaded', 'integrity_check_failed')
+			SELECT id FROM videos WHERE status IN ('downloaded', 'downloaded_integrity_failed')
 		`)
 		if err != nil {
 			return err

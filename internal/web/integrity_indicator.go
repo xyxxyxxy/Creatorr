@@ -23,7 +23,7 @@ type integrityIndicatorView struct {
 // integrityIndicatorState picks the chip state from video + profile + hash + schedule.
 // Priority: failed → off → eligible → hashed → monitored.
 func integrityIndicatorState(videoStatus string, verifyMedia, hasHash, scheduleOn bool) string {
-	if videoStatus == "integrity_check_failed" {
+	if videoStatus == "downloaded_integrity_failed" {
 		return integrityIndFailed
 	}
 	if videoStatus != "downloaded" {
@@ -74,7 +74,7 @@ func integrityIndicatorBaseTip(state, videoStatus string, verifyMedia bool) stri
 	case integrityIndMonitored:
 		return "'File integrity' monitored"
 	default: // off
-		if videoStatus != "downloaded" && videoStatus != "integrity_check_failed" {
+		if videoStatus != "downloaded" && videoStatus != "downloaded_integrity_failed" {
 			return "No packed media"
 		}
 		if !verifyMedia {

@@ -752,7 +752,7 @@ function importVideoStatusLabel(status) {
     case 'wanted': return 'wanted';
     case 'wanted_download_error': return 'wanted (download error)';
     case 'wanted_archive': return 'wanted (Web Archive)';
-    case 'integrity_check_failed': return 'verify failed';
+    case 'downloaded_integrity_failed': return 'verify failed';
     case 'downloaded': return 'downloaded';
     case 'missing': return 'missing';
     case 'deleted': return 'deleted';

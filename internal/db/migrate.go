@@ -104,6 +104,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo22(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 23:
+			if err := d.migrateTo23(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -774,3 +778,13 @@ func (d *DB) tableHasColumn(table, column string) (bool, error) {
 func quoteIdent(name string) string {
 	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }
+
+// migrateTo23 renames video status integrity_check_failed → downloaded_integrity_failed
+// (file kept; downloaded subgroup). Notify/history event names stay integrity_check_failed.
+func (d *DB) migrateTo23() error {
+	if _, err := d.SQL.Exec(`UPDATE videos SET status = 'downloaded_integrity_failed' WHERE status = 'integrity_check_failed'`); err != nil {
+		return fmt.Errorf("rename integrity_check_failed status: %w", err)
+	}
+	return nil
+}
+

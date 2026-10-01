@@ -444,13 +444,13 @@ func (s *Store) MaybeEnqueueMediaVerifyAfterPack(videoID int64, maturityPack boo
 	return id, nil
 }
 
-// MarkVerifyFailed sets status integrity_check_failed and history.
+// MarkVerifyFailed sets status downloaded_integrity_failed and history.
 // report is optional; when set, its checks/outcome are stored in history detail.
 func (s *Store) MarkVerifyFailed(videoID, taskID int64, message string, report *IntegrityCheckReport) error {
 	if _, err := s.GetVideo(videoID); err != nil {
 		return err
 	}
-	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'integrity_check_failed' WHERE id = ?`, videoID); err != nil {
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'downloaded_integrity_failed' WHERE id = ?`, videoID); err != nil {
 		return err
 	}
 	msg := strings.TrimSpace(message)
@@ -481,12 +481,12 @@ func (s *Store) MarkVerifyFailed(videoID, taskID int64, message string, report *
 }
 
 // MarkVerified appends integrity_checked history and restores status to downloaded
-// (including videos previously marked integrity_check_failed).
+// (including videos previously marked downloaded_integrity_failed).
 // report is optional; when outcome is partial, message notes sidecar/NFO issues.
 func (s *Store) MarkVerified(videoID, taskID int64, report *IntegrityCheckReport) error {
 	if _, err := s.DB.SQL.Exec(`
 		UPDATE videos SET status = 'downloaded'
-		WHERE id = ? AND status IN ('downloaded', 'integrity_check_failed')
+		WHERE id = ? AND status IN ('downloaded', 'downloaded_integrity_failed')
 	`, videoID); err != nil {
 		return err
 	}

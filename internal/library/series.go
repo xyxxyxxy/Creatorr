@@ -81,7 +81,7 @@ type Series struct {
 	VideoCount         int64
 	DownloadedCount    int64 // successful: status downloaded only
 	WantedCount        int64 // status wanted | wanted_archive (API); subset of PendingCount
-	PendingCount       int64 // open work: wanted | wanted_archive | wanted_download_error | integrity_check_failed
+	PendingCount       int64 // open work: wanted | wanted_archive | wanted_download_error | downloaded_integrity_failed
 	SourceCount        int64
 	Sources            []Source
 	Videos             []Video

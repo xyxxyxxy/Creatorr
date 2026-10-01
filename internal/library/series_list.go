@@ -40,7 +40,7 @@ func seriesListStatusActive(status string) bool {
 }
 
 // seriesProgressOpenStatuses: still-open for list progress + Incomplete (wanted, archive wait, download error, verify fail).
-const seriesProgressOpenStatuses = `'wanted', 'wanted_archive', 'wanted_download_error', 'integrity_check_failed'`
+const seriesProgressOpenStatuses = `'wanted', 'wanted_archive', 'wanted_download_error', 'downloaded_integrity_failed'`
 
 // seriesListSelectCols + seriesListFromJoins use one video/source aggregate join instead of
 // five correlated COUNT subqueries per series row.
@@ -109,7 +109,7 @@ func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilt
 		b.WriteString(` AND (
 			EXISTS (
 				SELECT 1 FROM videos v
-				WHERE v.series_id = s.id AND v.status IN ('wanted_download_error', 'integrity_check_failed')
+				WHERE v.series_id = s.id AND v.status IN ('wanted_download_error', 'downloaded_integrity_failed')
 			)
 			OR EXISTS (
 				SELECT 1 FROM sources src

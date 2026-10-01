@@ -50,7 +50,7 @@ func (s *Store) retentionPurge(now time.Time, taskID int64, progress ProgressFn)
 		JOIN files f ON f.video_id = v.id AND f.kind = 'video'
 		JOIN series s ON s.id = v.series_id
 		JOIN root_folders r ON r.id = s.root_id
-		WHERE v.status IN ('downloaded', 'integrity_check_failed')
+		WHERE v.status IN ('downloaded', 'downloaded_integrity_failed')
 		  AND r.retention_ttl_seconds IS NOT NULL
 		  AND r.retention_ttl_seconds > 0
 	`)

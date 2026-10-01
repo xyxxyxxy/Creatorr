@@ -177,7 +177,7 @@ func (s *Store) AlignSeriesYearEpisodes(seriesID int64, year, taskID int64) (lef
 func (s *Store) packedVideoIDsInYear(seriesID int64, year int) ([]int64, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id FROM videos
-		WHERE series_id = ? AND status IN ('downloaded', 'integrity_check_failed')
+		WHERE series_id = ? AND status IN ('downloaded', 'downloaded_integrity_failed')
 		  AND season = ?
 	`, seriesID, year)
 	if err != nil {
@@ -224,7 +224,7 @@ func (s *Store) twoPhaseRepackEpisodeNumbers(videoIDs []int64, taskID int64) (re
 			leftovers = append(leftovers, videoID)
 			continue
 		}
-		if v.Status != "downloaded" && v.Status != "integrity_check_failed" {
+		if v.Status != "downloaded" && v.Status != "downloaded_integrity_failed" {
 			continue
 		}
 		season, episode := 0, 0
@@ -431,7 +431,7 @@ func pathEpisodeNFO(v *Video, seriesTitle string, season, episode int, aired, do
 func (s *Store) rewriteSpecialEpisodeNFOs(seriesID int64) error {
 	rows, err := s.DB.SQL.Query(`
 		SELECT id FROM videos
-		WHERE series_id = ? AND special_feature = ? AND status IN ('downloaded', 'integrity_check_failed')
+		WHERE series_id = ? AND special_feature = ? AND status IN ('downloaded', 'downloaded_integrity_failed')
 	`, seriesID, PackRoleSpecialEpisode)
 	if err != nil {
 		return err

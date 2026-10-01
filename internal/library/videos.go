@@ -623,7 +623,7 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 		}
 	}
 	switch cur.Status {
-	case StatusIgnored, StatusDeleted, StatusMissing, StatusWantedDownloadError, StatusIntegrityCheckFailed, StatusWantedArchive:
+	case StatusIgnored, StatusDeleted, StatusMissing, StatusWantedDownloadError, StatusDownloadedIntegrityFailed, StatusWantedArchive:
 		_ = s.CancelArchiveDownloadsForVideo(videoID)
 		_, _ = s.DB.SQL.Exec(`UPDATE videos SET status = ? WHERE id = ?`, StatusWanted, videoID)
 	}
@@ -654,7 +654,7 @@ func (s *Store) IgnoreVideo(videoID int64) ([]queue.Task, error) {
 		return nil, err
 	}
 	switch cur.Status {
-	case StatusDownloaded, StatusIntegrityCheckFailed:
+	case StatusDownloaded, StatusDownloadedIntegrityFailed:
 		return nil, fmt.Errorf("cannot ignore %s video; delete library files instead", cur.Status)
 	}
 	_, err = s.DB.SQL.Exec(`UPDATE videos SET status = ? WHERE id = ?`, StatusIgnored, videoID)
@@ -818,7 +818,7 @@ func (s *Store) ListVideoHistoryByTaskID(taskID int64) ([]VideoHistoryEvent, err
 	return out, rows.Err()
 }
 
-// WantVideo sets status to wanted from ignored, deleted, missing, or integrity_check_failed.
+// WantVideo sets status to wanted from ignored, deleted, missing, or downloaded_integrity_failed.
 // Does not enqueue a download - download_wanted_cron or Download now picks it up.
 func (s *Store) WantVideo(id int64) (*Video, error) {
 	cur, err := s.GetVideo(id)
@@ -826,10 +826,10 @@ func (s *Store) WantVideo(id int64) (*Video, error) {
 		return nil, err
 	}
 	switch cur.Status {
-	case StatusIgnored, StatusDeleted, StatusMissing, StatusIntegrityCheckFailed:
+	case StatusIgnored, StatusDeleted, StatusMissing, StatusDownloadedIntegrityFailed:
 		// ok
 	default:
-		return nil, fmt.Errorf("%w: want only from ignored, deleted, missing, or integrity_check_failed (got %s)", ErrInvalid, cur.Status)
+		return nil, fmt.Errorf("%w: want only from ignored, deleted, missing, or downloaded_integrity_failed (got %s)", ErrInvalid, cur.Status)
 	}
 	_, err = s.DB.SQL.Exec(`UPDATE videos SET status = ? WHERE id = ?`, StatusWanted, id)
 	if err != nil {

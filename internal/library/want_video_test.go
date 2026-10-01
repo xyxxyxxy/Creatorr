@@ -30,7 +30,7 @@ func TestWantVideoStatusMatrix(t *testing.T) {
 		{"ignored", true, nil},
 		{"deleted", true, nil},
 		{"missing", true, nil},
-		{"integrity_check_failed", true, nil},
+		{"downloaded_integrity_failed", true, nil},
 		{"downloaded", false, library.ErrInvalid},
 		{"wanted", false, library.ErrInvalid},
 	}

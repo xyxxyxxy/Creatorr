@@ -24,6 +24,6 @@ func argsToInt64(args []any) []int64 {
 type SeriesVideoErrorFlags struct {
 	HasDownloadError   bool // wanted_download_error
 	DownloadErrorCount int
-	HasVerifyFailed    bool // integrity_check_failed
+	HasVerifyFailed    bool // downloaded_integrity_failed
 	VerifyFailedCount  int
 }

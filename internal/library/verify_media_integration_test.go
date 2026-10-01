@@ -43,7 +43,7 @@ func TestMarkVerifyFailedKeepsFilesNoThreshold(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Status != "integrity_check_failed" {
+	if v.Status != "downloaded_integrity_failed" {
 		t.Fatalf("status=%s", v.Status)
 	}
 	if _, err := os.Stat(media); err != nil {
@@ -61,7 +61,7 @@ func TestMarkVerifyFailedKeepsFilesNoThreshold(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("missing integrity_check_failed history")
+		t.Fatal("missing integrity_check_failed history event")
 	}
 	res2, err := s.UpsertListed(ser.ID, library.ListedVideo{
 		RemoteID: "vf2", Title: "Two", SourceID: srcID,

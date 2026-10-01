@@ -10,7 +10,7 @@ func TestVideoStatusLabel(t *testing.T) {
 		{"wanted", "wanted"},
 		{"wanted_download_error", "wanted (download error)"},
 		{"wanted_archive", "wanted (Web Archive)"},
-		{"integrity_check_failed", "verify failed"},
+		{"downloaded_integrity_failed", "verify failed"},
 		{"downloaded", "downloaded"},
 		{"missing", "missing"},
 		{"deleted", "deleted"},

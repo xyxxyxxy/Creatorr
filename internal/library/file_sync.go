@@ -75,7 +75,7 @@ func (s *Store) clearSidecarSizeBytes(fileID int64) error {
 }
 
 // MarkSidecarExternallyChanged updates size_bytes when a present sidecar's size drifts.
-// Does not change video status (media integrity_check_failed is media-only).
+// Does not change video status (media downloaded_integrity_failed is media-only).
 func (s *Store) MarkSidecarExternallyChanged(videoID, fileID, taskID, oldSize, newSize int64, kind, path string) error {
 	if _, err := s.DB.SQL.Exec(`UPDATE files SET size_bytes = ? WHERE id = ?`, newSize, fileID); err != nil {
 		return err
@@ -214,7 +214,7 @@ func (s *Store) fileSyncMissingAndRestore(taskID int64, progress ProgressFn) (mi
 		JOIN files f ON f.video_id = v.id AND f.kind = 'video'
 		JOIN series s ON s.id = v.series_id
 		JOIN root_folders r ON r.id = s.root_id
-		WHERE v.status IN ('downloaded', 'integrity_check_failed', 'missing')
+		WHERE v.status IN ('downloaded', 'downloaded_integrity_failed', 'missing')
 	`)
 	if err != nil {
 		return nil, nil, nil, err
@@ -262,7 +262,7 @@ func (s *Store) fileSyncMissingAndRestore(taskID int64, progress ProgressFn) (mi
 		st, statErr := os.Stat(h.path)
 		exists := statErr == nil && !st.IsDir()
 		switch h.status {
-		case "downloaded", "integrity_check_failed":
+		case "downloaded", "downloaded_integrity_failed":
 			if !exists {
 				if err := s.MarkMissing(h.id, taskID); err != nil {
 					return missingIDs, restoredIDs, changedIDs, err
@@ -306,7 +306,7 @@ func (s *Store) fileSyncSidecars(taskID int64, progress ProgressFn) (missing, re
 		JOIN series s ON s.id = v.series_id
 		JOIN root_folders r ON r.id = s.root_id
 		WHERE f.kind != 'video'
-		  AND v.status IN ('downloaded', 'integrity_check_failed', 'missing')
+		  AND v.status IN ('downloaded', 'downloaded_integrity_failed', 'missing')
 	`)
 	if err != nil {
 		return nil, nil, nil, err

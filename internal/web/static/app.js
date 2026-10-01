@@ -2997,7 +2997,7 @@
       wanted_download_error: "Last download failed",
       wanted_archive: "Live source gone; waiting for Web Archive download",
       verify_failed: "Integrity check failed - file kept; Want or Download now",
-      integrity_check_failed: "Integrity check failed - file kept; Want or Download now",
+      downloaded_integrity_failed: "Integrity check failed - file kept; Want or Download now",
       missing: "File path recorded but media not on disk - file sync may restore"
     };
     const icons = {
@@ -3012,7 +3012,7 @@
       wanted_download_error: { icon: "circle-x", color: "text-error" },
       wanted_archive: { icon: "archive", color: "text-warning" },
       verify_failed: { icon: "badge-alert", color: "text-warning" },
-      integrity_check_failed: { icon: "badge-alert", color: "text-warning" },
+      downloaded_integrity_failed: { icon: "badge-alert", color: "text-warning" },
       downloaded: { icon: "circle-check", color: "text-success" },
       missing: { icon: "file-question", color: "text-warning" },
       deleted: { icon: "trash-2", color: "text-base-content/50" },
@@ -3022,7 +3022,7 @@
       wanted_download_error: "wanted (download error)",
       wanted_archive: "wanted (Web Archive)",
       verify_failed: "Integrity check failed",
-      integrity_check_failed: "Integrity check failed"
+      downloaded_integrity_failed: "Integrity check failed"
     };
     const meta = icons[s] || { icon: "circle-help", color: "text-base-content/50" };
     const tip = tips[s] || s || "-";
@@ -4055,7 +4055,7 @@
     ytdlp_failed: "yt-dlp / site failure",
     cookie_invalid: "Cookie / auth failure",
     rate_limited: "Rate limit / IP block",
-    integrity_check_failed: "Integrity check failed",
+    downloaded_integrity_failed: "Integrity check failed",
     file_sync_issues: "File sync issues",
     pot_provider: "PO token provider failure",
     path_collision: "Episode path collision",
