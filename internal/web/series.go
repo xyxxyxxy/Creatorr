@@ -268,7 +268,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
-	folderRenameBusy, _ := h.Library.SeriesHasBusyMediaTasks(id)
+	folderRenameBusy, _ := h.Library.SeriesHasBlockingTasks(id)
 	metaForm := seriesMetadataView{
 		Series:      ser,
 		Art:         h.seriesArtFlags(ser),
@@ -440,7 +440,7 @@ func (h *Handler) seriesTaskIndicators(w http.ResponseWriter, r *http.Request) {
 
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
-	folderBusy, _ := h.Library.SeriesHasBusyMediaTasks(id)
+	folderBusy, _ := h.Library.SeriesHasBlockingTasks(id)
 
 	render(w, "task_indicators_oob", struct {
 		Indicators   []taskIndicatorView

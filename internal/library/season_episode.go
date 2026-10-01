@@ -2,10 +2,12 @@ package library
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 
 	epyear "github.com/xyxxyxxy/Creatorr/internal/library/episode"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 // seriesRenameMu serializes two-phase peer renames per series (single-process).
@@ -163,6 +165,10 @@ func (s *Store) EnqueueApplyForPackedEpisodeChanges(changed []int64) (taskID int
 		return 0, false, nil
 	}
 	tid, err := s.EnqueueRenameEpisodesVideos(packed)
+	if errors.Is(err, queue.ErrDuplicate) {
+		// series_move open: its final ApplySeriesEpisodeNaming covers these peers.
+		return 0, false, nil
+	}
 	if err != nil {
 		return 0, false, err
 	}

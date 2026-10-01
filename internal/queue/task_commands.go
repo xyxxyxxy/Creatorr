@@ -156,7 +156,7 @@ func PersistCommandsOnStatus(kind, status string) bool {
 	}
 	switch kind {
 	case KindRenameEpisodes, KindSyncFiles, KindIntegrityCheck, KindRegenerateNFO,
-		KindRetentionDelete, KindBulkEditSeries, KindBulkEditVideos:
+		KindRetentionDelete, KindBulkEditSeries, KindBulkEditVideos, KindSeriesMove:
 		return false
 	default:
 		return true // done / cancelled for download, scan, etc.

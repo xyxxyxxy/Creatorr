@@ -42,7 +42,7 @@ func (h *Handler) actionUpdateSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ok := "updated"
-	if out.RenameQueued {
+	if out.MoveQueued {
 		ok = "series-rename"
 	}
 	http.Redirect(w, r, fmt.Sprintf("/series/%d?ok=%s", sid, ok), http.StatusSeeOther)

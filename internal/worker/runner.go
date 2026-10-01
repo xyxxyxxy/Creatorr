@@ -410,5 +410,6 @@ func StubHandlers() map[string]TaskHandler {
 		queue.KindYtDlpUpdate:        stub(queue.KindYtDlpUpdate),
 		queue.KindBulkEditSeries:     stub(queue.KindBulkEditSeries),
 		queue.KindBulkEditVideos:     stub(queue.KindBulkEditVideos),
+		queue.KindSeriesMove:         stub(queue.KindSeriesMove),
 	}
 }

@@ -150,7 +150,7 @@ func flashFromQuery(r *http.Request) *flash {
 	case "updated":
 		return flashOK("Series updated.")
 	case "series-rename":
-		return flashOK("Series updated. File rename queued.")
+		return flashOK("Series updated. Folder move queued.")
 	case "bulk_edit_queued":
 		return flashOK("Bulk edit queued.")
 	case "bulk_monitored":

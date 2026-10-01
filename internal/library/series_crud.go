@@ -1,7 +1,6 @@
 package library
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -158,21 +157,19 @@ type UpdateSeriesParams struct {
 	RootID           *int64
 	QualityProfileID *int64
 	DeliveryMode     *string
-	// SyncDisk runs folder move + scoped Apply inline (bulk worker). When false,
-	// title/root changes enqueue rename_episodes with series_id after DB update.
-	SyncDisk bool
 }
 
 // UpdateSeriesOutcome reports side effects of UpdateSeries.
 type UpdateSeriesOutcome struct {
-	Series       *Series
-	RenameQueued bool
-	RenameTaskID int64
+	Series *Series
+	// MoveQueued is true when a series_move task owns the title/root change.
+	MoveQueued bool
+	MoveTaskID int64
 }
 
-// UpdateSeries updates title, root folder, quality profile, and/or delivery mode.
-// Title or root changes move the series folder on disk (blocked while media tasks busy).
-// On move failure the DB field is reverted so paths stay correct.
+// UpdateSeries updates quality profile and delivery mode now. Title or root changes
+// enqueue series_move (blocked while the series has blocking tasks); the worker updates
+// title/root in SQLite, then moves the folder and applies naming.
 func (s *Store) UpdateSeries(id int64, p UpdateSeriesParams) (*Series, error) {
 	out, err := s.UpdateSeriesDetailed(id, p)
 	if err != nil {
@@ -181,7 +178,7 @@ func (s *Store) UpdateSeries(id int64, p UpdateSeriesParams) (*Series, error) {
 	return out.Series, nil
 }
 
-// UpdateSeriesDetailed is UpdateSeries with rename-queue outcome.
+// UpdateSeriesDetailed is UpdateSeries with move-queue outcome.
 func (s *Store) UpdateSeriesDetailed(id int64, p UpdateSeriesParams) (UpdateSeriesOutcome, error) {
 	var out UpdateSeriesOutcome
 	cur, err := s.GetSeries(id, false)
@@ -213,85 +210,21 @@ func (s *Store) UpdateSeriesDetailed(id int64, p UpdateSeriesParams) (UpdateSeri
 	if p.DeliveryMode != nil {
 		mode = NormalizeDeliveryMode(*p.DeliveryMode)
 	}
-	titleChanged := title != cur.Title
-	rootChanged := rootID != cur.RootID
-	if titleChanged || rootChanged {
-		busy, err := s.SeriesHasBusyMediaTasks(id)
+
+	// Enqueue first so busy/conflict rejections leave every field unchanged.
+	if title != cur.Title || rootID != cur.RootID {
+		tid, err := s.EnqueueSeriesMove(id, title, rootID)
 		if err != nil {
 			return out, err
 		}
-		if busy {
-			return out, ErrSeriesBusy
-		}
-		if taken, err := s.seriesFolderTaken(rootID, title, id); err != nil {
-			return out, err
-		} else if taken {
-			return out, fmt.Errorf("%w: a series with this title already exists under the same root folder", ErrConflict)
-		}
+		out.MoveQueued = true
+		out.MoveTaskID = tid
 	}
-
 	if _, err := s.DB.SQL.Exec(`
-		UPDATE series SET title = ?, root_id = ?, quality_profile_id = ?, delivery_mode = ? WHERE id = ?
-	`, title, rootID, qpID, mode, id); err != nil {
+		UPDATE series SET quality_profile_id = ?, delivery_mode = ? WHERE id = ?
+	`, qpID, mode, id); err != nil {
 		return out, err
 	}
-
-	if titleChanged || rootChanged {
-		updated, err := s.GetSeries(id, false)
-		if err != nil {
-			return out, err
-		}
-		if p.SyncDisk {
-			if err := s.MoveSeriesFolder(updated, cur.Title, cur.RootID); err != nil {
-				_, _ = s.DB.SQL.Exec(`
-					UPDATE series SET title = ?, root_id = ? WHERE id = ?
-				`, cur.Title, cur.RootID, id)
-				return out, fmt.Errorf("folder move failed (reverted title/root): %w", err)
-			}
-			if err := s.WriteSeriesNFODisk(id); err != nil {
-				return out, fmt.Errorf("write series NFO after folder move: %w", err)
-			}
-			tid, qerr := s.Queue.InsertRunning(queue.EnqueueParams{
-				Origin:   queue.OriginManual,
-				Kind:     queue.KindRegenerateNFO,
-				Domain:   queue.SystemDomain,
-				SeriesID: id,
-				Message:  "Rewrite episode NFOs after series folder move",
-				Payload:  map[string]any{"series_id": id, "scope": "series_move"},
-			})
-			if qerr != nil {
-				if _, _, _, err := s.ApplySeriesEpisodeNaming(context.Background(), id, 0); err != nil {
-					return out, fmt.Errorf("apply episode naming after folder move: %w", err)
-				}
-			} else {
-				if _, _, err := s.RewriteSeriesEpisodeNFOs(id, tid); err != nil {
-					_ = s.Queue.Finish(tid, queue.StatusFailed, "Episode NFO rewrite failed after folder move", "", err.Error())
-					return out, fmt.Errorf("rewrite episode NFOs after folder move: %w", err)
-				}
-				if _, _, _, err := s.ApplySeriesEpisodeNaming(context.Background(), id, tid); err != nil {
-					_ = s.Queue.Finish(tid, queue.StatusFailed, "Episode naming failed after folder move", "", err.Error())
-					return out, fmt.Errorf("apply episode naming after folder move: %w", err)
-				}
-				if err := s.Queue.Finish(tid, queue.StatusDone, "Episode paths updated after folder move", "", ""); err != nil {
-					return out, fmt.Errorf("finish folder-move task: %w", err)
-				}
-			}
-			out.Series, err = s.GetSeries(id, false)
-			return out, err
-		}
-		tid, qerr := s.EnqueueRenameEpisodesSeries(id, cur.Title, cur.RootID)
-		if qerr != nil {
-			_, _ = s.DB.SQL.Exec(`
-				UPDATE series SET title = ?, root_id = ? WHERE id = ?
-			`, cur.Title, cur.RootID, id)
-			return out, qerr
-		}
-		out.RenameQueued = true
-		out.RenameTaskID = tid
-		out.Series = updated
-		return out, nil
-	}
-
 	out.Series, err = s.GetSeries(id, false)
 	return out, err
 }

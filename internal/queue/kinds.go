@@ -28,6 +28,7 @@ const (
 	KindYtDlpUpdate           = "ytdlp_update"
 	KindBulkEditSeries        = "bulk_edit_series"
 	KindBulkEditVideos        = "bulk_edit_videos"
+	KindSeriesMove            = "series_move"
 
 	// SystemDomain is the queue lane for maintenance tasks.
 	SystemDomain = "system"

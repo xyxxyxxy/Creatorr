@@ -72,9 +72,9 @@ func (s *Store) EnqueueRenameEpisodesVideos(videoIDs []int64) (int64, error) {
 	})
 }
 
-// EnqueueRenameEpisodesSeries queues a scoped Apply for one series, optionally
-// with folder-move prelude fields (old_title / old_root_id) after Edit series.
-func (s *Store) EnqueueRenameEpisodesSeries(seriesID int64, oldTitle string, oldRootID int64) (int64, error) {
+// EnqueueRenameEpisodesSeries queues a scoped Apply for one series (Maintenance).
+// Title/root changes use EnqueueSeriesMove instead.
+func (s *Store) EnqueueRenameEpisodesSeries(seriesID int64) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue unavailable", ErrInvalid)
 	}
@@ -90,24 +90,17 @@ func (s *Store) EnqueueRenameEpisodesSeries(seriesID int64, oldTitle string, old
 	} else if ok {
 		return tid, nil
 	}
-	payload := map[string]any{
-		"formats_by_root": formats,
-		"cursor":          0,
-		"series_id":       seriesID,
-	}
-	if strings.TrimSpace(oldTitle) != "" {
-		payload["old_title"] = strings.TrimSpace(oldTitle)
-	}
-	if oldRootID > 0 {
-		payload["old_root_id"] = oldRootID
-	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
 		Origin:   queue.OriginManual,
 		Kind:     queue.KindRenameEpisodes,
 		Domain:   queue.SystemDomain,
 		SeriesID: seriesID,
-		Payload:  payload,
-		Message:  "Rename episodes (series)",
+		Payload: map[string]any{
+			"formats_by_root": formats,
+			"cursor":          0,
+			"series_id":       seriesID,
+		},
+		Message: "Rename episodes (series)",
 	})
 }
 
@@ -119,7 +112,7 @@ func (s *Store) EnqueueRenameEpisodesSeriesIDs(seriesIDs []int64) (int64, error)
 		return 0, fmt.Errorf("%w: series_ids required", ErrInvalid)
 	}
 	if len(ids) == 1 {
-		return s.EnqueueRenameEpisodesSeries(ids[0], "", 0)
+		return s.EnqueueRenameEpisodesSeries(ids[0])
 	}
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue unavailable", ErrInvalid)
@@ -483,7 +476,8 @@ func (s *Store) ApplyEpisodeNamingPass(ctx context.Context, task *queue.Task, pr
 		}
 
 		i += len(ids)
-		if len(ids) > 0 {
+		// series_move owns its payload; never overwrite it with a rename cursor.
+		if len(ids) > 0 && task.Kind != queue.KindSeriesMove {
 			p.Cursor = ids[len(ids)-1]
 			_ = s.Queue.UpdatePayload(task.ID, p.payloadMap())
 		}
@@ -527,6 +521,9 @@ func buildApplyNamingQuery(p applyNamingPayload) (string, []any) {
 	return base, args
 }
 
+// applySeriesFolderPrelude moves the folder for legacy in-flight rename_episodes tasks that
+// still carry old_title / old_root_id. New Edit-series changes use series_move; absent
+// old fields make this a no-op.
 func (s *Store) applySeriesFolderPrelude(taskID int64, p *applyNamingPayload) error {
 	if p.SeriesID <= 0 || p.FolderMoved {
 		return nil
@@ -559,7 +556,8 @@ func (s *Store) applySeriesFolderPrelude(taskID int64, p *applyNamingPayload) er
 	return nil
 }
 
-// ApplySeriesEpisodeNaming runs ideal-path Apply for one series (bulk / SyncDisk).
+// ApplySeriesEpisodeNaming runs ideal-path Apply for one series (series_move worker).
+// taskID links path-collision warnings; the task payload is never rewritten.
 func (s *Store) ApplySeriesEpisodeNaming(ctx context.Context, seriesID, taskID int64) (renamed, skippedBusy, failed int, err error) {
 	formats, err := s.snapshotFormatsByRoot()
 	if err != nil {
@@ -569,7 +567,7 @@ func (s *Store) ApplySeriesEpisodeNaming(ctx context.Context, seriesID, taskID i
 		FormatsByRoot: formats,
 		SeriesID:      seriesID,
 	}.payloadMap())
-	task := &queue.Task{ID: taskID, Payload: string(payload)}
+	task := &queue.Task{ID: taskID, Kind: queue.KindSeriesMove, Payload: string(payload)}
 	return s.ApplyEpisodeNamingPass(ctx, task, nil)
 }
 

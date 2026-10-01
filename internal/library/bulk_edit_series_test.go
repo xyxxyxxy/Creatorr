@@ -287,9 +287,7 @@ func TestCommonSeriesSettings(t *testing.T) {
 		t.Fatalf("profile=%+v", got.QualityProfileID)
 	}
 
-	if _, err := lib.UpdateSeries(b.ID, library.UpdateSeriesParams{
-		RootID: &rootB.ID,
-	}); err != nil {
+	if _, err := lib.DB.SQL.Exec(`UPDATE series SET root_id = ? WHERE id = ?`, rootB.ID, b.ID); err != nil {
 		t.Fatal(err)
 	}
 	got, err = lib.CommonSeriesSettings([]int64{a.ID, b.ID})

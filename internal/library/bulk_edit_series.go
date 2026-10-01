@@ -235,7 +235,7 @@ func (s *Store) BulkEditSeriesPass(ctx context.Context, task *queue.Task, progre
 			_ = s.persistBulkEditCursor(task.ID, i+1, p)
 			continue
 		}
-		if err := s.applyBulkEditOne(ser, p); err != nil {
+		if err := s.applyBulkEditOne(ser, p, task.ID); err != nil {
 			failed++
 			_ = s.persistBulkEditCursor(task.ID, i+1, p)
 			continue
@@ -247,12 +247,9 @@ func (s *Store) BulkEditSeriesPass(ctx context.Context, task *queue.Task, progre
 	return updated, skipped, failed, nil
 }
 
-func (s *Store) applyBulkEditOne(ser *Series, p bulkEditSeriesPayload) error {
-		if p.RootID != nil || p.QualityProfileID != nil || p.DeliveryMode != nil {
-		up := UpdateSeriesParams{SyncDisk: true}
-		if p.RootID != nil {
-			up.RootID = p.RootID
-		}
+func (s *Store) applyBulkEditOne(ser *Series, p bulkEditSeriesPayload, taskID int64) error {
+	if p.QualityProfileID != nil || p.DeliveryMode != nil {
+		up := UpdateSeriesParams{}
 		if p.QualityProfileID != nil {
 			up.QualityProfileID = p.QualityProfileID
 		}
@@ -268,6 +265,14 @@ func (s *Store) applyBulkEditOne(ser *Series, p bulkEditSeriesPayload) error {
 			return err
 		}
 		ser = ser2
+	}
+	// Root change: series_move owns SQLite root + disk. Already-queued move counts as done.
+	if p.RootID != nil && *p.RootID != ser.RootID {
+		if _, err := s.enqueueSeriesMove(ser.ID, ser.Title, *p.RootID, queue.OriginTask, taskID); err != nil {
+			if open, oerr := s.SeriesHasOpenMove(ser.ID); oerr != nil || !open {
+				return err
+			}
+		}
 	}
 	if p.Monitored != nil {
 		if err := s.SetSeriesMonitored(ser.ID, *p.Monitored); err != nil {

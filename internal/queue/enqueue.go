@@ -227,6 +227,25 @@ func (s *Store) MoveToFront(id int64) error {
 }
 
 func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
+	// Path-touching system kinds never overlap series_move; series_move needs them idle.
+	switch p.Kind {
+	case KindRenameEpisodes, KindRegenerateNFO, KindSyncFiles, KindRetentionDelete:
+		if busy, err := s.PathTouchingSystemBusy(KindSeriesMove); err != nil {
+			return err
+		} else if busy {
+			return ErrDuplicate
+		}
+	case KindSeriesMove:
+		if busy, err := s.PathTouchingSystemBusy(KindRenameEpisodes, KindRegenerateNFO, KindSyncFiles, KindRetentionDelete); err != nil {
+			return err
+		} else if busy {
+			return ErrDuplicate
+		}
+		// ponytail: one open move per series; different series may queue together (bulk root change).
+		return s.rejectIfExists(`
+			SELECT 1 FROM tasks WHERE kind = ? AND series_id = ? AND status IN (?, ?) LIMIT 1
+		`, KindSeriesMove, p.SeriesID, StatusPending, StatusRunning)
+	}
 	// System lane: at most one pending/running task per kind (except import keeps per-video).
 	if p.Domain == SystemDomain {
 		switch p.Kind {
@@ -239,6 +258,13 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 	}
 	switch p.Kind {
 	case KindDownload:
+		if p.SeriesID > 0 {
+			if busy, err := s.SeriesMoveOpen(p.SeriesID); err != nil {
+				return err
+			} else if busy {
+				return ErrDuplicate
+			}
+		}
 		if p.VideoID > 0 {
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE kind = ? AND video_id = ? AND status IN (?, ?) LIMIT 1

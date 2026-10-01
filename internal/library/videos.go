@@ -560,6 +560,11 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 	if cur.Status == "downloaded" {
 		return 0, fmt.Errorf("%w: video already present", ErrInvalid)
 	}
+	if open, err := s.SeriesHasOpenMove(cur.SeriesID); err != nil {
+		return 0, err
+	} else if open {
+		return 0, ErrSeriesMoveBusy
+	}
 	if !downloadNow {
 		ok, err := s.SeriesIsMonitored(cur.SeriesID)
 		if err != nil {

@@ -44,5 +44,6 @@ func DefaultHandlers(d Deps) map[string]TaskHandler {
 	out[queue.KindYtDlpUpdate] = YtDlpUpdateHandler(d)
 	out[queue.KindBulkEditSeries] = BulkEditSeriesHandler(d)
 	out[queue.KindBulkEditVideos] = BulkEditVideosHandler(d)
+	out[queue.KindSeriesMove] = SeriesMoveHandler(d)
 	return out
 }
