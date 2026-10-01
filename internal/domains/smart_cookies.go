@@ -12,32 +12,34 @@ import (
 // DetailKeyCookieAttach is the tasks.detail JSON key for CookieAttachStatus.
 const DetailKeyCookieAttach = "cookie-attach"
 
-// Cookie attach outcome states for download task detail / Stages.
+// Cookie attach outcome states for task detail / Stages.
 const (
 	CookieAttachOff       = "off"       // no stored jar
-	CookieAttachAnonymous = "anonymous" // download succeeded without account jar
-	CookieAttachCookies   = "cookies"   // jar used (flag off, or always-attach path)
-	CookieAttachRetried   = "retried"   // download succeeded after cookie retry
-	CookieAttachOmitted   = "omitted"   // flag on; jar available but not used this invoke
+	CookieAttachAnonymous = "anonymous" // succeeded without account jar
+	CookieAttachCookies   = "cookies"   // jar used (smart off, or prefer-cookies path)
+	CookieAttachRetried   = "retried"   // succeeded after cookie retry
+	CookieAttachOmitted   = "omitted"   // smart on; jar available but not used this invoke
 )
 
 // CookieAttachStatus is stored under tasks.detail cookie-attach.
 type CookieAttachStatus struct {
-	State       string `json:"state"`                  // off|anonymous|cookies|retried|omitted
-	RetryReason string `json:"retry_reason,omitempty"` // first-failure code when retried
-	Detail      string `json:"detail,omitempty"`
-	AfterFail   bool   `json:"after_fail,omitempty"` // domains.cookies_after_fail at task time
+	State         string `json:"state"`                    // off|anonymous|cookies|retried|omitted
+	RetryReason   string `json:"retry_reason,omitempty"`   // first-failure code when retried
+	Detail        string `json:"detail,omitempty"`
+	Smart         bool   `json:"smart,omitempty"`          // domains.smart_cookies at task time
+	PreferCookies bool   `json:"prefer_cookies,omitempty"` // source preferred jar first
+	Probe         bool   `json:"probe,omitempty"`          // anonymous pass was a recover probe
 }
 
-// CookiesAfterFail reports domains.cookies_after_fail for a hostname.
-// Missing row → false (today's always-attach).
-func CookiesAfterFail(database *db.DB, domain string) (bool, error) {
+// SmartCookies reports domains.smart_cookies for a hostname.
+// Missing row → false (always-attach jar).
+func SmartCookies(database *db.DB, domain string) (bool, error) {
 	domain = settings.NormalizeDomain(domain)
 	if domain == "" || domain == "unknown" || domain == "system" || domain == settings.DomainDefault {
 		return false, nil
 	}
 	var v sql.NullInt64
-	err := database.SQL.QueryRow(`SELECT cookies_after_fail FROM domains WHERE domain = ?`, domain).Scan(&v)
+	err := database.SQL.QueryRow(`SELECT smart_cookies FROM domains WHERE domain = ?`, domain).Scan(&v)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
@@ -47,13 +49,14 @@ func CookiesAfterFail(database *db.DB, domain string) (bool, error) {
 	return v.Valid && v.Int64 != 0, nil
 }
 
-// CookiesAfterFailForURL resolves the host from rawURL then CookiesAfterFail.
-func CookiesAfterFailForURL(database *db.DB, rawURL string) (bool, error) {
-	return CookiesAfterFail(database, queue.DomainFromURL(rawURL))
+// SmartCookiesForURL resolves the host from rawURL then SmartCookies.
+func SmartCookiesForURL(database *db.DB, rawURL string) (bool, error) {
+	return SmartCookies(database, queue.DomainFromURL(rawURL))
 }
 
-// SetCookiesAfterFail sets domains.cookies_after_fail on a host override.
-func SetCookiesAfterFail(database *db.DB, domain string, on bool) error {
+// SetSmartCookies sets domains.smart_cookies on a host override.
+// Wipes that host's source learning when the flag value changes.
+func SetSmartCookies(database *db.DB, domain string, on bool) error {
 	if err := settings.ValidateOverrideDomain(domain); err != nil {
 		return err
 	}
@@ -61,25 +64,25 @@ func SetCookiesAfterFail(database *db.DB, domain string, on bool) error {
 	if err := EnsureHost(database, domain); err != nil {
 		return err
 	}
+	prev, err := SmartCookies(database, domain)
+	if err != nil {
+		return err
+	}
 	val := 0
 	if on {
 		val = 1
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := database.SQL.Exec(`
-		UPDATE domains SET cookies_after_fail = ?, updated_at = ? WHERE domain = ?
+	_, err = database.SQL.Exec(`
+		UPDATE domains SET smart_cookies = ?, updated_at = ? WHERE domain = ?
 	`, val, now, domain)
-	return err
-}
-
-// AllowStoredJar reports whether the stored Netscape jar may be attached.
-// When cookies_after_fail is off, always allow. When on, allow only on the
-// download retry pass (downloadRetryPass true).
-func AllowStoredJar(cookiesAfterFail, downloadRetryPass bool) bool {
-	if !cookiesAfterFail {
-		return true
+	if err != nil {
+		return err
 	}
-	return downloadRetryPass
+	if prev != on {
+		return WipeCookieSmartForHost(database, domain)
+	}
+	return nil
 }
 
 // CookieAttachStage is one Stages note derived from cookie-attach detail.
@@ -89,14 +92,13 @@ type CookieAttachStage struct {
 	HasError bool
 }
 
-// SplitDownloadAttempts reports whether Stages should show two download nodes
-// (anonymous failure, then cookie retry) under cookies-after-fail.
+// SplitDownloadAttempts reports whether Stages should show two attempt nodes
+// (anonymous failure, then cookie retry) under smart cookie anon-first.
 func (s CookieAttachStatus) SplitDownloadAttempts() bool {
-	return s.AfterFail && s.State == CookieAttachRetried
+	return s.Smart && s.State == CookieAttachRetried
 }
 
 // CookieUsedNote is the Stages line when cookies were actually attached.
-// Empty for anonymous / omitted / off (unused). Setting (after-fail vs always) does not matter.
 func (s CookieAttachStatus) CookieUsedNote() string {
 	switch s.State {
 	case CookieAttachCookies, CookieAttachRetried:
@@ -126,8 +128,8 @@ func (s CookieAttachStatus) ShowStage() bool {
 	return s.CookieUsedNote() != ""
 }
 
-// ValidateCookiesAfterFailForm maps checkbox form values to bool.
-func ValidateCookiesAfterFailForm(raw string) bool {
+// ValidateSmartCookiesForm maps checkbox form values to bool.
+func ValidateSmartCookiesForm(raw string) bool {
 	switch raw {
 	case "1", "on", "true", "True", "ON":
 		return true

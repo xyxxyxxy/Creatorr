@@ -119,6 +119,10 @@
   {{else}}
   {{template "detail_row" (dict "Label" "Last error" "TdClass" "text-xs")}}
   {{end}}
+  {{if .CookieSmart.Enabled}}
+  <tr><th class="w-40">Cookie policy</th><td class="text-xs">{{.CookieSmart.PolicyLabel}}</td></tr>
+  <tr><th class="w-40">Cookie learning</th><td class="text-xs">{{.CookieSmart.RingSummary}} · next probe {{.CookieSmart.NextProbe}}</td></tr>
+  {{end}}
 </tbody>
 {{template "list_table_end"}}
   </div>
@@ -126,22 +130,27 @@
 </div>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "History" "help" "List-pass timeline for this source (scans and metadata rescan). Linked rows open the related task in History.")}}
+{{template "list_header" (dict "level" "section" "title" "History" "help" "List-pass timeline for this source (scans and metadata rescan). Event names link to the related task when one exists.")}}
 {{if not .History}}
 {{template "list_empty" "No history for this source yet."}}
 {{else}}
-{{template "list_table"}}
-<thead><tr><th>When</th><th>Event</th><th>Message</th></tr></thead>
+{{/* table-fixed: long Message truncates instead of widening the page */}}
+<div class="list-table-wrap rounded-box border border-base-300">
+  <table class="table table-sm list-table w-full table-fixed">
+<thead><tr><th class="w-48">When</th><th class="w-28">Event</th><th>Message</th></tr></thead>
 <tbody>
   {{range .History}}
-  <tr{{if .HistoryID}} class="hover cursor-pointer" onclick="location.href='/task/{{.HistoryID}}'"{{end}}>
+  <tr>
     <td class="text-xs whitespace-nowrap">{{template "rel_time" .}}</td>
-    <td>{{if .HasError}}<span class="text-error">{{.Event}}</span>{{else}}{{.Event}}{{end}}</td>
-    <td class="text-sm{{if .HasError}} text-error{{end}}">{{.Message}}</td>
+    <td class="truncate">{{if .HistoryID}}<a class="link link-hover{{if .HasError}} text-error{{end}}" href="/task/{{.HistoryID}}">{{.Event}}</a>{{else}}{{if .HasError}}<span class="text-error">{{.Event}}</span>{{else}}{{.Event}}{{end}}{{end}}</td>
+    <td class="text-sm min-w-0">
+      <span class="block truncate{{if .HasError}} text-error{{end}}" title="{{.Message}}">{{.Message}}</span>
+    </td>
   </tr>
   {{end}}
 </tbody>
-{{template "list_table_end"}}
+  </table>
+</div>
 {{template "pagination" .HistoryPage}}
 {{end}}
 {{template "list_panel_end"}}

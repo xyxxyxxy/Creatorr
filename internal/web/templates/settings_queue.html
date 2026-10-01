@@ -90,15 +90,17 @@
     <td>{{if .HasCookies}}<span class="tooltip tooltip-top inline-flex" data-tip="Set" aria-label="Cookies set"><i data-lucide="cookie" class="size-4 text-amber-800"></i></span>{{else}}{{template "empty_value"}}{{end}}</td>
     <td>{{if eq .FlareOverride "on"}}<span class="tooltip tooltip-top inline-flex" data-tip="On" aria-label="FlareSolverr on"><i data-lucide="flame" class="size-4 text-error"></i></span>{{else}}{{template "empty_value"}}{{end}}</td>
     <td>{{if .HasCredentials}}<span class="tooltip tooltip-top inline-flex" data-tip="Set" aria-label="Credentials set"><i data-lucide="key-round" class="size-4 text-primary"></i></span>{{else}}{{template "empty_value"}}{{end}}</td>
-    <td class="whitespace-nowrap">
-      <label for="modal-edit-domain-{{.Domain}}" class="btn btn-ghost btn-xs btn-square tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
-        <i data-lucide="pencil" class="size-3.5"></i>
-      </label>
-      {{if .HasRow}}
-      <label for="modal-delete-domain-{{.Domain}}" class="btn btn-ghost btn-xs btn-square text-error tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
-        <i data-lucide="trash-2" class="size-3.5"></i>
-      </label>
-      {{end}}
+    <td class="whitespace-nowrap text-end">
+      <div class="join">
+        <label for="modal-edit-domain-{{.Domain}}" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+          <i data-lucide="pencil" class="size-3.5"></i>
+        </label>
+        {{if .HasRow}}
+        <label for="modal-delete-domain-{{.Domain}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+          <i data-lucide="trash-2" class="size-3.5"></i>
+        </label>
+        {{end}}
+      </div>
     </td>
   </tr>
   {{end}}
@@ -124,7 +126,7 @@
   "SleepOverride" .SleepOverride
   "FlareOverride" .FlareOverride
   "CookieContent" .CookieContent
-  "CookiesAfterFail" .CookiesAfterFail
+  "SmartCookies" .SmartCookies
   "CredentialsUsername" .CredentialsUsername
   "CredentialsInherit" .CredentialsInherit
   "CredentialsHasStoredPassword" .CredentialsHasStoredPassword

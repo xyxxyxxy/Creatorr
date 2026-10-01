@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
@@ -58,19 +59,6 @@ func ScanHandler(d Deps) TaskHandler {
 		}
 		defer func() { _ = os.RemoveAll(work) }()
 
-		jar, err := domains.TempJarForNonDownload(d.Library.DB, work, src.URL)
-		if err != nil {
-			mode := library.SourceHistModeScan
-			if !src.FullScanDone {
-				mode = library.SourceHistModeFull
-			}
-			_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, err.Error(), map[string]any{
-				"mode": mode,
-				"code": apperrors.CodeCookieInvalid,
-			}, t.ID)
-			return apperrors.WithDetail(apperrors.New(apperrors.CodeCookieInvalid, "cookie jar failed"), err.Error())
-		}
-
 		domain := queue.DomainFromURL(src.URL)
 		lim, _ := settings.LimitsForDomain(d.Library.DB, domain)
 
@@ -81,8 +69,16 @@ func ScanHandler(d Deps) TaskHandler {
 			mode = library.SourceHistModeFull
 			playlistEnd = src.FullScanLimit
 		}
-		entries, err := listEntries(ctx, d, src.URL, jar, playlistEnd, lim)
+		entries, attach, err := listEntriesWithCookieFallback(ctx, d, work, src.URL, src.ID, playlistEnd, lim)
+		persistCookieAttach(d, t.ID, attach)
 		if err != nil {
+			if apperrors.ErrorCode(err) == apperrors.CodeCookieInvalid && strings.Contains(err.Error(), "cookie jar failed") {
+				_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, err.Error(), map[string]any{
+					"mode": mode,
+					"code": apperrors.CodeCookieInvalid,
+				}, t.ID)
+				return err
+			}
 			code, msg := classify(err)
 			_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanError, msg+": "+err.Error(), map[string]any{
 				"mode": mode,
@@ -212,7 +208,7 @@ func ScanHandler(d Deps) TaskHandler {
 		_ = d.Library.AddSourceHistory(src.ID, library.SourceHistScanned, scanMsg, histDetail, t.ID)
 
 		msg := scanMsg
-		detailBytes, _ := json.Marshal(map[string]any{
+		detail := map[string]any{
 			"created":                      created,
 			"updated":                      updated,
 			"created_ids":                  createdIDs,
@@ -224,7 +220,9 @@ func ScanHandler(d Deps) TaskHandler {
 			"full":                         fullScan,
 			"hit_known":                    hitKnown,
 			"full_scan_limit":              playlistEnd,
-		})
+			domains.DetailKeyCookieAttach:  attach,
+		}
+		detailBytes, _ := json.Marshal(detail)
 		_ = d.Library.Queue.UpdateProgress(t.ID, msg, ptrFloat(1))
 		_ = d.Library.Queue.SetDetail(t.ID, string(detailBytes))
 		progress(msg, ptrFloat(1))

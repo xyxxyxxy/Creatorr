@@ -378,7 +378,7 @@ type DomainQueueRow struct {
 	UseFlareSolverr     bool // effective resolved flare (defaults + override)
 	HasCookies          bool
 	CookieContent       string // Netscape jar text for edit modal
-	CookiesAfterFail    bool   // omit stored jar until download retry
+	SmartCookies        bool   // smart cookie usage: learn per-source when jar is needed
 	HasCredentials              bool   // host row sets non-empty username
 	CredentialsUsername         string // host override username for edit modal
 	CredentialsInherit          bool   // host row username NULL (inherit default)
@@ -394,7 +394,7 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 	}
 	rows, err := database.SQL.Query(`
 		SELECT domain, active, task_cooldown_seconds, max_download_queue, max_parallel_tasks,
-		       download_rate_limit, sleep_requests, use_flaresolverr, cookies, cookies_after_fail, username, password
+		       download_rate_limit, sleep_requests, use_flaresolverr, cookies, smart_cookies, username, password
 		FROM domains WHERE domain != ? ORDER BY domain
 	`, DomainDefault)
 	if err != nil {
@@ -410,8 +410,8 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 		var sleep sql.NullFloat64
 		var flare sql.NullInt64
 		var jar, credUser, credPass sql.NullString
-		var cookiesAfterFail int
-		if err := rows.Scan(&host, &active, &delay, &maxQ, &maxP, &rate, &sleep, &flare, &jar, &cookiesAfterFail, &credUser, &credPass); err != nil {
+		var smartCookies int
+		if err := rows.Scan(&host, &active, &delay, &maxQ, &maxP, &rate, &sleep, &flare, &jar, &smartCookies, &credUser, &credPass); err != nil {
 			return nil, err
 		}
 		r := DomainQueueRow{
@@ -422,7 +422,7 @@ func DomainOverrideRows(database *db.DB) ([]DomainQueueRow, error) {
 			DownloadRateLimit:   def.DownloadRateLimit,
 			SleepRequests:       def.SleepRequests,
 			UseFlareSolverr:     def.UseFlareSolverr,
-			CookiesAfterFail:    cookiesAfterFail != 0,
+			SmartCookies:        smartCookies != 0,
 		}
 		if jar.Valid {
 			r.CookieContent = jar.String

@@ -1,0 +1,17 @@
+{{define "notes_editor"}}
+{{/*
+  Operator notes autosave block.
+  Expects: Value, Action, IDName, ID (int64 or string).
+*/}}
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Notes" "icon" "sticky-note" "help" "Operator notes; not written to files.")}}
+<textarea name="notes"
+          class="textarea w-full js-notes-autosave"
+          rows="3"
+          maxlength="65536"
+          data-autosave-action="{{.Action}}"
+          data-id-name="{{.IDName}}"
+          data-id-value="{{.ID}}"
+          placeholder="Notes">{{.Value}}</textarea>
+{{template "list_panel_end"}}
+{{end}}

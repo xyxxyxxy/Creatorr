@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -240,7 +241,13 @@ func (s *Server) SetDomainCookies(w http.ResponseWriter, r *http.Request, domain
 		return
 	}
 	if err := domains.SetCookies(s.Queue.DB, string(domain), body.Content); err != nil {
-		writeErr(w, http.StatusBadRequest, apperrors.CodeInternal, "save domain cookies failed", err.Error())
+		code := apperrors.CodeInternal
+		msg := "save domain cookies failed"
+		if errors.Is(err, domains.ErrFlareCookieExclusive) {
+			code = apperrors.CodeValidation
+			msg = err.Error()
+		}
+		writeErr(w, http.StatusBadRequest, code, msg, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

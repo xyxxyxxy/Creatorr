@@ -259,6 +259,9 @@ func UpdateSiteLimits(database *db.DB, domain string, rateStr, sleepStr, flareSt
 		if err := settings.RequireFlareSolverrConfigured(); err != nil {
 			return err
 		}
+		if err := RejectFlareOnWithStoredCookies(database, domain); err != nil {
+			return err
+		}
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = database.SQL.Exec(`
@@ -329,6 +332,9 @@ func UpdateHostOverrides(database *db.DB, domain, delayStr, queueStr, parallelSt
 	}
 	if flare == 1 {
 		if err := settings.RequireFlareSolverrConfigured(); err != nil {
+			return err
+		}
+		if err := RejectFlareOnWithStoredCookies(database, domain); err != nil {
 			return err
 		}
 	}

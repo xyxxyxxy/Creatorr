@@ -850,8 +850,11 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "Use FlareSolverr") || !strings.Contains(body, `name="use_flaresolverr"`) {
 				t.Fatalf("%s missing FlareSolverr control in override modal", path)
 			}
-			if !strings.Contains(body, "Use FlareSolverr (disabled)") || !strings.Contains(body, "CREATORR_FLARESOLVERR_URL") {
+			if !strings.Contains(body, "Use FlareSolverr") || !strings.Contains(body, "CREATORR_FLARESOLVERR_URL") {
 				t.Fatalf("%s Use FlareSolverr should be disabled when Flare URL unset", path)
+			}
+			if strings.Contains(body, "Use FlareSolverr (disabled)") {
+				t.Fatalf("%s Use FlareSolverr label must not append (disabled)", path)
 			}
 			if !strings.Contains(body, "list-panel") {
 				t.Fatalf("%s missing list-panel", path)
@@ -1280,6 +1283,61 @@ func TestSourceDetailPage(t *testing.T) {
 	}
 	if strings.Contains(body, "Indexed videos that belong to this source") {
 		t.Fatalf("source detail should not list videos: %s", truncate(body, 400))
+	}
+}
+
+func TestSourceDetailCookieSmartStatus(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui-smart.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := ser.Sources[0]
+	if err := domains.EnsureHost(d, "example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := domains.SetCookies(d, "example.com", "# Netscape\n.example.com\tTRUE\t/\tFALSE\t0\ta\tb\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := domains.SetSmartCookies(d, "example.com", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := domains.SaveCookieSmart(d, src.ID, domains.CookieSmartState{
+		Prefer: true,
+		Ring:   []string{domains.CookieOutcomeFallback, domains.CookieOutcomeFallback, domains.CookieOutcomeFallback, domains.CookieOutcomeFallback},
+		N:      3,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+	path := "/series/" + strconv.FormatInt(ser.ID, 10) + "/sources/" + strconv.FormatInt(src.ID, 10)
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Cookie policy") || !strings.Contains(body, "prefer cookies") {
+		t.Fatalf("missing cookie policy: %s", truncate(body, 800))
+	}
+	if !strings.Contains(body, "Cookie learning") || !strings.Contains(body, "4 fallback") {
+		t.Fatalf("missing cookie learning: %s", truncate(body, 800))
 	}
 }
 

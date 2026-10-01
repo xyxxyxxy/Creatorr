@@ -1098,7 +1098,11 @@
     if (!m) return;
     const pageVid = Number(m[2]);
     if (!pageVid || !data.video_id || Number(data.video_id) !== pageVid) return;
-    location.reload();
+    Promise.resolve(flushNotesAutosave())
+      .catch(() => {})
+      .finally(() => {
+        location.reload();
+      });
   }
 
   function refreshTaskIndicators() {
@@ -3339,6 +3343,194 @@
     submitListFilters(form);
   });
 
+  // Operator notes (js-notes-autosave): 4× list-filter search pause; flush on blur,
+  // pagehide / leave-link, and before video-detail task reload. Success/error use
+  // top-right flash toasts. Keepalive path must not reuse a non-keepalive in-flight
+  // fetch (that request is aborted on navigate).
+  const NOTES_AUTOSAVE_MS = LIST_FILTER_SEARCH_MS * 4;
+  const notesAutosaveTimers = new WeakMap();
+  const notesAutosaveState = new WeakMap();
+  function notesState(ta) {
+    let st = notesAutosaveState.get(ta);
+    if (!st) {
+      st = {
+        saved: ta.value,
+        dirty: false,
+        inFlight: null,
+      };
+      notesAutosaveState.set(ta, st);
+    }
+    return st;
+  }
+  function clearNotesTimer(ta) {
+    const t = notesAutosaveTimers.get(ta);
+    if (t != null) {
+      window.clearTimeout(t);
+      notesAutosaveTimers.delete(ta);
+    }
+  }
+  function notesAutosaveBody(ta) {
+    const idName = ta.getAttribute("data-id-name") || "";
+    const idValue = ta.getAttribute("data-id-value") || "";
+    const body = new URLSearchParams();
+    body.set(idName, idValue);
+    body.set("notes", ta.value);
+    return body;
+  }
+  function postNotesKeepalive(ta) {
+    const action = ta.getAttribute("data-autosave-action") || "";
+    const idName = ta.getAttribute("data-id-name") || "";
+    if (!action || !idName) return;
+    const st = notesState(ta);
+    const value = ta.value;
+    if (value === st.saved && !st.dirty) return;
+    clearNotesTimer(ta);
+    try {
+      fetch(action, {
+        method: "POST",
+        body: notesAutosaveBody(ta).toString(),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "HX-Request": "true",
+        },
+        credentials: "same-origin",
+        keepalive: true,
+      }).catch(() => {});
+    } catch (_) {
+      /* unload best-effort */
+    }
+    st.saved = value;
+    st.dirty = false;
+    st.inFlight = null;
+  }
+  function postNotesAutosave(ta, opts) {
+    const keepalive = !!(opts && opts.keepalive);
+    if (keepalive) {
+      postNotesKeepalive(ta);
+      return Promise.resolve();
+    }
+    const st = notesState(ta);
+    const action = ta.getAttribute("data-autosave-action") || "";
+    const idName = ta.getAttribute("data-id-name") || "";
+    if (!action || !idName) return Promise.resolve();
+    const value = ta.value;
+    if (value === st.saved && !st.dirty) return Promise.resolve();
+    if (st.inFlight) {
+      st.dirty = true;
+      return st.inFlight;
+    }
+    st.dirty = true;
+    const p = fetch(action, {
+      method: "POST",
+      body: notesAutosaveBody(ta).toString(),
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "HX-Request": "true",
+      },
+      credentials: "same-origin",
+    })
+      .then(async (resp) => {
+        const text = await resp.text().catch(() => "");
+        if (text) applySettingsOOB(text);
+        if (!resp.ok) {
+          const tooLong = resp.status === 422;
+          const msg = tooLong ? "Notes too long." : "Save failed.";
+          if (!text) window.showFlashToast(msg, { error: true });
+          throw new Error(msg);
+        }
+        st.saved = value;
+        st.dirty = ta.value !== st.saved;
+        window.showFlashToast("Saved.");
+      })
+      .finally(() => {
+        st.inFlight = null;
+        if (ta.value !== st.saved) {
+          st.dirty = true;
+          postNotesAutosave(ta);
+        }
+      });
+    st.inFlight = p;
+    return p;
+  }
+  function scheduleNotesAutosave(ta) {
+    if (!ta || !ta.classList.contains("js-notes-autosave")) return;
+    const st = notesState(ta);
+    if (ta.value === st.saved) {
+      st.dirty = false;
+      clearNotesTimer(ta);
+      return;
+    }
+    st.dirty = true;
+    clearNotesTimer(ta);
+    notesAutosaveTimers.set(
+      ta,
+      window.setTimeout(() => {
+        notesAutosaveTimers.delete(ta);
+        postNotesAutosave(ta);
+      }, NOTES_AUTOSAVE_MS)
+    );
+  }
+  function flushNotesAutosave(opts) {
+    const keepalive = !!(opts && opts.keepalive);
+    const nodes = document.querySelectorAll("textarea.js-notes-autosave");
+    if (keepalive) {
+      nodes.forEach((ta) => postNotesKeepalive(ta));
+      return Promise.resolve();
+    }
+    const jobs = [];
+    nodes.forEach((ta) => {
+      clearNotesTimer(ta);
+      const st = notesState(ta);
+      if (ta.value !== st.saved || st.dirty || st.inFlight) {
+        jobs.push(postNotesAutosave(ta));
+      }
+    });
+    if (!jobs.length) return Promise.resolve();
+    return Promise.allSettled(jobs);
+  }
+  function notesLeaveNeedsFlush(el) {
+    if (!el || !(el instanceof Element)) return false;
+    const a = el.closest("a[href]");
+    if (!a) return false;
+    const href = a.getAttribute("href") || "";
+    if (!href || href.startsWith("#") || href.startsWith("javascript:")) return false;
+    if (a.hasAttribute("download") || a.getAttribute("target") === "_blank") return false;
+    return true;
+  }
+  document.body.addEventListener("input", (ev) => {
+    const ta = ev.target;
+    if (!ta || ta.tagName !== "TEXTAREA" || !ta.classList.contains("js-notes-autosave")) return;
+    scheduleNotesAutosave(ta);
+  });
+  document.body.addEventListener("focusout", (ev) => {
+    const ta = ev.target;
+    if (!ta || ta.tagName !== "TEXTAREA" || !ta.classList.contains("js-notes-autosave")) return;
+    clearNotesTimer(ta);
+    const st = notesState(ta);
+    if (ta.value === st.saved && !st.dirty) return;
+    if (notesLeaveNeedsFlush(ev.relatedTarget)) {
+      postNotesKeepalive(ta);
+      return;
+    }
+    postNotesAutosave(ta);
+  });
+  document.addEventListener(
+    "click",
+    (ev) => {
+      if (ev.defaultPrevented || ev.button !== 0) return;
+      if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+      if (!notesLeaveNeedsFlush(ev.target)) return;
+      flushNotesAutosave({ keepalive: true });
+    },
+    true
+  );
+  window.addEventListener("pagehide", () => {
+    flushNotesAutosave({ keepalive: true });
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushNotesAutosave({ keepalive: true });
+  });
+
   // Cancel discards draft; closing via toggle (not backdrop - inert) keeps form state.
   // Metadata Fetch HTMX-swaps the body with draft values as new defaults, so form.reset()
   // cannot restore saved fields - reload a clean body from the server instead.
@@ -4039,14 +4231,134 @@
     return msg;
   }
 
+  /** Flare XOR non-empty jar while editing (server also rejects both-set). daisyUI tips only (never native title). */
+  function syncDomainFlareCookieExclusive(form) {
+    if (!form || !form.classList.contains("js-domain-override-form")) return;
+    const cookies = form.querySelector(".js-domain-cookies");
+    const flare = form.querySelector(".js-domain-flare");
+    if (!cookies || !flare) return;
+    const hasCookies = String(cookies.value || "").trim().length > 0;
+    const flareOn = !!flare.checked;
+    const flareUrlOk = form.getAttribute("data-flare-configured") === "1";
+    const cookiesLockTip =
+      form.getAttribute("data-cookies-lock-tip") ||
+      "Turn off Use FlareSolverr first. Flare and account cookies cannot both be set: Flare merges anonymous cookies over the jar and would overwrite session cookies.";
+    const flareCookieLockTip =
+      form.getAttribute("data-flare-cookie-lock-tip") ||
+      "Clear the cookie jar first. FlareSolverr and account cookies cannot both be set: Flare merges anonymous cookies over the jar and would overwrite session cookies.";
+
+    function setCookiesLocked(locked) {
+      const tipHost = cookies.closest(".js-domain-cookies-tip") || cookies;
+      cookies.disabled = !!locked;
+      cookies.readOnly = false;
+      if (locked) {
+        cookies.classList.add("pointer-events-none", "opacity-60");
+        tipHost.classList.add("tooltip", "tooltip-top");
+        tipHost.setAttribute("data-tip", cookiesLockTip);
+      } else {
+        cookies.classList.remove("pointer-events-none", "opacity-60");
+        tipHost.classList.remove("tooltip", "tooltip-top");
+        tipHost.removeAttribute("data-tip");
+      }
+    }
+
+    function setFlareCookieLocked(locked) {
+      // URL unset: server Disabled + tip; do not rewrite that wrap.
+      if (!flareUrlOk) return;
+      const label = flare.closest("label");
+      const labelText = label && label.querySelector(".label-text");
+      let tipHost = flare.closest(".js-domain-flare-tip");
+      if (locked) {
+        flare.disabled = true;
+        if (labelText) labelText.classList.add("opacity-60");
+        if (label) {
+          label.classList.remove("cursor-pointer");
+          label.classList.add("cursor-not-allowed");
+        }
+        if (!tipHost && label && label.parentNode) {
+          tipHost = document.createElement("span");
+          tipHost.className = "tooltip tooltip-top inline-flex w-fit max-w-full js-domain-flare-tip";
+          label.parentNode.insertBefore(tipHost, label);
+          tipHost.appendChild(label);
+        }
+        if (tipHost) {
+          tipHost.classList.add("tooltip", "tooltip-top");
+          tipHost.setAttribute("data-tip", flareCookieLockTip);
+        }
+      } else {
+        flare.disabled = false;
+        if (labelText) labelText.classList.remove("opacity-60");
+        if (label) {
+          label.classList.add("cursor-pointer");
+          label.classList.remove("cursor-not-allowed");
+        }
+        if (tipHost) {
+          tipHost.removeAttribute("data-tip");
+          tipHost.classList.remove("tooltip", "tooltip-top");
+          const parent = tipHost.parentNode;
+          if (parent) {
+            while (tipHost.firstChild) parent.insertBefore(tipHost.firstChild, tipHost);
+            parent.removeChild(tipHost);
+          }
+        }
+      }
+    }
+
+    // Legacy both-set: keep Flare editable; lock jar so Save drops cookies (disabled omit POST).
+    if (hasCookies && flareOn) {
+      setCookiesLocked(true);
+      setFlareCookieLocked(false);
+      return;
+    }
+    if (hasCookies) {
+      setCookiesLocked(false);
+      flare.checked = false;
+      setFlareCookieLocked(true);
+      return;
+    }
+    if (flareOn) {
+      setCookiesLocked(true);
+      setFlareCookieLocked(false);
+      return;
+    }
+    setCookiesLocked(false);
+    setFlareCookieLocked(false);
+  }
+
+  function syncAllDomainFlareCookieExclusive() {
+    document.querySelectorAll("form.js-domain-override-form").forEach(syncDomainFlareCookieExclusive);
+  }
+
   document.body.addEventListener("input", (ev) => {
     const input = ev.target.closest(".js-domain-override-domain");
-    if (!input) return;
-    syncDomainOverrideForm(input.closest("form"));
+    if (input) syncDomainOverrideForm(input.closest("form"));
+    const form = ev.target.closest(".js-domain-override-form");
+    if (form && (ev.target.closest(".js-domain-cookies") || ev.target.closest(".js-domain-flare"))) {
+      syncDomainFlareCookieExclusive(form);
+    }
   });
+  document.body.addEventListener("change", (ev) => {
+    const t = ev.target;
+    if (t && t.classList && t.classList.contains("modal-toggle") && t.checked) {
+      const modal = t.nextElementSibling;
+      if (modal && modal.classList.contains("modal")) {
+        modal.querySelectorAll("form.js-domain-override-form").forEach(syncDomainFlareCookieExclusive);
+      }
+    }
+    const form = ev.target.closest(".js-domain-override-form");
+    if (form && (ev.target.closest(".js-domain-cookies") || ev.target.closest(".js-domain-flare"))) {
+      syncDomainFlareCookieExclusive(form);
+    }
+  });
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", syncAllDomainFlareCookieExclusive);
+  } else {
+    syncAllDomainFlareCookieExclusive();
+  }
   document.body.addEventListener("submit", (ev) => {
     const form = ev.target.closest(".js-domain-override-form");
     if (!form) return;
+    syncDomainFlareCookieExclusive(form);
     const domainMsg = syncDomainOverrideForm(form);
     if (domainMsg) {
       ev.preventDefault();
@@ -4056,6 +4368,20 @@
           input.focus();
           if (typeof input.select === "function") input.select();
         }
+      } catch (_) {}
+      return;
+    }
+    const cookies = form.querySelector(".js-domain-cookies");
+    const flare = form.querySelector(".js-domain-flare");
+    // Disabled jar is omitted from POST (clears cookies); only block when both editable.
+    if (cookies && flare && !cookies.disabled && String(cookies.value || "").trim() && flare.checked && !flare.disabled) {
+      ev.preventDefault();
+      setControlValidity(
+        cookies,
+        "Cannot enable Use FlareSolverr with a non-empty cookie jar: Flare merges anonymous cookies over the jar and would overwrite session cookies. Clear the jar or turn Flare off."
+      );
+      try {
+        cookies.focus();
       } catch (_) {}
       return;
     }

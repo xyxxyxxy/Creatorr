@@ -92,6 +92,14 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo19(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 20:
+			if err := d.migrateTo20(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
+		case 21:
+			if err := d.migrateTo21(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -447,7 +455,7 @@ func (d *DB) migrateTo13() error {
 	return nil
 }
 
-// migrateTo14 adds domains.cookies_after_fail (omit stored jar until download retry).
+// migrateTo14 adds domains.cookies_after_fail (omit stored jar until failure; cookie retry).
 func (d *DB) migrateTo14() error {
 	has, err := d.tableHasColumn("domains", "cookies_after_fail")
 	if err != nil {
@@ -585,6 +593,71 @@ func (d *DB) migrateTo19() error {
 	}
 	if _, err := d.SQL.Exec(`ALTER TABLE videos DROP COLUMN import_src`); err != nil {
 		return fmt.Errorf("drop videos.import_src: %w", err)
+	}
+	return nil
+}
+
+// migrateTo21 adds operator-only notes on series and videos (not NFO / packed files).
+func (d *DB) migrateTo21() error {
+	for _, ddl := range []struct {
+		table string
+		sql   string
+	}{
+		{"series", `ALTER TABLE series ADD COLUMN notes TEXT NOT NULL DEFAULT ''`},
+		{"videos", `ALTER TABLE videos ADD COLUMN notes TEXT NOT NULL DEFAULT ''`},
+	} {
+		has, err := d.tableHasColumn(ddl.table, "notes")
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := d.SQL.Exec(ddl.sql); err != nil {
+			return fmt.Errorf("add %s.notes: %w", ddl.table, err)
+		}
+	}
+	return nil
+}
+
+// migrateTo20 renames domains.cookies_after_fail → smart_cookies and adds sources cookie_smart_* learning cols.
+func (d *DB) migrateTo20() error {
+	hasOld, err := d.tableHasColumn("domains", "cookies_after_fail")
+	if err != nil {
+		return err
+	}
+	hasNew, err := d.tableHasColumn("domains", "smart_cookies")
+	if err != nil {
+		return err
+	}
+	if hasOld && !hasNew {
+		if _, err := d.SQL.Exec(`ALTER TABLE domains RENAME COLUMN cookies_after_fail TO smart_cookies`); err != nil {
+			return fmt.Errorf("rename domains.cookies_after_fail to smart_cookies: %w", err)
+		}
+	} else if !hasNew {
+		if _, err := d.SQL.Exec(`ALTER TABLE domains ADD COLUMN smart_cookies INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("add domains.smart_cookies: %w", err)
+		}
+	}
+
+	for _, col := range []struct {
+		name string
+		ddl  string
+	}{
+		{"cookie_smart_prefer", `ALTER TABLE sources ADD COLUMN cookie_smart_prefer INTEGER NOT NULL DEFAULT 0`},
+		{"cookie_smart_ring", `ALTER TABLE sources ADD COLUMN cookie_smart_ring TEXT NOT NULL DEFAULT '[]'`},
+		{"cookie_smart_n", `ALTER TABLE sources ADD COLUMN cookie_smart_n INTEGER NOT NULL DEFAULT 0`},
+	} {
+		has, err := d.tableHasColumn("sources", col.name)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := d.SQL.Exec(col.ddl); err != nil {
+			return fmt.Errorf("add sources.%s: %w", col.name, err)
+		}
 	}
 	return nil
 }

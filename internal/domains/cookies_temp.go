@@ -33,7 +33,7 @@ func WriteTempJar(dir, domain, content string) (string, error) {
 
 // TempJarForURL resolves the host override jar for rawURL and materializes a temp Netscape file.
 // Returns empty path when nothing is stored or allowStored is false (omit --cookies).
-// allowStored is false when cookies_after_fail is on for non-retry yt-dlp invokes.
+// allowStored is false when smart cookies uses anon-first for non-retry yt-dlp invokes.
 func TempJarForURL(database *db.DB, dir, rawURL string, allowStored bool) (string, error) {
 	if !allowStored {
 		return "", nil
@@ -46,14 +46,17 @@ func TempJarForURL(database *db.DB, dir, rawURL string, allowStored bool) (strin
 	return WriteTempJar(dir, host, content)
 }
 
-// TempJarForNonDownload materializes the stored jar unless cookies_after_fail is on
-// (scan / meta / sidecars never use the account jar in that mode).
+// TempJarForNonDownload materializes the stored jar for the first yt-dlp pass.
+// When smart cookies is on, returns empty path (anonymous first) unless the source
+// prefers cookies; use InvokeWithCookieFallback for the retry-with-jar path.
+// Prefer ClaimCookieSmart + StoredJarForURL in workers; this helper assumes anon-first
+// when smart is on (no source learning).
 func TempJarForNonDownload(database *db.DB, dir, rawURL string) (string, error) {
-	afterFail, err := CookiesAfterFailForURL(database, rawURL)
+	smart, err := SmartCookiesForURL(database, rawURL)
 	if err != nil {
 		return "", err
 	}
-	return TempJarForURL(database, dir, rawURL, AllowStoredJar(afterFail, false))
+	return TempJarForURL(database, dir, rawURL, AllowStoredJar(smart, false))
 }
 
 // StoredJarForURL returns whether a stored jar exists and a temp path when allowStored.
