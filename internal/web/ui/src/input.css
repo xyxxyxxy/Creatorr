@@ -13,6 +13,7 @@
 @source "../../templates/**/*.html";
 @source "../../partials/**/*.html";
 @source "../../static/app.js";
+@source "../../static/import.js";
 
 /*
   Exception (approved): daisyUI .modal-box uses overflow-y:auto, which clips tooltip

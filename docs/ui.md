@@ -2,7 +2,7 @@
 
 Index: [README.md](README.md). Agent contract: [`AGENTS.md`](../AGENTS.md).
 
-**CSS.** Tailwind 4 + daisyUI 5. Source: [`internal/web/ui/src/input.css`](../internal/web/ui/src/input.css) → committed [`internal/web/static/app.css`](../internal/web/static/app.css). `make css` also vendors ECharts and Lucide. After class or vendor bumps, run `make css`. Themes: curated daisyUI set on Settings → General **Appearance** (Dark / Light / Special); default follows OS (`emerald` / `dark`); override is this browser only (`localStorage` key `creatorr-theme`).
+**CSS.** Tailwind 4 + daisyUI 5. Source: [`internal/web/ui/src/input.css`](../internal/web/ui/src/input.css) → committed [`internal/web/static/app.css`](../internal/web/static/app.css). `make css` also bundles JS with esbuild (ES modules in [`internal/web/ui/src/js/`](../internal/web/ui/src/js/) -> committed `internal/web/static/app.js`; the import page script `src/js/import.js` -> `static/import.js`) and vendors ECharts and Lucide. Edit the sources, never the bundles. Keep a Go-guarded comment as `//!` (esbuild drops other comments). After class or vendor bumps, run `make css`. Themes: curated daisyUI set on Settings → General **Appearance** (Dark / Light / Special); default follows OS (`emerald` / `dark`); override is this browser only (`localStorage` key `creatorr-theme`).
 
 **Dev UI reload:** `CREATORR_WEB_DEV=1` (optional `CREATORR_WEB_DIR`, default `internal/web`) reloads templates and static files each request. Compose mounts `./internal/web` at `/web`. CSS still needs `make css`.
 
