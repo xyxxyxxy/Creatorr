@@ -445,6 +445,10 @@ func TestRunnerShutdownCancelsPrefetch(t *testing.T) {
 	}
 }
 
+func TestRunnerCookieInvalidPausesAndNotifies(t *testing.T) {
+	testRunnerDomainIssueNotify(t, apperrors.CodeCookieInvalid, "Sign in to confirm you are not a bot", true)
+}
+
 func TestRunnerRateLimitedNotifiesWithoutUnmonitor(t *testing.T) {
 	testRunnerDomainIssueNotify(t, apperrors.CodeDownloadFailed, "HTTP Error 429: Too Many Requests", true)
 }

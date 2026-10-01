@@ -339,20 +339,26 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 	fullDomains := map[string]bool{}
 	fullCount := 0
 	n := 0
+	ids := make([]int64, len(list))
+	for i, r := range list {
+		ids[i] = r.id
+	}
+	hasMedia, err := s.videoIDsWithMediaFile(ids)
+	if err != nil {
+		return 0, err
+	}
+	pendingDL, err := s.videoIDsWithPendingDownload(ids)
+	if err != nil {
+		return 0, err
+	}
 	for _, r := range list {
 		if !activeOK[r.domain] || pausedOK[r.domain] || fullDomains[r.domain] {
 			continue
 		}
-		if _, ok, err := s.HasVideoFile(r.id); err != nil {
-			return n, err
-		} else if ok {
+		if hasMedia[r.id] {
 			continue
 		}
-		busy, err := s.hasPendingDownload(r.id)
-		if err != nil {
-			return n, err
-		}
-		if busy {
+		if pendingDL[r.id] {
 			continue
 		}
 		_, err = s.Queue.Enqueue(enqueueDownloadParams(r.id, r.seriesID, r.domain, queue.OriginScheduled))
@@ -375,6 +381,73 @@ func (s *Store) EnqueueDownloadWanted() (int, error) {
 		n++
 	}
 	return n, nil
+}
+
+// videoIDsWithMediaFile returns which of the given video IDs have an on-disk kind=video file.
+func (s *Store) videoIDsWithMediaFile(videoIDs []int64) (map[int64]bool, error) {
+	out := map[int64]bool{}
+	if len(videoIDs) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, len(videoIDs))
+	args := make([]any, len(videoIDs))
+	for i, id := range videoIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := s.DB.SQL.Query(`
+		SELECT video_id, path FROM files
+		WHERE kind = 'video' AND video_id IN (`+strings.Join(placeholders, ",")+`)
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var vid int64
+		var path string
+		if err := rows.Scan(&vid, &path); err != nil {
+			return nil, err
+		}
+		if out[vid] {
+			continue
+		}
+		if fileExists(path) {
+			out[vid] = true
+		}
+	}
+	return out, rows.Err()
+}
+
+// videoIDsWithPendingDownload returns video IDs among the set with pending/running download or sponsorblock_cut.
+func (s *Store) videoIDsWithPendingDownload(videoIDs []int64) (map[int64]bool, error) {
+	out := map[int64]bool{}
+	if len(videoIDs) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, len(videoIDs))
+	args := make([]any, 0, 4+len(videoIDs))
+	args = append(args, queue.KindDownload, queue.KindSponsorblockCut, queue.StatusPending, queue.StatusRunning)
+	for i, id := range videoIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	rows, err := s.DB.SQL.Query(`
+		SELECT DISTINCT video_id FROM tasks
+		WHERE kind IN (?, ?) AND status IN (?, ?) AND video_id IN (`+strings.Join(placeholders, ",")+`)
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var vid int64
+		if err := rows.Scan(&vid); err != nil {
+			return nil, err
+		}
+		out[vid] = true
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) hasPendingDownload(videoID int64) (bool, error) {

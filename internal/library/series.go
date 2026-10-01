@@ -542,21 +542,33 @@ func (s *Store) UpdateSeriesDetailed(id int64, p UpdateSeriesParams) (UpdateSeri
 				`, cur.Title, cur.RootID, id)
 				return out, fmt.Errorf("folder move failed (reverted title/root): %w", err)
 			}
-			_ = s.WriteSeriesNFODisk(id)
+			if err := s.WriteSeriesNFODisk(id); err != nil {
+				return out, fmt.Errorf("write series NFO after folder move: %w", err)
+			}
 			tid, qerr := s.Queue.InsertRunning(queue.EnqueueParams{
-		Origin: queue.OriginManual,
+				Origin:   queue.OriginManual,
 				Kind:     queue.KindRegenerateNFO,
 				Domain:   queue.SystemDomain,
 				SeriesID: id,
 				Message:  "Rewrite episode NFOs after series folder move",
 				Payload:  map[string]any{"series_id": id, "scope": "series_move"},
 			})
-			if qerr == nil {
-				_, _, _ = s.RewriteSeriesEpisodeNFOs(id, tid)
-				_, _, _, _ = s.ApplySeriesEpisodeNaming(context.Background(), id, tid)
-				_ = s.Queue.Finish(tid, queue.StatusDone, "Episode paths updated after folder move", "", "")
+			if qerr != nil {
+				if _, _, _, err := s.ApplySeriesEpisodeNaming(context.Background(), id, 0); err != nil {
+					return out, fmt.Errorf("apply episode naming after folder move: %w", err)
+				}
 			} else {
-				_, _, _, _ = s.ApplySeriesEpisodeNaming(context.Background(), id, 0)
+				if _, _, err := s.RewriteSeriesEpisodeNFOs(id, tid); err != nil {
+					_ = s.Queue.Finish(tid, queue.StatusFailed, "Episode NFO rewrite failed after folder move", "", err.Error())
+					return out, fmt.Errorf("rewrite episode NFOs after folder move: %w", err)
+				}
+				if _, _, _, err := s.ApplySeriesEpisodeNaming(context.Background(), id, tid); err != nil {
+					_ = s.Queue.Finish(tid, queue.StatusFailed, "Episode naming failed after folder move", "", err.Error())
+					return out, fmt.Errorf("apply episode naming after folder move: %w", err)
+				}
+				if err := s.Queue.Finish(tid, queue.StatusDone, "Episode paths updated after folder move", "", ""); err != nil {
+					return out, fmt.Errorf("finish folder-move task: %w", err)
+				}
 			}
 			out.Series, err = s.GetSeries(id, false)
 			return out, err
