@@ -42,12 +42,12 @@ func TestSeriesMoveExclusivity(t *testing.T) {
 	if err := move(s1); err != nil {
 		t.Fatal(err)
 	}
-	// Same series twice is a duplicate; another series may queue.
+	// Same series twice and any other series_move are duplicates (path-touching exclusivity).
 	if err := move(s1); !errors.Is(err, queue.ErrDuplicate) {
 		t.Fatalf("second move same series: %v", err)
 	}
-	if err := move(s2); err != nil {
-		t.Fatalf("move other series: %v", err)
+	if err := move(s2); !errors.Is(err, queue.ErrDuplicate) {
+		t.Fatalf("move other series while one open: %v", err)
 	}
 	// Open move blocks the other path-touching kinds.
 	for _, k := range []string{queue.KindRenameEpisodes, queue.KindRegenerateNFO, queue.KindSyncFiles, queue.KindRetentionDelete} {

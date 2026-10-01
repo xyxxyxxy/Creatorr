@@ -254,18 +254,20 @@ func TestBulkEditRootChangeEnqueuesSeriesMove(t *testing.T) {
 	}
 	task, _ := s.Queue.GetTask(bulkID)
 	updated, skipped, failed, err := s.BulkEditSeriesPass(context.Background(), task, nil)
-	if err != nil || updated != 2 || skipped != 0 || failed != 0 {
+	// Path-touching exclusivity: only the first series_move enqueues; the second fails while it is open.
+	if err != nil || updated != 1 || skipped != 0 || failed != 1 {
 		t.Fatalf("pass updated=%d skipped=%d failed=%d err=%v", updated, skipped, failed, err)
 	}
-	for _, id := range []int64{a.ID, b.ID} {
-		got, _ := s.GetSeries(id, false)
-		if got.RootID != rootID {
-			t.Fatalf("series %d root changed before worker move", id)
-		}
-		var n int
-		if err := s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = ? AND series_id = ? AND status = 'pending'`,
-			queue.KindSeriesMove, id).Scan(&n); err != nil || n != 1 {
-			t.Fatalf("series %d series_move count=%d err=%v", id, n, err)
-		}
+	gotA, _ := s.GetSeries(a.ID, false)
+	if gotA.RootID != rootID {
+		t.Fatalf("series A root changed before worker move")
+	}
+	var nA, nB int
+	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = ? AND series_id = ? AND status = 'pending'`,
+		queue.KindSeriesMove, a.ID).Scan(&nA)
+	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = ? AND series_id = ? AND status = 'pending'`,
+		queue.KindSeriesMove, b.ID).Scan(&nB)
+	if nA != 1 || nB != 0 {
+		t.Fatalf("series_move counts A=%d B=%d want 1/0", nA, nB)
 	}
 }

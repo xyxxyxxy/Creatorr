@@ -236,15 +236,12 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 			return ErrDuplicate
 		}
 	case KindSeriesMove:
-		if busy, err := s.PathTouchingSystemBusy(KindRenameEpisodes, KindRegenerateNFO, KindSyncFiles, KindRetentionDelete); err != nil {
+		// One open path-touching system task library-wide (includes any series_move).
+		if busy, err := s.PathTouchingSystemBusy(); err != nil {
 			return err
 		} else if busy {
 			return ErrDuplicate
 		}
-		// ponytail: one open move per series; different series may queue together (bulk root change).
-		return s.rejectIfExists(`
-			SELECT 1 FROM tasks WHERE kind = ? AND series_id = ? AND status IN (?, ?) LIMIT 1
-		`, KindSeriesMove, p.SeriesID, StatusPending, StatusRunning)
 	}
 	// System lane: at most one pending/running task per kind (except import keeps per-video).
 	if p.Domain == SystemDomain {
