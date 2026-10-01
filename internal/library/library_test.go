@@ -1982,7 +1982,7 @@ func TestMarkDownloadFailedStage(t *testing.T) {
 			continue
 		}
 		found = true
-		if e.Message != "Remux failed" {
+		if e.Message != "Remux failed: ffmpeg boom" {
 			t.Fatalf("message=%q", e.Message)
 		}
 		var detail map[string]any

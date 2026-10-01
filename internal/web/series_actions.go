@@ -348,6 +348,13 @@ func (h *Handler) actionWantVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err := h.Library.WantVideo(vid)
+	if err == nil {
+		ok := "want"
+		if ser, serr := h.Library.GetSeries(sid, false); serr == nil && !ser.Monitored {
+			ok = "want-unmonitored"
+		}
+		redir = appendQuery(redir, "ok="+ok)
+	}
 	h.finishVideoAction(w, r, sid, redir, err)
 }
 

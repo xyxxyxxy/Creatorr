@@ -178,7 +178,7 @@ func DomainAlert(ctx context.Context, database *db.DB, taskID int64, domain, rea
 // YtDlpFailed notifies a yt-dlp (or media-task remux/pack) failure that is not cookie/rate.
 func YtDlpFailed(ctx context.Context, database *db.DB, taskID int64, domain, detail string) error {
 	detail = truncateDetailTail(detail)
-	title := fmt.Sprintf("yt-dlp failure (%s)", domain)
+	title := fmt.Sprintf("yt-dlp / site failure (%s)", domain)
 	body := fmt.Sprintf("Domain %s: task failed.\n\n%s", domain, detail)
 	return SendEvent(ctx, database, EventYtDlpFailed, title, body, taskID)
 }

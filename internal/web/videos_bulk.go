@@ -76,11 +76,15 @@ func (h *Handler) actionBulkWantVideos(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, seriesVideosRedirect(sid, r, "", "", err.Error()), http.StatusSeeOther)
 		return
 	}
+	ok := "bulk_want"
+	if ser, serr := h.Library.GetSeries(sid, false); serr == nil && !ser.Monitored {
+		ok = "bulk_want_unmonitored"
+	}
 	msg := "updated=" + strconv.Itoa(updated)
 	if skipped > 0 {
 		msg += " skipped=" + strconv.Itoa(skipped)
 	}
-	http.Redirect(w, r, seriesVideosRedirect(sid, r, "bulk_want", msg, ""), http.StatusSeeOther)
+	http.Redirect(w, r, seriesVideosRedirect(sid, r, ok, msg, ""), http.StatusSeeOther)
 }
 
 func (h *Handler) actionBulkIgnoreVideos(w http.ResponseWriter, r *http.Request) {

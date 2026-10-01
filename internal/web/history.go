@@ -60,6 +60,50 @@ func taskWhen(t queue.Task) string {
 	return t.CreatedAt
 }
 
+// historyListMessage is the History → Tasks row text. Failed rows prefer a short
+// root-cause line from error_message when the stored message is generic.
+func historyListMessage(t queue.Task) string {
+	msg := strings.TrimSpace(t.Message)
+	if t.Status != queue.StatusFailed {
+		return msg
+	}
+	detail := firstErrorLine(t.ErrorMessage)
+	if detail == "" {
+		return msg
+	}
+	if msg == "" || isGenericFailMessage(msg) {
+		return detail
+	}
+	if strings.Contains(strings.ToLower(msg), strings.ToLower(detail)) {
+		return msg
+	}
+	return msg + ": " + detail
+}
+
+func isGenericFailMessage(msg string) bool {
+	switch strings.ToLower(strings.TrimSpace(msg)) {
+	case "download failed", "remux failed", "pack failed", "scan failed", "failed":
+		return true
+	default:
+		return false
+	}
+}
+
+func firstErrorLine(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = strings.TrimSpace(s[:i])
+	}
+	const max = 160
+	if len(s) > max {
+		return s[:max-1] + "…"
+	}
+	return s
+}
+
 func taskToHistoryView(t queue.Task, now time.Time) historyView {
 	abs, ago := createdAgoPair(taskWhen(t), now)
 	v := historyView{
@@ -68,7 +112,7 @@ func taskToHistoryView(t queue.Task, now time.Time) historyView {
 		CreatedAgo:   ago,
 		Kind:         t.Kind,
 		Status:       t.Status,
-		Message:      t.Message,
+		Message:      historyListMessage(t),
 		Domain:       t.Domain,
 		Code:         t.ErrorCode,
 		ErrorMessage: t.ErrorMessage,

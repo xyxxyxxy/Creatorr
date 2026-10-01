@@ -1,6 +1,8 @@
 package library
 
 import (
+	"strings"
+
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
 )
 
@@ -40,8 +42,26 @@ func (s *Store) MarkDownloadFailed(videoID, taskID int64, code, message string) 
 	case "pack":
 		histMsg = "Pack failed"
 	}
+	if short := shortHistoryError(message); short != "" {
+		histMsg = histMsg + ": " + short
+	}
 	_ = s.AddVideoHistory(videoID, "download_failed", histMsg, detail, taskID)
 	return nil
+}
+
+func shortHistoryError(message string) string {
+	s := strings.TrimSpace(message)
+	if s == "" {
+		return ""
+	}
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = strings.TrimSpace(s[:i])
+	}
+	const max = 120
+	if len(s) > max {
+		return s[:max-1] + "…"
+	}
+	return s
 }
 
 // RetrySourceErrors sets wanted_download_error / wanted_archive back to wanted for videos on this source.

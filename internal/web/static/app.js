@@ -99,29 +99,19 @@
 
   async function refreshBadge() {
     try {
-      const [tasksRes, pausedRes, seriesErrRes] = await Promise.all([
+      const [tasksRes, seriesErrRes] = await Promise.all([
         fetch("/api/tasks"),
-        fetch("/api/domains/paused"),
         fetch("/series/error-count.json"),
       ]);
-      let pausedSet = null;
-      if (pausedRes.ok) {
-        const paused = await pausedRes.json();
-        const list = Array.isArray(paused) ? paused : [];
-        pausedSet = new Set(list);
-        const b = pausedBadge();
-        if (b) {
-          b.textContent = String(list.length);
-          b.classList.toggle("hidden", list.length === 0);
-        }
+      // Soft-pause alone must not bump a nav badge; lane chips show Paused. Count all open tasks.
+      const pb = pausedBadge();
+      if (pb) {
+        pb.textContent = "0";
+        pb.classList.add("hidden");
       }
       if (tasksRes.ok) {
         const tasks = await tasksRes.json();
-        let list = Array.isArray(tasks) ? tasks : [];
-        // Soft-paused lanes still hold pending/running rows; omit them from the nav count.
-        if (pausedSet) {
-          list = list.filter((t) => t && !pausedSet.has(t.domain));
-        }
+        const list = Array.isArray(tasks) ? tasks : [];
         const n = list.length;
         const b = badge();
         if (b) {
@@ -210,6 +200,25 @@
     return parts.slice(0, 2).join(" ") + " ago";
   }
 
+  const notifyEventLabels = {
+    ytdlp_failed: "yt-dlp / site failure",
+    cookie_invalid: "Cookie / auth failure",
+    rate_limited: "Rate limit / IP block",
+    integrity_check_failed: "Integrity check failed",
+    file_sync_issues: "File sync issues",
+    pot_provider: "PO token provider failure",
+    path_collision: "Episode path collision",
+    download_digest: "Downloads finished (digest)",
+    live_skipped: "Live broadcast skipped",
+    archive_fallback: "Web Archive fallback used",
+  };
+
+  function notifyEventLabel(event) {
+    const id = String(event || "").trim();
+    if (!id) return "";
+    return notifyEventLabels[id] || id;
+  }
+
   async function refreshNotifyDropdown() {
     const menu = document.getElementById("notify-menu");
     const empty = document.getElementById("notify-dropdown-empty");
@@ -256,9 +265,10 @@
         title.textContent = n.title || n.event || "Notification";
         const meta = document.createElement("span");
         meta.className = "text-xs opacity-60";
-        const event = n.event || "";
+        const eventLabel = notifyEventLabel(n.event);
         const ago = formatNotifyAgo(n.created_at);
-        meta.textContent = [event, ago].filter(Boolean).join(" · ");
+        meta.textContent = [eventLabel, ago].filter(Boolean).join(" · ");
+        a.setAttribute("aria-label", [title.textContent, eventLabel, ago].filter(Boolean).join(" · "));
         text.appendChild(title);
         text.appendChild(meta);
         a.appendChild(iconWrap);
@@ -5672,11 +5682,7 @@
       setIfSame("studio", data.studio);
       setIfSame("country", data.country);
       setIfSame("mpaa", data.mpaa);
-      if (data.special_feature && data.special_feature.same) {
-        const role = String(data.special_feature.value || "").trim();
-        const sel = form.querySelector('select[name="special_feature"]');
-        if (sel && role) sel.value = role;
-      }
+      // Special kind stays No change unless the operator picks a value (shared kind is not prefilled).
       if (data.genres && data.genres.same && Array.isArray(data.genres.value) && data.genres.value.length) {
         form.querySelectorAll("[data-string-list-editor]").forEach((ed) => {
           if (ed.getAttribute("data-item-name") === "genre") fillBulkStringList(ed, data.genres.value);

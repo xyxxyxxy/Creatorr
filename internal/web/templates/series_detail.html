@@ -416,7 +416,7 @@
 <div class="modal">
   <div class="modal-box max-w-2xl">
     <h3 class="font-bold text-lg mb-2" data-video-bulk-meta-title>Edit metadata</h3>
-    <p class="text-sm opacity-70 mb-3">Fields shared by every selected video are pre-filled. Clear a field back to empty for No change. Filled fields replace that value on every selected video. Genres, tags, and actors replace the whole list when you add at least one entry (actor order is kept). Upload date is preserved. Changing Special kind may enqueue a file rename.</p>
+    <p class="text-sm opacity-70 mb-3">Fields shared by every selected video are pre-filled except Special kind (always No change until you pick a value). Clear a field back to empty for No change. Filled fields replace that value on every selected video. Genres, tags, and actors replace the whole list when you add at least one entry (actor order is kept). Upload date is preserved. Changing Special kind may enqueue a file rename.</p>
     <form method="post" action="/actions/bulk-edit-videos-metadata" class="space-y-3" id="form-bulk-edit-videos-metadata">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <div data-bulk-video-ids></div>
