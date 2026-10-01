@@ -1,9 +1,12 @@
 package library
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 // Series art filenames (Emby/Kodi convention under the series folder).
@@ -55,6 +58,109 @@ func SeriesArtFlagsForDir(dir string) SeriesArtFlags {
 		Fanart:    findArtFile(dir, ArtFanart) != "",
 		Clearlogo: findArtFile(dir, ArtClearlogo) != "",
 	}
+}
+
+// seriesArtLookupDirs returns folders to search for show art. The current series
+// dir is first; while a series_move is open, old and new dirs from the payload
+// are included so UI/art serving survive the DB-update / folder-rename window.
+func (s *Store) seriesArtLookupDirs(ser *Series) []string {
+	if ser == nil {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var dirs []string
+	add := func(rootPath, title string) {
+		title = strings.TrimSpace(title)
+		if rootPath == "" || title == "" {
+			return
+		}
+		for _, dir := range []string{
+			SeriesDir(rootPath, title),
+			filepath.Join(rootPath, sanitizeName(title, 0)),
+		} {
+			dir = filepath.Clean(dir)
+			if _, ok := seen[dir]; ok {
+				continue
+			}
+			seen[dir] = struct{}{}
+			dirs = append(dirs, dir)
+		}
+	}
+	if root, err := s.GetRoot(ser.RootID); err == nil {
+		add(root.Path, ser.Title)
+	}
+	if p, ok := s.openSeriesMovePayload(ser.ID); ok {
+		if root, err := s.GetRoot(p.OldRootID); err == nil {
+			add(root.Path, p.OldTitle)
+		}
+		if root, err := s.GetRoot(p.NewRootID); err == nil {
+			add(root.Path, p.NewTitle)
+		}
+	}
+	return dirs
+}
+
+func (s *Store) openSeriesMovePayload(seriesID int64) (seriesMovePayload, bool) {
+	if s.Queue == nil || seriesID <= 0 {
+		return seriesMovePayload{}, false
+	}
+	var raw string
+	err := s.DB.SQL.QueryRow(`
+		SELECT payload FROM tasks
+		WHERE kind = ? AND series_id = ? AND status IN (?, ?)
+		ORDER BY id DESC LIMIT 1
+	`, queue.KindSeriesMove, seriesID, queue.StatusPending, queue.StatusRunning).Scan(&raw)
+	if err != nil || strings.TrimSpace(raw) == "" {
+		return seriesMovePayload{}, false
+	}
+	var p seriesMovePayload
+	if json.Unmarshal([]byte(raw), &p) != nil {
+		return seriesMovePayload{}, false
+	}
+	return p, true
+}
+
+// FindSeriesArtFile returns the on-disk path for a series art role, or "".
+func (s *Store) FindSeriesArtFile(ser *Series, role string) string {
+	role = strings.ToLower(strings.TrimSpace(role))
+	switch role {
+	case ArtPoster, ArtBanner, ArtFanart, ArtClearlogo:
+	default:
+		return ""
+	}
+	for _, dir := range s.seriesArtLookupDirs(ser) {
+		if p := findArtFile(dir, role); p != "" {
+			return p
+		}
+	}
+	return ""
+}
+
+// SeriesArtFlagsFor reports which art files exist for the series (move-aware).
+func (s *Store) SeriesArtFlagsFor(ser *Series) SeriesArtFlags {
+	return SeriesArtFlags{
+		Poster:    s.FindSeriesArtFile(ser, ArtPoster) != "",
+		Banner:    s.FindSeriesArtFile(ser, ArtBanner) != "",
+		Fanart:    s.FindSeriesArtFile(ser, ArtFanart) != "",
+		Clearlogo: s.FindSeriesArtFile(ser, ArtClearlogo) != "",
+	}
+}
+
+// SeriesArtMtimesFor returns unix-nano mtimes for existing art (move-aware).
+func (s *Store) SeriesArtMtimesFor(ser *Series) map[string]int64 {
+	out := map[string]int64{}
+	for _, role := range seriesArtRoles {
+		p := s.FindSeriesArtFile(ser, role)
+		if p == "" {
+			continue
+		}
+		st, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		out[role] = st.ModTime().UnixNano()
+	}
+	return out
 }
 
 // SeriesMetaFileRoleNFO is the list/preview role for tvshow.nfo.

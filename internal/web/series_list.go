@@ -122,10 +122,8 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 	for _, s := range list {
 		best := pickBestTask(bySeries[s.ID])
 		posterURL := ""
-		if path := rootPath[s.RootID]; path != "" {
-			if library.SeriesArtFlagsForDir(library.SeriesDir(path, s.Title)).Poster {
-				posterURL = fmt.Sprintf("/series/%d/art/poster", s.ID)
-			}
+		if h.Library.SeriesArtFlagsFor(&s).Poster {
+			posterURL = fmt.Sprintf("/series/%d/art/poster", s.ID)
 		}
 		kindIcon, kindTip := "", ""
 		if s.IsAudio() {

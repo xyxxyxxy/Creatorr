@@ -231,6 +231,46 @@ func TestDownloadAndVideoMetadataRefusedWhileMovePending(t *testing.T) {
 	}
 }
 
+func TestSeriesArtSurvivesMidMoveTitleUpdate(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, _, _ := seedDownloadedSeries(t, s, rootID, profileID)
+	root, _ := s.GetRoot(rootID)
+	poster := filepath.Join(root.Path, "Old", "poster.jpg")
+	if err := os.WriteFile(poster, []byte("img"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tid, err := s.EnqueueSeriesMove(ser.ID, "New Name", rootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate worker DB update before folder rename (the race window).
+	if _, err := s.DB.SQL.Exec(`UPDATE series SET title = ? WHERE id = ?`, "New Name", ser.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetSeries(ser.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.SeriesArtFlagsFor(got).Poster {
+		t.Fatal("poster must still resolve while folder stays at old path")
+	}
+	path := s.FindSeriesArtFile(got, library.ArtPoster)
+	if path != poster {
+		t.Fatalf("art path=%q want %q", path, poster)
+	}
+	task, _ := s.Queue.GetTask(tid)
+	if _, _, _, err := s.SeriesMovePass(context.Background(), task, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.GetSeries(ser.ID, false)
+	moved := s.FindSeriesArtFile(got, library.ArtPoster)
+	want := filepath.Join(root.Path, "New Name", "poster.jpg")
+	if moved != want {
+		t.Fatalf("after move art=%q want %q", moved, want)
+	}
+}
+
 func TestBulkEditRootChangeEnqueuesSeriesMove(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)

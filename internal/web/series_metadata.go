@@ -15,11 +15,10 @@ import (
 )
 
 func (h *Handler) seriesArtFlags(ser *library.Series) library.SeriesArtFlags {
-	root, err := h.Library.GetRoot(ser.RootID)
-	if err != nil {
+	if h.Library == nil || ser == nil {
 		return library.SeriesArtFlags{}
 	}
-	return library.SeriesArtFlagsForDir(library.SeriesDir(root.Path, ser.Title))
+	return h.Library.SeriesArtFlagsFor(ser)
 }
 
 func (h *Handler) actionSaveSeriesMetadata(w http.ResponseWriter, r *http.Request) {
@@ -260,11 +259,8 @@ func (h *Handler) withMetaSuggestions(v seriesMetadataView) seriesMetadataView {
 			v.Suggestions = s
 		}
 		if v.Series != nil {
-			if root, err := h.Library.GetRoot(v.Series.RootID); err == nil {
-				dir := library.SeriesDir(root.Path, v.Series.Title)
-				v.Art = library.SeriesArtFlagsForDir(dir)
-				v.ArtMtimes = library.SeriesArtMtimes(dir)
-			}
+			v.Art = h.Library.SeriesArtFlagsFor(v.Series)
+			v.ArtMtimes = h.Library.SeriesArtMtimesFor(v.Series)
 		}
 	}
 	if v.ArtMtimes == nil {
@@ -319,26 +315,7 @@ func (h *Handler) seriesArtFile(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	root, err := h.Library.GetRoot(ser.RootID)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	dir := library.SeriesDir(root.Path, ser.Title)
-	path := ""
-	switch role {
-	case library.ArtPoster, library.ArtBanner, library.ArtFanart, library.ArtClearlogo:
-		for _, ext := range []string{".jpg", ".jpeg", ".png", ".webp"} {
-			p := filepath.Join(dir, role+ext)
-			if fileExistsWeb(p) {
-				path = p
-				break
-			}
-		}
-	default:
-		http.NotFound(w, r)
-		return
-	}
+	path := h.Library.FindSeriesArtFile(ser, role)
 	if path == "" {
 		http.NotFound(w, r)
 		return
