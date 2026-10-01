@@ -15,6 +15,12 @@ Mandatory reading for AI agents. Creatorr is a Sonarr-shaped Go daemon for creat
 - **Flags never auto-cascade** - series `monitored` and domain `active` are operator-only; cookie/rate failures soft-pause the domain lane and notify, do not deactivate.
 - **Ask when ambiguous** - behavior not in [`docs/`](docs/README.md), API/UI forks, missing env, large/unclear CSS overrides, adding a non-daisyUI library. Short question + recommended default → wait → record in the matching docs file (AGENTS only for agent-contract rules).
 - **daisyUI first** - stock daisyUI + Tailwind in markup; minimal `input.css` only for small glue (document why). Do not add another UI kit. UI work: read [`docs/ui.md`](docs/ui.md).
+- **File size:** prefer new/changed Go files under ~500 lines. Do not grow former gods (`queue`, `import`, `maintenance`, `series_meta`, `settings_actions`, monolith `app.js` sources) without splitting first. Same-package file split over new packages unless a boundary already exists.
+- **No write on list/read paths:** video list enrichment must not `UPDATE` SQLite (resolution/duration labels are read-only on GET; backfill only on pack/download/explicit jobs).
+- **Batch hot loops:** scheduler/maintenance loops that check per-video pending download or media presence must prefetch sets, not N+1 `HasVideoFile` / `hasPendingDownload`.
+- **Do not discard multi-step errors:** folder move / NFO rewrite / apply-naming / task `Finish` chains must propagate or fail the task, not `_ =` / `_, _, _ =` on partial success.
+- **No History-only kinds:** do not add task kinds whose only job is a finished History stamp. Sidecar delete is unlink + drop `files` row (no History, no task). Series folder title/root move should become a real async system task with UI/episode locks (follow-up; not SyncDisk InsertRunning bookkeeping).
+- **JS modules:** edit sources under `internal/web/ui/src/js/`; bundle with esbuild via `make css`; do not grow committed `app.js` / `import.js` by hand; no second bundler. New interactive UI contracts need a test or string-guard pin.
 - Keep files small; no god modules. New endpoint → small handler file or package method.
 - **Portable examples only** - no real hostnames/IPs/home paths; use `example.com` and env placeholders. Tests: `t.TempDir()`, fixtures - never infer paths from this machine. Operator-facing UI/docs copy: do not name real video sites (generic DASH/CDN language only).
 - **Local-only tests:** never trigger requests to external sites or the public internet from tests (`go test` / `make test`). Doubles stay on-machine: `httptest` / loopback, fake yt-dlp scripts, `t.TempDir()`, in-process swaps (e.g. `SetSendFnForTest`), checked-in fixtures/goldens. `example.com`-style URLs must resolve only via mocks (never leave the process). Forbidden: live FlareSolverr / POT / Apprise / GitHub / CDN / site extractors, or any "just this once" live smoke inside unit/integration tests. Agents must not add, enable, or suggest live-net test paths.
@@ -28,8 +34,7 @@ internal/api/gen/       oapi-codegen output (committed; do not hand-edit)
 internal/api/           handler impl, SSE, route mounting
 internal/config/        env bootstrap + settings bridge
 internal/db/            SQLite open + schema + stepwise migrations (`schema_version`)
-internal/domain/        series, source, video types
-internal/library/       series/videos/files, pack, remux, import, NFO
+internal/library/       series, source, video types + files, pack, remux, import, NFO
 internal/queue/         per-domain task queue, cooldown, History (finished tasks)
 internal/domains/       known hostnames: active + optional limit overrides; soft pause in domain_runtime; Access cookies/credentials on host rows
 internal/settings/      SQLite settings keys + domain_queue JSON
@@ -40,7 +45,8 @@ internal/health/        /api/health dependency checks
 internal/ytdlp/         in-tree yt-dlp invoke, image/PATH binary, plugins
 internal/notify/        Apprise (apprise-go) + in-app log (info digests vs unread alerts/warnings)
 internal/stats/         every-minute change-only sampler + daily library size + chart series for /stats
-internal/web/           HTMX UI (see docs/ui.md)
+internal/web/           HTMX UI (see docs/ui.md); JS sources in internal/web/ui/src/js/ (esbuild via make css)
+internal/testutil/      shared test DB opener (+ fakemedia)
 internal/errors/        AppError codes + ErrorResponse mapping
 .github/workflows/      GitHub Actions CI + GHCR images
 ```
@@ -58,24 +64,25 @@ New domain term → matching docs file (domain-model by default).
 ## API & errors
 
 - Contract: [`api/openapi.yaml`](api/openapi.yaml). Generate: `make generate`. Serve: `GET /api/openapi.json`. CI: `make openapi-check`.
-- **ErrorResponse:** `{code, message, detail?}` - stable `code` (`CookieInvalid`, `DownloadFailed`, `RemuxFailed`, `PackFailed`, …). Worker stores `error_code` + `error_message` on tasks (plus separate `message`); sources keep their own error fields. Cookie/rate failures (`CookieInvalid` / `RateLimited`) **auto soft-pause** the domain lane and notify as alerts (no auto-deactivate). Generic `DownloadFailed` / `ResolveFailed` fail the task (download → `wanted_download_error`) and notify `ytdlp_failed` but do **not** soft-pause. Never bare HTTP status with empty body.
+- **ErrorResponse:** `{code, message, detail?}` - stable `code` (`CookieInvalid`, `DownloadFailed`, `RemuxFailed`, `PackFailed`, …). Worker stores `error_code` + `error_message` on tasks (plus separate `message`); sources keep their own error fields. Cookie/rate failures (`CookieInvalid` / `RateLimited`) **auto soft-pause** the domain lane and notify as alerts (no auto-deactivate). Soft-pause alone never bumps the Tasks nav badge (open tasks only). Generic `DownloadFailed` / `ResolveFailed` fail the task (download → `wanted_download_error`) and notify `ytdlp_failed` but do **not** soft-pause. Never bare HTTP status with empty body.
 - **Out of OpenAPI:** HTMX routes + SSE `GET /api/events` (`EventSource`). Events: `task.updated` | `task.done` | `task.failed` | `notification.created` | `notification.read` (JSON in `data:`; keepalive ~15s; outside 60s HTTP timeout). Product behavior: [`docs/`](docs/README.md).
 
 ## Workflow
 
 1. Read this file + [`docs/README.md`](docs/README.md), then the topic doc for the task (UI → [`docs/ui.md`](docs/ui.md)).
 2. API: OpenAPI → `make generate` → handlers → tests.
-3. UI: daisyUI + shared partials; follow setting-description rules in `docs/ui.md`.
-4. Branch: never commit on `main`. Before push: `make test vet lint openapi-check` (and `make css` if UI classes/vendors changed). After clone, `make hooks` enables `.githooks/pre-commit` (lint + test on each commit; skip with `SKIP_GITHOOKS=1`).
+3. UI: daisyUI + shared partials; follow setting-description rules in `docs/ui.md`. JS: edit `internal/web/ui/src/js/`, then `make css`.
+4. Branch: never commit on `main`. Before push: `make test vet lint openapi-check` (and `make css` if UI classes/vendors/JS sources changed). After clone, `make hooks` enables `.githooks/pre-commit` (lint + test on each commit; skip with `SKIP_GITHOOKS=1`).
 5. Prompt on uncertainty; do not guess.
 
 ## Testing
 
-- **Not mandatory TDD.** Red-green test-first is optional where the design is stable (domain, settings, queue, yt-dlp parsers, handlers after the OpenAPI contract is drafted). Skip strict TDD for exploratory UI, remux/ffmpeg paths.
+- **Not mandatory TDD.** Red-green test-first is optional where the design is stable (settings, queue, yt-dlp parsers, handlers after the OpenAPI contract is drafted). Skip strict TDD for exploratory UI, remux/ffmpeg paths.
 - **Required on behavior change:** ship a test or updated fixture/golden that would catch the bug. Outcome matters more than red-green order.
-- **Layers:** unit (domain/settings/parsers); yt-dlp via fake binary + goldens under `internal/ytdlp/testdata/` (see `fake-yt-dlp`); integration (temp SQLite + worker/queue); API httptest for regression-critical paths. Prefer **narrow** goldens (yt-dlp List/Resolve JSON dumps; not NFO/HTML). Hermetic externals only: FlareSolverr / POT / Apprise / GitHub via `httptest` or test swaps - never live (Hard rule **Local-only tests**). OpenAPI contract drift stays CI `make openapi-check` (not a `go test` schema suite).
+- **Must-cover:** behavior changes to Want/Ignore (incl. bulk), soft-pause orchestration, download-wanted eligibility, and queue ClaimNext/cooldown ship with unit tests. Prefer shared `internal/testutil` DB opener over copy-pasted SeedDefaults blocks in new API/web tests.
+- **Layers:** unit (library/settings/parsers); yt-dlp via fake binary + goldens under `internal/ytdlp/testdata/` (see `fake-yt-dlp`); integration (temp SQLite + worker/queue); API httptest for regression-critical paths. Prefer **narrow** goldens (yt-dlp List/Resolve JSON dumps; not NFO/HTML). Hermetic externals only: FlareSolverr / POT / Apprise / GitHub via `httptest` or test swaps - never live (Hard rule **Local-only tests**). OpenAPI contract drift stays CI `make openapi-check` (not a `go test` schema suite).
 - **Fake media tools:** PATH-gated ffmpeg/ffprobe tests use `internal/testutil/fakemedia` (local scripts; never require host ffmpeg for those cases).
-- **Preferred test-first zones:** domain/queue/parsers; then handlers; UI tests after markup settles.
+- **Preferred test-first zones:** library/queue/parsers; then handlers; UI tests after markup settles.
 
 ## Ship
 
