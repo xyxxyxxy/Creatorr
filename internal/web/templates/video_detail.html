@@ -68,7 +68,8 @@
       "DomainDisabledTitle" .DomainDisabledTitle
       "DownloadRunning" .DownloadRunning
       "Redirect" (printf "/series/%d/videos/%d" .Series.ID .Video.ID)
-      "Class" "btn"
+      "Icons" true
+      "Class" "btn btn-square"
       "DeleteClass" "btn btn-soft btn-error btn-square"
     }}
     {{template "video_delivery_actions" $delivery}}
