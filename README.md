@@ -84,7 +84,7 @@ file system
 - **Special episodes & extras** - pack as Season 00 Specials (NFO for Emby/Jellyfin) or extras folders (trailers, interviews, …) with separate naming formats
 - **Quality profiles** - format selectors and optional maturity media/sidecar refresh
 - **Domains & queues** - per-host rate limits, credentials (Access cookies), and soft pause
-- **Smart cookie usage** - per-source learn when the jar is needed; prefer cookies to skip wasted anonymous fails, with periodic probes to recover
+- **Smart cookie usage** - learn per source when cookies help; prefer them to cut wasted tries and spare the account
 - **Web Archive fallback** - when an indexed YouTube video is deleted or unavailable, queue a [Web Archive](https://archive.org/) download
 - **Import existing downloads** - bring in files already on disk with automated matching
 - **Integrity check** - optional per-profile file integrity (null-decode + checksums)
