@@ -100,6 +100,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo21(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 22:
+			if err := d.migrateTo22(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -615,6 +619,54 @@ func (d *DB) migrateTo21() error {
 		}
 		if _, err := d.SQL.Exec(ddl.sql); err != nil {
 			return fmt.Errorf("add %s.notes: %w", ddl.table, err)
+		}
+	}
+	return nil
+}
+
+// migrateTo22 removes legacy delete_sidecar bookkeeping tasks and sidecar_deleted history.
+func (d *DB) migrateTo22() error {
+	if _, err := d.SQL.Exec(`
+		UPDATE tasks SET parent_task_id = NULL
+		WHERE parent_task_id IN (SELECT id FROM tasks WHERE kind = 'delete_sidecar')
+	`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") && !strings.Contains(err.Error(), "no such column") {
+			return fmt.Errorf("clear delete_sidecar parent refs: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`
+		DELETE FROM notifications
+		WHERE task_id IN (SELECT id FROM tasks WHERE kind = 'delete_sidecar')
+	`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") && !strings.Contains(err.Error(), "no such column") {
+			return fmt.Errorf("delete delete_sidecar notifications: %w", err)
+		}
+	}
+	hasTaskID, err := d.tableHasColumn("video_history", "task_id")
+	if err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return err
+		}
+		hasTaskID = false
+	}
+	if hasTaskID {
+		if _, err := d.SQL.Exec(`
+			DELETE FROM video_history
+			WHERE event = 'sidecar_deleted'
+			   OR task_id IN (SELECT id FROM tasks WHERE kind = 'delete_sidecar')
+		`); err != nil {
+			if !strings.Contains(err.Error(), "no such table") {
+				return fmt.Errorf("delete sidecar_deleted history: %w", err)
+			}
+		}
+	} else if _, err := d.SQL.Exec(`DELETE FROM video_history WHERE event = 'sidecar_deleted'`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("delete sidecar_deleted history: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`DELETE FROM tasks WHERE kind = 'delete_sidecar'`); err != nil {
+		if !strings.Contains(err.Error(), "no such table") {
+			return fmt.Errorf("delete delete_sidecar tasks: %w", err)
 		}
 	}
 	return nil

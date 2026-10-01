@@ -46,7 +46,6 @@ const (
 	KindRegenerateNFO         = "regenerate_nfo"
 	KindIntegrityCheck        = "integrity_check"
 	KindDeleteFiles           = "delete_files"
-	KindDeleteSidecar         = "delete_sidecar"
 	KindSponsorblockCut       = "sponsorblock_cut"
 	KindIntegrityCheckInitial = "integrity_check_initial"
 	KindYtDlpUpdate           = "ytdlp_update"
