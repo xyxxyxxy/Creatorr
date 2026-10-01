@@ -62,7 +62,12 @@ export function bootHooks() {
   document.body.addEventListener("htmx:beforeRequest", (ev) => {
     const cfg = ev.detail && ev.detail.requestConfig;
     const target = (cfg && cfg.target) || (ev.detail && ev.detail.target);
-    if (target && (target.id === "series-videos-live" || target.id === "series-list-live")) {
+    if (
+      target &&
+      (target.id === "series-videos-live" ||
+        target.id === "series-list-live" ||
+        target.id === "videos-list-live")
+    ) {
       document.body.dataset.listLiveScrollY = String(window.scrollY);
       captureListFilterQFocus();
     }
@@ -91,7 +96,13 @@ export function bootHooks() {
       syncAllPackRoleJoins(root);
     }
     const y = document.body.dataset.listLiveScrollY;
-    if (y != null && root && (root.id === "series-videos-live" || root.id === "series-list-live")) {
+    if (
+      y != null &&
+      root &&
+      (root.id === "series-videos-live" ||
+        root.id === "series-list-live" ||
+        root.id === "videos-list-live")
+    ) {
       delete document.body.dataset.listLiveScrollY;
       const top = Number(y);
       if (Number.isFinite(top)) requestAnimationFrame(() => window.scrollTo(0, top));

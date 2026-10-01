@@ -23,8 +23,8 @@ func TestVideoListFilterActive(t *testing.T) {
 	if !(VideoListFilter{Year: 2024}).Active() {
 		t.Fatal("year should be active")
 	}
-	if !(VideoListFilter{Year: VideoYearUnknown}).Active() {
-		t.Fatal("unknown year should be active")
+	if !(VideoListFilter{Empty: []string{PresenceUploadDate}}).Active() {
+		t.Fatal("empty upload_date should be active")
 	}
 	if !(VideoListFilter{PackRole: PackRoleRegular}).Active() {
 		t.Fatal("pack role should be active")

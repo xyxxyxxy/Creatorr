@@ -3,10 +3,8 @@ package web
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
@@ -118,32 +116,59 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 }
 
 type seriesVideosLiveData struct {
-	SeriesID        int64
-	Videos          []seriesVideoRow
-	VideosPage      PageInfo
-	FilterTotal     int
-	BulkEditBusy    bool
-	ProgressTotal   int64
-	DownloadedCount int64
-	ErrorCount      int64
+	SeriesID           int64
+	Videos             []seriesVideoRow
+	VideosPage         PageInfo
+	FilterTotal        int
+	BulkEditBusy       bool
+	ProgressTotal      int64
+	DownloadedCount    int64
+	ErrorCount         int64
 	WantedCount        int64
 	Monitored          bool
 	DownloadErrorCount int
-	VideoFilter        struct {
-		Query            string
-		QueryPlaceholder string
-		AriaLabel        string
-		Selects          []listFilterSelect
-		LiveTarget       string
-		FormAction       string
-	}
-	FilterActive bool
-	OOB          bool
+	VideoFilter        listViewToolbar
+	FilterActive       bool
+	ViewMode           string
+	OOB                bool
 }
 
-func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byVideo map[int64][]queue.Task) (seriesVideosLiveData, error) {
+// listViewToolbar is the shared filter/sort/view chrome for library lists.
+type listViewToolbar struct {
+	Query            string
+	QueryPlaceholder string
+	AriaLabel        string
+	QFieldOpts       []listFilterOpt
+	SortOpts         []listFilterOpt
+	SortDir          string // asc|desc resolved for UI
+	ViewOpts         []listFilterOpt
+	ShowView         bool
+	FromDay          string
+	ToDay            string
+	ShowDateRange    bool
+	DateClearHref    string
+	UploadEmptyHref  string
+	UploadFilledHref string
+	Selects          []listFilterSelect
+	FilterActive     bool
+	Badges           []listViewBadge
+	ClearAllHref     string
+	LiveTarget       string
+	FormAction       string
+	SeriesBulkMode   bool
+	VideoBulkMode    bool
+}
+
+func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, ser *library.Series, byVideo map[int64][]queue.Task) (seriesVideosLiveData, error) {
 	id := ser.ID
 	filter := parseSeriesVideoListFilter(r, ser.Sources)
+	if filter.Sort == "" {
+		filter.Sort = library.SortUpload
+	}
+	viewMode, writeCookie := resolveViewMode(r, cookieModeSeriesVideos, viewList)
+	if writeCookie {
+		writeViewCookie(w, cookieModeSeriesVideos, viewMode)
+	}
 	videoPage := ParsePage(r, "page")
 	videoTotal, _ := h.Library.CountVideosFiltered(id, filter)
 	videosPageInfo := NewPageInfoSize(r, "page", videoPage, videoTotal, VideoPageSize)
@@ -172,82 +197,32 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 	videos := h.buildSeriesVideoRows(vidList, byVideo, domainBySource)
 
 	videosPageInfo.LiveTarget = "series-videos-live"
-	var videoFilter struct {
-		Query            string
-		QueryPlaceholder string
-		AriaLabel        string
-		Selects          []listFilterSelect
-		LiveTarget       string
-		FormAction       string
+	videoFilter := listViewToolbar{
+		Query:            filter.Title,
+		QueryPlaceholder: searchByPlaceholder(filter.QField),
+		AriaLabel:        "Video filters",
+		QFieldOpts:       qFieldOpts(filter.QField),
+		SortOpts:         videoSortOpts(r, filter.Sort, filter.SortDir, library.SortUpload),
+		SortDir:          library.NormalizeSortDir(filter.Sort, filter.SortDir),
+		ViewOpts:         viewOpts(r, viewMode),
+		ShowView:         true,
+		FromDay:          filter.FromDay,
+		ToDay:            filter.ToDay,
+		ShowDateRange:    true,
+		Selects:          videoFilterSelects(h, r, id, filter, ser.Sources, false),
+		FilterActive:     filter.Active(),
+		Badges:           videoListBadges(r, filter, false, nil),
+		ClearAllHref:     "",
+		LiveTarget:       "series-videos-live",
+		FormAction:       fmt.Sprintf("/series/%d", id),
+		VideoBulkMode:    true,
+		DateClearHref:    dropQueryKeys(r, "from", "to", "page"),
+		UploadEmptyHref:  applyPresenceURL(r, true, library.PresenceUploadDate),
+		UploadFilledHref: applyPresenceURL(r, false, library.PresenceUploadDate),
 	}
-	videoFilter.Query = filter.Title
-	videoFilter.QueryPlaceholder = "Search title"
-	videoFilter.AriaLabel = "Video filters"
-	videoFilter.LiveTarget = "series-videos-live"
-	videoFilter.FormAction = fmt.Sprintf("/series/%d", id)
-	years, hasUnknown, _ := h.Library.DistinctVideoYears(id)
-	yearOpts := make([]listFilterOpt, 0, len(years)+1)
-	for _, y := range years {
-		ys := strconv.Itoa(y)
-		yearOpts = append(yearOpts, listFilterOpt{
-			Value:    ys,
-			Label:    ys,
-			Selected: filter.Year == y,
-		})
+	if filter.Active() {
+		videoFilter.ClearAllHref = clearOperatorFiltersURL(r)
 	}
-	if hasUnknown {
-		yearOpts = append(yearOpts, listFilterOpt{
-			Value:    "unknown",
-			Label:    "Unknown",
-			Selected: filter.Year == library.VideoYearUnknown,
-		})
-	}
-	statuses, _ := h.Library.DistinctVideoStatuses(id)
-	sel := ""
-	if len(filter.Statuses) == 1 {
-		sel = filter.Statuses[0]
-	}
-	statusOpts := make([]listFilterOpt, 0, len(statuses))
-	for _, st := range statuses {
-		statusOpts = append(statusOpts, listFilterOpt{
-			Value:    st,
-			Label:    videoStatusLabel(st),
-			Selected: st == sel,
-		})
-	}
-	srcOpts := make([]listFilterOpt, 0, len(ser.Sources)+1)
-	nullImportCount, _ := h.Library.CountVideosWithNullSource(id)
-	if nullImportCount > 0 {
-		srcOpts = append(srcOpts, listFilterOpt{
-			Value:    library.VideoSourceImportQuery,
-			Label:    "Import",
-			Selected: filter.SourceID == library.VideoSourceImport,
-		})
-	}
-	for _, src := range ser.Sources {
-		srcOpts = append(srcOpts, listFilterOpt{
-			Value:    strconv.FormatInt(src.ID, 10),
-			Label:    sourceFilterLabel(src),
-			Selected: filter.SourceID == src.ID,
-		})
-	}
-	kindOpts := []listFilterOpt{
-		{Value: library.PackRoleRegular, Label: "regular episode", Selected: filter.PackRole == library.PackRoleRegular},
-		{Value: library.VideoPackRoleAnySpecial, Label: "any special", Selected: filter.PackRole == library.VideoPackRoleAnySpecial},
-	}
-	for _, opt := range library.PackRoleSelectOptions() {
-		kindOpts = append(kindOpts, listFilterOpt{
-			Value:    opt.Value,
-			Label:    opt.Label,
-			Selected: filter.PackRole == opt.Value,
-		})
-	}
-	videoFilter.Selects = append(videoFilter.Selects,
-		listFilterSelect{Name: "source", AriaLabel: "Source", EmptyLabel: "All sources", Options: srcOpts},
-		listFilterSelect{Name: "year", AriaLabel: "Year", EmptyLabel: "All years", Options: yearOpts},
-		listFilterSelect{Name: "kind", AriaLabel: "Kind", EmptyLabel: "Any kind", Options: kindOpts},
-		listFilterSelect{Name: "status", AriaLabel: "Status", EmptyLabel: "Any status", Options: statusOpts},
-	)
 
 	bulkBusy, _ := h.Library.BulkEditVideosBusy()
 	dlErrCount, _ := h.Library.CountSeriesDownloadErrors(id)
@@ -265,6 +240,7 @@ func (h *Handler) loadSeriesVideosLive(r *http.Request, ser *library.Series, byV
 		DownloadErrorCount: dlErrCount,
 		VideoFilter:        videoFilter,
 		FilterActive:       filter.Active(),
+		ViewMode:           viewMode,
 	}, nil
 }
 
@@ -277,7 +253,7 @@ func (h *Handler) seriesVideosLive(w http.ResponseWriter, r *http.Request) {
 	}
 	activeTasks, _ := h.Queue.ListActiveForSeries(id)
 	_, _, byVideo := seriesActivityMaps(activeTasks)
-	data, err := h.loadSeriesVideosLive(r, ser, byVideo)
+	data, err := h.loadSeriesVideosLive(w, r, ser, byVideo)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -285,104 +261,13 @@ func (h *Handler) seriesVideosLive(w http.ResponseWriter, r *http.Request) {
 	render(w, "series_videos_live", data)
 }
 
-// parseSeriesVideoListFilter reads ?q= (title), ?year=, ?kind=, ?status=…, ?source=<id>, and optional ?from=&to= (YYYY-MM-DD UTC).
+// parseSeriesVideoListFilter reads video list filters for a series page (series locked).
 func parseSeriesVideoListFilter(r *http.Request, sources []library.Source) library.VideoListFilter {
-	f := library.VideoListFilter{
-		Title:   strings.TrimSpace(r.URL.Query().Get("q")),
-		FromDay: parseFilterDay(r.URL.Query().Get("from")),
-		ToDay:   parseFilterDay(r.URL.Query().Get("to")),
-	}
-	if raw := strings.TrimSpace(r.URL.Query().Get("year")); raw != "" {
-		if strings.EqualFold(raw, "unknown") {
-			f.Year = library.VideoYearUnknown
-		} else if y, err := strconv.Atoi(raw); err == nil && y >= 1900 && y <= 2100 {
-			f.Year = y
-		}
-	}
-	if raw := strings.TrimSpace(r.URL.Query().Get("kind")); raw != "" {
-		switch raw {
-		case library.PackRoleRegular:
-			f.PackRole = library.PackRoleRegular
-		case library.VideoPackRoleAnySpecial:
-			f.PackRole = library.VideoPackRoleAnySpecial
-		default:
-			if err := library.ValidatePackRole(raw); err == nil && library.IsSpecialPackRole(raw) {
-				f.PackRole = library.NormalizePackRole(raw)
-			}
-		}
-	}
-	seen := map[string]struct{}{}
-	for _, raw := range r.URL.Query()["status"] {
-		st := strings.TrimSpace(raw)
-		if st == "" {
-			continue
-		}
-		if _, ok := seen[st]; ok {
-			continue
-		}
-		seen[st] = struct{}{}
-		f.Statuses = append(f.Statuses, st)
-	}
-	if raw := strings.TrimSpace(r.URL.Query().Get("source")); raw != "" {
-		if strings.EqualFold(raw, library.VideoSourceImportQuery) {
-			f.SourceID = library.VideoSourceImport
-		} else if sid, err := strconv.ParseInt(raw, 10, 64); err == nil && sid > 0 {
-			for _, src := range sources {
-				if src.ID == sid {
-					f.SourceID = sid
-					break
-				}
-			}
-		}
-	}
-	if f.FromDay != "" && f.ToDay != "" && f.FromDay > f.ToDay {
-		f.FromDay, f.ToDay = f.ToDay, f.FromDay
-	}
-	return f
-}
-
-func parseFilterDay(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	if _, err := time.Parse("2006-01-02", raw); err != nil {
-		return ""
-	}
-	return raw
+	return parseVideoListFilter(r, sources, false)
 }
 
 func seriesVideoFilterQuery(filter library.VideoListFilter, page int) string {
-	q := url.Values{}
-	if t := strings.TrimSpace(filter.Title); t != "" {
-		q.Set("q", t)
-	}
-	if filter.Year == library.VideoYearUnknown {
-		q.Set("year", "unknown")
-	} else if filter.Year > 0 {
-		q.Set("year", strconv.Itoa(filter.Year))
-	}
-	for _, st := range filter.Statuses {
-		q.Add("status", st)
-	}
-	if filter.SourceID == library.VideoSourceImport {
-		q.Set("source", library.VideoSourceImportQuery)
-	} else if filter.SourceID > 0 {
-		q.Set("source", strconv.FormatInt(filter.SourceID, 10))
-	}
-	if role := strings.TrimSpace(filter.PackRole); role != "" {
-		q.Set("kind", role)
-	}
-	if filter.FromDay != "" {
-		q.Set("from", filter.FromDay)
-	}
-	if filter.ToDay != "" {
-		q.Set("to", filter.ToDay)
-	}
-	if page > 1 {
-		q.Set("page", strconv.Itoa(page))
-	}
-	return q.Encode()
+	return encodeVideoListFilter(filter, page, "")
 }
 
 func sourceFilterLabel(src library.Source) string {

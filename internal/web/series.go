@@ -69,7 +69,7 @@ func activeTaskLinkPrefix(status string) string {
 }
 
 func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
-	live, err := h.loadSeriesListLive(r)
+	live, err := h.loadSeriesListLive(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -252,7 +252,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	pageSrc, sourcesPage := SlicePage(r, "sources_page", srcRows)
 
-	videosLive, listErr := h.loadSeriesVideosLive(r, ser, byVideo)
+	videosLive, listErr := h.loadSeriesVideosLive(w, r, ser, byVideo)
 	if listErr != nil {
 		http.Error(w, listErr.Error(), 500)
 		return

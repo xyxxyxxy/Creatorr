@@ -1,0 +1,101 @@
+{{define "videos"}}
+{{template "head" .}}
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "page" "title" "Videos" "icon" .Icon "help" "All indexed videos across your library.")}}
+{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
+{{template "videos_live" .Live}}
+{{template "list_panel_end"}}
+{{template "foot" .}}
+{{end}}
+
+{{define "videos_live"}}
+<div id="videos-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
+     data-filter-total="{{.FilterTotal}}"
+     data-view-mode="{{.ViewMode}}">
+{{template "list_view_toolbar" .VideoFilter}}
+{{if not .Videos}}
+{{if .FilterActive}}
+{{template "list_empty" "No videos match the filters."}}
+{{else}}
+{{template "list_empty" "No videos indexed yet."}}
+{{end}}
+{{else if eq .ViewMode "thumbs"}}
+<ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" id="videos-list-rows">
+  {{range .Videos}}
+  {{template "video_thumb_card" (dict
+    "ID" .ID
+    "Title" .Title
+    "Status" .Status
+    "UploadDate" .UploadDate
+    "ResolutionLabel" .ResolutionLabel
+    "DurationLabel" .DurationLabel
+    "ThumbURL" .ThumbURL
+    "TaskInd" .TaskInd
+    "DownloadRunning" .DownloadRunning
+    "DeliveryQueued" .DeliveryQueued
+    "Deleting" .Deleting
+    "DomainActive" .DomainActive
+    "DomainDisabledTitle" .DomainDisabledTitle
+    "SeriesID" .SeriesID
+    "SeriesTitle" (index $.SeriesTitles .SeriesID)
+    "ShowSeries" true
+    "KeepScroll" true
+    "LiveSwap" true
+    "LiveTarget" "videos-list-live"
+  )}}
+  {{end}}
+</ul>
+{{template "pagination" .Page}}
+{{else}}
+<ul class="list bg-base-100 rounded-box border border-base-300" id="videos-list-rows">
+  {{range .Videos}}
+  {{template "video_list_row" (dict
+    "ID" .ID
+    "Title" .Title
+    "Status" .Status
+    "UploadDate" .UploadDate
+    "SizeLabel" .SizeLabel
+    "ResolutionLabel" .ResolutionLabel
+    "DurationLabel" .DurationLabel
+    "MediaTypeLabel" .MediaTypeLabel
+    "ThumbURL" .ThumbURL
+    "TaskInd" .TaskInd
+    "DownloadRunning" .DownloadRunning
+    "DeliveryQueued" .DeliveryQueued
+    "Deleting" .Deleting
+    "DomainActive" .DomainActive
+    "DomainDisabledTitle" .DomainDisabledTitle
+    "SeriesID" .SeriesID
+    "SeriesTitle" (index $.SeriesTitles .SeriesID)
+    "PackRoleBadge" .PackRoleBadge
+    "KeepScroll" true
+    "LiveSwap" true
+    "LiveTarget" "videos-list-live"
+    "FormClass" "inline"
+  )}}
+  {{end}}
+</ul>
+{{template "pagination" .Page}}
+{{end}}
+{{range .Videos}}
+{{if .DownloadRunning}}
+<input type="checkbox" id="modal-ignore-video-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Ignore video</h3>
+    <p class="text-sm mb-4">A download task is in progress for <strong>{{.Title}}</strong>. Ignore and cancel it?</p>
+    <form method="post" action="/actions/ignore-video" class="inline" hx-post="/actions/ignore-video" hx-target="#videos-list-live" hx-swap="outerHTML">
+      <input type="hidden" name="video_id" value="{{.ID}}" />
+      <input type="hidden" name="series_id" value="{{.SeriesID}}" />
+      <div class="modal-action">
+        <label for="modal-ignore-video-{{.ID}}" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Ignore and cancel task</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+{{end}}
+</div>
+{{end}}

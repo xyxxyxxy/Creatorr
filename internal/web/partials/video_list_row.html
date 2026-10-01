@@ -11,12 +11,12 @@
            {{if .BulkEditBusy}}disabled{{end}} />
   </div>
   {{end}}
-  <div class="relative shrink-0 w-[112px] aspect-video">
+  <div class="relative shrink-0 w-[112px] aspect-video bg-base-200 rounded overflow-hidden">
     {{if .ThumbURL}}
-    <img class="size-full rounded object-cover" src="{{.ThumbURL}}" alt="" width="112" height="63" loading="lazy" />
+    <img class="absolute inset-0 size-full rounded object-contain" src="{{.ThumbURL}}" alt="" width="112" height="63" loading="lazy" />
     {{else}}
-    <div class="bg-base-200 w-full h-full rounded flex items-center justify-center" aria-hidden="true">
-      <i data-lucide="square-play" class="size-6 opacity-40"></i>
+    <div class="absolute inset-0 rounded flex items-center justify-center" aria-hidden="true">
+      <i data-lucide="square-play" class="thumb-placeholder-icon opacity-40"></i>
     </div>
     {{end}}
     {{if .DurationLabel}}
@@ -53,6 +53,7 @@
         "DownloadRunning" .DownloadRunning
         "KeepScroll" .KeepScroll
         "LiveSwap" .LiveSwap
+        "LiveTarget" .LiveTarget
         "FormClass" "contents"
         "Redirect" .Redirect
         "Icons" true

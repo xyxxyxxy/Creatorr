@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/api/gen"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
@@ -13,6 +15,9 @@ func (s *Server) ListSeriesIds(w http.ResponseWriter, r *http.Request, params ge
 	filter := library.SeriesListFilter{}
 	if params.Q != nil {
 		filter.Title = *params.Q
+	}
+	if params.QField != nil {
+		filter.QField = library.NormalizeQField(string(*params.QField))
 	}
 	if params.Root != nil {
 		filter.RootID = *params.Root
@@ -25,6 +30,39 @@ func (s *Server) ListSeriesIds(w http.ResponseWriter, r *http.Request, params ge
 	}
 	if params.Status != nil {
 		filter.Status = string(*params.Status)
+	}
+	if params.Studio != nil {
+		filter.Studio = strings.TrimSpace(*params.Studio)
+	}
+	if params.Country != nil {
+		filter.Country = strings.TrimSpace(*params.Country)
+	}
+	if params.Mpaa != nil {
+		filter.MPAA = strings.TrimSpace(*params.Mpaa)
+	}
+	if params.Year != nil {
+		y := strings.TrimSpace(*params.Year)
+		if y != "" {
+			n, err := strconv.Atoi(y)
+			if err == nil && n > 0 {
+				filter.PremieredYear = n
+			}
+		}
+	}
+	if params.Genre != nil {
+		filter.Genres = append([]string(nil), (*params.Genre)...)
+	}
+	if params.Tag != nil {
+		filter.Tags = append([]string(nil), (*params.Tag)...)
+	}
+	if params.Actor != nil {
+		filter.Actors = append([]string(nil), (*params.Actor)...)
+	}
+	if params.Empty != nil {
+		filter.Empty = append([]string(nil), (*params.Empty)...)
+	}
+	if params.NotEmpty != nil {
+		filter.NotEmpty = append([]string(nil), (*params.NotEmpty)...)
 	}
 	ids, err := s.Library.ListSeriesIDsFiltered(filter)
 	if err != nil {

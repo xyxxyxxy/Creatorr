@@ -29,25 +29,29 @@ type seriesListRow struct {
 type seriesListLiveData struct {
 	Series       []seriesListRow
 	Page         PageInfo
-	SeriesFilter struct {
-		Query            string
-		QueryPlaceholder string
-		AriaLabel        string
-		Selects          []listFilterSelect
-		LiveTarget       string
-		FormAction       string
-	}
+	SeriesFilter listViewToolbar
 	FilterActive bool
 	BulkEditBusy bool
 	FilterTotal  int
+	ViewMode     string
 	OOB          bool
 }
 
 func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
 	q := r.URL.Query()
 	f := library.SeriesListFilter{
-		Title: strings.TrimSpace(q.Get("q")),
+		Title:    strings.TrimSpace(q.Get("q")),
+		QField:   parseQField(r),
+		Studio:   strings.TrimSpace(q.Get("studio")),
+		Country:  strings.TrimSpace(q.Get("country")),
+		MPAA:     strings.TrimSpace(q.Get("mpaa")),
+		Genres:   parseMultiQuery(q, "genre"),
+		Tags:     parseMultiQuery(q, "tag"),
+		Actors:   parseMultiQuery(q, "actor"),
+		Sort:     parseSeriesSort(q.Get("sort")),
+		SortDir:  parseSortDir(q.Get("dir")),
 	}
+	f.Empty, f.NotEmpty = parsePresenceParams(q)
 	if v := strings.TrimSpace(q.Get("root")); v != "" {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
 			f.RootID = id
@@ -72,11 +76,23 @@ func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
 		library.SeriesListStatusHasErrors:
 		f.Status = strings.TrimSpace(q.Get("status"))
 	}
+	if raw := strings.TrimSpace(q.Get("year")); raw != "" {
+		if y, err := strconv.Atoi(raw); err == nil && y >= 1900 && y <= 2100 {
+			f.PremieredYear = y
+		}
+	}
 	return f
 }
 
-func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error) {
+func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (seriesListLiveData, error) {
 	filter := parseSeriesListFilter(r)
+	if filter.Sort == "" {
+		filter.Sort = library.SortTitle
+	}
+	viewMode, writeCookie := resolveViewMode(r, cookieModeSeries, viewList)
+	if writeCookie {
+		writeViewCookie(w, cookieModeSeries, viewMode)
+	}
 	total, err := h.Library.CountSeriesFiltered(filter)
 	if err != nil {
 		return seriesListLiveData{}, err
@@ -165,75 +181,36 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 
 	pageInfo.LiveTarget = "series-list-live"
 
-	var seriesFilter struct {
-		Query            string
-		QueryPlaceholder string
-		AriaLabel        string
-		Selects          []listFilterSelect
-		LiveTarget       string
-		FormAction       string
+	clearHref := ""
+	if filter.Active() {
+		clearHref = clearOperatorFiltersURL(r)
 	}
-	seriesFilter.Query = filter.Title
-	seriesFilter.QueryPlaceholder = "Search title"
-	seriesFilter.AriaLabel = "Series filters"
-	seriesFilter.LiveTarget = "series-list-live"
-	seriesFilter.FormAction = "/series"
-
-	if len(roots) > 1 {
-		opts := make([]listFilterOpt, 0, len(roots))
-		for _, root := range roots {
-			label := strings.TrimSpace(root.Name)
-			if label == "" {
-				label = root.Path
-			}
-			opts = append(opts, listFilterOpt{
-				Value:    strconv.FormatInt(root.ID, 10),
-				Label:    label,
-				Selected: filter.RootID == root.ID,
-			})
-		}
-		seriesFilter.Selects = append(seriesFilter.Selects, listFilterSelect{
-			Name: "root", AriaLabel: "Root folder", EmptyLabel: "All roots", Options: opts,
-		})
+	toolbar := listViewToolbar{
+		Query:            filter.Title,
+		QueryPlaceholder: searchByPlaceholder(filter.QField),
+		AriaLabel:        "Series filters",
+		QFieldOpts:       qFieldOpts(filter.QField),
+		SortOpts:         seriesSortOpts(r, filter.Sort, filter.SortDir),
+		SortDir:          library.NormalizeSortDir(filter.Sort, filter.SortDir),
+		ViewOpts:         viewOpts(r, viewMode),
+		ShowView:         true,
+		Selects:          seriesFilterSelects(h, r, filter, roots, profiles),
+		FilterActive:     filter.Active(),
+		Badges:           seriesListBadges(r, filter),
+		ClearAllHref:     clearHref,
+		LiveTarget:       "series-list-live",
+		FormAction:       "/series",
+		SeriesBulkMode:   true,
 	}
-	if len(profiles) > 0 {
-		opts := make([]listFilterOpt, 0, len(profiles))
-		for _, p := range profiles {
-			opts = append(opts, listFilterOpt{
-				Value:    strconv.FormatInt(p.ID, 10),
-				Label:    p.Name,
-				Selected: filter.QualityProfileID == p.ID,
-			})
-		}
-		seriesFilter.Selects = append(seriesFilter.Selects, listFilterSelect{
-			Name: "quality", AriaLabel: "Quality profile", EmptyLabel: "All quality", Options: opts,
-		})
-	}
-	seriesFilter.Selects = append(seriesFilter.Selects, listFilterSelect{
-		Name: "delivery", AriaLabel: "Delivery mode", EmptyLabel: "All delivery",
-		Options: []listFilterOpt{
-			{Value: library.DeliveryVideo, Label: "Video", Selected: filter.DeliveryMode == library.DeliveryVideo},
-			{Value: library.DeliveryAudio, Label: "Audio", Selected: filter.DeliveryMode == library.DeliveryAudio},
-		},
-	})
-	seriesFilter.Selects = append(seriesFilter.Selects, listFilterSelect{
-		Name: "status", AriaLabel: "Status", EmptyLabel: "Any status",
-		Options: []listFilterOpt{
-			{Value: library.SeriesListStatusMonitored, Label: "Monitored", Selected: filter.Status == library.SeriesListStatusMonitored},
-			{Value: library.SeriesListStatusUnmonitored, Label: "Unmonitored", Selected: filter.Status == library.SeriesListStatusUnmonitored},
-			{Value: library.SeriesListStatusComplete, Label: "Complete", Selected: filter.Status == library.SeriesListStatusComplete},
-			{Value: library.SeriesListStatusIncomplete, Label: "Incomplete", Selected: filter.Status == library.SeriesListStatusIncomplete},
-			{Value: library.SeriesListStatusHasErrors, Label: "Has errors", Selected: filter.Status == library.SeriesListStatusHasErrors},
-		},
-	})
 
 	return seriesListLiveData{
 		Series:       rows,
 		Page:         pageInfo,
-		SeriesFilter: seriesFilter,
+		SeriesFilter: toolbar,
 		FilterActive: filter.Active(),
 		BulkEditBusy: bulkBusy,
 		FilterTotal:  total,
+		ViewMode:     viewMode,
 	}, nil
 }
 
@@ -249,7 +226,7 @@ func (h *Handler) seriesErrorCountJSON(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) seriesListLive(w http.ResponseWriter, r *http.Request) {
-	data, err := h.loadSeriesListLive(r)
+	data, err := h.loadSeriesListLive(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -271,7 +248,7 @@ func (h *Handler) tryRenderSeriesListLive(w http.ResponseWriter, r *http.Request
 			req = clone
 		}
 	}
-	data, err := h.loadSeriesListLive(req)
+	data, err := h.loadSeriesListLive(w, req)
 	if err != nil {
 		return false
 	}

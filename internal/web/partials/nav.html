@@ -8,6 +8,11 @@
   </a>
 </li>
 <li>
+  <a href="/videos"{{if eq .Nav "videos"}} class="active"{{end}}>
+    <i data-lucide="square-play" class="{{$icon}}"></i>Videos
+  </a>
+</li>
+<li>
   <a href="/tasks"{{if eq .Nav "tasks"}} class="active"{{end}}>
     <i data-lucide="list-todo" class="{{$icon}}"></i>Tasks
     {{if .IncludeBadgeIDs}}

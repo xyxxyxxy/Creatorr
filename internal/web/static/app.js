@@ -591,7 +591,7 @@
     const input = root.querySelector("form.js-list-filters input[type='search']");
     if (!input) return;
     requestAnimationFrame(() => {
-      input.focus();
+      input.focus({ preventScroll: true });
       try {
         const len = input.value.length;
         const start = Math.min(Number(saved.start) || 0, len);
@@ -623,9 +623,26 @@
     document.body.addEventListener("change", (ev) => {
       const el = ev.target;
       if (!el) return;
+      const menu = el.closest("[data-list-filter-menu]");
+      if (menu) {
+        if (el.type === "date") {
+          const wrap = el.closest("[data-list-filter-date]");
+          if (wrap) applyDateFilter(wrap);
+        }
+        return;
+      }
       const form = el.closest("form.js-list-filters");
       if (!form) return;
       if (el.tagName === "SELECT") {
+        if (el.name === "q_field") {
+          const input = form.querySelector('input[type="search"][name="q"]');
+          const opt = el.options[el.selectedIndex];
+          if (input && opt) {
+            const ph = "Search by " + opt.text;
+            input.placeholder = ph;
+            input.setAttribute("aria-label", ph);
+          }
+        }
         submitListFilters(form);
         return;
       }
@@ -663,6 +680,53 @@
       clearListFilterSearchTimer();
       submitListFilters(form);
     });
+  }
+  function toolbarFormFrom(el) {
+    const menu = el.closest("[data-list-filter-menu]");
+    const form = el.closest("form.js-list-filters") || menu && menu.closest("form.js-list-filters");
+    return form;
+  }
+  function navigateFilterURL(form, url) {
+    const live = form && form.getAttribute("data-live-target") || form && form.closest("[data-list-filter-menu]") && form.closest("[data-list-filter-menu]").getAttribute("data-live-target");
+    if (live && window.htmx) {
+      window.htmx.ajax("GET", url, { target: "#" + live, select: "#" + live, swap: "outerHTML", push: url });
+      return;
+    }
+    window.location.assign(url);
+  }
+  function copyToolbarParams(form, u) {
+    const fd = new FormData(form);
+    ["q", "q_field", "sort", "dir", "view"].forEach((name) => {
+      const v = fd.get(name);
+      if (v == null || String(v) === "") {
+        if (name === "q" || name === "q_field") u.searchParams.delete(name);
+        return;
+      }
+      u.searchParams.set(name, String(v));
+    });
+  }
+  function applyDateFilter(wrap) {
+    const form = toolbarFormFrom(wrap);
+    if (!form) return;
+    const fromEl = wrap.querySelector('[data-filter-date="from"]');
+    const toEl = wrap.querySelector('[data-filter-date="to"]');
+    const u = new URL(window.location.href);
+    u.searchParams.delete("page");
+    u.searchParams.delete("from");
+    u.searchParams.delete("to");
+    const from = fromEl && fromEl.value ? fromEl.value.trim() : "";
+    const to = toEl && toEl.value ? toEl.value.trim() : "";
+    if (from) u.searchParams.set("from", from);
+    if (to) u.searchParams.set("to", to);
+    if (from || to) {
+      ["empty", "not_empty"].forEach((pk) => {
+        const keep = u.searchParams.getAll(pk).filter((v) => v.toLowerCase() !== "upload_date");
+        u.searchParams.delete(pk);
+        keep.forEach((v) => u.searchParams.append(pk, v));
+      });
+    }
+    copyToolbarParams(form, u);
+    navigateFilterURL(form, u.pathname + u.search);
   }
 
   // src/js/flash.js
@@ -4437,7 +4501,7 @@
     document.body.addEventListener("htmx:beforeRequest", (ev) => {
       const cfg = ev.detail && ev.detail.requestConfig;
       const target = cfg && cfg.target || ev.detail && ev.detail.target;
-      if (target && (target.id === "series-videos-live" || target.id === "series-list-live")) {
+      if (target && (target.id === "series-videos-live" || target.id === "series-list-live" || target.id === "videos-list-live")) {
         document.body.dataset.listLiveScrollY = String(window.scrollY);
         captureListFilterQFocus();
       }
@@ -4463,7 +4527,7 @@
         syncAllPackRoleJoins(root);
       }
       const y = document.body.dataset.listLiveScrollY;
-      if (y != null && root && (root.id === "series-videos-live" || root.id === "series-list-live")) {
+      if (y != null && root && (root.id === "series-videos-live" || root.id === "series-list-live" || root.id === "videos-list-live")) {
         delete document.body.dataset.listLiveScrollY;
         const top = Number(y);
         if (Number.isFinite(top)) requestAnimationFrame(() => window.scrollTo(0, top));
@@ -4541,8 +4605,9 @@
     const modeBtn = live.querySelector("[data-series-bulk-mode]");
     if (modeBtn) {
       modeBtn.setAttribute("aria-pressed", seriesBulkMode ? "true" : "false");
-      modeBtn.classList.toggle("btn-primary", seriesBulkMode);
-      modeBtn.classList.toggle("btn-active", seriesBulkMode);
+      modeBtn.classList.remove("btn-primary", "btn-active");
+      const wrap = modeBtn.closest(".js-list-toolbar-dd");
+      if (wrap) wrap.classList.toggle("input-primary", seriesBulkMode);
       modeBtn.setAttribute("data-tip", seriesBulkMode ? "Exit multi-select" : "Multi-select");
       modeBtn.setAttribute("aria-label", seriesBulkMode ? "Exit multi-select" : "Multi-select");
     }
@@ -4550,7 +4615,7 @@
       wrap.classList.toggle("hidden", !seriesBulkMode);
     });
     live.querySelectorAll("[data-series-monitor-wrap]").forEach((wrap) => {
-      wrap.classList.toggle("hidden", false);
+      wrap.classList.remove("hidden");
       const disabled = seriesBulkMode || seriesBulkBusy();
       wrap.querySelectorAll("button, input, .monitor-toggle").forEach((el) => {
         if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement) {
@@ -4563,24 +4628,34 @@
       wrap.classList.toggle("pointer-events-none", disabled);
       wrap.classList.toggle("opacity-40", disabled);
     });
-    live.querySelectorAll("#series-list-rows > .list-row[data-series-id]").forEach((row) => {
+    live.querySelectorAll("#series-list-rows > [data-series-id]").forEach((row) => {
       row.classList.toggle("cursor-pointer", seriesBulkMode);
       const id = row.getAttribute("data-series-id");
-      row.classList.toggle("bg-base-200", seriesBulkMode && seriesBulkSelected.has(id));
-      row.classList.toggle("rounded-none", seriesBulkMode && seriesBulkSelected.has(id));
-      if (seriesBulkMode) {
-        row.style.setProperty("--list-grid-cols", "max-content minmax(0, auto) 1fr max-content");
+      const selected = seriesBulkMode && seriesBulkSelected.has(id);
+      row.classList.toggle("bg-base-200", selected);
+      if (row.classList.contains("list-row")) {
+        row.classList.toggle("rounded-none", selected);
+        if (seriesBulkMode) {
+          row.style.setProperty("--list-grid-cols", "max-content minmax(0, auto) 1fr max-content");
+        } else {
+          row.style.setProperty("--list-grid-cols", "minmax(0, auto) 1fr max-content");
+        }
+        row.querySelectorAll(".list-col-grow a[href]").forEach((a) => {
+          a.classList.toggle("link", !seriesBulkMode);
+          a.classList.toggle("link-hover", !seriesBulkMode);
+        });
       } else {
-        row.style.setProperty("--list-grid-cols", "minmax(0, auto) 1fr max-content");
+        row.querySelectorAll(".card-body a[href]").forEach((a) => {
+          a.classList.toggle("link", !seriesBulkMode);
+          a.classList.toggle("link-hover", !seriesBulkMode);
+        });
       }
-      row.querySelectorAll(".list-col-grow a[href]").forEach((a) => {
-        a.classList.toggle("link", !seriesBulkMode);
-        a.classList.toggle("link-hover", !seriesBulkMode);
-      });
     });
     const bar = live.querySelector("[data-series-bulk-bar]");
     if (bar) {
       bar.classList.toggle("hidden", !seriesBulkMode);
+      const wrap = document.getElementById("series-bulk-bar-wrap");
+      if (wrap) wrap.classList.toggle("hidden", !seriesBulkMode);
       const n = seriesBulkSelected.size;
       const m = seriesBulkFilterTotal();
       const countEl = bar.querySelector("[data-series-bulk-count]");
@@ -4839,8 +4914,9 @@
         return;
       }
       if (seriesBulkMode) {
-        const row = ev.target.closest("#series-list-rows > .list-row[data-series-id]");
-        if (row && !ev.target.closest(".js-series-select, [data-series-select-wrap]")) {
+        //! pin: thumb+list bulk click #series-list-rows > [data-series-id]
+        const row = ev.target.closest("#series-list-rows > [data-series-id]");
+        if (row && !ev.target.closest(".js-series-select, [data-series-select-wrap], [data-series-monitor-wrap]")) {
           ev.preventDefault();
           const id = row.getAttribute("data-series-id");
           if (id) toggleSeriesBulkID(id);
@@ -4948,8 +5024,9 @@
     const modeBtn = live.querySelector("[data-video-bulk-mode]");
     if (modeBtn) {
       modeBtn.setAttribute("aria-pressed", videoBulkMode ? "true" : "false");
-      modeBtn.classList.toggle("btn-primary", videoBulkMode);
-      modeBtn.classList.toggle("btn-active", videoBulkMode);
+      modeBtn.classList.remove("btn-primary", "btn-active");
+      const wrap = modeBtn.closest(".js-list-toolbar-dd");
+      if (wrap) wrap.classList.toggle("input-primary", videoBulkMode);
       modeBtn.setAttribute("data-tip", videoBulkMode ? "Exit multi-select" : "Multi-select");
       modeBtn.setAttribute("aria-label", videoBulkMode ? "Exit multi-select" : "Multi-select");
     }
@@ -4988,20 +5065,28 @@
         }
       });
     });
-    live.querySelectorAll("#series-videos-rows > .list-row[data-video-id]").forEach((row) => {
+    live.querySelectorAll("#series-videos-rows > [data-video-id]").forEach((row) => {
       row.classList.toggle("cursor-pointer", videoBulkMode);
       const id = row.getAttribute("data-video-id");
-      row.classList.toggle("bg-base-200", videoBulkMode && videoBulkSelected.has(id));
-      row.classList.toggle("rounded-none", videoBulkMode && videoBulkSelected.has(id));
-      if (videoBulkMode) {
-        row.style.setProperty("--list-grid-cols", "max-content minmax(0, auto) 1fr max-content");
+      const selected = videoBulkMode && videoBulkSelected.has(id);
+      row.classList.toggle("bg-base-200", selected);
+      if (row.classList.contains("list-row")) {
+        row.classList.toggle("rounded-none", selected);
+        if (videoBulkMode) {
+          row.style.setProperty("--list-grid-cols", "max-content minmax(0, auto) 1fr max-content");
+        } else {
+          row.style.setProperty("--list-grid-cols", "minmax(0, auto) 1fr max-content");
+        }
+        row.querySelectorAll(".list-col-grow a[href]").forEach((a) => {
+          a.classList.toggle("link", !videoBulkMode);
+          a.classList.toggle("link-hover", !videoBulkMode);
+        });
       } else {
-        row.style.setProperty("--list-grid-cols", "minmax(0, auto) 1fr max-content");
+        row.querySelectorAll(".card-body a[href]").forEach((a) => {
+          a.classList.toggle("link", !videoBulkMode);
+          a.classList.toggle("link-hover", !videoBulkMode);
+        });
       }
-      row.querySelectorAll(".list-col-grow a[href]").forEach((a) => {
-        a.classList.toggle("link", !videoBulkMode);
-        a.classList.toggle("link-hover", !videoBulkMode);
-      });
     });
     const bar = live.querySelector("[data-video-bulk-bar]");
     if (bar) {
@@ -5183,7 +5268,8 @@
         return;
       }
       if (videoBulkMode) {
-        const row = ev.target.closest("#series-videos-rows > .list-row[data-video-id]");
+        //! pin: thumb+list bulk click #series-videos-rows > [data-video-id]
+        const row = ev.target.closest("#series-videos-rows > [data-video-id]");
         if (row && !ev.target.closest(".js-video-select, [data-video-select-wrap], [data-video-row-actions]")) {
           ev.preventDefault();
           const id = row.getAttribute("data-video-id");

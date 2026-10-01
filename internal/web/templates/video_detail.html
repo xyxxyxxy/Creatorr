@@ -124,7 +124,10 @@
 <img class="w-full aspect-video object-cover rounded-box border border-base-300 bg-base-200" src="{{.ThumbURL}}" alt="" />
 <p class="text-sm opacity-60">No video</p>
 {{else}}
-{{template "list_empty" "No video"}}
+<div class="w-full aspect-video rounded-box border border-base-300 bg-base-200 flex items-center justify-center" role="img" aria-label="No video">
+  <i data-lucide="square-play" class="thumb-placeholder-icon opacity-40" aria-hidden="true"></i>
+</div>
+<p class="text-sm opacity-60">No video</p>
 {{end}}
 {{if or .MediaResolution .MediaFPS .MediaRemux .MediaDuration}}
 <div class="flex items-baseline justify-between gap-3 text-sm tabular-nums">

@@ -42,26 +42,23 @@
 {{end}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Recent additions" "icon" "square-play" "help" "Latest downloaded videos across all series.")}}
+{{template "list_header" (dict "level" "section" "title" "Recent additions" "icon" "square-play" "help" "Latest downloaded videos across all series (acquired order). Browse and filter on Videos.")}}
 {{if not .RecentVideos}}
 {{template "list_empty" "No downloaded videos yet."}}
 {{else}}
-<ul class="list bg-base-100 rounded-box border border-base-300">
+<ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" id="overview-recent-thumbs">
   {{range .RecentVideos}}
-  {{template "video_list_row" (dict
+  {{template "video_thumb_card" (dict
     "ID" .ID
     "Title" .Title
     "Status" .Status
-    "StatusLabel" .StatusLabel
     "UploadDate" .UploadDate
-    "SizeLabel" .SizeLabel
     "ResolutionLabel" .ResolutionLabel
     "DurationLabel" .DurationLabel
-    "MediaTypeLabel" .MediaTypeLabel
     "ThumbURL" .ThumbURL
     "SeriesID" .SeriesID
     "SeriesTitle" (index $.SeriesTitles .SeriesID)
-    "PackRoleBadge" .PackRoleBadge
+    "ShowSeries" true
     "NoActions" true
   )}}
   {{end}}

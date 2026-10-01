@@ -44,7 +44,7 @@
             <span id="notify-badge" class="badge badge-error badge-xs absolute top-1 right-1 hidden">0</span>
           </div>
           <ul tabindex="0" id="notify-menu"
-              class="dropdown-content menu menu-sm bg-base-100 rounded-box z-[1300] w-80 max-w-[calc(100vw-2rem)] p-2 border border-base-300 max-h-[min(24rem,70vh)] overflow-y-auto">
+              class="dropdown-content menu bg-base-100 rounded-box z-[1300] w-80 max-w-[calc(100vw-2rem)] p-2 border border-base-300 max-h-[min(24rem,70vh)] overflow-y-auto">
             <li id="notify-menu-mark-all">
               <button type="button" id="notify-mark-all-read" class="justify-center">
                 Mark all as read
@@ -62,7 +62,7 @@
           <div tabindex="0" role="button" class="btn btn-ghost btn-square" aria-label="Account" aria-haspopup="menu">
             <i data-lucide="user" class="size-5"></i>
           </div>
-          <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-100 rounded-box z-50 w-52 p-2 border border-base-300">
+          <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-50 w-52 p-2 border border-base-300">
             {{if .AuthUsername}}
             <li class="menu-title"><span>{{.AuthUsername}}</span></li>
             {{end}}

@@ -55,6 +55,8 @@ func pageIcon(nav string) string {
 		return "layout-dashboard"
 	case "series":
 		return "tv"
+	case "videos":
+		return "square-play"
 	case "import":
 		return "folder-input"
 	case "tasks":
@@ -418,7 +420,7 @@ func hxRedirect(w http.ResponseWriter, url string) {
 }
 
 // finishVideoAction redirects after a video action, or when HTMX targeted
-// #series-videos-live, returns that partial (no full-page reload).
+// a video list live region, returns that partial (no full-page reload).
 func (h *Handler) finishVideoAction(w http.ResponseWriter, r *http.Request, sid int64, redir string, err error) {
 	if redir == "" {
 		redir = fmt.Sprintf("/series/%d", sid)
@@ -426,7 +428,7 @@ func (h *Handler) finishVideoAction(w http.ResponseWriter, r *http.Request, sid 
 	if err != nil {
 		errURL := appendQuery(redir, "err="+urlQuery(err.Error()))
 		if hxRequest(r) {
-			if h.tryRenderSeriesVideosLive(w, r, sid) {
+			if h.tryRenderVideoListLive(w, r, sid) {
 				return
 			}
 			hxRedirect(w, errURL)
@@ -436,13 +438,26 @@ func (h *Handler) finishVideoAction(w http.ResponseWriter, r *http.Request, sid 
 		return
 	}
 	if hxRequest(r) {
-		if h.tryRenderSeriesVideosLive(w, r, sid) {
+		if h.tryRenderVideoListLive(w, r, sid) {
 			return
 		}
 		hxRedirect(w, redir)
 		return
 	}
 	http.Redirect(w, r, redir, http.StatusSeeOther)
+}
+
+// tryRenderVideoListLive renders series-videos-live or videos-list-live for HTMX.
+func (h *Handler) tryRenderVideoListLive(w http.ResponseWriter, r *http.Request, sid int64) bool {
+	target := r.Header.Get("HX-Target")
+	switch target {
+	case "series-videos-live":
+		return h.tryRenderSeriesVideosLive(w, r, sid)
+	case "videos-list-live":
+		return h.tryRenderVideosLive(w, r)
+	default:
+		return false
+	}
 }
 
 // tryRenderSeriesVideosLive renders the series video list partial when the
@@ -470,10 +485,31 @@ func (h *Handler) tryRenderSeriesVideosLive(w http.ResponseWriter, r *http.Reque
 	activeTasks, _ := h.Queue.ListActiveForSeries(sid)
 	seriesTasks, _, byVideo := seriesActivityMaps(activeTasks)
 	h.mergeFileDeleteForSeries(sid, &seriesTasks, byVideo)
-	data, err := h.loadSeriesVideosLive(req, ser, byVideo)
+	data, err := h.loadSeriesVideosLive(w, req, ser, byVideo)
 	if err != nil {
 		return false
 	}
 	render(w, "series_videos_live", data)
+	return true
+}
+
+func (h *Handler) tryRenderVideosLive(w http.ResponseWriter, r *http.Request) bool {
+	if r.Header.Get("HX-Target") != "videos-list-live" {
+		return false
+	}
+	req := r
+	if cur := strings.TrimSpace(r.Header.Get("HX-Current-URL")); cur != "" {
+		if u, perr := url.Parse(cur); perr == nil && u != nil {
+			clone := r.Clone(r.Context())
+			clone.URL = u
+			clone.RequestURI = u.RequestURI()
+			req = clone
+		}
+	}
+	data, err := h.loadVideosLive(w, req)
+	if err != nil {
+		return false
+	}
+	render(w, "videos_live", data)
 	return true
 }

@@ -2,9 +2,9 @@
 <div id="series-videos-live" {{if .OOB}}hx-swap-oob="true"{{end}}
      data-filter-total="{{.FilterTotal}}"
      data-series-id="{{.SeriesID}}"
-     data-download-error-count="{{.DownloadErrorCount}}"
      data-bulk-busy="{{if .BulkEditBusy}}1{{else}}0{{end}}"
-     data-bulk-mode="0">
+     data-bulk-mode="0"
+     data-view-mode="{{.ViewMode}}">
 {{template "list_panel"}}
 {{template "list_header" (dict
   "level" "section"
@@ -18,24 +18,43 @@
   "WantedCount" .WantedCount
   "Monitored" .Monitored
 )}}
-{{template "list_filters" (dict
-  "Query" .VideoFilter.Query
-  "QueryPlaceholder" .VideoFilter.QueryPlaceholder
-  "AriaLabel" .VideoFilter.AriaLabel
-  "Selects" .VideoFilter.Selects
-  "LiveTarget" .VideoFilter.LiveTarget
-  "FormAction" .VideoFilter.FormAction
-  "VideoBulkMode" true
-)}}
+{{template "list_view_toolbar" .VideoFilter}}
 {{if not .Videos}}
 {{if .FilterActive}}
 {{template "list_empty" "No videos match the filters."}}
 {{else}}
 {{template "list_empty" "No videos indexed yet. Run a scan."}}
 {{end}}
+{{else if eq .ViewMode "thumbs"}}
+<ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" id="series-videos-rows">
+  {{range .Videos}}
+  {{template "video_thumb_card" (dict
+    "ID" .ID
+    "Title" .Title
+    "Status" .Status
+    "UploadDate" .UploadDate
+    "ResolutionLabel" .ResolutionLabel
+    "DurationLabel" .DurationLabel
+    "ThumbURL" .ThumbURL
+    "TaskInd" .TaskInd
+    "DownloadRunning" .DownloadRunning
+    "DeliveryQueued" .DeliveryQueued
+    "Deleting" .Deleting
+    "DomainActive" .DomainActive
+    "DomainDisabledTitle" .DomainDisabledTitle
+    "SeriesID" $.SeriesID
+    "ShowSeries" false
+    "KeepScroll" true
+    "LiveSwap" true
+    "LiveTarget" "series-videos-live"
+    "Select" true
+    "BulkEditBusy" $.BulkEditBusy
+  )}}
+  {{end}}
+</ul>
+{{template "pagination" .VideosPage}}
 {{else}}
 <ul class="list bg-base-100 rounded-box border border-base-300" id="series-videos-rows">
-  {{/* Bulk bar: checkbox+count | grow | actions. Rows keep thumb column for checkbox alignment. */}}
   <li id="video-bulk-bar"
       class="list-row py-2 hidden"
       data-video-bulk-bar
@@ -75,9 +94,6 @@
           <i data-lucide="file-pen" class="size-4"></i>
           Edit metadata
         </button>
-        <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-video-bulk-clear-errors data-tip="Clear selected" aria-label="Clear selected" disabled>
-          <i data-lucide="badge-x" class="size-4"></i>
-        </button>
         <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-video-bulk-want data-tip="Want" aria-label="Want" disabled>
           <i data-lucide="eye" class="size-4"></i>
         </button>
@@ -98,7 +114,6 @@
     "ID" .ID
     "Title" .Title
     "Status" .Status
-    "StatusLabel" .StatusLabel
     "UploadDate" .UploadDate
     "SizeLabel" .SizeLabel
     "ResolutionLabel" .ResolutionLabel
@@ -115,6 +130,7 @@
     "PackRoleBadge" .PackRoleBadge
     "KeepScroll" true
     "LiveSwap" true
+    "LiveTarget" "series-videos-live"
     "FormClass" "inline"
     "Select" true
     "BulkEditBusy" $.BulkEditBusy

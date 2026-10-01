@@ -67,21 +67,30 @@ type Video struct {
 	Notes                         string // operator-only; not NFO
 }
 
-// VideoListFilter scopes series video lists by title, status, source, media type,
-// upload calendar year, special kind, and upload calendar day (UTC).
+// VideoListFilter scopes video lists by text, catalog metadata, status, source,
+// dates, presence (empty/not_empty), and optional series (library-wide lists).
 type VideoListFilter struct {
-	Title     string   // case-insensitive substring; empty = any title
+	Title     string   // case-insensitive substring against QField
+	QField    string   // title|sorttitle|originaltitle|plot|tagline|notes
 	Statuses  []string // empty = all statuses
 	SourceID  int64    // 0 = all sources; VideoSourceImport = source_id IS NULL
+	SeriesID  int64    // 0 = any; used when listing with seriesID==0 (library-wide)
 	MediaType string   // non-empty exact match; empty query = all
-	Year      int      // UTC calendar year of upload_date; 0 = any; VideoYearUnknown = undated
+	Year      int      // UTC calendar year of upload_date; 0 = any
 	PackRole  string   // empty = any; episode = regular; special = any special; else exact special_feature
 	FromDay   string   // YYYY-MM-DD inclusive; empty = no lower bound
 	ToDay     string   // YYYY-MM-DD inclusive; empty = no upper bound
+	Studio    string
+	Country   string
+	MPAA      string
+	Genres    []string
+	Tags      []string
+	Actors    []string
+	Empty     []string // presence field ids
+	NotEmpty  []string
+	Sort      string // upload|added|acquired|title; empty = upload
+	SortDir   string // asc|desc; empty = DefaultSortDir(Sort)
 }
-
-// VideoYearUnknown selects videos with missing/empty upload_date (?year=unknown).
-const VideoYearUnknown = -1
 
 // VideoSourceImport filters videos with source_id IS NULL (?source=import).
 // Covers Import-created rows and Add-video indexed rows until they gain a feed source_id.
@@ -93,15 +102,25 @@ const VideoSourceImportQuery = "import"
 // VideoPackRoleAnySpecial is the list-filter value for every non-regular special_feature.
 const VideoPackRoleAnySpecial = "special"
 
-// Active reports whether any filter constraint is set.
+// Active reports whether any filter constraint is set (not sort).
 func (f VideoListFilter) Active() bool {
-	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID != 0 || strings.TrimSpace(f.MediaType) != "" || f.Year != 0 || strings.TrimSpace(f.PackRole) != "" || f.FromDay != "" || f.ToDay != ""
+	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID != 0 || f.SeriesID > 0 ||
+		strings.TrimSpace(f.MediaType) != "" || f.Year != 0 || strings.TrimSpace(f.PackRole) != "" ||
+		f.FromDay != "" || f.ToDay != "" ||
+		strings.TrimSpace(f.Studio) != "" || strings.TrimSpace(f.Country) != "" || strings.TrimSpace(f.MPAA) != "" ||
+		len(f.Genres) > 0 || len(f.Tags) > 0 || len(f.Actors) > 0 ||
+		len(f.Empty) > 0 || len(f.NotEmpty) > 0
 }
 
 func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter) {
 	if title := strings.TrimSpace(f.Title); title != "" {
-		b.WriteString(` AND title LIKE ? ESCAPE '\' COLLATE NOCASE`)
+		col := videoTextColumn(f.QField)
+		b.WriteString(` AND ` + col + ` LIKE ? ESCAPE '\' COLLATE NOCASE`)
 		*args = append(*args, likeContainsPattern(title))
+	}
+	if f.SeriesID > 0 {
+		b.WriteString(` AND series_id = ?`)
+		*args = append(*args, f.SeriesID)
 	}
 	if len(f.Statuses) > 0 {
 		b.WriteString(` AND status IN (` + sqlIntPlaceholders(len(f.Statuses)) + `)`)
@@ -120,9 +139,23 @@ func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter
 		b.WriteString(` AND media_type = ? AND media_type != ''`)
 		*args = append(*args, mt)
 	}
+	if studio := strings.TrimSpace(f.Studio); studio != "" {
+		b.WriteString(` AND studio = ? COLLATE NOCASE`)
+		*args = append(*args, studio)
+	}
+	if country := strings.TrimSpace(f.Country); country != "" {
+		b.WriteString(` AND country = ? COLLATE NOCASE`)
+		*args = append(*args, country)
+	}
+	if mpaa := strings.TrimSpace(f.MPAA); mpaa != "" {
+		b.WriteString(` AND mpaa = ? COLLATE NOCASE`)
+		*args = append(*args, mpaa)
+	}
+	appendJSONStringListMatch(b, args, "genres", f.Genres)
+	appendJSONStringListMatch(b, args, "tags", f.Tags)
+	appendJSONActorNameMatch(b, args, "actors", f.Actors)
+	appendVideoPresenceSQL(b, f.Empty, f.NotEmpty)
 	switch {
-	case f.Year == VideoYearUnknown:
-		b.WriteString(` AND (upload_date IS NULL OR trim(upload_date) = '')`)
 	case f.Year > 0:
 		// UTC calendar year of upload_date (same as year-season / {year}).
 		b.WriteString(` AND upload_date IS NOT NULL AND trim(upload_date) != ''`)
@@ -243,7 +276,9 @@ func (s *Store) ListVideosPage(seriesID int64, limit, offset int) ([]Video, erro
 	return s.ListVideosPageFiltered(seriesID, VideoListFilter{}, limit, offset)
 }
 
-// ListVideosPageFiltered returns one page of videos for a series with optional title/status/source/date filters.
+// ListVideosPageFiltered returns one page of videos.
+// seriesID > 0 scopes to that series; seriesID == 0 lists the whole library
+// (optional filter.SeriesID still applies).
 func (s *Store) ListVideosPageFiltered(seriesID int64, filter VideoListFilter, limit, offset int) ([]Video, error) {
 	if limit <= 0 {
 		limit = 50
@@ -254,10 +289,14 @@ func (s *Store) ListVideosPageFiltered(seriesID int64, filter VideoListFilter, l
 	var b strings.Builder
 	b.WriteString(`
 		SELECT ` + videoSelectCols + `
-		FROM videos WHERE series_id = ?`)
-	args := []any{seriesID}
+		FROM videos WHERE 1=1`)
+	args := []any{}
+	if seriesID > 0 {
+		b.WriteString(` AND series_id = ?`)
+		args = append(args, seriesID)
+	}
 	appendVideoListFilterSQL(&b, &args, filter)
-	b.WriteString(` ORDER BY ` + videoListOrderBy + ` LIMIT ? OFFSET ?`)
+	b.WriteString(` ORDER BY ` + videoOrderByClause(filter.Sort, filter.SortDir) + ` LIMIT ? OFFSET ?`)
 	args = append(args, limit, offset)
 	rows, err := s.DB.SQL.Query(b.String(), args...)
 	if err != nil {
@@ -396,24 +435,35 @@ func (s *Store) anyVideo() (bool, error) {
 	return n > 0, err
 }
 
-// CountVideosFiltered returns how many videos match the series list filter.
+// CountVideosFiltered returns how many videos match the list filter.
+// seriesID > 0 scopes to that series; seriesID == 0 is library-wide.
 func (s *Store) CountVideosFiltered(seriesID int64, filter VideoListFilter) (int, error) {
 	var b strings.Builder
-	b.WriteString(`SELECT COUNT(*) FROM videos WHERE series_id = ?`)
-	args := []any{seriesID}
+	b.WriteString(`SELECT COUNT(*) FROM videos WHERE 1=1`)
+	args := []any{}
+	if seriesID > 0 {
+		b.WriteString(` AND series_id = ?`)
+		args = append(args, seriesID)
+	}
 	appendVideoListFilterSQL(&b, &args, filter)
 	var n int
 	err := s.DB.SQL.QueryRow(b.String(), args...).Scan(&n)
 	return n, err
 }
 
-// DistinctVideoStatuses returns statuses present on a series (sorted), for filter chips.
+// DistinctVideoStatuses returns statuses present (sorted). seriesID 0 = library-wide.
 func (s *Store) DistinctVideoStatuses(seriesID int64) ([]string, error) {
-	rows, err := s.DB.SQL.Query(`
+	var b strings.Builder
+	b.WriteString(`
 		SELECT DISTINCT status FROM videos
-		WHERE series_id = ? AND status IS NOT NULL AND status != ''
-		ORDER BY status
-	`, seriesID)
+		WHERE status IS NOT NULL AND status != ''`)
+	args := []any{}
+	if seriesID > 0 {
+		b.WriteString(` AND series_id = ?`)
+		args = append(args, seriesID)
+	}
+	b.WriteString(` ORDER BY status`)
+	rows, err := s.DB.SQL.Query(b.String(), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -429,40 +479,35 @@ func (s *Store) DistinctVideoStatuses(seriesID int64) ([]string, error) {
 	return out, rows.Err()
 }
 
-// DistinctVideoYears returns UTC calendar years present on a series upload_date
-// (newest first) and whether any video has a missing/empty upload_date.
-func (s *Store) DistinctVideoYears(seriesID int64) (years []int, unknown bool, err error) {
-	var nUnknown int
-	err = s.DB.SQL.QueryRow(`
-		SELECT COUNT(*) FROM videos
-		WHERE series_id = ?
-		  AND (upload_date IS NULL OR trim(upload_date) = '')
-	`, seriesID).Scan(&nUnknown)
-	if err != nil {
-		return nil, false, err
-	}
-	unknown = nUnknown > 0
-	rows, err := s.DB.SQL.Query(`
+// DistinctVideoYears returns UTC calendar years present on upload_date (newest first).
+// seriesID 0 = library-wide. Undated videos use presence empty=upload_date, not a year slot.
+func (s *Store) DistinctVideoYears(seriesID int64) (years []int, err error) {
+	var b strings.Builder
+	b.WriteString(`
 		SELECT DISTINCT CAST(strftime('%Y', upload_date) AS INTEGER) AS y
 		FROM videos
-		WHERE series_id = ?
-		  AND upload_date IS NOT NULL AND trim(upload_date) != ''
-		ORDER BY y DESC
-	`, seriesID)
+		WHERE upload_date IS NOT NULL AND trim(upload_date) != ''`)
+	args := []any{}
+	if seriesID > 0 {
+		b.WriteString(` AND series_id = ?`)
+		args = append(args, seriesID)
+	}
+	b.WriteString(` ORDER BY y DESC`)
+	rows, err := s.DB.SQL.Query(b.String(), args...)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var y int
 		if err := rows.Scan(&y); err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		if y > 0 {
 			years = append(years, y)
 		}
 	}
-	return years, unknown, rows.Err()
+	return years, rows.Err()
 }
 
 // CountVideosWithNullSource returns how many videos on the series have source_id IS NULL.

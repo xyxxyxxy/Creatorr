@@ -1,5 +1,7 @@
 // List filters (js-list-filters): select/date → submit now; search → debounce after
 // typing stops, and flush on blur. Keep caret in search across HTMX live swaps.
+// Filter menu: date change applies immediately (no Apply button). Multi value
+// rows are plain links (same as single-select); server Href toggles the query.
 let listFilterQFocus = null;
 
 let listFilterSearchTimer = null;
@@ -29,7 +31,8 @@ export function restoreListFilterQFocus(root) {
   const input = root.querySelector("form.js-list-filters input[type='search']");
   if (!input) return;
   requestAnimationFrame(() => {
-    input.focus();
+    // preventScroll: focus must not yank the page (HTMX already restored scrollY).
+    input.focus({ preventScroll: true });
     try {
       const len = input.value.length;
       const start = Math.min(Number(saved.start) || 0, len);
@@ -66,9 +69,28 @@ export function bootListFilter() {
   document.body.addEventListener("change", (ev) => {
     const el = ev.target;
     if (!el) return;
+
+    const menu = el.closest("[data-list-filter-menu]");
+    if (menu) {
+      if (el.type === "date") {
+        const wrap = el.closest("[data-list-filter-date]");
+        if (wrap) applyDateFilter(wrap);
+      }
+      return;
+    }
+
     const form = el.closest("form.js-list-filters");
     if (!form) return;
     if (el.tagName === "SELECT") {
+      if (el.name === "q_field") {
+        const input = form.querySelector('input[type="search"][name="q"]');
+        const opt = el.options[el.selectedIndex];
+        if (input && opt) {
+          const ph = "Search by " + opt.text;
+          input.placeholder = ph;
+          input.setAttribute("aria-label", ph);
+        }
+      }
       submitListFilters(form);
       return;
     }
@@ -110,4 +132,57 @@ export function bootListFilter() {
     clearListFilterSearchTimer();
     submitListFilters(form);
   });
+}
+
+function toolbarFormFrom(el) {
+  const menu = el.closest("[data-list-filter-menu]");
+  const form = el.closest("form.js-list-filters") ||
+    (menu && menu.closest("form.js-list-filters"));
+  return form;
+}
+
+function navigateFilterURL(form, url) {
+  const live = (form && form.getAttribute("data-live-target")) ||
+    (form && form.closest("[data-list-filter-menu]") && form.closest("[data-list-filter-menu]").getAttribute("data-live-target"));
+  if (live && window.htmx) {
+    window.htmx.ajax("GET", url, { target: "#" + live, select: "#" + live, swap: "outerHTML", push: url });
+    return;
+  }
+  window.location.assign(url);
+}
+
+function copyToolbarParams(form, u) {
+  const fd = new FormData(form);
+  ["q", "q_field", "sort", "dir", "view"].forEach((name) => {
+    const v = fd.get(name);
+    if (v == null || String(v) === "") {
+      if (name === "q" || name === "q_field") u.searchParams.delete(name);
+      return;
+    }
+    u.searchParams.set(name, String(v));
+  });
+}
+
+function applyDateFilter(wrap) {
+  const form = toolbarFormFrom(wrap);
+  if (!form) return;
+  const fromEl = wrap.querySelector('[data-filter-date="from"]');
+  const toEl = wrap.querySelector('[data-filter-date="to"]');
+  const u = new URL(window.location.href);
+  u.searchParams.delete("page");
+  u.searchParams.delete("from");
+  u.searchParams.delete("to");
+  const from = fromEl && fromEl.value ? fromEl.value.trim() : "";
+  const to = toEl && toEl.value ? toEl.value.trim() : "";
+  if (from) u.searchParams.set("from", from);
+  if (to) u.searchParams.set("to", to);
+  if (from || to) {
+    ["empty", "not_empty"].forEach((pk) => {
+      const keep = u.searchParams.getAll(pk).filter((v) => v.toLowerCase() !== "upload_date");
+      u.searchParams.delete(pk);
+      keep.forEach((v) => u.searchParams.append(pk, v));
+    });
+  }
+  copyToolbarParams(form, u);
+  navigateFilterURL(form, u.pathname + u.search);
 }

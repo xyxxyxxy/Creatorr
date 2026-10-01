@@ -65,8 +65,9 @@ function syncVideoBulkUI() {
   const modeBtn = live.querySelector("[data-video-bulk-mode]");
   if (modeBtn) {
     modeBtn.setAttribute("aria-pressed", videoBulkMode ? "true" : "false");
-    modeBtn.classList.toggle("btn-primary", videoBulkMode);
-    modeBtn.classList.toggle("btn-active", videoBulkMode);
+    modeBtn.classList.remove("btn-primary", "btn-active");
+    const wrap = modeBtn.closest(".js-list-toolbar-dd");
+    if (wrap) wrap.classList.toggle("input-primary", videoBulkMode);
     modeBtn.setAttribute("data-tip", videoBulkMode ? "Exit multi-select" : "Multi-select");
     modeBtn.setAttribute("aria-label", videoBulkMode ? "Exit multi-select" : "Multi-select");
   }
@@ -106,20 +107,28 @@ function syncVideoBulkUI() {
       }
     });
   });
-  live.querySelectorAll("#series-videos-rows > .list-row[data-video-id]").forEach((row) => {
+  live.querySelectorAll("#series-videos-rows > [data-video-id]").forEach((row) => {
     row.classList.toggle("cursor-pointer", videoBulkMode);
     const id = row.getAttribute("data-video-id");
-    row.classList.toggle("bg-base-200", videoBulkMode && videoBulkSelected.has(id));
-    row.classList.toggle("rounded-none", videoBulkMode && videoBulkSelected.has(id));
-    if (videoBulkMode) {
-      row.style.setProperty("--list-grid-cols", "max-content minmax(0, auto) 1fr max-content");
+    const selected = videoBulkMode && videoBulkSelected.has(id);
+    row.classList.toggle("bg-base-200", selected);
+    if (row.classList.contains("list-row")) {
+      row.classList.toggle("rounded-none", selected);
+      if (videoBulkMode) {
+        row.style.setProperty("--list-grid-cols", "max-content minmax(0, auto) 1fr max-content");
+      } else {
+        row.style.setProperty("--list-grid-cols", "minmax(0, auto) 1fr max-content");
+      }
+      row.querySelectorAll(".list-col-grow a[href]").forEach((a) => {
+        a.classList.toggle("link", !videoBulkMode);
+        a.classList.toggle("link-hover", !videoBulkMode);
+      });
     } else {
-      row.style.setProperty("--list-grid-cols", "minmax(0, auto) 1fr max-content");
+      row.querySelectorAll(".card-body a[href]").forEach((a) => {
+        a.classList.toggle("link", !videoBulkMode);
+        a.classList.toggle("link-hover", !videoBulkMode);
+      });
     }
-    row.querySelectorAll(".list-col-grow a[href]").forEach((a) => {
-      a.classList.toggle("link", !videoBulkMode);
-      a.classList.toggle("link-hover", !videoBulkMode);
-    });
   });
   const bar = live.querySelector("[data-video-bulk-bar]");
   if (bar) {
@@ -314,8 +323,12 @@ export function bootVideoBulk() {
       return;
     }
     if (videoBulkMode) {
-      const row = ev.target.closest("#series-videos-rows > .list-row[data-video-id]");
-      if (row && !ev.target.closest(".js-video-select, [data-video-select-wrap], [data-video-row-actions]")) {
+      //! pin: thumb+list bulk click #series-videos-rows > [data-video-id]
+      const row = ev.target.closest("#series-videos-rows > [data-video-id]");
+      if (
+        row &&
+        !ev.target.closest(".js-video-select, [data-video-select-wrap], [data-video-row-actions]")
+      ) {
         ev.preventDefault();
         const id = row.getAttribute("data-video-id");
         if (id) toggleVideoBulkID(id);

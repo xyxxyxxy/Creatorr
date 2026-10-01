@@ -21,24 +21,28 @@
   <input type="hidden" name="{{.Name}}" value="{{.Value}}" />
   {{end}}
   {{if .SeriesBulkMode}}
-  <button type="button"
-          class="btn join-item btn-square shrink-0 tooltip tooltip-bottom"
-          data-series-bulk-mode
-          aria-pressed="false"
-          aria-label="Multi-select"
-          data-tip="Multi-select">
-    <i data-lucide="list-checks" class="size-4"></i>
-  </button>
+  <div class="input join-item shrink-0 js-list-toolbar-dd">
+    <button type="button"
+            class="js-list-toolbar-dd-btn tooltip tooltip-top"
+            data-series-bulk-mode
+            aria-pressed="false"
+            aria-label="Multi-select"
+            data-tip="Multi-select">
+      <i data-lucide="list-checks" class="size-4" aria-hidden="true"></i>
+    </button>
+  </div>
   {{end}}
   {{if .VideoBulkMode}}
-  <button type="button"
-          class="btn join-item btn-square shrink-0 tooltip tooltip-bottom"
-          data-video-bulk-mode
-          aria-pressed="false"
-          aria-label="Multi-select"
-          data-tip="Multi-select">
-    <i data-lucide="list-checks" class="size-4"></i>
-  </button>
+  <div class="input join-item shrink-0 js-list-toolbar-dd">
+    <button type="button"
+            class="js-list-toolbar-dd-btn tooltip tooltip-top"
+            data-video-bulk-mode
+            aria-pressed="false"
+            aria-label="Multi-select"
+            data-tip="Multi-select">
+      <i data-lucide="list-checks" class="size-4" aria-hidden="true"></i>
+    </button>
+  </div>
   {{end}}
   {{if not .HideQuery}}
   {{/* Full class strings (not {{if}}…input-primary) so Tailwind/daisyUI scan sees input-primary. */}}

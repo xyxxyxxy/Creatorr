@@ -6,7 +6,7 @@
      TaskInd?, WarnLevel?,
      Line2? (plain text), ShowProgress? (uses series_progress on .; shares Line2 row 50/50),
      Select? (dict: ID, Disabled?) - starts hidden; bulk mode shows it,
-     Monitor? (dict for monitor_toggle AsButton; stays visible in bulk but disabled via app.js).
+     Monitor? (dict for monitor_toggle AsButton; visible in bulk but not clickable via app.js).
      Grid: normal = media|grow|monitor; bulk = checkbox|media|grow|monitor. */}}
 {{$mediaClass := .MediaClass}}{{if not $mediaClass}}{{$mediaClass = "relative shrink-0 w-[112px] aspect-video"}}{{end}}
 {{$imgClass := .ImgClass}}{{if not $imgClass}}{{if .Circle}}{{$imgClass = "size-full rounded-full object-cover"}}{{else}}{{$imgClass = "size-full rounded object-cover"}}{{end}}{{end}}

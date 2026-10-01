@@ -165,7 +165,7 @@ func (s *Store) ListSeriesIDsFiltered(filter SeriesListFilter) ([]int64, error) 
 	b.WriteString(`SELECT s.id FROM series s WHERE 1=1`)
 	args := []any{}
 	appendSeriesListFilterSQL(&b, &args, filter)
-	b.WriteString(` ORDER BY s.title COLLATE NOCASE`)
+	b.WriteString(` ORDER BY ` + seriesOrderByClause(filter.Sort, filter.SortDir))
 	rows, err := s.DB.SQL.Query(b.String(), args...)
 	if err != nil {
 		return nil, err

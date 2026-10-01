@@ -37,6 +37,8 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/logout", h.logoutPost)
 
 	r.Get("/", h.overview)
+	r.Get("/videos", h.videosPage)
+	r.Get("/videos/live", h.videosLive)
 	r.Get("/series", h.seriesList)
 	r.Get("/series/list-live", h.seriesListLive)
 	r.Get("/series/ids", h.seriesIDsJSON)

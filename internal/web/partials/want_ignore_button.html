@@ -5,8 +5,9 @@
 {{if .FormClass}}{{$formClass = .FormClass}}{{end}}
 {{$icon := "size-4"}}{{if .Icons}}{{$icon = "size-5"}}{{end}}
 {{$live := .LiveSwap}}
+{{$target := "series-videos-live"}}{{if .LiveTarget}}{{$target = .LiveTarget}}{{end}}
 {{if or (eq .Status "ignored") (eq .Status "deleted") (eq .Status "missing") (eq .Status "downloaded_integrity_failed")}}
-<form method="post" action="/actions/want-video"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/want-video" hx-target="#series-videos-live" hx-swap="outerHTML"{{end}}>
+<form method="post" action="/actions/want-video"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/want-video" hx-target="#{{$target}}" hx-swap="outerHTML"{{end}}>
   <input type="hidden" name="video_id" value="{{.VideoID}}" />
   <input type="hidden" name="series_id" value="{{.SeriesID}}" />
   {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
@@ -26,7 +27,7 @@
   {{if .Icons}}<i data-lucide="eye-off" class="{{$icon}}"></i>{{else}}<i data-lucide="eye-off" class="size-4"></i> Ignore{{end}}
 </label>
 {{else}}
-<form method="post" action="/actions/ignore-video"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/ignore-video" hx-target="#series-videos-live" hx-swap="outerHTML"{{end}}>
+<form method="post" action="/actions/ignore-video"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/ignore-video" hx-target="#{{$target}}" hx-swap="outerHTML"{{end}}>
   <input type="hidden" name="video_id" value="{{.VideoID}}" />
   <input type="hidden" name="series_id" value="{{.SeriesID}}" />
   {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
@@ -39,15 +40,16 @@
 {{end}}
 
 {{define "delete_video_modal"}}
-{{/* Expects VideoID, SeriesID, Status, LiveSwap, Redirect. Render outside .join (siblings break join radius). */}}
+{{/* Expects VideoID, SeriesID, Status, LiveSwap, LiveTarget, Redirect. Render outside .join (siblings break join radius). */}}
 {{$formClass := ""}}{{if .LiveSwap}}{{$formClass = "inline"}}{{else if .KeepScroll}}{{$formClass = "inline js-keep-scroll"}}{{end}}
 {{$live := .LiveSwap}}
+{{$target := "series-videos-live"}}{{if .LiveTarget}}{{$target = .LiveTarget}}{{end}}
 <input type="checkbox" id="modal-delete-video-{{.VideoID}}" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Delete downloaded files</h3>
     <p class="text-sm mb-4">Removes library media and sidecars for this video and sets status to deleted.</p>
-    <form method="post" action="/actions/delete-video"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/delete-video" hx-target="#series-videos-live" hx-swap="outerHTML"{{end}}>
+    <form method="post" action="/actions/delete-video"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/delete-video" hx-target="#{{$target}}" hx-swap="outerHTML"{{end}}>
       <input type="hidden" name="video_id" value="{{.VideoID}}" />
       <input type="hidden" name="series_id" value="{{.SeriesID}}" />
       {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}

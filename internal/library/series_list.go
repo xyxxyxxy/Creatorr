@@ -13,20 +13,35 @@ const (
 	SeriesListStatusHasErrors   = "has_errors"
 )
 
-// SeriesListFilter scopes the series admin list (title, root, quality, delivery, status).
+// SeriesListFilter scopes the series admin list (text, catalog metadata, root, quality, delivery, status).
 type SeriesListFilter struct {
-	Title            string // case-insensitive substring; empty = any
+	Title            string // case-insensitive substring against QField
+	QField           string
 	RootID           int64  // 0 = any
 	QualityProfileID int64  // 0 = any
 	DeliveryMode     string // video|audio; empty = any
 	Status           string // SeriesListStatus*; empty = any
+	Studio           string
+	Country          string
+	MPAA             string
+	PremieredYear    int // 0 = any; positive = premiered UTC calendar year
+	Genres           []string
+	Tags             []string
+	Actors           []string
+	Empty            []string
+	NotEmpty         []string
+	Sort             string // title|added; empty = title
+	SortDir          string // asc|desc; empty = DefaultSortDir(Sort)
 }
 
-// Active reports whether any series list filter constraint is set.
+// Active reports whether any series list filter constraint is set (not sort).
 func (f SeriesListFilter) Active() bool {
 	return strings.TrimSpace(f.Title) != "" || f.RootID > 0 || f.QualityProfileID > 0 ||
 		f.DeliveryMode == DeliveryVideo || f.DeliveryMode == DeliveryAudio ||
-		seriesListStatusActive(f.Status)
+		seriesListStatusActive(f.Status) ||
+		strings.TrimSpace(f.Studio) != "" || strings.TrimSpace(f.Country) != "" || strings.TrimSpace(f.MPAA) != "" ||
+		f.PremieredYear != 0 || len(f.Genres) > 0 || len(f.Tags) > 0 || len(f.Actors) > 0 ||
+		len(f.Empty) > 0 || len(f.NotEmpty) > 0
 }
 
 func seriesListStatusActive(status string) bool {
@@ -73,7 +88,8 @@ const seriesListFromJoins = `
 
 func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilter) {
 	if title := strings.TrimSpace(f.Title); title != "" {
-		b.WriteString(` AND s.title LIKE ? ESCAPE '\' COLLATE NOCASE`)
+		col := seriesTextColumn(f.QField)
+		b.WriteString(` AND ` + col + ` LIKE ? ESCAPE '\' COLLATE NOCASE`)
 		*args = append(*args, likeContainsPattern(title))
 	}
 	if f.RootID > 0 {
@@ -88,6 +104,28 @@ func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilt
 		b.WriteString(` AND s.delivery_mode = ?`)
 		*args = append(*args, f.DeliveryMode)
 	}
+	if studio := strings.TrimSpace(f.Studio); studio != "" {
+		b.WriteString(` AND s.studio = ? COLLATE NOCASE`)
+		*args = append(*args, studio)
+	}
+	if country := strings.TrimSpace(f.Country); country != "" {
+		b.WriteString(` AND s.country = ? COLLATE NOCASE`)
+		*args = append(*args, country)
+	}
+	if mpaa := strings.TrimSpace(f.MPAA); mpaa != "" {
+		b.WriteString(` AND s.mpaa = ? COLLATE NOCASE`)
+		*args = append(*args, mpaa)
+	}
+	switch {
+	case f.PremieredYear > 0:
+		b.WriteString(` AND s.premiered IS NOT NULL AND trim(s.premiered) != ''`)
+		b.WriteString(` AND CAST(strftime('%Y', s.premiered) AS INTEGER) = ?`)
+		*args = append(*args, f.PremieredYear)
+	}
+	appendJSONStringListMatch(b, args, "s.genres", f.Genres)
+	appendJSONStringListMatch(b, args, "s.tags", f.Tags)
+	appendJSONActorNameMatch(b, args, "s.actors", f.Actors)
+	appendSeriesPresenceSQL(b, f.Empty, f.NotEmpty)
 	switch f.Status {
 	case SeriesListStatusMonitored:
 		b.WriteString(` AND s.monitored = 1`)
@@ -177,7 +215,7 @@ func (s *Store) ListSeriesFiltered(filter SeriesListFilter, limit, offset int) (
 		WHERE 1=1`)
 	args := []any{}
 	appendSeriesListFilterSQL(&b, &args, filter)
-	b.WriteString(` ORDER BY s.title COLLATE NOCASE`)
+	b.WriteString(` ORDER BY ` + seriesOrderByClause(filter.Sort, filter.SortDir))
 	if limit > 0 {
 		if offset < 0 {
 			offset = 0

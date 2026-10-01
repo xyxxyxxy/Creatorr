@@ -671,7 +671,14 @@ paths:
           required: false
           schema:
             type: string
-          description: Title substring (case-insensitive)
+          description: Substring against q_field (default title; case-insensitive)
+        - name: q_field
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [title, sorttitle, originaltitle, plot, tagline, notes]
+          description: Text search column (default title)
         - name: root
           in: query
           required: false
@@ -696,6 +703,74 @@ paths:
           schema:
             type: string
             enum: [monitored, unmonitored, complete, incomplete, has_errors]
+        - name: studio
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: country
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: mpaa
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: year
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Premiered UTC calendar year
+        - name: genre
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: actor
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: empty
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: Presence empty fields (plot, genres, …)
+        - name: not_empty
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: Presence filled fields
       responses:
         "200":
           description: Matching series ids (title order)
@@ -1062,7 +1137,13 @@ paths:
           required: false
           schema:
             type: string
-          description: Title substring (case-insensitive)
+          description: Substring against q_field (default title; case-insensitive)
+        - name: q_field
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [title, sorttitle, originaltitle, plot, tagline, notes]
         - name: status
           in: query
           required: false
@@ -1080,7 +1161,90 @@ paths:
           required: false
           schema:
             type: string
-          description: UTC calendar year, or unknown
+          description: UTC calendar year of upload_date
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Pack role filter (regular, any special, or a special kind)
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Upload date from (inclusive UTC day, YYYY-MM-DD)
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Upload date to (inclusive UTC day, YYYY-MM-DD)
+        - name: studio
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: country
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: mpaa
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: media_type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: genre
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: actor
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: empty
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: not_empty
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
       responses:
         "200":
           description: Matching video ids (list order)

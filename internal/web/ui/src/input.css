@@ -321,6 +321,65 @@
 .js-list-filters > label.input.join-item > input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   background-color: transparent;
 }
+
+/*
+  List-view Filter/Sort/View: wrappers are .input.join-item (stock field chrome,
+  same as search / history clear). Triggers stay borderless. Undo .input>* rules
+  that would crush .dropdown-content (height/nowrap/flex).
+*/
+.js-list-filters > .js-list-toolbar-dd.input {
+  width: auto;
+  max-width: none;
+  padding-inline: 0;
+  overflow: visible;
+  flex-shrink: 0;
+}
+.js-list-filters > .js-list-toolbar-dd > .js-list-toolbar-dd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 100%;
+  padding-inline: 0.75rem;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  outline: none;
+  white-space: nowrap;
+  font-size: inherit;
+  line-height: 1;
+}
+.js-list-filters > .js-list-toolbar-dd > .dropdown-content {
+  /* Undo .input>* (height/nowrap/flex/padding). daisyUI toggles open via :focus-within;
+     .input>* {display:flex} can keep menus painted when closed - re-assert hide.
+     Leave width to utility classes (w-52/w-64/w-80); force below the trigger. */
+  position: absolute;
+  top: 100%;
+  bottom: auto;
+  height: auto;
+  max-width: min(20rem, calc(100vw - 2rem));
+  white-space: normal;
+  padding-inline: 0;
+  align-items: stretch;
+  overflow-x: hidden;
+}
+.js-list-filters > .js-list-toolbar-dd.input:not(:focus-within):not(.dropdown-open) > .dropdown-content {
+  display: none;
+  opacity: 0;
+  scale: 0.95;
+}
+
+/*
+  Empty thumb slots: Lucide ships width/height=24 attrs; size-* is fixed px.
+  Scale the icon off the placeholder box (width fraction + square aspect).
+*/
+.thumb-placeholder-icon {
+  width: 28%;
+  height: auto;
+  aspect-ratio: 1;
+  flex-shrink: 0;
+}
 [data-string-list],
 [data-actors-list] {
   counter-reset: meta-ord;

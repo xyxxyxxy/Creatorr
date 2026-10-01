@@ -2,17 +2,10 @@
 <div id="series-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
      data-filter-total="{{.FilterTotal}}"
      data-bulk-busy="{{if .BulkEditBusy}}1{{else}}0{{end}}"
-     data-bulk-mode="0">
+     data-bulk-mode="0"
+     data-view-mode="{{.ViewMode}}">
 {{if or .Series .FilterActive}}
-{{template "list_filters" (dict
-  "Query" .SeriesFilter.Query
-  "QueryPlaceholder" .SeriesFilter.QueryPlaceholder
-  "AriaLabel" .SeriesFilter.AriaLabel
-  "Selects" .SeriesFilter.Selects
-  "LiveTarget" .SeriesFilter.LiveTarget
-  "FormAction" .SeriesFilter.FormAction
-  "SeriesBulkMode" true
-)}}
+{{template "list_view_toolbar" .SeriesFilter}}
 {{end}}
 {{if not .Series}}
 {{if .FilterActive}}
@@ -28,8 +21,7 @@
 </div>
 {{end}}
 {{else}}
-<ul class="list bg-base-100 rounded-box border border-base-300" id="series-list-rows">
-  {{/* Bulk bar: checkbox+count | grow | actions. Rows keep poster column for checkbox alignment. */}}
+<ul class="list bg-base-100 rounded-box border border-base-300 mb-3 hidden" id="series-bulk-bar-wrap">
   <li id="series-bulk-bar"
       class="list-row py-2 hidden"
       data-series-bulk-bar
@@ -78,10 +70,20 @@
     <div class="size-10 shrink-0" aria-hidden="true"></div>
     {{end}}
   </li>
+</ul>
+{{if eq .ViewMode "thumbs"}}
+<ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" id="series-list-rows">
+  {{range .Series}}
+  {{template "series_thumb_card" .}}
+  {{end}}
+</ul>
+{{else}}
+<ul class="list bg-base-100 rounded-box border border-base-300" id="series-list-rows">
   {{range .Series}}
   {{template "series_list_row" .}}
   {{end}}
 </ul>
+{{end}}
 {{template "pagination" .Page}}
 {{end}}
 </div>
