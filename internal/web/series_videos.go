@@ -135,7 +135,7 @@ type seriesVideosLiveData struct {
 	OOB                bool
 }
 
-// listViewToolbar is the shared filter/sort/view chrome for library lists.
+// listViewToolbar is the shared filter/sort/view toolbar for Explorer hosts.
 type listViewToolbar struct {
 	Query                string
 	QueryPlaceholder     string
@@ -159,6 +159,9 @@ type listViewToolbar struct {
 	ClearAllHref         string
 	LiveTarget           string
 	FormAction           string
+	ExplorerType         string // series|videos|sources for /explorer/browse
+	ExplorerAt           string // series|videos|browser|series-detail
+	Hidden               []listHiddenField
 	SeriesBulkMode       bool
 	VideoBulkMode        bool
 }

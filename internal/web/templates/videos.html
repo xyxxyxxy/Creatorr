@@ -37,7 +37,7 @@
   "BulkEditBusy" .BulkEditBusy
   "ShowSelectAll" .ShowSelectAll
 )}}
-{{if ne .ViewMode "table"}}{{template "list_load_chrome" .}}{{end}}
+{{if ne .ViewMode "table"}}{{template "list_load_controls" .}}{{end}}
 {{if or (eq .ViewMode "cards") (eq .ViewMode "gallery")}}
 <ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" id="videos-list-rows">
   {{template "videos_rows_inner" .}}
@@ -61,7 +61,7 @@
   {{if eq .ListMode "infinite"}}{{template "list_infinite_sentinel" .}}{{end}}
 </ul>
 {{end}}
-{{template "list_load_chrome" .}}
+{{template "list_load_controls" .}}
 {{end}}
 {{range .Videos}}
 {{if .DownloadRunning}}

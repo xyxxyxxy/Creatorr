@@ -91,6 +91,7 @@ type Series struct {
 	WantedCount        int64 // status wanted | wanted_archive (API); subset of PendingCount
 	PendingCount       int64 // open work: wanted | wanted_archive | wanted_download_error | downloaded_integrity_failed
 	SourceCount        int64
+	SizeBytes          int64 // sum of packed video files.size_bytes (0 when none / unknown)
 	Sources            []Source
 	Videos             []Video
 }

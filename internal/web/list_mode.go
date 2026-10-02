@@ -30,7 +30,7 @@ const (
 	MaxRefreshRows = 100
 )
 
-// ListLoad drives list chrome (pager / sentinel / neither) and SQL limit/offset.
+// ListLoad drives pager / infinite sentinel / neither and SQL limit/offset.
 type ListLoad struct {
 	Mode           ListMode
 	PageSize       int

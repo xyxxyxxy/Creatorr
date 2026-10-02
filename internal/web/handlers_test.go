@@ -1468,6 +1468,128 @@ func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
 	}
 }
 
+func TestSeriesDetailImportRowFiltersVideos(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
+		SeriesID:   ser.ID,
+		Title:      "Imported",
+		UploadDate: "2024-01-02T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 400))
+	}
+	body := rec.Body.String()
+	wantHref := `/series/` + itoa(ser.ID) + `?source=import`
+	if !strings.Contains(body, `hx-get="`+wantHref+`"`) {
+		t.Fatalf("Import row missing hx-get: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `data-scroll-after-swap="series-videos-live"`) {
+		t.Fatalf("Import row missing scroll-after-swap: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `hx-target="#series-videos-live"`) {
+		t.Fatalf("Import row missing hx-target: %s", truncate(body, 600))
+	}
+	liveIdx := strings.Index(body, `id="sources-list-live"`)
+	importIdx := strings.Index(body, `aria-label="Show imported videos"`)
+	if liveIdx < 0 || importIdx < 0 || importIdx < liveIdx {
+		t.Fatalf("Import row should sit after Sources Explorer (live=%d import=%d)", liveIdx, importIdx)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, wantHref, nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("filtered status %d: %s", rec.Code, truncate(rec.Body.String(), 400))
+	}
+	filtered := rec.Body.String()
+	if !strings.Contains(filtered, `Source: Import`) {
+		t.Fatalf("source=import missing Source: Import badge: %s", truncate(filtered, 600))
+	}
+	if !strings.Contains(filtered, "Imported") {
+		t.Fatalf("source=import missing imported video: %s", truncate(filtered, 600))
+	}
+}
+
+func TestSeriesVideosSearchOnlyOmitsChipRow(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
+		SeriesID:   ser.ID,
+		Title:      "Hello",
+		UploadDate: "2024-01-02T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID)+"?q=test", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 400))
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, `aria-label="Active filters"`) {
+		t.Fatalf("search-only must not show chip row: %s", truncate(body, 800))
+	}
+	if strings.Contains(body, `aria-label="Clear all"`) {
+		t.Fatalf("search-only must not show Clear all: %s", truncate(body, 800))
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID)+"?source=import", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("chip status %d", rec.Code)
+	}
+	withChip := rec.Body.String()
+	if !strings.Contains(withChip, `aria-label="Active filters"`) || !strings.Contains(withChip, `aria-label="Clear all"`) {
+		t.Fatalf("chip filter should show Active filters + Clear all: %s", truncate(withChip, 800))
+	}
+}
+
 func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {

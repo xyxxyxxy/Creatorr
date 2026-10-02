@@ -71,6 +71,8 @@
             <span class="tabular-nums">{{$row.WantedCount}}</span>
             {{else if eq .Key "errors"}}
             <span class="tabular-nums">{{$row.ErrorCount}}</span>
+            {{else if eq .Key "size"}}
+            {{if gt $row.SizeBytes 0}}<span class="tabular-nums whitespace-nowrap">{{formatBytes $row.SizeBytes}}</span>{{else}}{{template "empty_value"}}{{end}}
             {{else if eq .Key "delivery"}}
             {{if $row.IsAudio}}Audio{{else}}Video{{end}}
             {{end}}

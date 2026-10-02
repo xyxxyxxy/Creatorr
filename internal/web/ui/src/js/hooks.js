@@ -12,7 +12,60 @@ import { wireMaintenanceScope } from "./maintenance.js";
 import { connectEvents } from "./sse.js";
 import { openAddSeriesModal, openSeriesMetadataModal } from "./validity.js";
 
+const LIST_LIVE_IDS = new Set([
+  "series-videos-live",
+  "series-list-live",
+  "videos-list-live",
+  "sources-list-live",
+]);
 
+function isListLiveEl(el) {
+  return !!(el && el.id && LIST_LIVE_IDS.has(el.id));
+}
+
+function clearListLiveScrollDatasets() {
+  delete document.body.dataset.listLiveScrollY;
+  delete document.body.dataset.listLiveAnchorTop;
+  delete document.body.dataset.listLiveScrollTarget;
+}
+
+/** Keep the live panel's viewport position across outerHTML swap (height collapse clamps scrollY). */
+function pinListLiveScroll(target) {
+  if (!isListLiveEl(target)) return;
+  document.body.dataset.listLiveScrollY = String(window.scrollY);
+  document.body.dataset.listLiveAnchorTop = String(target.getBoundingClientRect().top);
+  captureListFilterQFocus();
+}
+
+function restoreListLiveScroll(root) {
+  if (!isListLiveEl(root)) return;
+  const scrollTo = document.body.dataset.listLiveScrollTarget;
+  const anchor = Number(document.body.dataset.listLiveAnchorTop);
+  const y = Number(document.body.dataset.listLiveScrollY);
+  clearListLiveScrollDatasets();
+  // Infinite keep-depth clamp: list_infinite.js scrolls to list top instead.
+  if (root.getAttribute("data-through-clamped") === "1") {
+    restoreListFilterQFocus(root);
+    return;
+  }
+  if (scrollTo && root.id === scrollTo) {
+    requestAnimationFrame(() => root.scrollIntoView({ block: "start" }));
+    restoreListFilterQFocus(root);
+    return;
+  }
+  const apply = () => {
+    if (Number.isFinite(anchor)) {
+      const delta = root.getBoundingClientRect().top - anchor;
+      if (delta !== 0) window.scrollBy(0, delta);
+      return;
+    }
+    if (Number.isFinite(y)) window.scrollTo(0, y);
+  };
+  apply();
+  // Second pass after layout/focus settle (swap can clamp scrollY mid-frame).
+  requestAnimationFrame(() => requestAnimationFrame(apply));
+  restoreListFilterQFocus(root);
+}
 
 export function bootHooks() {
   document.addEventListener("DOMContentLoaded", () => {
@@ -62,20 +115,23 @@ export function bootHooks() {
   document.body.addEventListener("htmx:beforeRequest", (ev) => {
     const cfg = ev.detail && ev.detail.requestConfig;
     const target = (cfg && cfg.target) || (ev.detail && ev.detail.target);
-    if (
-      target &&
-      (target.id === "series-videos-live" ||
-        target.id === "series-list-live" ||
-        target.id === "videos-list-live")
-    ) {
-      document.body.dataset.listLiveScrollY = String(window.scrollY);
-      captureListFilterQFocus();
-    }
+    if (!isListLiveEl(target)) return;
+    pinListLiveScroll(target);
+    const elt = (cfg && cfg.elt) || (ev.detail && ev.detail.elt);
+    const scrollTo = elt && elt.getAttribute && elt.getAttribute("data-scroll-after-swap");
+    if (scrollTo) document.body.dataset.listLiveScrollTarget = scrollTo;
+    else delete document.body.dataset.listLiveScrollTarget;
   });
 
   // Soft #tasks-live refresh: keep tip hosts that did not change so hover tips do not flicker.
   document.body.addEventListener("htmx:beforeSwap", (ev) => {
-    stashTasksLiveBeforeSwap(ev.detail && ev.detail.target);
+    const target = ev.detail && ev.detail.target;
+    stashTasksLiveBeforeSwap(target);
+    if (!isListLiveEl(target)) return;
+    // Refresh pin immediately before detach; blur so focus loss does not yank the viewport.
+    pinListLiveScroll(target);
+    const ae = document.activeElement;
+    if (ae && target.contains(ae) && typeof ae.blur === "function") ae.blur();
   });
 
   document.body.addEventListener("htmx:afterSwap", (ev) => {
@@ -95,23 +151,8 @@ export function bootHooks() {
     if (root && (root.id === "video-metadata-body" || root.querySelector?.("[data-pack-role-join]"))) {
       syncAllPackRoleJoins(root);
     }
-    const y = document.body.dataset.listLiveScrollY;
-    if (
-      y != null &&
-      root &&
-      (root.id === "series-videos-live" ||
-        root.id === "series-list-live" ||
-        root.id === "videos-list-live")
-    ) {
-      delete document.body.dataset.listLiveScrollY;
-      // Infinite keep-depth clamp: list_infinite.js scrolls to list top instead.
-      if (root.getAttribute("data-through-clamped") === "1") {
-        restoreListFilterQFocus(root);
-        return;
-      }
-      const top = Number(y);
-      if (Number.isFinite(top)) requestAnimationFrame(() => window.scrollTo(0, top));
-      restoreListFilterQFocus(root);
+    if (document.body.dataset.listLiveScrollY != null || document.body.dataset.listLiveAnchorTop != null) {
+      restoreListLiveScroll(root);
     }
   });
 

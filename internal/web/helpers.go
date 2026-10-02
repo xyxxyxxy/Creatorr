@@ -65,6 +65,8 @@ func pageIcon(nav string) string {
 		return "chart-column"
 	case "history":
 		return "history"
+	case "browser":
+		return "layout-panel-left"
 	case "settings":
 		return "settings"
 	default:

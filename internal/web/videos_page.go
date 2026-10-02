@@ -50,19 +50,6 @@ func (h *Handler) videosPage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) videosLive(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("HX-Target") == "videos-list-infinite" {
-		h.renderVideosInfiniteChunk(w, r)
-		return
-	}
-	data, err := h.loadVideosLive(w, r)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	render(w, "videos_live", data)
-}
-
 func (h *Handler) renderVideosInfiniteChunk(w http.ResponseWriter, r *http.Request) {
 	data, err := h.loadVideosLive(w, r)
 	if err != nil {
@@ -82,7 +69,7 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 	if filter.Sort == "" {
 		filter.Sort = library.SortAdded
 	}
-	writeVideosListPrefs(w, filter)
+	writeVideosListPrefs(w, r, filter)
 	viewMode, writeCookie := resolveViewMode(r, cookieModeVideos, viewList)
 	if writeCookie {
 		writeViewCookie(w, cookieModeVideos, viewMode)
@@ -157,7 +144,7 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		Badges:           videoListBadges(r, filter, true, titles),
 		ClearAllHref:     "",
 		LiveTarget:       liveTarget,
-		FormAction:       "/videos",
+		FormAction:       "/explorer/browse",
 		VideoBulkMode:    true,
 		DateClearHref:    dropQueryKeys(r, "from", "to", "page", "through"),
 	}
@@ -165,13 +152,15 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 	if filter.Active() {
 		toolbar.ClearAllHref = clearOperatorFiltersURL(r)
 	}
+	at := explorerAtFrom(r, explorerAtVideos)
+	applyExplorerToolbar(&toolbar, explorerTypeVideos, at)
 
 	bulkBusy, _ := h.Library.BulkEditVideosBusy()
 	showSelectAll := total > len(rows)
 	if mode == ListModePaginated {
 		showSelectAll = load.Page.Show
 	}
-	return videosPageLiveData{
+	out := videosPageLiveData{
 		Videos:          rows,
 		Page:            load.Page,
 		Load:            load,
@@ -187,5 +176,8 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		ShowSelectAll:   showSelectAll,
 		InfiniteID:      infiniteID,
 		RowsID:          rowsID,
-	}, nil
+	}
+	rewriteExplorerInfinite(&out.Load, explorerTypeVideos, 0)
+	out.Page = out.Load.Page
+	return out, nil
 }

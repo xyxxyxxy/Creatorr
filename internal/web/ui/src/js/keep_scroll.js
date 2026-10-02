@@ -77,6 +77,11 @@ function saveSeriesScroll() {
 }
 
 export function restoreSeriesScroll() {
+  // Import hash owns the viewport; keep-scroll restore would fight it (double rAF).
+  if (location.hash === "#series-videos-live") {
+    sessionStorage.removeItem(SCROLL_KEY);
+    return;
+  }
   restoreKeepScroll();
 }
 

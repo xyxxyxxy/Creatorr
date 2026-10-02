@@ -6,6 +6,9 @@
       class="join w-full mb-2 js-keep-scroll js-list-filters relative z-40 min-w-0"
       aria-label="{{.AriaLabel}}"{{if $live}} hx-get="{{.FormAction}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}
       data-list-view-toolbar{{if $live}} data-live-target="{{$live}}"{{end}}>
+  {{range .Hidden}}
+  <input type="hidden" name="{{.Name}}" value="{{.Value}}" />
+  {{end}}
   {{if .SeriesBulkMode}}
   <div class="input join-item shrink-0 js-list-toolbar-dd">
     <button type="button"
@@ -191,10 +194,11 @@
   </div>
   {{end}}
 </form>
-{{if or .Badges .ClearAllHref}}
+{{if .Badges}}
 {{/* daisyUI filter chips (checkbox form style): clear × last / on the right.
      https://daisyui.com/components/filter/#filter-using-html-form-checkboxes-and-a-reset-button
-     Clear all only when ClearAllHref is set (operator filters active). */}}
+     Search text is not a chip (stays in the search field). Show this row only when
+     there is at least one chip; Clear all sits on the right of that row. */}}
 <div class="filter mb-3" aria-label="Active filters">
   {{range .Badges}}
   <input class="btn" type="checkbox" checked aria-label="{{.Label}}"

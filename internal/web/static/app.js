@@ -4269,6 +4269,10 @@
     return false;
   }
   function restoreSeriesScroll() {
+    if (location.hash === "#series-videos-live") {
+      sessionStorage.removeItem(SCROLL_KEY);
+      return;
+    }
     restoreKeepScroll();
   }
   function scrollSeriesVideosAnchor() {
@@ -4301,7 +4305,7 @@
     });
   }
   function onSeriesListPage() {
-    return /^\/series\/?$/.test(location.pathname);
+    return /^\/series\/?$/.test(location.pathname) || /^\/browser\/?$/.test(location.pathname) && new URLSearchParams(location.search).get("type") !== "videos" && new URLSearchParams(location.search).get("type") !== "sources";
   }
   function onSeriesDetailPage() {
     return /^\/series\/\d+\/?$/.test(location.pathname);
@@ -4310,8 +4314,10 @@
     if (!window.htmx) return;
     if (!onSeriesListPage() || !document.getElementById("series-list-live")) return;
     const y = preserveScroll ? window.scrollY : null;
-    const q = location.search || "";
-    window.htmx.ajax("GET", "/series/list-live" + q, {
+    const params = new URLSearchParams(location.search || "");
+    params.set("type", "series");
+    params.set("at", /^\/browser\/?$/.test(location.pathname) ? "browser" : "series");
+    window.htmx.ajax("GET", "/explorer/browse?" + params.toString(), {
       target: "#series-list-live",
       select: "#series-list-live",
       swap: "outerHTML"
@@ -4446,6 +4452,53 @@
   }
 
   // src/js/hooks.js
+  var LIST_LIVE_IDS = /* @__PURE__ */ new Set([
+    "series-videos-live",
+    "series-list-live",
+    "videos-list-live",
+    "sources-list-live"
+  ]);
+  function isListLiveEl(el) {
+    return !!(el && el.id && LIST_LIVE_IDS.has(el.id));
+  }
+  function clearListLiveScrollDatasets() {
+    delete document.body.dataset.listLiveScrollY;
+    delete document.body.dataset.listLiveAnchorTop;
+    delete document.body.dataset.listLiveScrollTarget;
+  }
+  function pinListLiveScroll(target) {
+    if (!isListLiveEl(target)) return;
+    document.body.dataset.listLiveScrollY = String(window.scrollY);
+    document.body.dataset.listLiveAnchorTop = String(target.getBoundingClientRect().top);
+    captureListFilterQFocus();
+  }
+  function restoreListLiveScroll(root) {
+    if (!isListLiveEl(root)) return;
+    const scrollTo = document.body.dataset.listLiveScrollTarget;
+    const anchor = Number(document.body.dataset.listLiveAnchorTop);
+    const y = Number(document.body.dataset.listLiveScrollY);
+    clearListLiveScrollDatasets();
+    if (root.getAttribute("data-through-clamped") === "1") {
+      restoreListFilterQFocus(root);
+      return;
+    }
+    if (scrollTo && root.id === scrollTo) {
+      requestAnimationFrame(() => root.scrollIntoView({ block: "start" }));
+      restoreListFilterQFocus(root);
+      return;
+    }
+    const apply = () => {
+      if (Number.isFinite(anchor)) {
+        const delta = root.getBoundingClientRect().top - anchor;
+        if (delta !== 0) window.scrollBy(0, delta);
+        return;
+      }
+      if (Number.isFinite(y)) window.scrollTo(0, y);
+    };
+    apply();
+    requestAnimationFrame(() => requestAnimationFrame(apply));
+    restoreListFilterQFocus(root);
+  }
   function bootHooks() {
     document.addEventListener("DOMContentLoaded", () => {
       createLucideIcons();
@@ -4492,13 +4545,20 @@
     document.body.addEventListener("htmx:beforeRequest", (ev) => {
       const cfg = ev.detail && ev.detail.requestConfig;
       const target = cfg && cfg.target || ev.detail && ev.detail.target;
-      if (target && (target.id === "series-videos-live" || target.id === "series-list-live" || target.id === "videos-list-live")) {
-        document.body.dataset.listLiveScrollY = String(window.scrollY);
-        captureListFilterQFocus();
-      }
+      if (!isListLiveEl(target)) return;
+      pinListLiveScroll(target);
+      const elt = cfg && cfg.elt || ev.detail && ev.detail.elt;
+      const scrollTo = elt && elt.getAttribute && elt.getAttribute("data-scroll-after-swap");
+      if (scrollTo) document.body.dataset.listLiveScrollTarget = scrollTo;
+      else delete document.body.dataset.listLiveScrollTarget;
     });
     document.body.addEventListener("htmx:beforeSwap", (ev) => {
-      stashTasksLiveBeforeSwap(ev.detail && ev.detail.target);
+      const target = ev.detail && ev.detail.target;
+      stashTasksLiveBeforeSwap(target);
+      if (!isListLiveEl(target)) return;
+      pinListLiveScroll(target);
+      const ae = document.activeElement;
+      if (ae && target.contains(ae) && typeof ae.blur === "function") ae.blur();
     });
     document.body.addEventListener("htmx:afterSwap", (ev) => {
       const root = htmxSwapRoot(ev);
@@ -4517,16 +4577,8 @@
       if (root && (root.id === "video-metadata-body" || root.querySelector?.("[data-pack-role-join]"))) {
         syncAllPackRoleJoins(root);
       }
-      const y = document.body.dataset.listLiveScrollY;
-      if (y != null && root && (root.id === "series-videos-live" || root.id === "series-list-live" || root.id === "videos-list-live")) {
-        delete document.body.dataset.listLiveScrollY;
-        if (root.getAttribute("data-through-clamped") === "1") {
-          restoreListFilterQFocus(root);
-          return;
-        }
-        const top = Number(y);
-        if (Number.isFinite(top)) requestAnimationFrame(() => window.scrollTo(0, top));
-        restoreListFilterQFocus(root);
+      if (document.body.dataset.listLiveScrollY != null || document.body.dataset.listLiveAnchorTop != null) {
+        restoreListLiveScroll(root);
       }
     });
     document.body.addEventListener("htmx:oobAfterSwap", (ev) => {
@@ -5486,7 +5538,22 @@
   // src/js/list_table.js
   function writeColsCookie(name, keys) {
     const maxAge = 365 * 24 * 3600;
-    document.cookie = name + "=" + encodeURIComponent(keys.join(",")) + "; Path=/; Max-Age=" + maxAge + "; SameSite=Lax";
+    document.cookie = name + "=" + keys.join(",") + "; Path=/; Max-Age=" + maxAge + "; SameSite=Lax";
+  }
+  function readColsCookie(name) {
+    if (!name) return "";
+    const prefix = name + "=";
+    for (const part of document.cookie.split(";")) {
+      const s = part.trim();
+      if (!s.startsWith(prefix)) continue;
+      let v = s.slice(prefix.length);
+      try {
+        v = decodeURIComponent(v);
+      } catch (_) {
+      }
+      return v;
+    }
+    return "";
   }
   function visibleColCount(menu) {
     return menu.querySelectorAll("input[data-table-col]:checked").length;
@@ -5495,6 +5562,25 @@
     root.querySelectorAll('[data-col="' + CSS.escape(key) + '"]').forEach((el) => {
       el.classList.toggle("hidden", !on);
     });
+  }
+  function syncMenuFromCookie(menu) {
+    const raw = readColsCookie(menu.getAttribute("data-cols-cookie") || "");
+    if (!raw) return;
+    const want = new Set(
+      raw.split(",").map((k) => k.trim().toLowerCase()).filter(Boolean)
+    );
+    if (!want.size) return;
+    let any = false;
+    menu.querySelectorAll("input[data-table-col]").forEach((cb) => {
+      const key = (cb.getAttribute("data-table-col") || "").toLowerCase();
+      const on = want.has(key);
+      cb.checked = on;
+      if (on) any = true;
+    });
+    if (!any) {
+      const first = menu.querySelector("input[data-table-col]");
+      if (first) first.checked = true;
+    }
   }
   function applyColsFromMenu(menu) {
     const tableRoot = menu.closest("[data-list-table]");
@@ -5530,9 +5616,15 @@
     document.body.addEventListener("htmx:afterSwap", (ev) => {
       const target = ev.detail && ev.detail.target;
       if (!target || !target.querySelector) return;
-      target.querySelectorAll("[data-list-table-cols]").forEach((menu) => applyColsFromMenu(menu));
+      target.querySelectorAll("[data-list-table-cols]").forEach((menu) => {
+        syncMenuFromCookie(menu);
+        applyColsFromMenu(menu);
+      });
     });
-    document.querySelectorAll("[data-list-table-cols]").forEach((menu) => applyColsFromMenu(menu));
+    document.querySelectorAll("[data-list-table-cols]").forEach((menu) => {
+      syncMenuFromCookie(menu);
+      applyColsFromMenu(menu);
+    });
   }
 
   // src/js/list_infinite.js
@@ -5589,6 +5681,8 @@
       resyncBulk(target);
       if (clamped) {
         delete document.body.dataset.listLiveScrollY;
+        delete document.body.dataset.listLiveAnchorTop;
+        delete document.body.dataset.listLiveScrollTarget;
         scrollLiveToTop(target);
       }
     }

@@ -68,6 +68,8 @@ function onInfiniteAfterSwap(ev) {
     resyncBulk(target);
     if (clamped) {
       delete document.body.dataset.listLiveScrollY;
+      delete document.body.dataset.listLiveAnchorTop;
+      delete document.body.dataset.listLiveScrollTarget;
       scrollLiveToTop(target);
     }
   }

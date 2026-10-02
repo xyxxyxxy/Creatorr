@@ -76,7 +76,7 @@ func cloneRequestQuery(r *http.Request, q url.Values) *http.Request {
 func mergeSeriesListPrefs(r *http.Request) *http.Request {
 	q := r.URL.Query()
 	changed := false
-	if _, ok := q["status"]; !ok {
+	if _, ok := q["status"]; !ok && explorerAtFrom(r, "") != explorerAtBrowser {
 		if v := readListPrefCookie(r, cookieStatusSeries); v != "" {
 			q.Set("status", v)
 			changed = true
@@ -100,8 +100,10 @@ func mergeSeriesListPrefs(r *http.Request) *http.Request {
 	return cloneRequestQuery(r, q)
 }
 
-func writeSeriesListPrefs(w http.ResponseWriter, filter library.SeriesListFilter) {
-	writeListPrefCookie(w, cookieStatusSeries, strings.TrimSpace(filter.Status))
+func writeSeriesListPrefs(w http.ResponseWriter, r *http.Request, filter library.SeriesListFilter) {
+	if explorerAtFrom(r, "") != explorerAtBrowser {
+		writeListPrefCookie(w, cookieStatusSeries, strings.TrimSpace(filter.Status))
+	}
 	sort := filter.Sort
 	if sort == "" {
 		sort = library.SortTitle
@@ -114,7 +116,7 @@ func writeSeriesListPrefs(w http.ResponseWriter, filter library.SeriesListFilter
 func mergeVideosListPrefs(r *http.Request) *http.Request {
 	q := r.URL.Query()
 	changed := false
-	if _, ok := q["status"]; !ok {
+	if _, ok := q["status"]; !ok && explorerAtFrom(r, "") != explorerAtBrowser {
 		if raw := readListPrefCookie(r, cookieStatusVideos); raw != "" {
 			for _, part := range strings.Split(raw, ",") {
 				st := strings.TrimSpace(part)
@@ -143,8 +145,10 @@ func mergeVideosListPrefs(r *http.Request) *http.Request {
 	return cloneRequestQuery(r, q)
 }
 
-func writeVideosListPrefs(w http.ResponseWriter, filter library.VideoListFilter) {
-	writeListPrefCookie(w, cookieStatusVideos, strings.Join(filter.Statuses, ","))
+func writeVideosListPrefs(w http.ResponseWriter, r *http.Request, filter library.VideoListFilter) {
+	if explorerAtFrom(r, "") != explorerAtBrowser {
+		writeListPrefCookie(w, cookieStatusVideos, strings.Join(filter.Statuses, ","))
+	}
 	sort := filter.Sort
 	if sort == "" {
 		sort = library.SortAdded

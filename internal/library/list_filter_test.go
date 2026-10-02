@@ -1,6 +1,7 @@
 package library_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
@@ -180,6 +181,80 @@ func TestSeriesListSortDownloadedAndLastUpload(t *testing.T) {
 	}
 	if len(byUpload) < 2 || byUpload[0].ID != many.ID {
 		t.Fatalf("last_upload desc: first=%v want Many DL (2025)", byUpload)
+	}
+}
+
+func TestSeriesListSortSize(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	small, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Small Sz", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	big, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Big Sz", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcSmall, err := s.AddSource(small.ID, library.AddSourceParams{URL: "https://www.example.com/@smallsz"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcBig, err := s.AddSource(big.ID, library.AddSourceParams{URL: "https://www.example.com/@bigsz"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := seedTaskID(t, s)
+	add := func(sid, sourceID int64, remote string) int64 {
+		t.Helper()
+		res, err := s.UpsertListed(sid, library.ListedVideo{
+			RemoteID: remote, Title: remote, SourceID: sourceID,
+		}, taskID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.VideoID
+	}
+	vSmall := add(small.ID, srcSmall.ID, "s1")
+	vBig1 := add(big.ID, srcBig.ID, "b1")
+	vBig2 := add(big.ID, srcBig.ID, "b2")
+	for _, id := range []int64{vSmall, vBig1, vBig2} {
+		if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'downloaded' WHERE id = ?`, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insertFile := func(vid, size int64) {
+		t.Helper()
+		path := fmt.Sprintf("/tmp/%d.mkv", vid)
+		if _, err := s.DB.SQL.Exec(`
+			INSERT INTO files (video_id, path, kind, acquired_at, size_bytes) VALUES (?, ?, 'video', ?, ?)
+		`, vid, path, "2024-01-01T00:00:00Z", size); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insertFile(vSmall, 100)
+	insertFile(vBig1, 1000)
+	insertFile(vBig2, 2000)
+
+	bySize, err := s.ListSeriesFiltered(library.SeriesListFilter{Sort: library.SortSize}, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bySize) < 2 || bySize[0].ID != big.ID || bySize[0].SizeBytes != 3000 {
+		t.Fatalf("size desc: first=%+v want Big Sz size=3000", bySize)
+	}
+	var smallRow *library.Series
+	for i := range bySize {
+		if bySize[i].ID == small.ID {
+			smallRow = &bySize[i]
+			break
+		}
+	}
+	if smallRow == nil || smallRow.SizeBytes != 100 {
+		t.Fatalf("small size=%v want 100", smallRow)
 	}
 }
 

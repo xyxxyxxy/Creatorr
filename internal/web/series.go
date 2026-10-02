@@ -254,7 +254,24 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 			StatusSummary: summary, ErrorMessage: errMsg, HasScanned: hasScanned, HasError: hasError,
 		})
 	}
-	pageSrc, sourcesPage := SlicePage(r, "sources_page", srcRows)
+	pageSrc := srcRows
+	qSrc := r.URL.Query()
+	qSrc.Set("type", explorerTypeSources)
+	qSrc.Set("at", explorerAtSeriesDetail)
+	qSrc.Set("series_id", strconv.FormatInt(id, 10))
+	// Series detail URL carries video list filters; drop them for Sources Explorer.
+	for _, k := range []string{
+		"source", "q", "q_field", "from", "to", "year", "status",
+		"empty", "not_empty", "sort", "dir", "view", "page",
+	} {
+		qSrc.Del(k)
+	}
+	sourcesReq := cloneRequestQuery(r, qSrc)
+	sourcesLive, sourcesErr := h.loadSourcesListLive(w, sourcesReq)
+	if sourcesErr != nil {
+		http.Error(w, sourcesErr.Error(), 500)
+		return
+	}
 
 	videosLive, listErr := h.loadSeriesVideosLive(w, r, ser, byVideo)
 	if listErr != nil {
@@ -313,7 +330,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		pageBase
 		Series              *library.Series
 		Sources             []sourceRow
-		SourcesPage         PageInfo
+		SourcesLive         sourcesListLiveData
 		SourceURLs          []string
 		ImportNullCount     int
 		VideosLive          seriesVideosLiveData
@@ -337,7 +354,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		pageBase:            newPage(ser.Title, "series", flashFromQuery(r)),
 		Series:              ser,
 		Sources:             pageSrc,
-		SourcesPage:         sourcesPage,
+		SourcesLive:         sourcesLive,
 		SourceURLs:          sourceURLs,
 		ImportNullCount:     nullImportCount,
 		VideosLive:          videosLive,

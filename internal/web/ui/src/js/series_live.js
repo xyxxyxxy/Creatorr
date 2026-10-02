@@ -19,7 +19,8 @@ function refreshSeriesVideos(preserveScroll) {
 }
 
 export function onSeriesListPage() {
-  return /^\/series\/?$/.test(location.pathname);
+  return /^\/series\/?$/.test(location.pathname) ||
+    (/^\/browser\/?$/.test(location.pathname) && new URLSearchParams(location.search).get("type") !== "videos" && new URLSearchParams(location.search).get("type") !== "sources");
 }
 
 export function onSeriesDetailPage() {
@@ -30,8 +31,10 @@ function refreshSeriesList(preserveScroll) {
   if (!window.htmx) return;
   if (!onSeriesListPage() || !document.getElementById("series-list-live")) return;
   const y = preserveScroll ? window.scrollY : null;
-  const q = location.search || "";
-  window.htmx.ajax("GET", "/series/list-live" + q, {
+  const params = new URLSearchParams(location.search || "");
+  params.set("type", "series");
+  params.set("at", /^\/browser\/?$/.test(location.pathname) ? "browser" : "series");
+  window.htmx.ajax("GET", "/explorer/browse?" + params.toString(), {
     target: "#series-list-live",
     select: "#series-list-live",
     swap: "outerHTML",

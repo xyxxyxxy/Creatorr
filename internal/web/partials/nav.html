@@ -13,6 +13,11 @@
   </a>
 </li>
 <li>
+  <a href="/browser"{{if eq .Nav "browser"}} class="active"{{end}}>
+    <i data-lucide="layout-panel-left" class="{{$icon}}"></i>Browser
+  </a>
+</li>
+<li>
   <a href="/tasks"{{if eq .Nav "tasks"}} class="active"{{end}}>
     <i data-lucide="list-todo" class="{{$icon}}"></i>Tasks
     {{if .IncludeBadgeIDs}}

@@ -43,6 +43,13 @@ func TestParseTableColsCookieDefaultsAndMinOne(t *testing.T) {
 	if !tableColVisible(cols4, "root") || tableColVisible(cols4, "title") {
 		t.Fatalf("cookie should honor root,quality: %+v", cols4)
 	}
+
+	r5 := httptest.NewRequest(http.MethodGet, "/series", nil)
+	r5.AddCookie(&http.Cookie{Name: cookieColsSeries, Value: "root%2Cquality"})
+	cols5 := parseTableColsCookie(r5, cookieColsSeries, defs)
+	if !tableColVisible(cols5, "root") || !tableColVisible(cols5, "quality") || tableColVisible(cols5, "title") {
+		t.Fatalf("legacy %%2C cookie should decode: %+v", cols5)
+	}
 }
 
 func TestVideoTableColDefsSeriesOptional(t *testing.T) {

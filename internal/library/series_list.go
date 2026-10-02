@@ -65,7 +65,8 @@ const seriesListSelectCols = `s.id, s.title, s.root_id, s.quality_profile_id, s.
 		       COALESCE(vc.downloaded_count, 0),
 		       COALESCE(vc.wanted_count, 0),
 		       COALESCE(vc.pending_count, 0),
-		       COALESCE(sc.source_count, 0)`
+		       COALESCE(sc.source_count, 0),
+		       COALESCE(sz.size_bytes, 0)`
 
 const seriesListFromJoins = `
 		FROM series s
@@ -86,7 +87,13 @@ const seriesListFromJoins = `
 			SELECT series_id, COUNT(*) AS source_count
 			FROM sources
 			GROUP BY series_id
-		) sc ON sc.series_id = s.id`
+		) sc ON sc.series_id = s.id
+		LEFT JOIN (
+			SELECT v.series_id, COALESCE(SUM(f.size_bytes), 0) AS size_bytes
+			FROM videos v
+			JOIN files f ON f.video_id = v.id AND f.kind = 'video' AND f.size_bytes IS NOT NULL
+			GROUP BY v.series_id
+		) sz ON sz.series_id = s.id`
 
 func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilter) {
 	if title := strings.TrimSpace(f.Title); title != "" {
@@ -172,7 +179,7 @@ func scanSeriesListRow(rows *sql.Rows) (Series, error) {
 		&ser.ID, &ser.Title, &ser.RootID, &ser.QualityProfileID, &mon, &ser.DeliveryMode, &ser.AddedAt,
 		&ser.RootName, &ser.QualityProfileName,
 		&ser.VideoCount, &ser.DownloadedCount, &ser.WantedCount, &ser.PendingCount,
-		&ser.SourceCount,
+		&ser.SourceCount, &ser.SizeBytes,
 	); err != nil {
 		return Series{}, err
 	}

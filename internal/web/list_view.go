@@ -140,7 +140,7 @@ func parseVideoSort(raw string) string {
 func parseSeriesSort(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case library.SortAdded, library.SortTitle, library.SortLastUpload,
-		library.SortDownloaded, library.SortWanted, library.SortErrors:
+		library.SortDownloaded, library.SortWanted, library.SortErrors, library.SortSize:
 		return strings.ToLower(strings.TrimSpace(raw))
 	default:
 		return ""
@@ -216,6 +216,10 @@ func clearOperatorFiltersURL(r *http.Request, keepKeys ...string) string {
 	keep["sort"] = struct{}{}
 	keep["view"] = struct{}{}
 	keep["dir"] = struct{}{}
+	// Explorer / series-detail scope (not operator filters).
+	keep["type"] = struct{}{}
+	keep["at"] = struct{}{}
+	keep["series_id"] = struct{}{}
 	q := r.URL.Query()
 	out := url.Values{}
 	for k, vs := range q {
@@ -489,6 +493,8 @@ func presenceFieldLabel(field string) string {
 		return "media type"
 	case library.PresenceThumbnail:
 		return "thumbnail"
+	case library.PresenceScanError:
+		return "scan error"
 	default:
 		return field
 	}

@@ -14,6 +14,7 @@ const (
 	SortDownloaded = "downloaded"  // series: downloaded video count
 	SortWanted     = "wanted"      // series: wanted + wanted_archive count
 	SortErrors     = "errors"      // series: download/integrity error count
+	SortSize       = "size"        // series: sum of packed video size_bytes
 	SortDuration   = "duration"    // video: duration_seconds
 )
 
@@ -23,10 +24,10 @@ const (
 	SortDirDesc = "desc"
 )
 
-// DefaultSortDir is asc for title, desc for date-like sorts (newest first).
+// DefaultSortDir is asc for title-like sorts, desc for date-like sorts (newest first).
 func DefaultSortDir(sort string) string {
 	switch strings.ToLower(strings.TrimSpace(sort)) {
-	case SortTitle:
+	case SortTitle, SortSourceSeries, SortSourceLabel, "url", SortSourceKind, SortSourceDomain:
 		return SortDirAsc
 	default:
 		return SortDirDesc
@@ -72,6 +73,7 @@ const (
 	PresenceUploadDate    = "upload_date"
 	PresenceMediaType     = "media_type"
 	PresenceThumbnail     = "thumbnail"
+	PresenceScanError     = "scan_error"
 )
 
 // NormalizeQField returns a known text field id or title.
@@ -194,6 +196,11 @@ func seriesOrderByClause(sort, dir string) string {
 			return `COALESCE(vc.error_count, 0) DESC, s.id DESC`
 		}
 		return `COALESCE(vc.error_count, 0) ASC, s.id ASC`
+	case SortSize:
+		if desc {
+			return `COALESCE(sz.size_bytes, 0) DESC, s.id DESC`
+		}
+		return `COALESCE(sz.size_bytes, 0) ASC, s.id ASC`
 	default: // title
 		if desc {
 			return `s.title COLLATE NOCASE DESC, s.id DESC`

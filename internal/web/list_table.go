@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -35,6 +36,7 @@ func seriesTableColDefs() []tableColDef {
 		{Key: "downloaded", Label: "Downloaded", Default: false},
 		{Key: "wanted", Label: "Wanted", Default: false},
 		{Key: "errors", Label: "Errors", Default: false},
+		{Key: "size", Label: "Size", Default: false},
 		{Key: "delivery", Label: "Delivery", Default: false},
 	}
 }
@@ -78,7 +80,12 @@ func parseTableColsCookie(r *http.Request, cookieName string, defs []tableColDef
 	}
 	var keys []string
 	if c, err := r.Cookie(cookieName); err == nil {
-		for _, part := range strings.Split(c.Value, ",") {
+		raw := c.Value
+		// Legacy JS wrote encodeURIComponent("a,b") → "a%2Cb"; unescape so commas split.
+		if u, err := url.QueryUnescape(raw); err == nil {
+			raw = u
+		}
+		for _, part := range strings.Split(raw, ",") {
 			k := strings.ToLower(strings.TrimSpace(part))
 			if k == "" {
 				continue

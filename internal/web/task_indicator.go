@@ -420,7 +420,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 	if p.Best != nil {
 		title := p.Best.Kind + " · " + p.Best.Status
 		if p.Best.Message != "" {
-			title = p.Best.Message
+			title = truncateStatusLabel(p.Best.Message, 80)
 		}
 		if p.Best.Status == queue.StatusRunning {
 			v.Kind = "running"
@@ -447,18 +447,24 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 
 	if p.HasError {
 		v.Kind = "scan_error"
-		v.Label = truncateStatusLabel(p.ErrMsg, 40)
-		if v.Label == "" {
-			v.Label = "error"
-		}
+		// Short label + tip: code (or truncated msg). Full yt-dlp text lives on /task/{id}.
 		errTip := strings.TrimSpace(p.ErrCode)
 		if errTip == "" {
 			errTip = "Scan error"
 		}
-		v.Title = joinStatusTip(errTip, scheduleTip, limitTip, lastTip)
+		v.Label = errTip
+		if strings.TrimSpace(p.ErrCode) == "" {
+			v.Label = truncateStatusLabel(p.ErrMsg, 40)
+			if v.Label == "" {
+				v.Label = "error"
+			}
+		}
+		detailTip := ""
 		if p.HistoryID > 0 {
+			detailTip = "Open task for full error"
 			v.Href = fmt.Sprintf("/task/%d", p.HistoryID)
 		}
+		v.Title = joinStatusTip(errTip, scheduleTip, limitTip, detailTip)
 		return v
 	}
 

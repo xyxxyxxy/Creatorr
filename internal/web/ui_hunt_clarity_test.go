@@ -355,3 +355,23 @@ func TestVideoBulkMetadataCommonStillReportsSpecialFeature(t *testing.T) {
 		t.Fatalf("special_feature=%v", meta["special_feature"])
 	}
 }
+
+func TestListLiveSearchPinsViewportAnchor(t *testing.T) {
+	// Live filter search must not jump the page: pin panel top across outerHTML swap.
+	req := httptest.NewRequest(http.MethodGet, "/static/app.js", nil)
+	rec := httptest.NewRecorder()
+	web.StaticHandler().ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("app.js status %d", rec.Code)
+	}
+	js := rec.Body.String()
+	for _, pin := range []string{
+		"listLiveAnchorTop",
+		"sources-list-live",
+		"getBoundingClientRect().top",
+	} {
+		if !strings.Contains(js, pin) {
+			t.Fatalf("app.js missing live-scroll pin %q", pin)
+		}
+	}
+}

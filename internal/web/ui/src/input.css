@@ -51,29 +51,37 @@
 }
 
 /*
-  Import list/summary file icons: daisyUI tip ::before uses z-index:2 inside the
-  tooltip's stacking context, so the bubble paints under the next filename/code
-  and Match controls (looks like no tip). Raise the host on hover/focus so the
-  whole tip stack wins. Prefer tooltip-top in markup for clear air above the row.
+  Tooltips on top: daisyUI tip ::before sits at z-index:2 inside the host, so
+  bubbles lose to later siblings, sticky cells, and the Filter join (z-40).
+  Raise every hovered tip host. Raise list/card/table rows that contain one so
+  the tip escapes the row stacking context. Stay below shell navbar (1100) and
+  .modal (1200). Prefer tooltip-top in markup for clear air above the row.
 */
-#import-list .tooltip:is(:hover, :focus-within),
-#import-summary-tree .tooltip:is(:hover, :focus-within) {
-  z-index: 40;
+.tooltip:is(:hover, :focus-within) {
+  z-index: 1000;
+}
+.list .list-row:has(.tooltip:is(:hover, :focus-within)),
+.list-table tbody tr:has(.tooltip:is(:hover, :focus-within)),
+#series-list-rows > .card:has(.tooltip:is(:hover, :focus-within)) {
+  position: relative;
+  z-index: 1000;
 }
 /* Episode pick list: Special kind tip must clear the scroll panel chrome. */
 #import-list details.dropdown[open] .js-import-video-list .tooltip:is(:hover, :focus-within) {
-  z-index: 60;
+  z-index: 1000;
 }
 #import-list details.dropdown[open] .dropdown-content {
   overflow: visible;
 }
 
 /*
-  List tables: same daisyUI tip stacking issue as Import. Raise the tip host on
-  hover so tooltip-top clears the next row / neighboring cells.
+  List Filter/Sort/View menus: each toolbar form is relative z-40, so a later
+  toolbar (series-detail Videos under Sources) paints over an open Sources
+  dropdown. Raise the form that has a focused dropdown above sibling toolbars;
+  stay below hovered tips (1000).
 */
-.list-table .tooltip:is(:hover, :focus-within) {
-  z-index: 40;
+form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
+  z-index: 80;
 }
 
 /*
@@ -108,8 +116,9 @@
 
 /*
   Configurable series/videos table view: many optional columns. Scroll sideways
-  inside the wrap; Title (and select when shown) stick left, Actions stick right
-  on video tables. Columns settings sit above the wrap (not clipped). Sticky
+  inside the wrap so Title/Actions sticky stay in the panel (not the viewport).
+  Overflow clips daisyUI tips that paint outside the wrap - keep tips short and
+  prefer tooltip-top. Columns settings sit above the wrap (not clipped). Sticky
   cells need their own bg so scrolled content does not show through; match row
   hover and bulk-select fill.
 */
@@ -592,21 +601,6 @@
 }
 
 /*
-  Series card/list monitor tip: filter toolbar is relative z-40, so tip hosts
-  inside later cards paint under it. Raise the hovered row/card above the bar.
-*/
-#series-list-rows > .card:has([data-series-monitor-wrap]:hover),
-#series-list-rows > .card:has([data-series-monitor-wrap]:focus-within),
-#series-list-rows > .list-row:has([data-series-monitor-wrap]:hover),
-#series-list-rows > .list-row:has([data-series-monitor-wrap]:focus-within) {
-  z-index: 50;
-}
-#series-list-rows > .card [data-series-monitor-wrap] .tooltip:is(:hover, :focus-within),
-#series-list-rows > .list-row [data-series-monitor-wrap] .tooltip:is(:hover, :focus-within) {
-  z-index: 50;
-}
-
-/*
   App column floor: Tailwind md (48rem). Below that, main p-4 vs md:p-6 (and
   other md: rules) jump the content width; keep the floor at md so the column
   never sits in that band. Cap stays max-w-5xl in markup; narrower viewports
@@ -614,6 +608,21 @@
 */
 .app-shell {
   min-width: 48rem;
+}
+
+/*
+  Browser full width: expand the Explorer list-panel to the viewport. Nav and
+  footer stay inside .app-shell max-w-5xl. Breakout uses 100vw + centering
+  margins so main padding does not leave the panel inset.
+*/
+.list-panel.browser-wide {
+  width: 100vw;
+  max-width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
 }
 
 /*

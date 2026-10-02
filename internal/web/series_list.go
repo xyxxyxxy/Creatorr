@@ -98,7 +98,7 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 	if filter.Sort == "" {
 		filter.Sort = library.SortTitle
 	}
-	writeSeriesListPrefs(w, filter)
+	writeSeriesListPrefs(w, r, filter)
 	viewMode, writeCookie := resolveViewMode(r, cookieModeSeries, viewList)
 	if writeCookie {
 		writeViewCookie(w, cookieModeSeries, viewMode)
@@ -214,6 +214,7 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 	if filter.Active() {
 		clearHref = clearOperatorFiltersURL(r)
 	}
+	at := explorerAtFrom(r, explorerAtSeries)
 	toolbar := listViewToolbar{
 		Query:            filter.Title,
 		QueryPlaceholder: searchByPlaceholder(filter.QField),
@@ -228,15 +229,16 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 		Badges:           seriesListBadges(r, filter),
 		ClearAllHref:     clearHref,
 		LiveTarget:       liveTarget,
-		FormAction:       "/series",
+		FormAction:       "/explorer/browse",
 		SeriesBulkMode:   true,
 	}
+	applyExplorerToolbar(&toolbar, explorerTypeSeries, at)
 
 	showSelectAll := total > len(rows)
 	if mode == ListModePaginated {
 		showSelectAll = load.Page.Show
 	}
-	return seriesListLiveData{
+	out := seriesListLiveData{
 		Series:          rows,
 		Page:            load.Page,
 		Load:            load,
@@ -251,7 +253,10 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 		ShowSelectAll:   showSelectAll,
 		InfiniteID:      infiniteID,
 		RowsID:          rowsID,
-	}, nil
+	}
+	rewriteExplorerInfinite(&out.Load, explorerTypeSeries, 0)
+	out.Page = out.Load.Page
+	return out, nil
 }
 
 func (h *Handler) seriesErrorCountJSON(w http.ResponseWriter, r *http.Request) {
@@ -263,19 +268,6 @@ func (h *Handler) seriesErrorCountJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(map[string]int{"count": n})
-}
-
-func (h *Handler) seriesListLive(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("HX-Target") == "series-list-infinite" {
-		h.renderSeriesInfiniteChunk(w, r)
-		return
-	}
-	data, err := h.loadSeriesListLive(w, r)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	render(w, "series_list_live", data)
 }
 
 func (h *Handler) renderSeriesInfiniteChunk(w http.ResponseWriter, r *http.Request) {

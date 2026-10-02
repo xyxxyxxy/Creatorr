@@ -75,7 +75,7 @@
     {{end}}
   </li>
 </ul>
-{{if ne .ViewMode "table"}}{{template "list_load_chrome" .}}{{end}}
+{{if ne .ViewMode "table"}}{{template "list_load_controls" .}}{{end}}
 {{if or (eq .ViewMode "cards") (eq .ViewMode "gallery")}}
 {{$seriesGrid := "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"}}
 {{if eq .ViewMode "gallery"}}{{$seriesGrid = "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7"}}{{end}}
@@ -91,7 +91,7 @@
   {{if eq .ListMode "infinite"}}{{template "list_infinite_sentinel" .}}{{end}}
 </ul>
 {{end}}
-{{template "list_load_chrome" .}}
+{{template "list_load_controls" .}}
 {{end}}
 </div>
 {{end}}

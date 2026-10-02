@@ -456,6 +456,7 @@ func seriesSortOpts(r *http.Request, current, curDir string) []listFilterOpt {
 		{Value: library.SortDownloaded, Label: "Downloaded", Selected: cur == library.SortDownloaded, Icon: "download"},
 		{Value: library.SortWanted, Label: "Wanted", Selected: cur == library.SortWanted, Icon: "circle-dashed"},
 		{Value: library.SortErrors, Label: "Errors", Selected: cur == library.SortErrors, Icon: "circle-alert"},
+		{Value: library.SortSize, Label: "Size", Selected: cur == library.SortSize, Icon: "hard-drive"},
 	}
 	annotateSortOpts(r, opts, library.SortTitle, curDir)
 	return opts
@@ -532,11 +533,9 @@ func applyViewURL(r *http.Request, view string) string {
 	}
 	// Always set view so changing the control updates the mode cookie.
 	q.Set("view", view)
-	u := *r.URL
-	enc := q.Encode()
-	if enc == "" {
-		u.RawQuery = ""
-	} else {
+	path := explorerFragmentPath(r)
+	u := url.URL{Path: path}
+	if enc := q.Encode(); enc != "" {
 		u.RawQuery = enc
 	}
 	return u.RequestURI()

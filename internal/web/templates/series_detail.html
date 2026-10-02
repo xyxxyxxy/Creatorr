@@ -71,63 +71,26 @@
 {{else}}
 {{template "list_header" (dict "level" "section" "title" "Sources" "add_modal" "modal-add-source" "add_label" "Add channel/playlist" "add_icon" "list-video" "add_modal2" "modal-add-single" "add_label2" "Add single video" "add_icon2" "film")}}
 <script type="application/json" id="series-source-urls">{{toJSON .SourceURLs}}</script>
-{{if or .Sources .ImportNullCount}}
-{{template "list_table"}}
-<thead><tr><th>URL / Name</th><th>Status</th><th class="w-0"></th></tr></thead>
-<tbody>
-  {{if .ImportNullCount}}
-  <tr class="row-hover">
-    <td>
-      <div class="flex items-center gap-2 min-w-0">
-        <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="imported or manually indexed videos with no feed source"><i data-lucide="folder-input" class="size-4 opacity-70"></i></span>
-        <a class="link link-hover font-medium min-w-0 truncate" href="/series/{{.Series.ID}}?source=import#series-videos-live">Import</a>
-      </div>
-    </td>
-    <td><span class="text-sm opacity-80 tabular-nums">{{if eq .ImportNullCount 1}}1 video imported{{else}}{{.ImportNullCount}} videos imported{{end}}</span></td>
-    <td class="whitespace-nowrap text-end"></td>
-  </tr>
-  {{end}}
-  {{range .Sources}}
-  <tr class="row-hover">
-    <td>
-      <div class="flex items-center gap-2 min-w-0">
-        {{if eq .Kind "single"}}
-        <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="single video"><i data-lucide="film" class="size-4 opacity-70"></i></span>
-        {{else if .IndexAsIgnored}}
-        <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="channel/playlist - new videos marked as ignored"><i data-lucide="list-minus" class="size-4 text-warning"></i></span>
-        {{else}}
-        <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="channel/playlist"><i data-lucide="list-video" class="size-4 opacity-70"></i></span>
-        {{end}}
-        {{if and .Label.Valid .Label.String}}
-        <a class="link link-hover font-medium min-w-0 truncate tooltip tooltip-top" href="/series/{{$.Series.ID}}/sources/{{.ID}}" data-tip="{{.URL}}">{{.Label.String}}</a>
-        {{else}}
-        <a class="link link-hover font-medium break-all min-w-0" href="/series/{{$.Series.ID}}/sources/{{.ID}}">{{displayURL .URL}}</a>
-        {{end}}
-      </div>
-      {{template "source_stalled" .}}
-    </td>
-    {{template "source_status_cell" .StatusInd}}
-    <td class="whitespace-nowrap text-end">
-      <div class="join">
-      {{if .HasRetryable}}
-      <label for="modal-retry-source-{{.ID}}" class="btn btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Clear download errors on this source and put videos back to wanted" aria-label="Retry">
-        <i data-lucide="rotate-ccw" class="size-3.5"></i>
-      </label>
-      {{end}}
-      {{template "source_scan_actions" .}}
-      <label for="modal-edit-source-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
-        <i data-lucide="pencil" class="size-3.5"></i>
-      </label>
-      <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
-        <i data-lucide="trash-2" class="size-3.5"></i>
-      </label>
-      </div>
-    </td>
-  </tr>
-  {{end}}
-</tbody>
-{{template "list_table_end"}}
-{{if .Sources}}{{template "pagination" .SourcesPage}}{{end}}
+{{template "sources_list_live" .SourcesLive}}
+{{if .ImportNullCount}}
+{{$importHref := printf "/series/%d?source=import" .Series.ID}}
+<a class="list bg-base-100 rounded-box border border-base-300 mt-3 block hover:bg-base-200/50"
+   href="{{$importHref}}#series-videos-live"
+   hx-get="{{$importHref}}"
+   hx-target="#series-videos-live"
+   hx-select="#series-videos-live"
+   hx-swap="outerHTML"
+   hx-push-url="true"
+   data-scroll-after-swap="series-videos-live"
+   aria-label="Show imported videos">
+  <div class="list-row" style="--list-grid-cols: 1fr max-content">
+    <div class="list-col-grow min-w-0 flex items-center gap-2">
+      <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="imported or manually indexed videos with no feed source"><i data-lucide="folder-input" class="size-4 opacity-70"></i></span>
+      <span class="link link-hover font-medium min-w-0 truncate">Import</span>
+    </div>
+    <div class="self-center text-sm opacity-80 tabular-nums">{{if eq .ImportNullCount 1}}1 video imported{{else}}{{.ImportNullCount}} videos imported{{end}}</div>
+  </div>
+</a>
 {{end}}
 {{end}}
 {{template "list_panel_end"}}
