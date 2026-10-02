@@ -5,7 +5,7 @@ const videoBulkSelected = new Set();
 
 let videoBulkMode = false;
 
-// Row click target for list + thumbs on both live roots.
+// Row click target for list + cards/gallery on both live roots.
 const VIDEO_BULK_ROW = "#series-videos-rows > [data-video-id], #videos-list-rows > [data-video-id]";
 
 function videoBulkLive() {

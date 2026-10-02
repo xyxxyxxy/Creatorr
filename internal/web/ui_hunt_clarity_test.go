@@ -235,10 +235,10 @@ func TestBulkThumbCardClickSelectsNotNavigates(t *testing.T) {
 		}
 	}
 	if strings.Contains(js, `#series-list-rows > .list-row[data-series-id]`) {
-		t.Fatal("series bulk click still list-row-only; thumbs would navigate")
+		t.Fatal("series bulk click still list-row-only; cards/gallery would navigate")
 	}
 	if strings.Contains(js, `#series-videos-rows > .list-row[data-video-id]`) {
-		t.Fatal("video bulk click still list-row-only; thumbs would navigate")
+		t.Fatal("video bulk click still list-row-only; cards/gallery would navigate")
 	}
 	for _, tip := range []string{
 		`Use the multi-select bar`,

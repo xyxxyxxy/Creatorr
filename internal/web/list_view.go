@@ -11,9 +11,12 @@ import (
 )
 
 const (
-	viewList   = "list"
-	viewThumbs = "thumbs"
-	viewTable  = "table"
+	viewList    = "list"
+	viewCards   = "cards"
+	viewGallery = "gallery"
+	viewTable   = "table"
+	// legacyViewThumbs is accepted in ?view= and cookies; canonicalizeViewMode maps it to cards.
+	legacyViewThumbs = "thumbs"
 
 	cookieModeSeries       = "creatorr_mode_series"
 	cookieModeSeriesVideos = "creatorr_mode_series_videos"
@@ -26,25 +29,37 @@ type listViewBadge struct {
 	Href  string // URL without this constraint
 }
 
+// canonicalizeViewMode maps a raw view token to a first-class mode, or "" if unknown.
+// Legacy "thumbs" becomes cards.
+func canonicalizeViewMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case viewList, viewCards, viewGallery, viewTable:
+		return strings.ToLower(strings.TrimSpace(raw))
+	case legacyViewThumbs:
+		return viewCards
+	default:
+		return ""
+	}
+}
+
+// viewPersistedInQuery is true for non-default views that filter rebuild URLs should keep.
+func viewPersistedInQuery(view string) bool {
+	return view == viewCards || view == viewGallery || view == viewTable
+}
+
 // resolveViewMode reads ?view= or the scope cookie; defaultMode is list unless locked.
 // When view is in the query, writeCookie is true so the handler can persist it.
 func resolveViewMode(r *http.Request, cookieName, defaultMode string) (mode string, writeCookie bool) {
-	raw := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("view")))
-	switch raw {
-	case viewThumbs, viewList, viewTable:
-		return raw, true
+	if mode := canonicalizeViewMode(r.URL.Query().Get("view")); mode != "" {
+		return mode, true
 	}
 	if c, err := r.Cookie(cookieName); err == nil {
-		v := strings.ToLower(strings.TrimSpace(c.Value))
-		if v == viewThumbs || v == viewList || v == viewTable {
-			return v, false
+		if mode := canonicalizeViewMode(c.Value); mode != "" {
+			return mode, false
 		}
 	}
-	if defaultMode == viewThumbs {
-		return viewThumbs, false
-	}
-	if defaultMode == viewTable {
-		return viewTable, false
+	if mode := canonicalizeViewMode(defaultMode); mode != "" {
+		return mode, false
 	}
 	return viewList, false
 }
@@ -166,6 +181,7 @@ func dropQueryKeys(r *http.Request, keys ...string) string {
 }
 
 // dropQueryValue removes one value from a multi query key (e.g. one genre).
+// Clearing the last status value sets status= so list prefs cookies can clear.
 func dropQueryValue(r *http.Request, key, value string) string {
 	q := r.URL.Query()
 	vals := q[key]
@@ -176,6 +192,11 @@ func dropQueryValue(r *http.Request, key, value string) string {
 		}
 		q.Add(key, v)
 	}
+	if key == "status" && len(q[key]) == 0 {
+		q.Set("status", "")
+	}
+	q.Del("page")
+	q.Del("through")
 	u := *r.URL
 	enc := q.Encode()
 	if enc == "" {
@@ -204,6 +225,8 @@ func clearOperatorFiltersURL(r *http.Request, keepKeys ...string) string {
 			}
 		}
 	}
+	// Empty status marks intentional clear so status cookies do not re-apply.
+	out.Set("status", "")
 	u := *r.URL
 	enc := out.Encode()
 	if enc == "" {
@@ -215,6 +238,7 @@ func clearOperatorFiltersURL(r *http.Request, keepKeys ...string) string {
 }
 
 // applySelectOptionURLClearingPresence returns path with name set/cleared and matching presence dropped.
+// Clearing status sets status= (empty) so list prefs cookies can clear.
 func applySelectOptionURLClearingPresence(r *http.Request, name, value, presenceField string) string {
 	q := r.URL.Query()
 	q.Del("page")
@@ -222,6 +246,8 @@ func applySelectOptionURLClearingPresence(r *http.Request, name, value, presence
 	q.Del(name)
 	if strings.TrimSpace(value) != "" {
 		q.Set(name, value)
+	} else if name == "status" {
+		q.Set("status", "")
 	}
 	clearPresenceField(q, presenceField)
 	u := *r.URL

@@ -92,10 +92,12 @@ func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
 }
 
 func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (seriesListLiveData, error) {
+	r = mergeSeriesListPrefs(r)
 	filter := parseSeriesListFilter(r)
 	if filter.Sort == "" {
 		filter.Sort = library.SortTitle
 	}
+	writeSeriesListPrefs(w, filter)
 	viewMode, writeCookie := resolveViewMode(r, cookieModeSeries, viewList)
 	if writeCookie {
 		writeViewCookie(w, cookieModeSeries, viewMode)

@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// ListMode is how a library list loads rows (orthogonal to view list|thumbs|table).
+// ListMode is how a library list loads rows (orthogonal to view list|cards|gallery|table).
 type ListMode string
 
 const (
@@ -20,7 +20,7 @@ const (
 	VideoPageSize = 10
 	// SeriesPageSize is the page length for paginated /series table view.
 	SeriesPageSize = 10
-	// InfiniteChunkSize is rows per infinite-scroll chunk (/series and /videos list|thumbs).
+	// InfiniteChunkSize is rows per infinite-scroll chunk (/series and /videos list|cards|gallery).
 	InfiniteChunkSize = 20
 	// FixedDefault is the one-shot size for fixed lists (Overview Recent).
 	FixedDefault = 10
@@ -46,7 +46,7 @@ type ListLoad struct {
 	BrowseCapped   bool // reached MaxInfiniteRows; show refine message, no sentinel
 }
 
-// libraryListMode returns infinite for /series and /videos list|thumbs; else paginated.
+// libraryListMode returns infinite for /series and /videos list|cards|gallery; else paginated.
 func libraryListMode(viewMode string) ListMode {
 	if viewMode == viewTable {
 		return ListModePaginated
@@ -74,7 +74,7 @@ func maxThroughPages(chunk, maxRows int) int {
 	return maxRows / chunk
 }
 
-// resolveInfiniteLoad builds ListLoad for infinite list|thumbs.
+// resolveInfiniteLoad builds ListLoad for infinite list|cards|gallery.
 // appendTarget is the element id HTMX targeted for a chunk append (e.g. videos-list-infinite).
 func resolveInfiniteLoad(r *http.Request, total int, liveTarget, appendTarget, pageParam string) ListLoad {
 	chunk := InfiniteChunkSize

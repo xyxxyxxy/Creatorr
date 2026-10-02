@@ -10,11 +10,43 @@ func TestLibraryListMode(t *testing.T) {
 	if libraryListMode(viewList) != ListModeInfinite {
 		t.Fatalf("list → infinite")
 	}
-	if libraryListMode(viewThumbs) != ListModeInfinite {
-		t.Fatalf("thumbs → infinite")
+	if libraryListMode(viewCards) != ListModeInfinite {
+		t.Fatalf("cards → infinite")
+	}
+	if libraryListMode(viewGallery) != ListModeInfinite {
+		t.Fatalf("gallery → infinite")
 	}
 	if libraryListMode(viewTable) != ListModePaginated {
 		t.Fatalf("table → paginated")
+	}
+}
+
+func TestCanonicalizeViewMode(t *testing.T) {
+	if got := canonicalizeViewMode("thumbs"); got != viewCards {
+		t.Fatalf("thumbs → cards, got %q", got)
+	}
+	if got := canonicalizeViewMode("cards"); got != viewCards {
+		t.Fatalf("got %q", got)
+	}
+	if got := canonicalizeViewMode("gallery"); got != viewGallery {
+		t.Fatalf("got %q", got)
+	}
+	if got := canonicalizeViewMode("nope"); got != "" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestResolveViewModeThumbsAlias(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/series?view=thumbs", nil)
+	mode, write := resolveViewMode(r, cookieModeSeries, viewList)
+	if mode != viewCards || !write {
+		t.Fatalf("got mode=%q write=%v", mode, write)
+	}
+	r2 := httptest.NewRequest(http.MethodGet, "/series", nil)
+	r2.AddCookie(&http.Cookie{Name: cookieModeSeries, Value: "thumbs"})
+	mode, write = resolveViewMode(r2, cookieModeSeries, viewList)
+	if mode != viewCards || write {
+		t.Fatalf("cookie thumbs → cards, got mode=%q write=%v", mode, write)
 	}
 }
 

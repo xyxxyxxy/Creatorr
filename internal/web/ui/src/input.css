@@ -77,6 +77,36 @@
 }
 
 /*
+  Gallery lists: stock daisyUI image-full always shows the body overlay and dims
+  the figure. gallery-hover-overlay reveals that overlay (and dim) on hover/focus;
+  coarse pointers keep it visible.
+*/
+.card.image-full.gallery-hover-overlay > .card-body {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.card.image-full.gallery-hover-overlay > figure img {
+  filter: none;
+  transition: filter 150ms ease;
+}
+@media (hover: hover) {
+  .card.image-full.gallery-hover-overlay:is(:hover, :focus-within) > .card-body {
+    opacity: 1;
+  }
+  .card.image-full.gallery-hover-overlay:is(:hover, :focus-within) > figure img {
+    filter: brightness(28%);
+  }
+}
+@media (hover: none) {
+  .card.image-full.gallery-hover-overlay > .card-body {
+    opacity: 1;
+  }
+  .card.image-full.gallery-hover-overlay > figure img {
+    filter: brightness(28%);
+  }
+}
+
+/*
   Configurable series/videos table view: many optional columns. Scroll sideways
   inside the wrap; Title (and select when shown) stick left, Actions stick right
   on video tables. Columns settings sit above the wrap (not clipped). Sticky

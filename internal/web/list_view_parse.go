@@ -145,7 +145,7 @@ func encodeVideoListFilter(filter library.VideoListFilter, page int, view string
 	if s := parseVideoSort(filter.Sort); s != "" && s != library.SortUpload {
 		q.Set("sort", s)
 	}
-	if view == viewThumbs || view == viewTable {
+	if viewPersistedInQuery(view) {
 		q.Set("view", view)
 	}
 	if page > 1 {
@@ -436,7 +436,8 @@ func searchByPlaceholder(qField string) string {
 func viewOpts(r *http.Request, current string) []listFilterOpt {
 	opts := []listFilterOpt{
 		{Value: viewList, Label: "List", Selected: current == viewList || current == ""},
-		{Value: viewThumbs, Label: "Thumbs", Selected: current == viewThumbs},
+		{Value: viewCards, Label: "Card", Selected: current == viewCards},
+		{Value: viewGallery, Label: "Gallery", Selected: current == viewGallery},
 		{Value: viewTable, Label: "Table", Selected: current == viewTable},
 	}
 	annotateViewOpts(r, opts)
@@ -469,11 +470,8 @@ func annotateSortOpts(r *http.Request, opts []listFilterOpt, defaultSort, curDir
 			opts[i].Href = sortDirToggleURL(r, v, curDir)
 			continue
 		}
-		if v == defaultSort {
-			opts[i].Href = dropQueryKeys(r, "sort", "dir", "page")
-		} else {
-			opts[i].Href = applySortFieldURL(r, v)
-		}
+		// Always set sort= so cookie prefs see an explicit choice (incl. page default).
+		opts[i].Href = applySortFieldURL(r, v)
 	}
 }
 
@@ -557,7 +555,7 @@ func seriesListBadges(r *http.Request, filter library.SeriesListFilter) []listVi
 		out = append(out, listViewBadge{Label: "Delivery: " + filter.DeliveryMode, Href: dropQueryKeys(r, "delivery", "page")})
 	}
 	if filter.Status != "" {
-		out = append(out, listViewBadge{Label: "Status: " + filter.Status, Href: dropQueryKeys(r, "status", "page")})
+		out = append(out, listViewBadge{Label: "Status: " + filter.Status, Href: clearQueryKey(r, "status")})
 	}
 	if filter.PremieredYear > 0 {
 		out = append(out, listViewBadge{Label: "Premiered: " + strconv.Itoa(filter.PremieredYear), Href: dropQueryKeys(r, "year", "page")})

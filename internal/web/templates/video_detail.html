@@ -155,9 +155,9 @@
   <tr><th class="w-40">Source URL</th><td class="opacity-60 text-xs break-all">none</td></tr>
   {{end}}
   {{if .Video.UploadDate.Valid}}
-  <tr><th class="w-40">Upload date</th><td>{{template "local_time" .Video.UploadDate.String}}</td></tr>
+  <tr><th class="w-40">Uploaded</th><td>{{template "local_time" .Video.UploadDate.String}}</td></tr>
   {{else}}
-  <tr><th class="w-40">Upload date</th><td class="opacity-60">none</td></tr>
+  <tr><th class="w-40">Uploaded</th><td class="opacity-60">none</td></tr>
   {{end}}
   {{if .Video.MediaType}}
   <tr><th class="w-40">Media type</th><td>{{.Video.MediaType}}</td></tr>

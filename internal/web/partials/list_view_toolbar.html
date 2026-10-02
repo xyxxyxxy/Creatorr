@@ -3,7 +3,7 @@
      Bulk/Filter/Sort/View wrappers use .input.join-item (same field chrome as search; no nested btn). */}}
 {{$live := .LiveTarget}}
 <form method="get"{{if .FormAction}} action="{{.FormAction}}"{{end}}
-      class="join w-full mb-2 js-keep-scroll js-list-filters min-w-0"
+      class="join w-full mb-2 js-keep-scroll js-list-filters relative z-40 min-w-0"
       aria-label="{{.AriaLabel}}"{{if $live}} hx-get="{{.FormAction}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}
       data-list-view-toolbar{{if $live}} data-live-target="{{$live}}"{{end}}>
   {{if .SeriesBulkMode}}
@@ -172,7 +172,7 @@
   {{end}}
 
   {{if .ShowView}}
-  {{$viewLabel := "List"}}{{$viewValue := "list"}}{{$viewIcon := "layout-list"}}{{range .ViewOpts}}{{if .Selected}}{{$viewLabel = .Label}}{{$viewValue = .Value}}{{if eq .Value "thumbs"}}{{$viewIcon = "layout-grid"}}{{else if eq .Value "table"}}{{$viewIcon = "table"}}{{end}}{{end}}{{end}}
+  {{$viewLabel := "List"}}{{$viewValue := "list"}}{{$viewIcon := "layout-list"}}{{range .ViewOpts}}{{if .Selected}}{{$viewLabel = .Label}}{{$viewValue = .Value}}{{if eq .Value "cards"}}{{$viewIcon = "layout-grid"}}{{else if eq .Value "gallery"}}{{$viewIcon = "images"}}{{else if eq .Value "table"}}{{$viewIcon = "table"}}{{end}}{{end}}{{end}}
   <div class="dropdown dropdown-bottom dropdown-end input join-item shrink-0 js-list-toolbar-dd">
     <input type="hidden" name="view" value="{{$viewValue}}" />
     <div tabindex="0" role="button" class="js-list-toolbar-dd-btn" aria-label="View: {{$viewLabel}}">
@@ -182,7 +182,7 @@
       {{range .ViewOpts}}
       <li>
         <a href="{{.Href}}"{{if $live}} hx-get="{{.Href}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}{{if .Selected}} class="active"{{end}}>
-          {{if eq .Value "thumbs"}}<i data-lucide="layout-grid" class="size-4" aria-hidden="true"></i>{{else if eq .Value "table"}}<i data-lucide="table" class="size-4" aria-hidden="true"></i>{{else}}<i data-lucide="layout-list" class="size-4" aria-hidden="true"></i>{{end}}
+          {{if eq .Value "cards"}}<i data-lucide="layout-grid" class="size-4" aria-hidden="true"></i>{{else if eq .Value "gallery"}}<i data-lucide="images" class="size-4" aria-hidden="true"></i>{{else if eq .Value "table"}}<i data-lucide="table" class="size-4" aria-hidden="true"></i>{{else}}<i data-lucide="layout-list" class="size-4" aria-hidden="true"></i>{{end}}
           {{.Label}}
         </a>
       </li>
@@ -191,16 +191,17 @@
   </div>
   {{end}}
 </form>
-{{if .Badges}}
+{{if or .Badges .ClearAllHref}}
 {{/* daisyUI filter chips (checkbox form style): clear × last / on the right.
-     https://daisyui.com/components/filter/#filter-using-html-form-checkboxes-and-a-reset-button */}}
+     https://daisyui.com/components/filter/#filter-using-html-form-checkboxes-and-a-reset-button
+     Clear all only when ClearAllHref is set (operator filters active). */}}
 <div class="filter mb-3" aria-label="Active filters">
   {{range .Badges}}
   <input class="btn" type="checkbox" checked aria-label="{{.Label}}"
          {{if $live}}hx-get="{{.Href}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true" hx-trigger="change"
          {{else}}data-href="{{.Href}}" onchange="location.href=this.getAttribute('data-href')"{{end}} />
   {{end}}
-  {{if and .ClearAllHref (ge (len .Badges) 2)}}
+  {{if .ClearAllHref}}
   <a href="{{.ClearAllHref}}" class="btn btn-square" aria-label="Clear all"
      {{if $live}}hx-get="{{.ClearAllHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>×</a>
   {{end}}

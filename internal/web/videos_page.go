@@ -77,10 +77,12 @@ func (h *Handler) renderVideosInfiniteChunk(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videosPageLiveData, error) {
+	r = mergeVideosListPrefs(r)
 	filter := parseVideoListFilter(r, nil, true)
 	if filter.Sort == "" {
 		filter.Sort = library.SortAdded
 	}
+	writeVideosListPrefs(w, filter)
 	viewMode, writeCookie := resolveViewMode(r, cookieModeVideos, viewList)
 	if writeCookie {
 		writeViewCookie(w, cookieModeVideos, viewMode)

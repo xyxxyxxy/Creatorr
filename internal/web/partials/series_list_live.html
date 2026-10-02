@@ -76,8 +76,10 @@
   </li>
 </ul>
 {{if ne .ViewMode "table"}}{{template "list_load_chrome" .}}{{end}}
-{{if eq .ViewMode "thumbs"}}
-<ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" id="series-list-rows">
+{{if or (eq .ViewMode "cards") (eq .ViewMode "gallery")}}
+{{$seriesGrid := "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"}}
+{{if eq .ViewMode "gallery"}}{{$seriesGrid = "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7"}}{{end}}
+<ul class="grid gap-3 {{$seriesGrid}}" id="series-list-rows">
   {{template "series_rows_inner" .}}
   {{if eq .ListMode "infinite"}}{{template "list_infinite_sentinel" .}}{{end}}
 </ul>
@@ -95,9 +97,13 @@
 {{end}}
 
 {{define "series_rows_inner"}}
-{{if eq .ViewMode "thumbs"}}
+{{if eq .ViewMode "cards"}}
   {{range .Series}}
-  {{template "series_thumb_card" .}}
+  {{template "series_card" .}}
+  {{end}}
+{{else if eq .ViewMode "gallery"}}
+  {{range .Series}}
+  {{template "series_gallery_card" .}}
   {{end}}
 {{else}}
   {{range .Series}}
