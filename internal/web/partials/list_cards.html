@@ -49,9 +49,9 @@
 {{end}}
 
 {{define "video_gallery_card"}}
-{{/* Dot: same as video_card; daisyUI image-full + gallery-hover-overlay (hover title).
-     No per-item Want/Ignore/Delete, no duration. Select wrap stays for bulk mode. */}}
-<li class="card image-full gallery-hover-overlay bg-base-100 border border-base-300 relative aspect-video overflow-hidden" {{if .Select}}data-video-id="{{.ID}}"{{end}}>
+{{/* Dot: same as video_card; daisyUI image-full + gallery-hover-overlay when thumb
+     exists (hover title). No thumb: always show title. No per-item actions. */}}
+<li class="card image-full{{if .ThumbURL}} gallery-hover-overlay{{end}} bg-base-100 border border-base-300 relative aspect-video overflow-hidden" {{if .Select}}data-video-id="{{.ID}}"{{end}}>
   <figure class="m-0">
     {{if .ThumbURL}}
     <img class="size-full object-cover" src="{{.ThumbURL}}" alt="" loading="lazy" />
@@ -118,9 +118,9 @@
 {{end}}
 
 {{define "series_gallery_card"}}
-{{/* Dot: seriesListRow fields; daisyUI image-full + gallery-hover-overlay.
-     No per-item monitor. Select wrap stays for bulk mode. */}}
-<li class="card image-full gallery-hover-overlay bg-base-100 border border-base-300 relative aspect-square overflow-hidden" data-series-id="{{.ID}}">
+{{/* Dot: seriesListRow fields; gallery-hover-overlay when poster exists.
+     No poster: always show title. No per-item monitor. */}}
+<li class="card image-full{{if .PosterURL}} gallery-hover-overlay{{end}} bg-base-100 border border-base-300 relative aspect-square overflow-hidden" data-series-id="{{.ID}}">
   <figure class="m-0">
     {{if .PosterURL}}
     <img class="size-full object-cover" src="{{.PosterURL}}" alt="" loading="lazy" />
