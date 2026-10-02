@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -338,14 +339,14 @@ func TestOverviewShowsRunningTasks(t *testing.T) {
 
 	pendingID, err := q.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindScan, Domain: "example.com", Message: "queued only",
+		Kind:   queue.KindScan, Domain: "example.com", Message: "queued only",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	runningID, err := q.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindDownload, Domain: "cdn.example", Message: "Fetching",
+		Kind:   queue.KindDownload, Domain: "cdn.example", Message: "Fetching",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -971,7 +972,7 @@ func TestTaskDetailPage(t *testing.T) {
 
 	tid, err := q.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindScan, Domain: "system", Message: "scan",
+		Kind:   queue.KindScan, Domain: "system", Message: "scan",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1185,7 +1186,7 @@ func TestTaskDetailRenameEpisodesList(t *testing.T) {
 
 	tid, err := q.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindRenameEpisodes, Domain: queue.SystemDomain, Message: "Rename",
+		Kind:   queue.KindRenameEpisodes, Domain: queue.SystemDomain, Message: "Rename",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1248,7 +1249,7 @@ func TestSourceDetailPage(t *testing.T) {
 	_, _ = q.CancelAll()
 	tid, err := q.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindScan, Domain: "example.com", Message: "Scan: indexed 1 videos",
+		Kind:   queue.KindScan, Domain: "example.com", Message: "Scan: indexed 1 videos",
 		SeriesID: ser.ID,
 		Payload:  map[string]any{"source_id": src.ID},
 	})
@@ -1464,6 +1465,160 @@ func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
 	}
 	if !strings.Contains(body, `action="/actions/bulk-want-videos"`) {
 		t.Fatalf("series detail missing bulk want form: %s", truncate(body, 400))
+	}
+}
+
+func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 25; i++ {
+		if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
+			SeriesID:   ser.ID,
+			Title:      "Ep " + itoa(int64(i+1)),
+			UploadDate: "2024-01-02T00:00:00Z",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	// Infinite list: first chunk + sentinel.
+	req := httptest.NewRequest(http.MethodGet, "/videos?view=list", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("list status %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-list-mode="infinite"`) {
+		t.Fatalf("missing infinite mode: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, `id="videos-list-infinite"`) {
+		t.Fatalf("missing sentinel: %s", truncate(body, 400))
+	}
+	if strings.Contains(body, `««`) {
+		t.Fatalf("pager should not show for infinite list")
+	}
+	if got := strings.Count(body, `data-video-id="`); got != web.InfiniteChunkSize {
+		t.Fatalf("first paint rows=%d want %d", got, web.InfiniteChunkSize)
+	}
+	if got := strings.Count(body, `class="skeleton`); got < 5 {
+		t.Fatalf("expected next-chunk skeletons in sentinel, got %d: %s", got, truncate(body, 400))
+	}
+
+	// Append chunk page=2.
+	req = httptest.NewRequest(http.MethodGet, "/videos?view=list&page=2", nil)
+	req.Header.Set("HX-Target", "videos-list-infinite")
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("append status %d", rec.Code)
+	}
+	chunk := rec.Body.String()
+	if !strings.Contains(chunk, `data-infinite-chunk`) {
+		t.Fatalf("missing chunk wrapper: %s", truncate(chunk, 300))
+	}
+	if got := strings.Count(chunk, `data-video-id="`); got != 5 {
+		// 25 total, first 20, page 2 has 5
+		t.Fatalf("append rows=%d want 5: %s", got, truncate(chunk, 300))
+	}
+
+	// through=2 full live returns 40 when enough exist.
+	req = httptest.NewRequest(http.MethodGet, "/videos?view=list&through=2", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	if got := strings.Count(body, `data-video-id="`); got != 25 {
+		// only 25 videos total
+		t.Fatalf("through=2 rows=%d want 25", got)
+	}
+
+	// Refresh clamp: through=20 → max 100, but we only have 25.
+	req = httptest.NewRequest(http.MethodGet, "/videos?view=list&through=20", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	if !strings.Contains(body, `data-through-clamped="1"`) {
+		t.Fatalf("expected clamp flag: %s", truncate(body, 400))
+	}
+
+	// Table: paginated, pager when enough pages, no sentinel.
+	req = httptest.NewRequest(http.MethodGet, "/videos?view=table", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	if !strings.Contains(body, `data-list-table`) {
+		t.Fatalf("table missing: %s", truncate(body, 300))
+	}
+	if strings.Contains(body, `id="videos-list-infinite"`) {
+		t.Fatalf("table must not have infinite sentinel")
+	}
+	if got := strings.Count(body, `data-video-id="`); got != web.VideoPageSize {
+		t.Fatalf("table page rows=%d want %d", got, web.VideoPageSize)
+	}
+	if !strings.Contains(body, `««`) {
+		t.Fatalf("table missing pager")
+	}
+
+	// Series detail videos always paginated.
+	req = httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID)+"?view=list", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	if strings.Contains(body, `id="series-videos`) && strings.Contains(body, `-infinite"`) {
+		t.Fatalf("series detail must not infinite-scroll videos")
+	}
+	if !strings.Contains(body, `««`) {
+		t.Fatalf("series detail videos missing pager")
+	}
+
+	// Series list infinite.
+	req = httptest.NewRequest(http.MethodGet, "/series?view=list", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	if !strings.Contains(body, `data-list-mode="infinite"`) {
+		t.Fatalf("series list missing infinite: %s", truncate(body, 300))
+	}
+
+	// Overview fixed.
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	if !strings.Contains(body, `data-list-mode="fixed"`) {
+		t.Fatalf("overview recent missing fixed mode")
+	}
+}
+
+func TestListInfiniteJSDuplicateIDPin(t *testing.T) {
+	b, err := os.ReadFile("ui/src/js/list_infinite.js")
+	if err != nil {
+		// Test cwd may be package dir.
+		b, err = os.ReadFile("internal/web/ui/src/js/list_infinite.js")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "duplicate data-video-id") {
+		t.Fatal("missing duplicate-id string-guard pin in list_infinite.js")
 	}
 }
 

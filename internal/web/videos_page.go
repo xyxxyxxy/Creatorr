@@ -10,6 +10,8 @@ import (
 type videosPageLiveData struct {
 	Videos          []seriesVideoRow
 	Page            PageInfo
+	Load            ListLoad
+	ListMode        ListMode
 	FilterTotal     int
 	VideoFilter     listViewToolbar
 	FilterActive    bool
@@ -18,10 +20,17 @@ type videosPageLiveData struct {
 	BulkEditBusy    bool
 	TableCols       []tableCol
 	TableColsCookie string
+	ShowSelectAll   bool
+	InfiniteID      string
+	RowsID          string
 	OOB             bool
 }
 
 func (h *Handler) videosPage(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("HX-Target") == "videos-list-infinite" {
+		h.renderVideosInfiniteChunk(w, r)
+		return
+	}
 	data, err := h.loadVideosLive(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -42,12 +51,29 @@ func (h *Handler) videosPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) videosLive(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("HX-Target") == "videos-list-infinite" {
+		h.renderVideosInfiniteChunk(w, r)
+		return
+	}
 	data, err := h.loadVideosLive(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
 	render(w, "videos_live", data)
+}
+
+func (h *Handler) renderVideosInfiniteChunk(w http.ResponseWriter, r *http.Request) {
+	data, err := h.loadVideosLive(w, r)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if !data.Load.Append {
+		render(w, "videos_live", data)
+		return
+	}
+	render(w, "videos_infinite_chunk", data)
 }
 
 func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videosPageLiveData, error) {
@@ -59,14 +85,29 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 	if writeCookie {
 		writeViewCookie(w, cookieModeVideos, viewMode)
 	}
-	page := ParsePage(r, "page")
 	total, err := h.Library.CountVideosFiltered(0, filter)
 	if err != nil {
 		return videosPageLiveData{}, err
 	}
-	pageInfo := NewPageInfoSize(r, "page", page, total, VideoPageSize)
-	pageInfo.LiveTarget = "videos-list-live"
-	list, err := h.Library.ListVideosPageFiltered(0, filter, VideoPageSize, OffsetSize(pageInfo.Page, VideoPageSize))
+
+	mode := libraryListMode(viewMode)
+	const liveTarget = "videos-list-live"
+	const infiniteID = "videos-list-infinite"
+	const rowsID = "videos-list-rows"
+
+	var load ListLoad
+	var limit, offset int
+	switch mode {
+	case ListModeInfinite:
+		load = resolveInfiniteLoad(r, total, liveTarget, infiniteID, "page")
+		limit, offset = infiniteLimitOffset(load)
+	default:
+		load = resolvePaginatedLoad(r, total, VideoPageSize, liveTarget, "page")
+		limit = load.PageSize
+		offset = OffsetSize(load.Page.Page, load.PageSize)
+	}
+
+	list, err := h.Library.ListVideosPageFiltered(0, filter, limit, offset)
 	if err != nil {
 		return videosPageLiveData{}, err
 	}
@@ -113,10 +154,10 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		FilterActive:     filter.Active(),
 		Badges:           videoListBadges(r, filter, true, titles),
 		ClearAllHref:     "",
-		LiveTarget:       "videos-list-live",
+		LiveTarget:       liveTarget,
 		FormAction:       "/videos",
 		VideoBulkMode:    true,
-		DateClearHref:    dropQueryKeys(r, "from", "to", "page"),
+		DateClearHref:    dropQueryKeys(r, "from", "to", "page", "through"),
 	}
 	annotateUploadPresence(r, &toolbar)
 	if filter.Active() {
@@ -124,9 +165,15 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 	}
 
 	bulkBusy, _ := h.Library.BulkEditVideosBusy()
+	showSelectAll := total > len(rows)
+	if mode == ListModePaginated {
+		showSelectAll = load.Page.Show
+	}
 	return videosPageLiveData{
 		Videos:          rows,
-		Page:            pageInfo,
+		Page:            load.Page,
+		Load:            load,
+		ListMode:        mode,
 		FilterTotal:     total,
 		VideoFilter:     toolbar,
 		FilterActive:    filter.Active(),
@@ -135,5 +182,8 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		BulkEditBusy:    bulkBusy,
 		TableCols:       parseTableColsCookie(r, cookieColsVideos, videoTableColDefs(true)),
 		TableColsCookie: cookieColsVideos,
+		ShowSelectAll:   showSelectAll,
+		InfiniteID:      infiniteID,
+		RowsID:          rowsID,
 	}, nil
 }

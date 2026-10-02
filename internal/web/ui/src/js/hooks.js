@@ -104,6 +104,11 @@ export function bootHooks() {
         root.id === "videos-list-live")
     ) {
       delete document.body.dataset.listLiveScrollY;
+      // Infinite keep-depth clamp: list_infinite.js scrolls to list top instead.
+      if (root.getAttribute("data-through-clamped") === "1") {
+        restoreListFilterQFocus(root);
+        return;
+      }
       const top = Number(y);
       if (Number.isFinite(top)) requestAnimationFrame(() => window.scrollTo(0, top));
       restoreListFilterQFocus(root);

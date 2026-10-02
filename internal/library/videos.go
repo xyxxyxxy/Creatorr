@@ -198,7 +198,7 @@ func likeContainsPattern(s string) string {
 // across all series, ordered by acquired_at then id (highest first).
 func (s *Store) ListRecentVideos(limit int) ([]Video, error) {
 	if limit <= 0 {
-		limit = 20
+		limit = 10
 	}
 	rows, err := s.DB.SQL.Query(`
 		SELECT `+videoSelectCols+`

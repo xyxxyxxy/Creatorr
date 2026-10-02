@@ -351,6 +351,11 @@ async function selectAllMatchingSeries() {
   restoreSeriesBulkCheckboxes();
 }
 
+/** Re-apply selected Set to checkboxes after infinite append or keep-depth live swap. */
+export function refreshSeriesBulkAfterDOM() {
+  syncSeriesBulkUI();
+}
+
 export function bootSeriesBulk() {
   document.body.addEventListener("change", (ev) => {
     const t = ev.target;

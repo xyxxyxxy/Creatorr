@@ -1,0 +1,63 @@
+{{define "list_infinite_sentinel"}}
+{{/* Dot: Load ListLoad, InfiniteID, ViewMode. Self-replacing HTMX load-more.
+     Next-chunk skeletons only (not full remaining): loading affordance without
+     letting the scrollbar scrub far past loaded rows. */}}
+{{if .Load.HasMore}}
+{{$series := eq .InfiniteID "series-list-infinite"}}
+<li id="{{.InfiniteID}}"
+    class="list-none col-span-full !p-0 !m-0 border-0"
+    hx-get="{{.Load.NextHref}}"
+    hx-trigger="revealed"
+    hx-swap="outerHTML"
+    hx-sync="this:replace"
+    hx-select="[data-infinite-chunk] > *"
+    data-infinite-page="{{.Load.NextPage}}"
+    aria-busy="true"
+    aria-label="Loading more">
+  {{if eq .ViewMode "thumbs"}}
+  <ul class="grid gap-3 {{if $series}}grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5{{else}}grid-cols-2 sm:grid-cols-3 lg:grid-cols-4{{end}}" aria-hidden="true">
+    {{range seq .Load.SkeletonCount}}
+    <li class="card bg-base-100 border border-base-300 overflow-hidden pointer-events-none">
+      {{if $series}}
+      <div class="skeleton aspect-[2/3] max-h-64 w-full rounded-none"></div>
+      {{else}}
+      <div class="skeleton aspect-video w-full rounded-none"></div>
+      {{end}}
+      <div class="card-body p-3 gap-2">
+        <div class="skeleton h-4 w-3/4"></div>
+        <div class="skeleton h-3 w-1/2"></div>
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <div class="flex flex-col" aria-hidden="true">
+    {{range seq .Load.SkeletonCount}}
+    <div class="flex gap-4 items-center px-4 py-3{{if not $series}} border-b border-base-200 last:border-0{{end}}">
+      {{if $series}}
+      <div class="skeleton size-14 shrink-0 rounded-full"></div>
+      {{else}}
+      <div class="skeleton w-[112px] aspect-video shrink-0 rounded"></div>
+      {{end}}
+      <div class="flex-1 flex flex-col gap-2 min-w-0">
+        <div class="skeleton h-4 w-3/5"></div>
+        <div class="skeleton h-3 w-2/5"></div>
+      </div>
+    </div>
+    {{end}}
+  </div>
+  {{end}}
+</li>
+{{else if .Load.BrowseCapped}}
+<li class="list-none col-span-full text-center text-sm opacity-60 py-3" role="status">
+  Refine filters or use table view to browse further.
+</li>
+{{end}}
+{{end}}
+
+{{define "list_load_chrome"}}
+{{/* Dot: ListMode, Load (Page inside for paginated). */}}
+{{if eq .ListMode "paginated"}}
+{{template "pagination" .Load.Page}}
+{{end}}
+{{end}}

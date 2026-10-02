@@ -353,6 +353,11 @@ function onVideoBulkPage() {
   return !!videoBulkLive();
 }
 
+/** Re-apply selected Set to checkboxes after infinite append or keep-depth live swap. */
+export function refreshVideoBulkAfterDOM() {
+  syncVideoBulkUI();
+}
+
 export function bootVideoBulk() {
   document.body.addEventListener("change", (ev) => {
     const t = ev.target;

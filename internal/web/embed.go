@@ -87,6 +87,13 @@ func templateFuncs() template.FuncMap {
 		"list": func(items ...any) []any {
 			return items
 		},
+		// seq returns n empty structs for {{range seq N}} loops (skeleton slots, etc.).
+		"seq": func(n int) []struct{} {
+			if n < 1 {
+				return nil
+			}
+			return make([]struct{}, n)
+		},
 		"displayURL": DisplayURL,
 		"retentionDays": func(n sql.NullInt64) int64 {
 			if !n.Valid {

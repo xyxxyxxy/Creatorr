@@ -43,6 +43,7 @@
 
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Recent additions" "icon" "square-play" "help" "Latest downloaded videos across all series (acquired order). Browse and filter on Videos.")}}
+<div data-list-mode="fixed">
 {{if not .RecentVideos}}
 {{template "list_empty" "No downloaded videos yet."}}
 {{else}}
@@ -64,6 +65,7 @@
   {{end}}
 </ul>
 {{end}}
+</div>
 {{template "list_panel_end"}}
 
 {{template "add_series_modal" .}}

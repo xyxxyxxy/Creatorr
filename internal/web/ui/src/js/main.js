@@ -19,6 +19,7 @@ import { bootSeriesBulk } from "./series_bulk.js";
 import { bootVideoBulk } from "./video_bulk.js";
 import { bootConfirmNotify } from "./confirm_notify.js";
 import { bootListTable } from "./list_table.js";
+import { bootListInfinite } from "./list_infinite.js";
 
 bootTheme();
 bootLanes();
@@ -40,3 +41,4 @@ bootSeriesBulk();
 bootVideoBulk();
 bootConfirmNotify();
 bootListTable();
+bootListInfinite();

@@ -16,7 +16,7 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
 
-	recentVids, _ := h.Library.ListRecentVideos(VideoPageSize)
+	recentVids, _ := h.Library.ListRecentVideos(FixedDefault)
 	recentRows := h.buildSeriesVideoRows(recentVids, nil, nil)
 	seriesIDs := make([]int64, 0, len(recentVids))
 	seen := map[int64]struct{}{}

@@ -69,6 +69,10 @@ func activeTaskLinkPrefix(status string) string {
 }
 
 func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("HX-Target") == "series-list-infinite" {
+		h.renderSeriesInfiniteChunk(w, r)
+		return
+	}
 	live, err := h.loadSeriesListLive(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), 500)

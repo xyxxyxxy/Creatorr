@@ -19,7 +19,11 @@
      data-filter-total="{{.FilterTotal}}"
      data-bulk-busy="{{if .BulkEditBusy}}1{{else}}0{{end}}"
      data-bulk-mode="0"
-     data-view-mode="{{.ViewMode}}">
+     data-view-mode="{{.ViewMode}}"
+     data-list-mode="{{.ListMode}}"
+     data-loaded-through="{{.Load.Through}}"
+     data-through-clamped="{{if .Load.ThroughClamped}}1{{else}}0{{end}}"
+     data-loaded-count="{{.Load.LoadedCount}}">
 {{template "list_view_toolbar" .VideoFilter}}
 {{if not .Videos}}
 {{if .FilterActive}}
@@ -31,10 +35,58 @@
 {{template "video_bulk_bar" (dict
   "FilterTotal" .FilterTotal
   "BulkEditBusy" .BulkEditBusy
-  "ShowSelectAll" .Page.Show
+  "ShowSelectAll" .ShowSelectAll
 )}}
 {{if eq .ViewMode "thumbs"}}
 <ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" id="videos-list-rows">
+  {{template "videos_rows_inner" .}}
+  {{if eq .ListMode "infinite"}}{{template "list_infinite_sentinel" .}}{{end}}
+</ul>
+{{else if eq .ViewMode "table"}}
+{{template "video_table" (dict
+  "Videos" .Videos
+  "TableCols" .TableCols
+  "TableColsCookie" .TableColsCookie
+  "BulkEditBusy" .BulkEditBusy
+  "SeriesTitles" .SeriesTitles
+  "Select" true
+  "LiveTarget" "videos-list-live"
+  "RowsID" "videos-list-rows"
+  "Page" .Page
+)}}
+{{else}}
+<ul class="list bg-base-100 rounded-box border border-base-300" id="videos-list-rows">
+  {{template "videos_rows_inner" .}}
+  {{if eq .ListMode "infinite"}}{{template "list_infinite_sentinel" .}}{{end}}
+</ul>
+{{end}}
+{{template "list_load_chrome" .}}
+{{end}}
+{{range .Videos}}
+{{if .DownloadRunning}}
+<input type="checkbox" id="modal-ignore-video-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Ignore video</h3>
+    <p class="text-sm mb-4">A download task is in progress for <strong>{{.Title}}</strong>. Ignore and cancel it?</p>
+    <form method="post" action="/actions/ignore-video" class="inline" hx-post="/actions/ignore-video" hx-target="#videos-list-live" hx-swap="outerHTML">
+      <input type="hidden" name="video_id" value="{{.ID}}" />
+      <input type="hidden" name="series_id" value="{{.SeriesID}}" />
+      <div class="modal-action">
+        <label for="modal-ignore-video-{{.ID}}" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Ignore and cancel task</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+{{end}}
+</div>
+{{end}}
+
+{{define "videos_rows_inner"}}
+{{if eq .ViewMode "thumbs"}}
   {{range .Videos}}
   {{template "video_thumb_card" (dict
     "ID" .ID
@@ -60,21 +112,7 @@
     "BulkEditBusy" $.BulkEditBusy
   )}}
   {{end}}
-</ul>
-{{else if eq .ViewMode "table"}}
-{{template "video_table" (dict
-  "Videos" .Videos
-  "TableCols" .TableCols
-  "TableColsCookie" .TableColsCookie
-  "BulkEditBusy" .BulkEditBusy
-  "SeriesTitles" .SeriesTitles
-  "Select" true
-  "LiveTarget" "videos-list-live"
-  "RowsID" "videos-list-rows"
-  "Page" .Page
-)}}
 {{else}}
-<ul class="list bg-base-100 rounded-box border border-base-300" id="videos-list-rows">
   {{range .Videos}}
   {{template "video_list_row" (dict
     "ID" .ID
@@ -103,29 +141,12 @@
     "BulkEditBusy" $.BulkEditBusy
   )}}
   {{end}}
-</ul>
-{{end}}
-{{template "pagination" .Page}}
-{{end}}
-{{range .Videos}}
-{{if .DownloadRunning}}
-<input type="checkbox" id="modal-ignore-video-{{.ID}}" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Ignore video</h3>
-    <p class="text-sm mb-4">A download task is in progress for <strong>{{.Title}}</strong>. Ignore and cancel it?</p>
-    <form method="post" action="/actions/ignore-video" class="inline" hx-post="/actions/ignore-video" hx-target="#videos-list-live" hx-swap="outerHTML">
-      <input type="hidden" name="video_id" value="{{.ID}}" />
-      <input type="hidden" name="series_id" value="{{.SeriesID}}" />
-      <div class="modal-action">
-        <label for="modal-ignore-video-{{.ID}}" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-warning">Ignore and cancel task</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
 {{end}}
 {{end}}
+
+{{define "videos_infinite_chunk"}}
+<div data-infinite-chunk>
+  {{template "videos_rows_inner" .}}
+  {{template "list_infinite_sentinel" .}}
 </div>
 {{end}}

@@ -15,18 +15,18 @@ import (
 func parseVideoListFilter(r *http.Request, sources []library.Source, allowSeries bool) library.VideoListFilter {
 	q := r.URL.Query()
 	f := library.VideoListFilter{
-		Title:    strings.TrimSpace(q.Get("q")),
-		QField:   parseQField(r),
-		FromDay:  parseFilterDay(q.Get("from")),
-		ToDay:    parseFilterDay(q.Get("to")),
-		Studio:   strings.TrimSpace(q.Get("studio")),
-		Country:  strings.TrimSpace(q.Get("country")),
-		MPAA:     strings.TrimSpace(q.Get("mpaa")),
-		Genres:   parseMultiQuery(q, "genre"),
-		Tags:     parseMultiQuery(q, "tag"),
-		Actors:   parseMultiQuery(q, "actor"),
-		Sort:     parseVideoSort(q.Get("sort")),
-		SortDir:  parseSortDir(q.Get("dir")),
+		Title:     strings.TrimSpace(q.Get("q")),
+		QField:    parseQField(r),
+		FromDay:   parseFilterDay(q.Get("from")),
+		ToDay:     parseFilterDay(q.Get("to")),
+		Studio:    strings.TrimSpace(q.Get("studio")),
+		Country:   strings.TrimSpace(q.Get("country")),
+		MPAA:      strings.TrimSpace(q.Get("mpaa")),
+		Genres:    parseMultiQuery(q, "genre"),
+		Tags:      parseMultiQuery(q, "tag"),
+		Actors:    parseMultiQuery(q, "actor"),
+		Sort:      parseVideoSort(q.Get("sort")),
+		SortDir:   parseSortDir(q.Get("dir")),
 		MediaType: strings.TrimSpace(q.Get("media_type")),
 	}
 	f.Empty, f.NotEmpty = parsePresenceParams(q)
@@ -144,8 +144,6 @@ func encodeVideoListFilter(filter library.VideoListFilter, page int, view string
 	}
 	if s := parseVideoSort(filter.Sort); s != "" && s != library.SortUpload {
 		q.Set("sort", s)
-	} else if filter.Sort == library.SortUpload {
-		// omit default for series videos; callers may set explicitly for /videos defaults
 	}
 	if view == viewThumbs || view == viewTable {
 		q.Set("view", view)
@@ -181,7 +179,7 @@ func videoListBadges(r *http.Request, filter library.VideoListFilter, showSeries
 		out = append(out, listViewBadge{Label: "Kind: " + role, Href: dropQueryKeys(r, "kind", "page")})
 	}
 	if filter.FromDay != "" || filter.ToDay != "" {
-		label := "Upload date"
+		var label string
 		if filter.FromDay != "" && filter.ToDay != "" {
 			label = fmt.Sprintf("Upload: %s–%s", filter.FromDay, filter.ToDay)
 		} else if filter.FromDay != "" {
@@ -402,15 +400,6 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 	return selects
 }
 
-func hasPresence(list []string, field string) bool {
-	for _, v := range list {
-		if strings.EqualFold(v, field) {
-			return true
-		}
-	}
-	return false
-}
-
 func videoSortOpts(r *http.Request, current, curDir, defaultSort string) []listFilterOpt {
 	cur := current
 	if cur == "" {
@@ -491,6 +480,7 @@ func annotateSortOpts(r *http.Request, opts []listFilterOpt, defaultSort, curDir
 func applySortFieldURL(r *http.Request, sort string) string {
 	q := r.URL.Query()
 	q.Del("page")
+	q.Del("through")
 	q.Del("dir") // reset direction to the field default
 	q.Set("sort", sort)
 	u := *r.URL
@@ -512,6 +502,7 @@ func sortDirToggleURL(r *http.Request, sort, curDir string) string {
 	}
 	q := r.URL.Query()
 	q.Del("page")
+	q.Del("through")
 	def := library.DefaultSortDir(resolved)
 	if next == def {
 		q.Del("dir")
@@ -537,6 +528,7 @@ func annotateViewOpts(r *http.Request, opts []listFilterOpt) {
 func applyViewURL(r *http.Request, view string) string {
 	q := r.URL.Query()
 	q.Del("page")
+	q.Del("through")
 	if view == "" {
 		view = viewList
 	}

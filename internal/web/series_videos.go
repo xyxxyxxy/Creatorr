@@ -137,30 +137,30 @@ type seriesVideosLiveData struct {
 
 // listViewToolbar is the shared filter/sort/view chrome for library lists.
 type listViewToolbar struct {
-	Query            string
-	QueryPlaceholder string
-	AriaLabel        string
-	QFieldOpts       []listFilterOpt
-	SortOpts         []listFilterOpt
-	SortDir          string // asc|desc resolved for UI
-	ViewOpts         []listFilterOpt
-	ShowView         bool
-	FromDay          string
-	ToDay            string
-	ShowDateRange    bool
-	DateClearHref    string
+	Query                string
+	QueryPlaceholder     string
+	AriaLabel            string
+	QFieldOpts           []listFilterOpt
+	SortOpts             []listFilterOpt
+	SortDir              string // asc|desc resolved for UI
+	ViewOpts             []listFilterOpt
+	ShowView             bool
+	FromDay              string
+	ToDay                string
+	ShowDateRange        bool
+	DateClearHref        string
 	UploadEmptyHref      string
 	UploadFilledHref     string
 	UploadEmptySelected  bool
 	UploadFilledSelected bool
 	Selects              []listFilterSelect
-	FilterActive     bool
-	Badges           []listViewBadge
-	ClearAllHref     string
-	LiveTarget       string
-	FormAction       string
-	SeriesBulkMode   bool
-	VideoBulkMode    bool
+	FilterActive         bool
+	Badges               []listViewBadge
+	ClearAllHref         string
+	LiveTarget           string
+	FormAction           string
+	SeriesBulkMode       bool
+	VideoBulkMode        bool
 }
 
 func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, ser *library.Series, byVideo map[int64][]queue.Task) (seriesVideosLiveData, error) {
@@ -173,10 +173,10 @@ func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, s
 	if writeCookie {
 		writeViewCookie(w, cookieModeSeriesVideos, viewMode)
 	}
-	videoPage := ParsePage(r, "page")
 	videoTotal, _ := h.Library.CountVideosFiltered(id, filter)
-	videosPageInfo := NewPageInfoSize(r, "page", videoPage, videoTotal, VideoPageSize)
-	vidList, err := h.Library.ListVideosPageFiltered(id, filter, VideoPageSize, OffsetSize(videosPageInfo.Page, VideoPageSize))
+	load := resolvePaginatedLoad(r, videoTotal, VideoPageSize, "series-videos-live", "page")
+	videosPageInfo := load.Page
+	vidList, err := h.Library.ListVideosPageFiltered(id, filter, load.PageSize, OffsetSize(videosPageInfo.Page, load.PageSize))
 	if err != nil {
 		return seriesVideosLiveData{}, err
 	}

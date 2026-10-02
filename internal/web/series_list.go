@@ -29,6 +29,8 @@ type seriesListRow struct {
 type seriesListLiveData struct {
 	Series          []seriesListRow
 	Page            PageInfo
+	Load            ListLoad
+	ListMode        ListMode
 	SeriesFilter    listViewToolbar
 	FilterActive    bool
 	BulkEditBusy    bool
@@ -36,22 +38,25 @@ type seriesListLiveData struct {
 	ViewMode        string
 	TableCols       []tableCol
 	TableColsCookie string
+	ShowSelectAll   bool
+	InfiniteID      string
+	RowsID          string
 	OOB             bool
 }
 
 func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
 	q := r.URL.Query()
 	f := library.SeriesListFilter{
-		Title:    strings.TrimSpace(q.Get("q")),
-		QField:   parseQField(r),
-		Studio:   strings.TrimSpace(q.Get("studio")),
-		Country:  strings.TrimSpace(q.Get("country")),
-		MPAA:     strings.TrimSpace(q.Get("mpaa")),
-		Genres:   parseMultiQuery(q, "genre"),
-		Tags:     parseMultiQuery(q, "tag"),
-		Actors:   parseMultiQuery(q, "actor"),
-		Sort:     parseSeriesSort(q.Get("sort")),
-		SortDir:  parseSortDir(q.Get("dir")),
+		Title:   strings.TrimSpace(q.Get("q")),
+		QField:  parseQField(r),
+		Studio:  strings.TrimSpace(q.Get("studio")),
+		Country: strings.TrimSpace(q.Get("country")),
+		MPAA:    strings.TrimSpace(q.Get("mpaa")),
+		Genres:  parseMultiQuery(q, "genre"),
+		Tags:    parseMultiQuery(q, "tag"),
+		Actors:  parseMultiQuery(q, "actor"),
+		Sort:    parseSeriesSort(q.Get("sort")),
+		SortDir: parseSortDir(q.Get("dir")),
 	}
 	f.Empty, f.NotEmpty = parsePresenceParams(q)
 	if v := strings.TrimSpace(q.Get("root")); v != "" {
@@ -99,9 +104,25 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 	if err != nil {
 		return seriesListLiveData{}, err
 	}
-	page := ParsePage(r, "page")
-	pageInfo := NewPageInfoSize(r, "page", page, total, SeriesPageSize)
-	list, err := h.Library.ListSeriesFiltered(filter, SeriesPageSize, OffsetSize(pageInfo.Page, SeriesPageSize))
+
+	mode := libraryListMode(viewMode)
+	const liveTarget = "series-list-live"
+	const infiniteID = "series-list-infinite"
+	const rowsID = "series-list-rows"
+
+	var load ListLoad
+	var limit, offset int
+	switch mode {
+	case ListModeInfinite:
+		load = resolveInfiniteLoad(r, total, liveTarget, infiniteID, "page")
+		limit, offset = infiniteLimitOffset(load)
+	default:
+		load = resolvePaginatedLoad(r, total, SeriesPageSize, liveTarget, "page")
+		limit = load.PageSize
+		offset = OffsetSize(load.Page.Page, load.PageSize)
+	}
+
+	list, err := h.Library.ListSeriesFiltered(filter, limit, offset)
 	if err != nil {
 		return seriesListLiveData{}, err
 	}
@@ -133,7 +154,6 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 	if redir == "" {
 		redir = "/series"
 	}
-	liveTarget := "series-list-live"
 	bulkBusy, _ := h.Library.BulkEditSeriesBusy()
 
 	rows := make([]seriesListRow, 0, len(list))
@@ -181,8 +201,6 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 		})
 	}
 
-	pageInfo.LiveTarget = "series-list-live"
-
 	clearHref := ""
 	if filter.Active() {
 		clearHref = clearOperatorFiltersURL(r)
@@ -200,14 +218,20 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 		FilterActive:     filter.Active(),
 		Badges:           seriesListBadges(r, filter),
 		ClearAllHref:     clearHref,
-		LiveTarget:       "series-list-live",
+		LiveTarget:       liveTarget,
 		FormAction:       "/series",
 		SeriesBulkMode:   true,
 	}
 
+	showSelectAll := total > len(rows)
+	if mode == ListModePaginated {
+		showSelectAll = load.Page.Show
+	}
 	return seriesListLiveData{
 		Series:          rows,
-		Page:            pageInfo,
+		Page:            load.Page,
+		Load:            load,
+		ListMode:        mode,
 		SeriesFilter:    toolbar,
 		FilterActive:    filter.Active(),
 		BulkEditBusy:    bulkBusy,
@@ -215,6 +239,9 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 		ViewMode:        viewMode,
 		TableCols:       parseTableColsCookie(r, cookieColsSeries, seriesTableColDefs()),
 		TableColsCookie: cookieColsSeries,
+		ShowSelectAll:   showSelectAll,
+		InfiniteID:      infiniteID,
+		RowsID:          rowsID,
 	}, nil
 }
 
@@ -230,12 +257,29 @@ func (h *Handler) seriesErrorCountJSON(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) seriesListLive(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("HX-Target") == "series-list-infinite" {
+		h.renderSeriesInfiniteChunk(w, r)
+		return
+	}
 	data, err := h.loadSeriesListLive(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
 	render(w, "series_list_live", data)
+}
+
+func (h *Handler) renderSeriesInfiniteChunk(w http.ResponseWriter, r *http.Request) {
+	data, err := h.loadSeriesListLive(w, r)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if !data.Load.Append {
+		render(w, "series_list_live", data)
+		return
+	}
+	render(w, "series_infinite_chunk", data)
 }
 
 // tryRenderSeriesListLive renders #series-list-live when HTMX targeted it.

@@ -26,11 +26,6 @@ type listViewBadge struct {
 	Href  string // URL without this constraint
 }
 
-type listViewOpt struct {
-	Value, Label string
-	Selected     bool
-}
-
 // resolveViewMode reads ?view= or the scope cookie; defaultMode is list unless locked.
 // When view is in the query, writeCookie is true so the handler can persist it.
 func resolveViewMode(r *http.Request, cookieName, defaultMode string) (mode string, writeCookie bool) {
@@ -147,10 +142,18 @@ func parseSortDir(raw string) string {
 }
 
 // dropQueryKeys returns the request path with listed query keys removed (all values).
+// Dropping page also drops through (infinite keep-depth resets with paging).
 func dropQueryKeys(r *http.Request, keys ...string) string {
 	q := r.URL.Query()
+	dropThrough := false
 	for _, k := range keys {
 		q.Del(k)
+		if k == "page" {
+			dropThrough = true
+		}
+	}
+	if dropThrough {
+		q.Del("through")
 	}
 	u := *r.URL
 	enc := q.Encode()
@@ -215,6 +218,7 @@ func clearOperatorFiltersURL(r *http.Request, keepKeys ...string) string {
 func applySelectOptionURLClearingPresence(r *http.Request, name, value, presenceField string) string {
 	q := r.URL.Query()
 	q.Del("page")
+	q.Del("through")
 	q.Del(name)
 	if strings.TrimSpace(value) != "" {
 		q.Set(name, value)
@@ -235,6 +239,7 @@ func applySelectOptionURLClearingPresence(r *http.Request, name, value, presence
 func toggleMultiSelectURL(r *http.Request, name, value, presenceField string) string {
 	q := r.URL.Query()
 	q.Del("page")
+	q.Del("through")
 	want := strings.TrimSpace(value)
 	vals := q[name]
 	q.Del(name)
@@ -265,6 +270,7 @@ func toggleMultiSelectURL(r *http.Request, name, value, presenceField string) st
 func applyPresenceURL(r *http.Request, empty bool, field string) string {
 	q := r.URL.Query()
 	q.Del("page")
+	q.Del("through")
 	for _, key := range filterKeysForPresence(field) {
 		q.Del(key)
 	}
