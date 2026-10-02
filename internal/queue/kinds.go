@@ -21,6 +21,7 @@ const (
 	KindRetentionDelete       = "retention_delete"
 	KindRenameEpisodes        = "rename_episodes"
 	KindRegenerateNFO         = "regenerate_nfo"
+	KindResetMetadataFromInfo = "reset_metadata_from_info"
 	KindIntegrityCheck        = "integrity_check"
 	KindDeleteFiles           = "delete_files"
 	KindSponsorblockCut       = "sponsorblock_cut"

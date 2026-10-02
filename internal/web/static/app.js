@@ -3473,6 +3473,7 @@
   var maintenanceTaskKinds = /* @__PURE__ */ new Set([
     "rename_episodes",
     "regenerate_nfo",
+    "reset_metadata_from_info",
     "integrity_check",
     "sync_files"
   ]);
@@ -3485,6 +3486,7 @@
   var maintenanceSeriesCatalogReady = false;
   var maintenanceSeriesCatalogPromise = null;
   var maintenanceActionLabels = {
+    reset_metadata_from_info: "Reset metadata from info.json",
     apply_episode_naming: "Apply episode format",
     regenerate_nfos: "Regenerate all NFO files",
     integrity_check: "Integrity check",
@@ -3522,9 +3524,9 @@
     return maintenanceSeriesCatalog.find((s) => Number(s.id) === n) || null;
   }
   function maintenanceSeriesPosterHTML(s) {
-    const fallback = '<span class="bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></span>';
+    const fallback = '<div class="bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></div>';
     if (!s || !s.poster_url) return fallback;
-    return '<img class="size-8 rounded-full object-cover shrink-0" src="' + escapeMaintenanceHtml(s.poster_url) + '" alt="" width="32" height="32" loading="lazy" />';
+    return '<img class="size-8 rounded-full object-cover shrink-0" src="' + escapeMaintenanceHtml(s.poster_url) + `" alt="" width="32" height="32" loading="lazy" onerror="this.onerror=null;this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden')" /><div class="hidden bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></div>`;
   }
   function maintenanceSeriesScopeRowHTML(id, titleHint, withRemove) {
     const s = id != null ? maintenanceSeriesById(id) : null;
@@ -3572,6 +3574,7 @@
     ul.innerHTML = rows.map((s) => {
       return '<li class="list-row cursor-pointer" data-maintenance-pick-series="' + escapeMaintenanceHtml(String(s.id)) + '" role="option"><div class="relative shrink-0">' + maintenanceSeriesPosterHTML(s) + '</div><div class="list-col-grow min-w-0 font-medium truncate">' + escapeMaintenanceHtml(s.title || "") + "</div></li>";
     }).join("");
+    lucideRefreshMaintenance(ul);
   }
   function addMaintenanceSeries(id) {
     const n = Number(id);
@@ -3683,6 +3686,7 @@
   function selectedMaintenanceActionLabels() {
     readMaintenanceActionChecks();
     const order = [
+      "reset_metadata_from_info",
       "apply_episode_naming",
       "regenerate_nfos",
       "sync_files",
@@ -3701,6 +3705,7 @@
     const externalBox = document.getElementById("maintenance-confirm-external");
     const externalText = document.getElementById("maintenance-confirm-external-text");
     const integrityBox = document.getElementById("maintenance-confirm-integrity");
+    const resetMetaBox = document.getElementById("maintenance-confirm-reset-meta");
     const form = document.getElementById("maintenance-run-form");
     const actionNames = selectedMaintenanceActionLabels();
     if (!toggle || !titleEl || !leadEl || !listEl || !actionsEl || !affectedEl || !externalBox || !externalText || !form || actionNames.length === 0) {
@@ -3733,6 +3738,13 @@
         integrityBox.classList.remove("hidden");
       } else {
         integrityBox.classList.add("hidden");
+      }
+    }
+    if (resetMetaBox) {
+      if (maintenanceSelectedActions.has("reset_metadata_from_info")) {
+        resetMetaBox.classList.remove("hidden");
+      } else {
+        resetMetaBox.classList.add("hidden");
       }
     }
     toggle.checked = true;

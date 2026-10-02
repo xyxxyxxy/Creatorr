@@ -5,6 +5,7 @@ function onMaintenancePage() {
 const maintenanceTaskKinds = new Set([
   "rename_episodes",
   "regenerate_nfo",
+  "reset_metadata_from_info",
   "integrity_check",
   "sync_files",
 ]);
@@ -26,6 +27,7 @@ let maintenanceSeriesCatalogReady = false;
 let maintenanceSeriesCatalogPromise = null;
 
 const maintenanceActionLabels = {
+  reset_metadata_from_info: "Reset metadata from info.json",
   apply_episode_naming: "Apply episode format",
   regenerate_nfos: "Regenerate all NFO files",
   integrity_check: "Integrity check",
@@ -77,12 +79,14 @@ function maintenanceSeriesById(id) {
 
 function maintenanceSeriesPosterHTML(s) {
   const fallback =
-    '<span class="bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></span>';
+    '<div class="bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></div>';
   if (!s || !s.poster_url) return fallback;
+  // Picker always returns poster_url; missing art 404s - swap to TV icon like Import.
   return (
     '<img class="size-8 rounded-full object-cover shrink-0" src="' +
     escapeMaintenanceHtml(s.poster_url) +
-    '" alt="" width="32" height="32" loading="lazy" />'
+    '" alt="" width="32" height="32" loading="lazy" onerror="this.onerror=null;this.classList.add(\'hidden\');this.nextElementSibling.classList.remove(\'hidden\')" />' +
+    '<div class="hidden bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></div>'
   );
 }
 
@@ -164,6 +168,7 @@ function fillMaintenanceSeriesPickList(q) {
       );
     })
     .join("");
+  lucideRefreshMaintenance(ul);
 }
 
 function addMaintenanceSeries(id) {
@@ -291,6 +296,7 @@ export function wireMaintenanceScope() {
 function selectedMaintenanceActionLabels() {
   readMaintenanceActionChecks();
   const order = [
+    "reset_metadata_from_info",
     "apply_episode_naming",
     "regenerate_nfos",
     "sync_files",
@@ -312,6 +318,7 @@ function openMaintenanceConfirm() {
   const externalBox = document.getElementById("maintenance-confirm-external");
   const externalText = document.getElementById("maintenance-confirm-external-text");
   const integrityBox = document.getElementById("maintenance-confirm-integrity");
+  const resetMetaBox = document.getElementById("maintenance-confirm-reset-meta");
   const form = document.getElementById("maintenance-run-form");
   const actionNames = selectedMaintenanceActionLabels();
   if (
@@ -364,6 +371,13 @@ function openMaintenanceConfirm() {
       integrityBox.classList.remove("hidden");
     } else {
       integrityBox.classList.add("hidden");
+    }
+  }
+  if (resetMetaBox) {
+    if (maintenanceSelectedActions.has("reset_metadata_from_info")) {
+      resetMetaBox.classList.remove("hidden");
+    } else {
+      resetMetaBox.classList.add("hidden");
     }
   }
   toggle.checked = true;

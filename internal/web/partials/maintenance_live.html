@@ -86,6 +86,29 @@
       </fieldset>
     </div>
 
+    <details class="collapse collapse-arrow border border-error/40 bg-error/5 rounded-box w-full min-w-0">
+      <summary class="collapse-title font-medium text-sm min-h-0 py-3 text-error">Danger zone</summary>
+      <div class="collapse-content gap-3 flex flex-col">
+        <p class="text-sm text-error">These actions override data in Creatorr and cannot be undone.</p>
+        <fieldset class="fieldset">
+          {{if .ResetMetaFromInfoBusy}}
+          <span class="tooltip tooltip-top inline-flex w-fit max-w-full" data-tip="Already queued">
+            <label class="label justify-start gap-2 cursor-not-allowed">
+              <input type="checkbox" name="actions" value="reset_metadata_from_info" class="checkbox checkbox-error js-maintenance-action" disabled />
+              <span class="label-text text-base-content opacity-60">Reset metadata from info.json (queued)</span>
+            </label>
+          </span>
+          {{else}}
+          <label class="label justify-start gap-2 cursor-pointer">
+            <input type="checkbox" name="actions" value="reset_metadata_from_info" class="checkbox checkbox-error js-maintenance-action" />
+            <span class="label-text text-base-content">Reset metadata from info.json</span>
+          </label>
+          <p class="label whitespace-normal">Overwrite video Metadata from packed info.json (title, plot, upload date, genres, tags, media columns). Clears studio, actors, sorttitle, and other fields not in info.json. Operator notes stay. Rewrites episode NFO; may queue Apply episode format. Skips videos without info.json. Never rewrites info.json or series metadata.</p>
+          {{end}}
+        </fieldset>
+      </div>
+    </details>
+
     <div class="fieldset bg-base-200 border border-base-300 rounded-box p-4 gap-3 w-full min-w-0" data-maintenance-scope>
       <div class="fieldset-legend">Select scope</div>
       <p class="label whitespace-normal -mt-1">Optional. Empty means the whole library. Add one or more series; scope clears after Run.</p>

@@ -293,11 +293,12 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("'Apply episode format' queued.")
 	case "maintenance-run":
 		labels := map[string]string{
-			"apply":    "'Apply episode format'",
-			"nfo":      "'Regenerate all NFO files'",
-			"verify":   "'Integrity check'",
-			"sync":     "'File sync'",
-			"sidecars": "'Refresh sidecars'",
+			"reset-meta": "'Reset metadata from info.json'",
+			"apply":      "'Apply episode format'",
+			"nfo":        "'Regenerate all NFO files'",
+			"verify":     "'Integrity check'",
+			"sync":       "'File sync'",
+			"sidecars":   "'Refresh sidecars'",
 		}
 		parts := strings.Split(r.URL.Query().Get("actions"), ",")
 		var names []string

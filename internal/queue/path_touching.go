@@ -3,7 +3,7 @@ package queue
 // PathTouchingKinds are system tasks that move, rename, or rewrite library paths.
 // They never run together: see PathTouchingSystemBusy and series_move in rejectDuplicate.
 var PathTouchingKinds = []string{
-	KindRenameEpisodes, KindRegenerateNFO, KindSyncFiles, KindRetentionDelete, KindSeriesMove,
+	KindRenameEpisodes, KindRegenerateNFO, KindResetMetadataFromInfo, KindSyncFiles, KindRetentionDelete, KindSeriesMove,
 }
 
 // PathTouchingSystemBusy reports a pending/running system task of any given kind.

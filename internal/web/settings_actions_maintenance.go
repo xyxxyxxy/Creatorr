@@ -139,7 +139,7 @@ func (h *Handler) actionMaintenanceRun(w http.ResponseWriter, r *http.Request) {
 			wanted[a] = true
 		}
 	}
-	order := []string{"apply_episode_naming", "regenerate_nfos", "sync_files", "integrity_check", "refresh_sidecars"}
+	order := []string{"reset_metadata_from_info", "apply_episode_naming", "regenerate_nfos", "sync_files", "integrity_check", "refresh_sidecars"}
 	var queued []string
 	var skipMsgs []string
 	var firstErr string
@@ -150,6 +150,18 @@ func (h *Handler) actionMaintenanceRun(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		switch key {
+		case "reset_metadata_from_info":
+			if busy, _ := h.Queue.HasPendingOrRunningKind(queue.KindResetMetadataFromInfo, queue.SystemDomain); busy {
+				skipMsgs = append(skipMsgs, "'Reset metadata from info.json' already queued")
+				continue
+			}
+			if _, err := h.Library.EnqueueResetMetadataFromInfoScoped(seriesIDs, videoIDs); err != nil {
+				if firstErr == "" {
+					firstErr = err.Error()
+				}
+				continue
+			}
+			queued = append(queued, "reset-meta")
 		case "apply_episode_naming":
 			var qerr error
 			switch {

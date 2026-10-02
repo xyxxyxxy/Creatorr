@@ -37,6 +37,7 @@ func DefaultHandlers(d Deps) map[string]TaskHandler {
 	out[queue.KindRetentionDelete] = RetentionDeleteHandler(d)
 	out[queue.KindRenameEpisodes] = RenameEpisodesHandler(d)
 	out[queue.KindRegenerateNFO] = RegenerateNFOHandler(d)
+	out[queue.KindResetMetadataFromInfo] = ResetMetadataFromInfoHandler(d)
 	out[queue.KindIntegrityCheck] = VerifyAllMediaHandler(d)
 	out[queue.KindDeleteFiles] = DeleteFilesHandler(d)
 	out[queue.KindSponsorblockCut] = SponsorblockCutHandler(d)

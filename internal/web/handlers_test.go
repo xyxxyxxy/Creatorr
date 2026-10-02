@@ -922,6 +922,12 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "Refresh sidecars") {
 				t.Fatalf("%s missing refresh sidecars", path)
 			}
+			if !strings.Contains(body, "Danger zone") || !strings.Contains(body, `value="reset_metadata_from_info"`) {
+				t.Fatalf("%s missing danger zone reset metadata", path)
+			}
+			if !strings.Contains(body, `id="maintenance-confirm-reset-meta"`) {
+				t.Fatalf("%s missing reset metadata confirm alert", path)
+			}
 			if !strings.Contains(body, "File sync") || !strings.Contains(body, `value="sync_files"`) {
 				t.Fatalf("%s missing file sync", path)
 			}
