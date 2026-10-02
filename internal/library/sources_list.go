@@ -23,6 +23,8 @@ const (
 	SourceFullScanIncomplete = "incomplete"
 	SourceScheduleOn         = "on"
 	SourceScheduleOff        = "off"
+	SourceDiscoveredWanted   = "wanted"
+	SourceDiscoveredIgnored  = "ignored"
 )
 
 // SourceFilterFacets are distinct Source Filter values present in a series scope.
@@ -34,6 +36,8 @@ type SourceFilterFacets struct {
 	HasFullScanIncomplete bool
 	HasScheduleOn         bool
 	HasScheduleOff        bool
+	HasDiscoveredWanted   bool
+	HasDiscoveredIgnored  bool
 }
 
 // SourceFilterFacetsForSeries returns Filter facets for one series (empty if seriesID < 1).
@@ -43,7 +47,7 @@ func (s *Store) SourceFilterFacetsForSeries(seriesID int64) (SourceFilterFacets,
 		return out, nil
 	}
 	rows, err := s.DB.SQL.Query(`
-		SELECT url, kind, scan_cron, full_scan_done FROM sources WHERE series_id = ?`, seriesID)
+		SELECT url, kind, scan_cron, full_scan_done, index_as_ignored FROM sources WHERE series_id = ?`, seriesID)
 	if err != nil {
 		return out, err
 	}
@@ -52,8 +56,8 @@ func (s *Store) SourceFilterFacetsForSeries(seriesID int64) (SourceFilterFacets,
 	domains := map[string]struct{}{}
 	for rows.Next() {
 		var rawURL, kind, cron string
-		var fullDone int
-		if err := rows.Scan(&rawURL, &kind, &cron, &fullDone); err != nil {
+		var fullDone, indexAsIgnored int
+		if err := rows.Scan(&rawURL, &kind, &cron, &fullDone, &indexAsIgnored); err != nil {
 			return out, err
 		}
 		kind = NormalizeSourceKind(kind)
@@ -71,6 +75,12 @@ func (s *Store) SourceFilterFacetsForSeries(seriesID int64) (SourceFilterFacets,
 			out.HasScheduleOff = true
 		} else {
 			out.HasScheduleOn = true
+		}
+		// Singles always index as wanted; flag only applies to feeds.
+		if !src.IsSingle() && indexAsIgnored != 0 {
+			out.HasDiscoveredIgnored = true
+		} else {
+			out.HasDiscoveredWanted = true
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -115,7 +125,7 @@ const sourceDomainSortSQL = `lower(replace(
 	''
 ))`
 
-// Source text query field ids for q_field (default url).
+// Source text query field ids for q_field (default label / Name).
 const (
 	QFieldSourceURL    = "url"
 	QFieldSourceLabel  = "label"
@@ -124,14 +134,15 @@ const (
 
 // SourceListFilter narrows library-wide or series-scoped source lists.
 type SourceListFilter struct {
-	SeriesID        int64  // 0 = all series
+	SeriesID        int64  // 0 = all series (browser operator filter or series-detail lock)
 	Q               string // case-insensitive substring against QField
-	QField          string // url|label|series; empty = url
+	QField          string // url|label|series; empty = label
 	Kind            string // feed|single|""
 	Domain          string // hostname (facet); matched against URL
 	HasError        *bool  // nil = any; true = last event scan_error; false = not
 	FullScanDone    *bool  // nil = any; true = done; false = incomplete
 	ScheduleOn      *bool  // nil = any; true = feed with cron; false = off/never/single
+	IndexAsIgnored  *bool  // nil = any; discovered video status (feeds); singles count as wanted
 	SeriesMonitored *bool  // nil = any
 	Sort            string
 	SortDir         string
@@ -145,26 +156,29 @@ type SourceListRow struct {
 	LastScannedAt   string // sticky last scanned/scan_error time; empty = never
 }
 
-// Active reports whether any operator filter is set (series scope alone does not count).
+// Active reports whether any operator filter is set.
+// SeriesID counts when used as a browser Series filter (series-detail lock is gated in the UI).
 func (f SourceListFilter) Active() bool {
 	return strings.TrimSpace(f.Q) != "" ||
+		f.SeriesID > 0 ||
 		f.Kind != "" ||
 		strings.TrimSpace(f.Domain) != "" ||
 		f.HasError != nil ||
 		f.FullScanDone != nil ||
 		f.ScheduleOn != nil ||
+		f.IndexAsIgnored != nil ||
 		f.SeriesMonitored != nil
 }
 
-// NormalizeSourceQField returns a known Sources text field id or url.
+// NormalizeSourceQField returns a known Sources text field id or label.
 func NormalizeSourceQField(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case QFieldSourceLabel, "name":
-		return QFieldSourceLabel
+	case QFieldSourceURL:
+		return QFieldSourceURL
 	case QFieldSourceSeries:
 		return QFieldSourceSeries
 	default:
-		return QFieldSourceURL
+		return QFieldSourceLabel
 	}
 }
 
@@ -230,6 +244,15 @@ func (f SourceListFilter) where() (string, []any) {
 		} else {
 			b.WriteString(` AND ` + cronOff)
 			args = append(args, SourceKindSingle)
+		}
+	}
+	if f.IndexAsIgnored != nil {
+		if *f.IndexAsIgnored {
+			// Feeds with mark-new-as-ignored only (singles never set the flag).
+			b.WriteString(` AND src.kind = ? AND src.index_as_ignored = 1`)
+			args = append(args, SourceKindFeed)
+		} else {
+			b.WriteString(` AND src.index_as_ignored = 0`)
 		}
 	}
 	if f.SeriesMonitored != nil {

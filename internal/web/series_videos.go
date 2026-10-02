@@ -204,11 +204,12 @@ func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, s
 	videos := h.buildSeriesVideoRows(vidList, byVideo, domainBySource)
 
 	videosPageInfo.LiveTarget = "series-videos-live"
+	qfOpts := qFieldOpts(filter.QField)
 	videoFilter := listViewToolbar{
 		Query:            filter.Title,
-		QueryPlaceholder: searchByPlaceholder(filter.QField),
+		QueryPlaceholder: searchByPlaceholder(qfOpts),
 		AriaLabel:        "Video filters",
-		QFieldOpts:       qFieldOpts(filter.QField),
+		QFieldOpts:       qfOpts,
 		SortOpts:         videoSortOpts(r, filter.Sort, filter.SortDir, library.SortUpload),
 		SortDir:          library.NormalizeSortDir(filter.Sort, filter.SortDir),
 		ViewOpts:         viewOpts(r, viewMode),

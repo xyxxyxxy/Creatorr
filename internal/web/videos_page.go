@@ -127,11 +127,12 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		}
 	}
 
+	qfOpts := qFieldOpts(filter.QField)
 	toolbar := listViewToolbar{
 		Query:            filter.Title,
-		QueryPlaceholder: searchByPlaceholder(filter.QField),
+		QueryPlaceholder: searchByPlaceholder(qfOpts),
 		AriaLabel:        "Video filters",
-		QFieldOpts:       qFieldOpts(filter.QField),
+		QFieldOpts:       qfOpts,
 		SortOpts:         videoSortOpts(r, filter.Sort, filter.SortDir, library.SortAdded),
 		SortDir:          library.NormalizeSortDir(filter.Sort, filter.SortDir),
 		ViewOpts:         viewOpts(r, viewMode),

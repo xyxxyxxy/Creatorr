@@ -429,6 +429,83 @@ func presenceOnlySelect(r *http.Request, field, aria string) listFilterSelect {
 	return sel
 }
 
+// boolOnlySelect is Has/No chrome for a two-state query param (yes/no or on/off).
+// Has applies trueVal; No applies falseVal; pressing the active side clears the param.
+func boolOnlySelect(r *http.Request, name, aria, trueVal, falseVal string, selected *bool) listFilterSelect {
+	sel := listFilterSelect{
+		Name:                name,
+		AriaLabel:           aria,
+		PresenceFilledLabel: "Has " + strings.ToLower(aria),
+		PresenceEmptyLabel:  "No " + strings.ToLower(aria),
+	}
+	clearHref := dropQueryKeys(r, name, "page", "through")
+	hasHref := applySelectOptionURLClearingPresence(r, name, trueVal, "")
+	noHref := applySelectOptionURLClearingPresence(r, name, falseVal, "")
+	switch {
+	case selected != nil && *selected:
+		sel.PresenceFilledSelected = true
+		sel.PresenceFilledHref = clearHref
+		sel.PresenceEmptyHref = noHref
+	case selected != nil && !*selected:
+		sel.PresenceEmptySelected = true
+		sel.PresenceEmptyHref = clearHref
+		sel.PresenceFilledHref = hasHref
+	default:
+		sel.PresenceFilledHref = hasHref
+		sel.PresenceEmptyHref = noHref
+	}
+	return sel
+}
+
+// specialKindFilterSelect is Has/No for any-special vs regular, plus accordion of concrete specials.
+func specialKindFilterSelect(r *http.Request, packRole string, concreteOpts []listFilterOpt) listFilterSelect {
+	sel := listFilterSelect{
+		Name:                "kind",
+		AriaLabel:           "Special kind",
+		Options:             concreteOpts,
+		PresenceFilledLabel: "Has special kind",
+		PresenceEmptyLabel:  "No special kind",
+	}
+	role := strings.TrimSpace(packRole)
+	clearHref := dropQueryKeys(r, "kind", "page", "through")
+	hasHref := applySelectOptionURLClearingPresence(r, "kind", library.VideoPackRoleAnySpecial, "")
+	noHref := applySelectOptionURLClearingPresence(r, "kind", library.PackRoleRegular, "")
+	switch {
+	case role == library.PackRoleRegular:
+		sel.PresenceEmptySelected = true
+		sel.PresenceEmptyHref = clearHref
+		sel.PresenceFilledHref = hasHref
+	case role == library.VideoPackRoleAnySpecial || library.IsSpecialPackRole(role):
+		sel.PresenceFilledSelected = true
+		sel.PresenceFilledHref = clearHref
+		sel.PresenceEmptyHref = noHref
+	default:
+		sel.PresenceFilledHref = hasHref
+		sel.PresenceEmptyHref = noHref
+	}
+	return sel
+}
+
+func specialKindChipLabel(packRole string) string {
+	role := strings.TrimSpace(packRole)
+	switch role {
+	case library.PackRoleRegular:
+		return "No special kind"
+	case library.VideoPackRoleAnySpecial:
+		return "Has special kind"
+	default:
+		for _, opt := range library.PackRoleSelectOptions() {
+			if opt.Value == role {
+				return "Special kind: " + opt.Label
+			}
+		}
+		if label := library.PackRoleBadgeLabel(role); label != "" {
+			return "Special kind: " + label
+		}
+		return "Special kind: " + role
+	}
+}
+
 func presenceBadgeLabel(field string, empty bool) string {
 	name := presenceFieldLabel(field)
 	if empty {

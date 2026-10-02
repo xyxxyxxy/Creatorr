@@ -176,7 +176,7 @@ func videoListBadges(r *http.Request, filter library.VideoListFilter, showSeries
 		out = append(out, listViewBadge{Label: "Year: " + strconv.Itoa(filter.Year), Href: dropQueryKeys(r, "year", "page")})
 	}
 	if role := strings.TrimSpace(filter.PackRole); role != "" {
-		out = append(out, listViewBadge{Label: "Kind: " + role, Href: dropQueryKeys(r, "kind", "page")})
+		out = append(out, listViewBadge{Label: specialKindChipLabel(role), Href: dropQueryKeys(r, "kind", "page")})
 	}
 	if filter.FromDay != "" || filter.ToDay != "" {
 		var label string
@@ -376,16 +376,13 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 			selects = append(selects, listFilterSelect{Name: "source", AriaLabel: "Source", EmptyLabel: "All sources", Options: srcOpts})
 		}
 	}
-	kindOpts := []listFilterOpt{
-		{Value: library.PackRoleRegular, Label: "regular episode", Selected: filter.PackRole == library.PackRoleRegular},
-		{Value: library.VideoPackRoleAnySpecial, Label: "any special", Selected: filter.PackRole == library.VideoPackRoleAnySpecial},
-	}
+	kindOpts := make([]listFilterOpt, 0, len(library.PackRoleSelectOptions()))
 	for _, opt := range library.PackRoleSelectOptions() {
 		kindOpts = append(kindOpts, listFilterOpt{
 			Value: opt.Value, Label: opt.Label, Selected: filter.PackRole == opt.Value,
 		})
 	}
-	selects = append(selects, listFilterSelect{Name: "kind", AriaLabel: "Kind", EmptyLabel: "Any kind", Options: kindOpts})
+	selects = append(selects, specialKindFilterSelect(r, filter.PackRole, kindOpts))
 
 	selects = append(selects,
 		presenceOnlySelect(r, library.PresencePlot, "Plot"),
@@ -428,9 +425,16 @@ func qFieldOpts(current string) []listFilterOpt {
 	}
 }
 
-func searchByPlaceholder(qField string) string {
-	_ = qField
-	return "Search by..."
+func searchByPlaceholder(opts []listFilterOpt) string {
+	for _, o := range opts {
+		if o.Selected {
+			if label := strings.TrimSpace(o.Label); label != "" {
+				return "Search by " + label
+			}
+			break
+		}
+	}
+	return "Search"
 }
 
 func viewOpts(r *http.Request, current string) []listFilterOpt {

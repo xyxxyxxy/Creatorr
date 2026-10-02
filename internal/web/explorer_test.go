@@ -67,7 +67,9 @@ func TestExplorerBrowseAndBrowserShell(t *testing.T) {
 		t.Fatalf("sources scan error should use Has/No presence: %s", truncate(srcLive, 600))
 	}
 	if !strings.Contains(srcLive, ">Domain<") || !strings.Contains(srcLive, ">Full scan<") ||
-		!strings.Contains(srcLive, ">Schedule<") || !strings.Contains(srcLive, ">Series monitored<") {
+		!strings.Contains(srcLive, ">Schedule<") || !strings.Contains(srcLive, ">Series monitored<") ||
+		!strings.Contains(srcLive, ">Discovered<") ||
+		!strings.Contains(srcLive, `>Series</span>`) || !strings.Contains(srcLive, "series=") {
 		t.Fatalf("sources missing new filters: %s", truncate(srcLive, 800))
 	}
 	if !strings.Contains(srcLive, "sort=last_scanned") || !strings.Contains(srcLive, "sort=domain") {

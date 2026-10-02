@@ -1,0 +1,8 @@
+{{define "source_kind_icon"}}
+{{/* Kind only: feed vs single. Tip wraps a child (not the table cell). */}}
+{{if eq .Kind "single"}}
+<span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="single video"><i data-lucide="film" class="size-4 opacity-70" aria-hidden="true"></i></span>
+{{else}}
+<span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="channel/playlist"><i data-lucide="list-video" class="size-4 opacity-70" aria-hidden="true"></i></span>
+{{end}}
+{{end}}

@@ -45,8 +45,33 @@ func TestSourcesTableView(t *testing.T) {
 	if !strings.Contains(body, `data-list-table`) {
 		t.Fatalf("missing data-list-table: %s", body[:min(800, len(body))])
 	}
-	if !strings.Contains(body, `data-col="url"`) || !strings.Contains(body, `data-col="domain"`) || !strings.Contains(body, `data-col="name"`) {
-		t.Fatalf("table missing name/url/domain cols: %s", body[:min(1200, len(body))])
+	if !strings.Contains(body, `data-col="url"`) || !strings.Contains(body, `data-col="domain"`) || !strings.Contains(body, `data-col="name"`) || !strings.Contains(body, `data-col="kind"`) || !strings.Contains(body, `data-col="discovered"`) {
+		t.Fatalf("table missing name/url/domain/kind/discovered cols: %s", body[:min(1200, len(body))])
+	}
+	tbody := body
+	if i := strings.Index(body, `id="sources-list-rows"`); i >= 0 {
+		tbody = body[i:]
+	}
+	kindTD := strings.Index(tbody, `data-col="kind"`)
+	discoveredTD := strings.Index(tbody, `data-col="discovered"`)
+	nameTD := strings.Index(tbody, `data-col="name"`)
+	if kindTD < 0 || discoveredTD < 0 || nameTD < 0 || kindTD >= discoveredTD || discoveredTD >= nameTD {
+		t.Fatalf("col order kind→discovered→name: kind=%d discovered=%d name=%d", kindTD, discoveredTD, nameTD)
+	}
+	nameSlice := tbody[nameTD:min(nameTD+400, len(tbody))]
+	if strings.Contains(nameSlice, `data-lucide="list-`) || strings.Contains(nameSlice, `data-lucide="film"`) || strings.Contains(nameSlice, `data-lucide="eye`) {
+		t.Fatalf("kind/discovered icons must not sit in name column: %s", nameSlice)
+	}
+	kindSlice := tbody[kindTD:min(kindTD+350, len(tbody))]
+	if !strings.Contains(kindSlice, `data-lucide="list-video"`) && !strings.Contains(kindSlice, `data-lucide="film"`) {
+		t.Fatalf("kind column missing feed/single icon: %s", kindSlice)
+	}
+	if strings.Contains(kindSlice, `data-lucide="list-minus"`) || strings.Contains(kindSlice, `data-lucide="eye`) {
+		t.Fatalf("kind column must be kind-only: %s", kindSlice)
+	}
+	discoveredSlice := tbody[discoveredTD:min(discoveredTD+350, len(tbody))]
+	if !strings.Contains(discoveredSlice, "Wanted") && !strings.Contains(discoveredSlice, "Ignored") {
+		t.Fatalf("discovered column missing Wanted/Ignored: %s", discoveredSlice)
 	}
 	if strings.Contains(body, "URL / Name") {
 		t.Fatalf("table should not merge URL/Name: %s", body[:min(800, len(body))])
@@ -54,8 +79,24 @@ func TestSourcesTableView(t *testing.T) {
 	if !strings.Contains(body, `name="q_field"`) || !strings.Contains(body, `value="url"`) || !strings.Contains(body, `value="label"`) {
 		t.Fatalf("sources toolbar missing q_field select: %s", body[:min(1200, len(body))])
 	}
-	if !strings.Contains(body, `value="series"`) {
-		t.Fatalf("browser sources q_field missing series option: %s", body[:min(800, len(body))])
+	qfIdx := strings.Index(body, `name="q_field"`)
+	qIdx := strings.Index(body, `name="q"`)
+	searchIconIdx := strings.Index(body, `data-lucide="search"`)
+	if qfIdx < 0 || qIdx < 0 || qfIdx >= qIdx {
+		t.Fatalf("q_field should sit left of search input: q_field=%d q=%d", qfIdx, qIdx)
+	}
+	if searchIconIdx < 0 || searchIconIdx >= qfIdx {
+		t.Fatalf("search icon should live in q_field select, not the input: icon=%d q_field=%d", searchIconIdx, qfIdx)
+	}
+	labelIdx := strings.Index(body, `value="label"`)
+	urlIdx := strings.Index(body, `value="url"`)
+	seriesIdx := strings.Index(body, `value="series"`)
+	if labelIdx < 0 || urlIdx < 0 || seriesIdx < 0 || labelIdx >= urlIdx || urlIdx >= seriesIdx {
+		t.Fatalf("browser sources q_field order want Name, URL, Series: label=%d url=%d series=%d body=%s",
+			labelIdx, urlIdx, seriesIdx, body[:min(1200, len(body))])
+	}
+	if !strings.Contains(body, `>Series</span>`) || !strings.Contains(body, "series=") {
+		t.Fatalf("browser sources Filter missing Series select: %s", body[:min(1600, len(body))])
 	}
 	if !strings.Contains(body, `<table`) {
 		t.Fatalf("missing table element")

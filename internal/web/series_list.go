@@ -215,11 +215,12 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 		clearHref = clearOperatorFiltersURL(r)
 	}
 	at := explorerAtFrom(r, explorerAtSeries)
+	qfOpts := qFieldOpts(filter.QField)
 	toolbar := listViewToolbar{
 		Query:            filter.Title,
-		QueryPlaceholder: searchByPlaceholder(filter.QField),
+		QueryPlaceholder: searchByPlaceholder(qfOpts),
 		AriaLabel:        "Series filters",
-		QFieldOpts:       qFieldOpts(filter.QField),
+		QFieldOpts:       qfOpts,
 		SortOpts:         seriesSortOpts(r, filter.Sort, filter.SortDir),
 		SortDir:          library.NormalizeSortDir(filter.Sort, filter.SortDir),
 		ViewOpts:         viewOpts(r, viewMode),

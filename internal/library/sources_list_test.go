@@ -143,6 +143,34 @@ func TestListSourcesFiltered(t *testing.T) {
 		t.Fatal("schedule off should include single source")
 	}
 
+	ignOn := true
+	ignOff := false
+	// Default feeds are wanted; flip one feed to ignored.
+	feedID := a.Sources[0].ID
+	if _, err := s.UpdateSource(a.ID, feedID, UpdateSourceParams{IndexAsIgnored: &ignOn}); err != nil {
+		t.Fatal(err)
+	}
+	ignoredOnly, err := s.ListSourcesFiltered(SourceListFilter{IndexAsIgnored: &ignOn}, 50, 0)
+	if err != nil || len(ignoredOnly) != 1 || ignoredOnly[0].ID != feedID {
+		t.Fatalf("discovered ignored got %#v err=%v", ignoredOnly, err)
+	}
+	wantedOnly, err := s.ListSourcesFiltered(SourceListFilter{IndexAsIgnored: &ignOff}, 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range wantedOnly {
+		if row.IndexAsIgnored {
+			t.Fatalf("discovered wanted leaked ignored id=%d", row.ID)
+		}
+	}
+	facetsA, err := s.SourceFilterFacetsForSeries(a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !facetsA.HasDiscoveredWanted || !facetsA.HasDiscoveredIgnored {
+		t.Fatalf("series A discovered facets wanted=%v ignored=%v", facetsA.HasDiscoveredWanted, facetsA.HasDiscoveredIgnored)
+	}
+
 	done := true
 	incomplete := false
 	if n, err := s.CountSourcesFiltered(SourceListFilter{FullScanDone: &incomplete}); err != nil || n < 1 {
@@ -184,7 +212,23 @@ func TestListSourcesFilteredActive(t *testing.T) {
 	}
 	v := true
 	if !(SourceListFilter{Domain: "x"}).Active() || !(SourceListFilter{FullScanDone: &v}).Active() ||
-		!(SourceListFilter{ScheduleOn: &v}).Active() || !(SourceListFilter{SeriesMonitored: &v}).Active() {
+		!(SourceListFilter{ScheduleOn: &v}).Active() || !(SourceListFilter{SeriesMonitored: &v}).Active() ||
+		!(SourceListFilter{SeriesID: 1}).Active() || !(SourceListFilter{IndexAsIgnored: &v}).Active() {
 		t.Fatal("operator filters should be active")
+	}
+}
+
+func TestNormalizeSourceQField(t *testing.T) {
+	if got := NormalizeSourceQField(""); got != QFieldSourceLabel {
+		t.Fatalf("default: got %q", got)
+	}
+	if got := NormalizeSourceQField("url"); got != QFieldSourceURL {
+		t.Fatalf("url: got %q", got)
+	}
+	if got := NormalizeSourceQField("series"); got != QFieldSourceSeries {
+		t.Fatalf("series: got %q", got)
+	}
+	if got := NormalizeSourceQField("name"); got != QFieldSourceLabel {
+		t.Fatalf("name alias: got %q", got)
 	}
 }

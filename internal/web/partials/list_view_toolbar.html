@@ -1,7 +1,8 @@
 {{define "list_view_toolbar"}}
-{{/* Dot: listViewToolbar - one join: bulk + search/q_field + Filter accordion + Sort + View.
+{{/* Dot: listViewToolbar - one join: bulk + q_field (search icon) + search + Filter accordion + Sort + View.
      Bulk/Filter/Sort/View wrappers use .input.join-item (same field chrome as search; no nested btn). */}}
 {{$live := .LiveTarget}}
+{{$hasQField := .QFieldOpts}}
 <form method="get"{{if .FormAction}} action="{{.FormAction}}"{{end}}
       class="join w-full mb-2 js-keep-scroll js-list-filters relative z-40 min-w-0"
       aria-label="{{.AriaLabel}}"{{if $live}} hx-get="{{.FormAction}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}
@@ -33,26 +34,24 @@
     </button>
   </div>
   {{end}}
-  {{if .Query}}
-  <label class="input join-item grow min-w-0 input-primary">
-    <i data-lucide="search" class="size-4 opacity-60" aria-hidden="true"></i>
-    <input type="search" name="q" value="{{.Query}}" placeholder="{{.QueryPlaceholder}}" aria-label="{{.QueryPlaceholder}}"
-           class="grow min-w-0" autocomplete="off" />
-  </label>
-  {{else}}
-  <label class="input join-item grow min-w-0">
-    <i data-lucide="search" class="size-4 opacity-60" aria-hidden="true"></i>
-    <input type="search" name="q" value="{{.Query}}" placeholder="{{.QueryPlaceholder}}" aria-label="{{.QueryPlaceholder}}"
-           class="grow min-w-0" autocomplete="off" />
+  {{if $hasQField}}
+  <label class="input join-item w-auto max-w-40 shrink-0">
+    <i data-lucide="search" class="size-4 shrink-0" aria-hidden="true"></i>
+    <select name="q_field" class="grow min-w-0" aria-label="Search field">
+      {{range .QFieldOpts}}
+      <option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
+      {{end}}
+    </select>
+    <i data-lucide="chevron-down" class="size-4 shrink-0 opacity-70" aria-hidden="true"></i>
   </label>
   {{end}}
-  {{if .QFieldOpts}}
-  <select name="q_field" class="select join-item w-auto max-w-40" aria-label="Search field">
-    {{range .QFieldOpts}}
-    <option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
+  <label class="input join-item grow min-w-0{{if .Query}} input-primary{{end}}">
+    {{if not $hasQField}}
+    <i data-lucide="search" class="size-4 shrink-0" aria-hidden="true"></i>
     {{end}}
-  </select>
-  {{end}}
+    <input type="search" name="q" value="{{.Query}}" placeholder="{{.QueryPlaceholder}}" aria-label="{{.QueryPlaceholder}}"
+           class="grow min-w-0" autocomplete="off" />
+  </label>
 
   {{if or .Selects .ShowDateRange}}
   <div class="dropdown dropdown-bottom dropdown-end input join-item shrink-0 js-list-toolbar-dd{{if .FilterActive}} input-primary{{end}}">

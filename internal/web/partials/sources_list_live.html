@@ -49,13 +49,7 @@
 {{define "sources_list_row"}}
 <li class="list-row" style="--list-grid-cols: max-content 1fr max-content{{if .ShowRowActions}} max-content{{end}}">
   <div class="self-center shrink-0">
-    {{if eq .Kind "single"}}
-    <span class="inline-flex tooltip tooltip-top" data-tip="single video"><i data-lucide="film" class="size-4 opacity-70"></i></span>
-    {{else if .IndexAsIgnored}}
-    <span class="inline-flex tooltip tooltip-top" data-tip="channel/playlist - new videos marked as ignored"><i data-lucide="list-minus" class="size-4 text-warning"></i></span>
-    {{else}}
-    <span class="inline-flex tooltip tooltip-top" data-tip="channel/playlist"><i data-lucide="list-video" class="size-4 opacity-70"></i></span>
-    {{end}}
+    {{template "source_kind_icon" .}}
   </div>
   <div class="list-col-grow min-w-0 self-center">
     <div class="flex items-center gap-2 min-w-0">
@@ -69,6 +63,9 @@
     <div class="text-xs opacity-60 truncate">
       <a class="link link-hover" href="/series/{{.SeriesID}}">{{.SeriesTitle}}</a>
     </div>
+    {{end}}
+    {{if .IndexAsIgnored}}
+    <div class="mt-0.5">{{template "source_discovered_cell" .}}</div>
     {{end}}
     {{template "source_stalled" .}}
   </div>
@@ -123,26 +120,19 @@
           <td data-col="{{.Key}}" class="align-middle{{if not .Visible}} hidden{{end}}">
             {{if eq .Key "series"}}
             <a class="link link-hover" href="/series/{{$row.SeriesID}}">{{$row.SeriesTitle}}</a>
+            {{else if eq .Key "kind"}}
+            {{template "source_kind_icon" $row}}
+            {{else if eq .Key "discovered"}}
+            {{template "source_discovered_cell" $row}}
             {{else if eq .Key "name"}}
-            <div class="flex items-center gap-2 min-w-0">
-              {{if eq $row.Kind "single"}}
-              <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="single video"><i data-lucide="film" class="size-4 opacity-70"></i></span>
-              {{else if $row.IndexAsIgnored}}
-              <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="channel/playlist - new videos marked as ignored"><i data-lucide="list-minus" class="size-4 text-warning"></i></span>
-              {{else}}
-              <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="channel/playlist"><i data-lucide="list-video" class="size-4 opacity-70"></i></span>
-              {{end}}
-              {{if and $row.Label.Valid $row.Label.String}}
-              <a class="link link-hover font-medium min-w-0 truncate" href="/series/{{$row.SeriesID}}/sources/{{$row.ID}}">{{$row.Label.String}}</a>
-              {{else}}
-              <span class="opacity-40">-</span>
-              {{end}}
-            </div>
+            {{if and $row.Label.Valid $row.Label.String}}
+            <a class="link link-hover font-medium min-w-0 truncate" href="/series/{{$row.SeriesID}}/sources/{{$row.ID}}">{{$row.Label.String}}</a>
+            {{else}}
+            <span class="opacity-40">-</span>
+            {{end}}
             {{template "source_stalled" $row}}
             {{else if eq .Key "url"}}
             <a class="link link-hover text-sm break-all min-w-0" href="/series/{{$row.SeriesID}}/sources/{{$row.ID}}">{{displayURL $row.URL}}</a>
-            {{else if eq .Key "kind"}}
-            <span class="text-sm opacity-80">{{$row.Kind}}</span>
             {{else if eq .Key "domain"}}
             {{if $row.DomainHost}}<span class="text-sm opacity-80">{{$row.DomainHost}}</span>{{else}}<span class="opacity-40">-</span>{{end}}
             {{else if eq .Key "last_scanned"}}

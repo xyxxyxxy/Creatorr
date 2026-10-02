@@ -414,6 +414,32 @@ form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
 }
 
 /*
+  q_field: same .input.join-item chrome as Filter/Sort (search icon + field
+  select + chevron). Strip native select arrow/border so only the lucide
+  chevron shows; keep the control growing in the leftover space.
+*/
+.js-list-filters > label.input.join-item > select {
+  appearance: none;
+  background-color: transparent;
+  border: 0;
+  box-shadow: none;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+}
+.js-list-filters > label.input.join-item > select:focus,
+.js-list-filters > label.input.join-item > select:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/*
   List-view Filter/Sort/View: wrappers are .input.join-item (stock field chrome,
   same as search / history clear). Triggers stay borderless. Undo .input>* rules
   that would crush .dropdown-content (height/nowrap/flex).
