@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   commands TEXT NOT NULL DEFAULT '[]',
   logs TEXT NOT NULL DEFAULT '[]',
   progress REAL,
+  interrupt_count INTEGER NOT NULL DEFAULT 0,
   domain TEXT NOT NULL DEFAULT 'unknown',
   queue_seq INTEGER NOT NULL DEFAULT 0,
   origin TEXT NOT NULL,

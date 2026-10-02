@@ -3,7 +3,7 @@
      Dot: Query, QueryName (default q), QueryPlaceholder, AriaLabel,
           HideQuery (bool - omit search input),
           DateName, DateValue, DateAriaLabel, DateMax (optional type=date as daisyUI label-for-date-input join item),
-          Selects []{Name, AriaLabel, EmptyLabel, Options[{Value,Label,Selected}]},
+          Selects []{Name, AriaLabel, Options[{Value,Label,Selected}]},
           Hidden []{Name, Value}, FormAction, LiveTarget,
           FormClass (optional extra classes on the form; default includes mb-3),
           SeriesBulkMode (bool - leading multi-select join-item for /series),
@@ -76,7 +76,6 @@
   {{else}}
   <select name="{{.Name}}" class="select join-item w-auto max-w-48" aria-label="{{.AriaLabel}}">
   {{end}}
-    <option value="">{{.EmptyLabel}}</option>
     {{range .Options}}
     <option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
     {{end}}

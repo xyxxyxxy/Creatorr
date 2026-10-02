@@ -1,0 +1,85 @@
+{{define "tasks_list_live"}}
+<div id="tasks-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
+     data-filter-total="{{.FilterTotal}}"
+     data-view-mode="{{.ViewMode}}"
+     data-list-mode="{{.ListMode}}">
+{{if or .Items .FilterActive}}
+{{template "list_view_toolbar" .Filter}}
+{{end}}
+{{if not .Items}}
+{{if .FilterActive}}
+{{template "list_empty" "No tasks match the filters."}}
+{{else}}
+{{template "list_empty" "No tasks."}}
+{{end}}
+{{else}}
+{{if eq .ViewMode "table"}}
+{{template "tasks_explorer_table" .}}
+{{else}}
+<ul class="list bg-base-100 rounded-box border border-base-300 mt-1" id="tasks-list-rows">
+  {{range .ListRows}}
+  {{template "task_row" .}}
+  {{end}}
+</ul>
+{{end}}
+{{if ne .ViewMode "table"}}{{template "list_load_controls" .}}{{end}}
+{{end}}
+</div>
+{{end}}
+
+{{define "tasks_explorer_table"}}
+<div data-list-table>
+  {{template "list_table_chrome" (dict
+    "Page" .Page
+    "Noun" "tasks"
+    "Cols" .TableCols
+    "CookieName" .TableColsCookie
+  )}}
+  <div class="list-table-wrap rounded-box border border-base-300">
+    <table class="table table-sm list-table w-full">
+      <thead>
+        <tr>
+          {{range .TableCols}}
+          <th data-col="{{.Key}}"{{if not .Visible}} class="hidden"{{end}}>{{.Label}}</th>
+          {{end}}
+        </tr>
+      </thead>
+      <tbody id="tasks-list-rows">
+        {{range .Items}}
+        <tr class="row-hover" data-task-id="{{.ID}}" data-task-status="{{.Status}}" data-task-domain="{{.Domain}}">
+          {{$row := .}}
+          {{range $.TableCols}}
+          <td data-col="{{.Key}}" class="align-middle{{if not .Visible}} hidden{{end}}">
+            {{if eq .Key "kind"}}
+              <a class="link link-hover" href="/task/{{$row.ID}}">{{$row.Kind}}</a>
+            {{else if eq .Key "status"}}
+              {{template "status_badge" $row.Status}}
+            {{else if eq .Key "domain"}}{{$row.Domain}}
+            {{else if eq .Key "origin"}}{{$row.Origin}}
+            {{else if eq .Key "parent"}}
+              {{if $row.ParentTaskID}}<a class="link link-hover" href="/task/{{$row.ParentTaskID}}">#{{$row.ParentTaskID}}</a>{{else}}-{{end}}
+            {{else if eq .Key "created"}}
+              <span title="{{$row.CreatedAt}}">{{$row.CreatedAgo}}</span>
+            {{else if eq .Key "duration"}}{{$row.DurationLabel}}
+            {{else if eq .Key "interrupted"}}
+              {{if ne $row.InterruptLabel "-"}}<span class="tooltip tooltip-top" data-tip="Requeued after restart">{{$row.InterruptLabel}}</span>{{else}}-{{end}}
+            {{else if eq .Key "progress"}}{{$row.ProgressLabel}}
+            {{else if eq .Key "queue"}}
+              {{if ne $row.QueuePosLabel "-"}}<span class="tooltip tooltip-top" data-tip="Position in domain queue">{{$row.QueuePosLabel}}</span>{{else}}-{{end}}
+            {{else if eq .Key "message"}}
+              <span class="block truncate max-w-xs{{if eq $row.Status "failed"}} text-error{{end}}" title="{{$row.Message}}">{{$row.Message}}</span>
+            {{else if eq .Key "series"}}
+              {{if $row.SeriesID}}<a class="link link-hover" href="/series/{{$row.SeriesID}}">{{if $row.SeriesTitle}}{{$row.SeriesTitle}}{{else}}#{{$row.SeriesID}}{{end}}</a>{{else}}-{{end}}
+            {{else if eq .Key "video"}}
+              {{if $row.VideoID}}<a class="link link-hover" href="/series/{{$row.SeriesID}}/videos/{{$row.VideoID}}">{{if $row.VideoTitle}}{{$row.VideoTitle}}{{else}}#{{$row.VideoID}}{{end}}</a>{{else}}-{{end}}
+            {{end}}
+          </td>
+          {{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{template "pagination" .Page}}
+</div>
+{{end}}

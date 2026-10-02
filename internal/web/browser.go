@@ -44,6 +44,8 @@ func (h *Handler) browserPage(w http.ResponseWriter, r *http.Request) {
 		SeriesLive          seriesListLiveData
 		VideosLive          videosPageLiveData
 		SourcesLive         sourcesListLiveData
+		TasksLive           tasksListLiveData
+		NotificationsLive   notificationsListLiveData
 		Roots               []library.RootFolder
 		Profiles            []library.QualityProfile
 		Suggestions         library.MetaSuggestions
@@ -76,6 +78,20 @@ func (h *Handler) browserPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.SourcesLive = live
+	case explorerTypeTasks:
+		live, err := h.loadTasksListLive(w, req)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		data.TasksLive = live
+	case explorerTypeNotifications:
+		live, err := h.loadNotificationsListLive(w, req)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		data.NotificationsLive = live
 	default:
 		data.Type = explorerTypeSeries
 		live, err := h.loadSeriesListLive(w, req)

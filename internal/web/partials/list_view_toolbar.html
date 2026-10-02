@@ -35,21 +35,21 @@
   </div>
   {{end}}
   {{if $hasQField}}
-  <label class="input join-item w-auto max-w-40 shrink-0">
-    <i data-lucide="search" class="size-4 shrink-0" aria-hidden="true"></i>
-    <select name="q_field" class="grow min-w-0" aria-label="Search field">
+  <label class="select join-item w-auto max-w-40 shrink-0">
+    <i data-lucide="search" class="size-4 shrink-0 opacity-70" aria-hidden="true"></i>
+    <select name="q_field" aria-label="Search field">
       {{range .QFieldOpts}}
       <option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
       {{end}}
     </select>
-    <i data-lucide="chevron-down" class="size-4 shrink-0 opacity-70" aria-hidden="true"></i>
   </label>
   {{end}}
+  {{$qPh := .QueryPlaceholder}}{{if not $qPh}}{{$qPh = "Search"}}{{end}}
   <label class="input join-item grow min-w-0{{if .Query}} input-primary{{end}}">
     {{if not $hasQField}}
     <i data-lucide="search" class="size-4 shrink-0" aria-hidden="true"></i>
     {{end}}
-    <input type="search" name="q" value="{{.Query}}" placeholder="{{.QueryPlaceholder}}" aria-label="{{.QueryPlaceholder}}"
+    <input type="search" name="q" value="{{.Query}}" placeholder="{{$qPh}}" aria-label="{{$qPh}}"
            class="grow min-w-0" autocomplete="off" />
   </label>
 
@@ -67,7 +67,8 @@
         <li>
           <details>
             <summary>
-              <span class="grow truncate">Upload date</span>
+              <span class="grow truncate">{{if .DateRangeLabel}}{{.DateRangeLabel}}{{else}}Upload date{{end}}</span>
+              {{if .ShowDatePresence}}
               <span class="join join-horizontal shrink-0 list-filter-presence"
                     onmousedown="event.preventDefault(); event.stopPropagation()"
                     onclick="event.stopPropagation()">
@@ -78,9 +79,9 @@
                    aria-label="No upload date"{{if .UploadEmptySelected}} aria-pressed="true"{{end}}
                    {{if $live}} hx-get="{{.UploadEmptyHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>No</a>
               </span>
+              {{end}}
             </summary>
             <ul class="p-1">
-              <li class="menu-title"><span>Range</span></li>
               <li class="pointer-events-auto">
                 <div class="flex flex-col gap-2 px-1 py-1" data-list-filter-date>
                   <label class="input input-sm w-full">
@@ -91,10 +92,6 @@
                     <span class="label">To</span>
                     <input type="date" data-filter-date="to" value="{{.ToDay}}" max="{{today}}" />
                   </label>
-                  {{if or .FromDay .ToDay}}
-                  <a href="{{.DateClearHref}}" class="btn btn-sm btn-ghost"
-                     {{if $live}}hx-get="{{.DateClearHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>Clear dates</a>
-                  {{end}}
                 </div>
               </li>
             </ul>

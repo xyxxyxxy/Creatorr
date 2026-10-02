@@ -91,7 +91,7 @@
   {{if eq .ListMode "infinite"}}{{template "list_infinite_sentinel" .}}{{end}}
 </ul>
 {{end}}
-{{template "list_load_controls" .}}
+{{if ne .ViewMode "table"}}{{template "list_load_controls" .}}{{end}}
 {{end}}
 </div>
 {{end}}

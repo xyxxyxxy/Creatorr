@@ -148,6 +148,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/test-notify-channel", h.actionTestNotifyChannel)
 	r.Post("/actions/mark-notification-read", h.actionMarkNotificationRead)
 	r.Post("/actions/mark-all-notifications-read", h.actionMarkAllNotificationsRead)
+	r.Post("/actions/toggle-notification-read", h.actionToggleNotificationRead)
 	r.Post("/actions/set-domain-active", h.actionSetDomainActive)
 	r.Post("/actions/set-domain-paused", h.actionSetDomainPaused)
 	r.Post("/actions/save-domain-default", h.actionSaveDomainDefault)

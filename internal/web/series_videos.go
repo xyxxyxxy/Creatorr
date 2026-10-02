@@ -148,7 +148,8 @@ type listViewToolbar struct {
 	FromDay              string
 	ToDay                string
 	ShowDateRange        bool
-	DateClearHref        string
+	DateRangeLabel       string // default "Upload date" when empty
+	ShowDatePresence     bool   // Has/No upload chips; false for Created day-ranges
 	UploadEmptyHref      string
 	UploadFilledHref     string
 	UploadEmptySelected  bool
@@ -217,6 +218,8 @@ func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, s
 		FromDay:          filter.FromDay,
 		ToDay:            filter.ToDay,
 		ShowDateRange:    true,
+		ShowDatePresence: true,
+		DateRangeLabel:   "Upload date",
 		Selects:          videoFilterSelects(h, r, id, filter, ser.Sources, false),
 		FilterActive:     filter.Active(),
 		Badges:           videoListBadges(r, filter, false, nil),
@@ -224,7 +227,6 @@ func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, s
 		LiveTarget:       "series-videos-live",
 		FormAction:       fmt.Sprintf("/series/%d", id),
 		VideoBulkMode:    true,
-		DateClearHref:    dropQueryKeys(r, "from", "to", "page"),
 	}
 	annotateUploadPresence(r, &videoFilter)
 	if filter.Active() {

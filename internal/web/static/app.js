@@ -89,7 +89,7 @@
 
   // src/js/lanes.js
   function refreshTasksPanel(force) {
-    const panel = document.getElementById("tasks-live");
+    const panel = document.getElementById("tasks-list-live");
     if (!panel || !window.htmx) return;
     const now = Date.now();
     if (!force) {
@@ -97,7 +97,19 @@
     }
     refreshTasksPanel._at = now;
     const q = location.search || "";
-    window.htmx.ajax("GET", "/tasks" + q, { target: "#tasks-live", select: "#tasks-live", swap: "outerHTML" });
+    let url;
+    if (location.pathname === "/tasks") {
+      url = "/tasks" + q;
+    } else if (location.pathname === "/browser") {
+      const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
+      if (params.get("type") !== "tasks") return;
+      params.set("type", "tasks");
+      params.set("at", "browser");
+      url = "/explorer/browse?" + params.toString();
+    } else {
+      return;
+    }
+    window.htmx.ajax("GET", url, { target: "#tasks-list-live", select: "#tasks-list-live", swap: "outerHTML" });
   }
   function laneStableActionsFingerprint(el) {
     if (!el || !el.querySelectorAll) return "";
@@ -116,10 +128,10 @@
   }
   var stashedLaneStableActions = null;
   function stashTasksLiveBeforeSwap(target) {
-    stashedLaneStableActions = target && target.id === "tasks-live" ? stashLaneStableActions(target) : null;
+    stashedLaneStableActions = target && target.id === "tasks-list-live" ? stashLaneStableActions(target) : null;
   }
   function restoreTasksLiveAfterSwap(root) {
-    if (!root || root.id !== "tasks-live" || !stashedLaneStableActions) return;
+    if (!root || root.id !== "tasks-list-live" || !stashedLaneStableActions) return;
     restoreLaneStableActions(root, stashedLaneStableActions);
     stashedLaneStableActions = null;
   }
@@ -3031,20 +3043,13 @@
 
   // src/js/taskrows.js
   function refreshHistoryPanel() {
-    if (!location.pathname.startsWith("/history")) return;
-    const panel = document.getElementById("history-live");
-    if (panel && window.htmx) {
-      const q = location.search || "";
-      window.htmx.ajax("GET", location.pathname + q, {
-        target: "#history-live",
-        select: "#history-live",
-        swap: "outerHTML"
-      });
-      return;
-    }
-    if (/^\/history\/\d+/.test(location.pathname)) {
-      location.reload();
-    }
+    refreshTasksPanel(true);
+  }
+  function syncTaskMessageTone(el, status) {
+    if (!el) return;
+    const failed = status === "failed";
+    el.classList.toggle("text-error", failed);
+    el.classList.toggle("opacity-60", !failed && el.classList.contains("text-xs"));
   }
   function statusBadgeEl(status) {
     const s = String(status || "");
@@ -3192,6 +3197,7 @@
       } else if (typeof data.message === "string") {
         msgEl.textContent = data.message || "-";
       }
+      if (st) syncTaskMessageTone(msgEl, st);
     }
     const progressChanged = Object.prototype.hasOwnProperty.call(data, "progress");
     if (statusChanged || progressChanged) {
@@ -3240,7 +3246,10 @@
       if (text != null) {
         msgEls.forEach((el) => {
           el.textContent = text;
+          if (st) syncTaskMessageTone(el, st);
         });
+      } else if (statusChanged && st) {
+        msgEls.forEach((el) => syncTaskMessageTone(el, st));
       }
     }
     const progressChanged = Object.prototype.hasOwnProperty.call(data, "progress");
@@ -4195,16 +4204,18 @@
     }
   }
   function refreshNotificationHistoryPanel() {
-    if (!location.pathname.startsWith("/history")) return;
-    const panel = document.getElementById("notification-history-live");
-    if (panel && window.htmx) {
-      const q = location.search || "";
-      window.htmx.ajax("GET", location.pathname + q, {
-        target: "#notification-history-live",
-        select: "#notification-history-live",
-        swap: "outerHTML"
-      });
-    }
+    const panel = document.getElementById("notifications-list-live");
+    if (!panel || !window.htmx) return;
+    const onBrowser = location.pathname === "/browser" && new URLSearchParams(location.search).get("type") === "notifications";
+    if (!onBrowser) return;
+    const params = new URLSearchParams(location.search);
+    params.set("type", "notifications");
+    params.set("at", "browser");
+    window.htmx.ajax("GET", "/explorer/browse?" + params.toString(), {
+      target: "#notifications-list-live",
+      select: "#notifications-list-live",
+      swap: "outerHTML"
+    });
   }
 
   // src/js/keep_scroll.js
@@ -4262,7 +4273,7 @@
     if (form.classList.contains("js-keep-scroll")) return true;
     const dest = formRedirectPathname(form);
     if (dest !== "" && dest === location.pathname) return true;
-    if (document.getElementById("tasks-live") && String(form.method || "").toLowerCase() === "post") {
+    if (document.getElementById("tasks-list-live") && String(form.method || "").toLowerCase() === "post") {
       const action = form.getAttribute("action") || "";
       if (action.startsWith("/actions/")) return true;
     }
@@ -4539,7 +4550,7 @@
       setInterval(() => {
         refreshBadge();
         refreshNotifyBadge();
-        if (document.getElementById("tasks-live")) refreshTasksPanel(false);
+        if (document.getElementById("tasks-list-live")) refreshTasksPanel(false);
       }, 15e3);
     });
     document.body.addEventListener("htmx:beforeRequest", (ev) => {
@@ -4566,7 +4577,7 @@
       formatLocalTimes(root);
       scrollTaskLogsToBottom(root);
       restoreTasksLiveAfterSwap(root);
-      if (root && root.id === "tasks-live") {
+      if (root && root.id === "tasks-list-live") {
         root.querySelectorAll("input[name='redirect'][data-keep-scroll-redirect]").forEach((el) => {
           el.value = currentKeepScrollRedirect();
         });

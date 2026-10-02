@@ -76,6 +76,9 @@ func TestSourcesTableView(t *testing.T) {
 	if strings.Contains(body, "URL / Name") {
 		t.Fatalf("table should not merge URL/Name: %s", body[:min(800, len(body))])
 	}
+	if !strings.Contains(body, `class="select join-item`) {
+		t.Fatalf("q_field should use select join-item chrome: %s", body[:min(1200, len(body))])
+	}
 	if !strings.Contains(body, `name="q_field"`) || !strings.Contains(body, `value="url"`) || !strings.Contains(body, `value="label"`) {
 		t.Fatalf("sources toolbar missing q_field select: %s", body[:min(1200, len(body))])
 	}

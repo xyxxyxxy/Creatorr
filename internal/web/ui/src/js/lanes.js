@@ -1,5 +1,5 @@
 export function refreshTasksPanel(force) {
-  const panel = document.getElementById("tasks-live");
+  const panel = document.getElementById("tasks-list-live");
   if (!panel || !window.htmx) return;
   const now = Date.now();
   // Soft refreshes (SSE miss / 15s poll) recreate lane Busy indeterminate bars;
@@ -9,7 +9,19 @@ export function refreshTasksPanel(force) {
   }
   refreshTasksPanel._at = now;
   const q = location.search || "";
-  window.htmx.ajax("GET", "/tasks" + q, { target: "#tasks-live", select: "#tasks-live", swap: "outerHTML" });
+  let url;
+  if (location.pathname === "/tasks") {
+    url = "/tasks" + q;
+  } else if (location.pathname === "/browser") {
+    const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
+    if (params.get("type") !== "tasks") return;
+    params.set("type", "tasks");
+    params.set("at", "browser");
+    url = "/explorer/browse?" + params.toString();
+  } else {
+    return;
+  }
+  window.htmx.ajax("GET", url, { target: "#tasks-list-live", select: "#tasks-list-live", swap: "outerHTML" });
 }
 
 /**
@@ -38,12 +50,12 @@ let stashedLaneStableActions = null;
 
 // htmx:beforeSwap: remember lane tip hosts when #tasks-live is about to be replaced.
 export function stashTasksLiveBeforeSwap(target) {
-  stashedLaneStableActions = target && target.id === "tasks-live" ? stashLaneStableActions(target) : null;
+  stashedLaneStableActions = target && target.id === "tasks-list-live" ? stashLaneStableActions(target) : null;
 }
 
-// htmx:afterSwap: reattach unchanged tip hosts into the new #tasks-live.
+// htmx:afterSwap: reattach unchanged tip hosts into the new #tasks-list-live.
 export function restoreTasksLiveAfterSwap(root) {
-  if (!root || root.id !== "tasks-live" || !stashedLaneStableActions) return;
+  if (!root || root.id !== "tasks-list-live" || !stashedLaneStableActions) return;
   restoreLaneStableActions(root, stashedLaneStableActions);
   stashedLaneStableActions = null;
 }

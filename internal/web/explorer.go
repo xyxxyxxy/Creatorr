@@ -8,9 +8,11 @@ import (
 )
 
 const (
-	explorerTypeSeries  = "series"
-	explorerTypeVideos  = "videos"
-	explorerTypeSources = "sources"
+	explorerTypeSeries        = "series"
+	explorerTypeVideos        = "videos"
+	explorerTypeSources       = "sources"
+	explorerTypeTasks         = "tasks"
+	explorerTypeNotifications = "notifications"
 
 	cookieBrowserType = "creatorr_browser_type"
 	cookieBrowserWide = "creatorr_browser_wide"
@@ -19,6 +21,7 @@ const (
 	explorerAtVideos       = "videos"
 	explorerAtBrowser      = "browser"
 	explorerAtSeriesDetail = "series-detail"
+	explorerAtTasks        = "tasks"
 )
 
 // explorerBrowse is the single Explorer fragment API.
@@ -34,6 +37,10 @@ func (h *Handler) explorerBrowse(w http.ResponseWriter, r *http.Request) {
 		h.explorerBrowseVideos(w, r)
 	case explorerTypeSources:
 		h.explorerBrowseSources(w, r)
+	case explorerTypeTasks:
+		h.explorerBrowseTasks(w, r)
+	case explorerTypeNotifications:
+		h.explorerBrowseNotifications(w, r)
 	default:
 		http.Error(w, "unknown explorer type", http.StatusBadRequest)
 	}
@@ -217,6 +224,9 @@ func explorerCanonicalURL(r *http.Request, typ string) string {
 		path = "/browser"
 	case explorerAtVideos:
 		path = "/videos"
+	case explorerAtTasks:
+		path = "/tasks"
+		out.Del("type")
 	case explorerAtSeriesDetail:
 		sid := strings.TrimSpace(q.Get("series_id"))
 		if sid == "" {
@@ -257,12 +267,12 @@ func redirectExplorerLive(typ string) http.HandlerFunc {
 func parseBrowserType(r *http.Request) string {
 	t := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("type")))
 	switch t {
-	case explorerTypeSeries, explorerTypeVideos, explorerTypeSources:
+	case explorerTypeSeries, explorerTypeVideos, explorerTypeSources, explorerTypeTasks, explorerTypeNotifications:
 		return t
 	}
 	if c := readListPrefCookie(r, cookieBrowserType); c != "" {
 		switch c {
-		case explorerTypeSeries, explorerTypeVideos, explorerTypeSources:
+		case explorerTypeSeries, explorerTypeVideos, explorerTypeSources, explorerTypeTasks, explorerTypeNotifications:
 			return c
 		}
 	}

@@ -96,8 +96,7 @@ func parseSourceListFilter(r *http.Request) library.SourceListFilter {
 		Kind:    strings.TrimSpace(r.URL.Query().Get("kind")),
 		Domain:  strings.TrimSpace(r.URL.Query().Get("domain")),
 		Sort:    parseSourceSort(r.URL.Query().Get("sort")),
-		SortDir: parseSortDir(r.URL.Query().Get("dir")),
-	}
+		SortDir: parseSortDir(r.URL.Query().Get("dir"))}
 	// series_id = series-detail lock; series = browser operator filter (like Videos).
 	if sid, err := strconv.ParseInt(r.URL.Query().Get("series_id"), 10, 64); err == nil && sid > 0 {
 		f.SeriesID = sid
@@ -233,8 +232,7 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 		filter = library.SourceListFilter{
 			SeriesID: sid,
 			Sort:     library.SortSourceLabel,
-			SortDir:  library.SortDirAsc,
-		}
+			SortDir:  library.SortDirAsc}
 		viewMode = viewList
 	} else {
 		writeSourcesListPrefs(w, filter)
@@ -309,8 +307,7 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 			Src: src.Source, Best: nil, HasError: hasError, ErrMsg: errMsg, ErrCode: errCode, Stalled: stalled,
 			SeriesMonitored: src.SeriesMonitored, DomainActive: dAct, DomainDisabledTitle: disTitle,
 			ScanCronLabel: cronLabel, Summary: summary, HasScanned: hasScanned, HistoryID: taskID,
-			Now: now, LastTipScannedAt: tipAt,
-		})
+			Now: now, LastTipScannedAt: tipAt})
 		retryable, _ := h.Library.SourceHasRetryableVideos(src.ID)
 		vc := 0
 		if vcounts != nil {
@@ -337,8 +334,7 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 			Redirect:            redir,
 			LiveTarget:          sourcesLiveTarget,
 			ShowSeries:          showSeries,
-			ShowRowActions:      showActions,
-		})
+			ShowRowActions:      showActions})
 	}
 
 	var toolbar listViewToolbar
@@ -361,8 +357,7 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 			FilterActive:     filter.Active(),
 			Badges:           sourcesListBadges(r, filter, seriesTitles),
 			LiveTarget:       sourcesLiveTarget,
-			FormAction:       "/explorer/browse",
-		}
+			FormAction:       "/explorer/browse"}
 		if filter.Active() {
 			toolbar.ClearAllHref = clearOperatorFiltersURL(r)
 		}
@@ -385,8 +380,7 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 		SeriesID:        filter.SeriesID,
 		ShowSeriesCol:   showSeries,
 		ShowRowActions:  showActions,
-		ShowToolbar:     !seriesDetail,
-	}
+		ShowToolbar:     !seriesDetail}
 	if seriesDetail {
 		if ser, err := h.Library.GetSeries(filter.SeriesID, false); err == nil && ser != nil {
 			out.SeriesTitle = ser.Title
@@ -410,8 +404,7 @@ func sourcesSortOpts(r *http.Request, current, curDir string) []listFilterOpt {
 		{Value: library.SortSourceLabel, Label: "Name", Selected: cur == library.SortSourceLabel, Icon: "type"},
 		{Value: library.SortSourceDomain, Label: "Domain", Selected: cur == library.SortSourceDomain, Icon: "globe"},
 		{Value: library.SortSourceKind, Label: "Kind", Selected: cur == library.SortSourceKind, Icon: "shapes"},
-		{Value: library.SortSourceLastScanned, Label: "Last scanned", Selected: cur == library.SortSourceLastScanned, Icon: "clock"},
-	}
+		{Value: library.SortSourceLastScanned, Label: "Last scanned", Selected: cur == library.SortSourceLastScanned, Icon: "clock"}}
 	annotateSortOpts(r, opts, library.SortSourceSeries, curDir)
 	return opts
 }
@@ -423,8 +416,7 @@ func sourcesViewOpts(r *http.Request, current string) []listFilterOpt {
 	}
 	opts := []listFilterOpt{
 		{Value: viewList, Label: "List", Selected: cur == viewList, Icon: "layout-list"},
-		{Value: viewTable, Label: "Table", Selected: cur == viewTable, Icon: "table"},
-	}
+		{Value: viewTable, Label: "Table", Selected: cur == viewTable, Icon: "table"}}
 	annotateViewOpts(r, opts)
 	return opts
 }
@@ -444,25 +436,21 @@ func sourcesFilterSelects(h *Handler, r *http.Request, filter library.SourceList
 			opts = append(opts, listFilterOpt{
 				Value:    strconv.FormatInt(ser.ID, 10),
 				Label:    ser.Title,
-				Selected: filter.SeriesID == ser.ID,
-			})
+				Selected: filter.SeriesID == ser.ID})
 		}
 		if len(opts) > 0 {
-			selects = append(selects, listFilterSelect{Name: "series", AriaLabel: "Series", EmptyLabel: "All series", Options: opts})
+			selects = append(selects, listFilterSelect{Name: "series", AriaLabel: "Series", Options: opts})
 		}
 	}
 	kind := filter.Kind
 	showKind := !scoped || len(facets.Kinds) >= 2
 	if showKind {
 		selects = append(selects, listFilterSelect{
-			Name:       "kind",
-			AriaLabel:  "Kind",
-			EmptyLabel: "Any",
+			Name:      "kind",
+			AriaLabel: "Kind",
 			Options: []listFilterOpt{
 				{Value: library.SourceKindFeed, Label: "Feed", Selected: kind == library.SourceKindFeed},
-				{Value: library.SourceKindSingle, Label: "Single", Selected: kind == library.SourceKindSingle},
-			},
-		})
+				{Value: library.SourceKindSingle, Label: "Single", Selected: kind == library.SourceKindSingle}}})
 	}
 
 	var domains []string
@@ -478,8 +466,7 @@ func sourcesFilterSelects(h *Handler, r *http.Request, filter library.SourceList
 			domOpts = append(domOpts, listFilterOpt{Value: d, Label: d, Selected: filter.Domain == d})
 		}
 		selects = append(selects, listFilterSelect{
-			Name: "domain", AriaLabel: "Domain", EmptyLabel: "Any", Options: domOpts,
-		})
+			Name: "domain", AriaLabel: "Domain", Options: domOpts})
 	}
 
 	fullScan := ""
@@ -493,14 +480,11 @@ func sourcesFilterSelects(h *Handler, r *http.Request, filter library.SourceList
 	showFullScan := !scoped || (facets.HasFullScanDone && facets.HasFullScanIncomplete)
 	if showFullScan {
 		selects = append(selects, listFilterSelect{
-			Name:       "full_scan",
-			AriaLabel:  "Full scan",
-			EmptyLabel: "Any",
+			Name:      "full_scan",
+			AriaLabel: "Full scan",
 			Options: []listFilterOpt{
 				{Value: library.SourceFullScanDone, Label: "Done", Selected: fullScan == library.SourceFullScanDone},
-				{Value: library.SourceFullScanIncomplete, Label: "Incomplete", Selected: fullScan == library.SourceFullScanIncomplete},
-			},
-		})
+				{Value: library.SourceFullScanIncomplete, Label: "Incomplete", Selected: fullScan == library.SourceFullScanIncomplete}}})
 	}
 
 	showSchedule := !scoped || (facets.HasScheduleOn && facets.HasScheduleOff)
@@ -520,14 +504,11 @@ func sourcesFilterSelects(h *Handler, r *http.Request, filter library.SourceList
 	showDiscovered := !scoped || (facets.HasDiscoveredWanted && facets.HasDiscoveredIgnored)
 	if showDiscovered {
 		selects = append(selects, listFilterSelect{
-			Name:       "discovered",
-			AriaLabel:  "Discovered",
-			EmptyLabel: "Any",
+			Name:      "discovered",
+			AriaLabel: "Discovered",
 			Options: []listFilterOpt{
 				{Value: library.SourceDiscoveredWanted, Label: "Wanted", Selected: discovered == library.SourceDiscoveredWanted},
-				{Value: library.SourceDiscoveredIgnored, Label: "Ignored", Selected: discovered == library.SourceDiscoveredIgnored},
-			},
-		})
+				{Value: library.SourceDiscoveredIgnored, Label: "Ignored", Selected: discovered == library.SourceDiscoveredIgnored}}})
 	}
 
 	if showSeries {
@@ -616,12 +597,10 @@ func sourceQFieldOpts(current string, showSeries bool) []listFilterOpt {
 	cur := library.NormalizeSourceQField(current)
 	opts := []listFilterOpt{
 		{Value: library.QFieldSourceLabel, Label: "Name", Selected: cur == library.QFieldSourceLabel},
-		{Value: library.QFieldSourceURL, Label: "URL", Selected: cur == library.QFieldSourceURL},
-	}
+		{Value: library.QFieldSourceURL, Label: "URL", Selected: cur == library.QFieldSourceURL}}
 	if showSeries {
 		opts = append(opts, listFilterOpt{
-			Value: library.QFieldSourceSeries, Label: "Series", Selected: cur == library.QFieldSourceSeries,
-		})
+			Value: library.QFieldSourceSeries, Label: "Series", Selected: cur == library.QFieldSourceSeries})
 	}
 	return opts
 }

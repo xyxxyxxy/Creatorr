@@ -108,7 +108,7 @@ export function bootHooks() {
     setInterval(() => {
       refreshBadge();
       refreshNotifyBadge();
-      if (document.getElementById("tasks-live")) refreshTasksPanel(false);
+      if (document.getElementById("tasks-list-live")) refreshTasksPanel(false);
     }, 15000);
   });
 
@@ -123,7 +123,7 @@ export function bootHooks() {
     else delete document.body.dataset.listLiveScrollTarget;
   });
 
-  // Soft #tasks-live refresh: keep tip hosts that did not change so hover tips do not flicker.
+  // Soft #tasks-list-live refresh: keep tip hosts that did not change so hover tips do not flicker.
   document.body.addEventListener("htmx:beforeSwap", (ev) => {
     const target = ev.detail && ev.detail.target;
     stashTasksLiveBeforeSwap(target);
@@ -140,7 +140,7 @@ export function bootHooks() {
     formatLocalTimes(root);
     scrollTaskLogsToBottom(root);
     restoreTasksLiveAfterSwap(root);
-    if (root && root.id === "tasks-live") {
+    if (root && root.id === "tasks-list-live") {
       root.querySelectorAll("input[name='redirect'][data-keep-scroll-redirect]").forEach((el) => {
         el.value = currentKeepScrollRedirect();
       });

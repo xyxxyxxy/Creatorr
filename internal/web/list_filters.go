@@ -10,14 +10,14 @@ type listFilterOpt struct {
 
 // listFilterSelect is one Filter-menu field (or a legacy list_filters select).
 type listFilterSelect struct {
-	Name, AriaLabel, EmptyLabel string
-	Options                     []listFilterOpt
-	Multi                       bool   // multi query values; click toggles; clear via chips
-	PresenceField               string // library.Presence* id; empty = no Has/No
-	PresenceEmptyHref           string
-	PresenceFilledHref          string
-	PresenceEmptyLabel          string
-	PresenceFilledLabel         string
-	PresenceEmptySelected       bool
-	PresenceFilledSelected      bool
+	Name, AriaLabel        string
+	Options                []listFilterOpt
+	Multi                  bool   // multi query values; click toggles; clear via chips
+	PresenceField          string // library.Presence* id; empty = no Has/No
+	PresenceEmptyHref      string
+	PresenceFilledHref     string
+	PresenceEmptyLabel     string
+	PresenceFilledLabel    string
+	PresenceEmptySelected  bool
+	PresenceFilledSelected bool
 }

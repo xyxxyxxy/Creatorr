@@ -140,6 +140,8 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		FromDay:          filter.FromDay,
 		ToDay:            filter.ToDay,
 		ShowDateRange:    true,
+		ShowDatePresence: true,
+		DateRangeLabel:   "Upload date",
 		Selects:          videoFilterSelects(h, r, 0, filter, sources, true),
 		FilterActive:     filter.Active(),
 		Badges:           videoListBadges(r, filter, true, titles),
@@ -147,7 +149,6 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		LiveTarget:       liveTarget,
 		FormAction:       "/explorer/browse",
 		VideoBulkMode:    true,
-		DateClearHref:    dropQueryKeys(r, "from", "to", "page", "through"),
 	}
 	annotateUploadPresence(r, &toolbar)
 	if filter.Active() {

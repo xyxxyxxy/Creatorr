@@ -635,6 +635,15 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			}
 			continue
 		}
+		if path == "/history" {
+			if rec.Code != http.StatusFound {
+				t.Fatalf("/history want 302, got %d: %s", rec.Code, rec.Body.String())
+			}
+			if loc := rec.Header().Get("Location"); !strings.Contains(loc, "type=tasks") {
+				t.Fatalf("/history redirect=%q", loc)
+			}
+			continue
+		}
 		if rec.Code != 200 {
 			t.Fatalf("%s status %d: %s", path, rec.Code, rec.Body.String())
 		}
@@ -772,27 +781,18 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			continue
 		}
 		if path == "/history" {
-			body := rec.Body.String()
-			if !strings.Contains(body, `id="notifications"`) || !strings.Contains(body, "Finished tasks") {
-				t.Fatalf("/history missing notification/task sections")
-			}
-			if !strings.Contains(body, `name="origin"`) || !strings.Contains(body, "All origins") {
-				t.Fatalf("/history missing origin filter select")
-			}
-			if strings.Contains(body, `class="tooltip tooltip-top join-item"`) {
-				t.Fatalf("/history range clear must not wrap join-item around the button")
-			}
-			if !strings.Contains(body, `data-tip="Clear time range"`) || !strings.Contains(body, `input join-item tooltip tooltip-top`) {
-				t.Fatalf("/history range clear missing join-item tip on the control")
-			}
+			continue
 		}
 		if path == "/tasks" {
 			body := rec.Body.String()
 			if !strings.Contains(body, "interactive") || !strings.Contains(body, "Pausing a domain") {
 				t.Fatalf("/tasks missing interactive/pause note")
 			}
+			if !strings.Contains(body, `id="tasks-list-live"`) {
+				t.Fatalf("/tasks missing tasks-list-live")
+			}
 			if !strings.Contains(body, `data-scheduled-task`) || !strings.Contains(body, "download_wanted") || !strings.Contains(body, queue.KindSyncFiles) {
-				t.Fatalf("/tasks missing scheduled task rows on system lane")
+				t.Fatalf("/tasks missing scheduled task rows")
 			}
 			if !strings.Contains(body, `action="/actions/run-scheduled"`) || !strings.Contains(body, `data-tip="Queue now"`) {
 				t.Fatalf("/tasks missing queue-now on scheduled rows")

@@ -33,6 +33,9 @@ type ListFilter struct {
 	From       string // inclusive UTC RFC3339Nano on created_at
 	To         string // inclusive UTC RFC3339Nano on created_at
 	UnreadOnly bool
+	ReadOnly   bool   // only read (or non-unread-event) rows; mutually exclusive with UnreadOnly
+	Sort       string // when | level; empty = when
+	SortDir    string // asc|desc
 }
 
 // InsertNotification writes a notification row. taskID <= 0 stores NULL.
@@ -106,10 +109,11 @@ func ListNotifications(database *db.DB, f ListFilter, limit, offset int) ([]Noti
 		offset = 0
 	}
 	where, args := notificationWhere(f)
+	order := notificationOrderSQL(f)
 	q := `
 		SELECT id, created_at, event, title, body, task_id, external_ok, read_at
 		FROM notifications` + where + `
-		ORDER BY id DESC LIMIT ? OFFSET ?`
+		ORDER BY ` + order + ` LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 	rows, err := database.SQL.Query(q, args...)
 	if err != nil {
@@ -152,6 +156,20 @@ func MarkRead(database *db.DB, id int64) error {
 	_, err := database.SQL.Exec(`
 		UPDATE notifications SET read_at = ? WHERE id = ? AND read_at IS NULL
 	`, now, id)
+	if err == nil {
+		publishRead(database, id)
+	}
+	return err
+}
+
+// MarkUnread clears read_at on one notification (no-op if already unread).
+func MarkUnread(database *db.DB, id int64) error {
+	if database == nil || id <= 0 {
+		return nil
+	}
+	_, err := database.SQL.Exec(`
+		UPDATE notifications SET read_at = NULL WHERE id = ? AND read_at IS NOT NULL
+	`, id)
 	if err == nil {
 		publishRead(database, id)
 	}
@@ -217,11 +235,56 @@ func notificationWhere(f ListFilter) (string, []any) {
 		for _, e := range evs {
 			args = append(args, e)
 		}
+	} else if f.ReadOnly {
+		evs := UnreadEvents()
+		ph := strings.Repeat("?,", len(evs))
+		ph = ph[:len(ph)-1]
+		// Read = not (unread-event AND read_at IS NULL): either read_at set or non-unread event.
+		parts = append(parts, `(read_at IS NOT NULL OR event NOT IN (`+ph+`))`)
+		for _, e := range evs {
+			args = append(args, e)
+		}
 	}
 	if len(parts) == 0 {
 		return "", args
 	}
 	return ` WHERE ` + strings.Join(parts, ` AND `), args
+}
+
+func notificationOrderSQL(f ListFilter) string {
+	dir := strings.ToLower(strings.TrimSpace(f.SortDir))
+	if dir != "asc" && dir != "desc" {
+		dir = "desc"
+	}
+	dirSQL := "DESC"
+	if dir == "asc" {
+		dirSQL = "ASC"
+	}
+	switch strings.ToLower(strings.TrimSpace(f.Sort)) {
+	case "level":
+		return notificationLevelOrderExpr() + ` ` + dirSQL + `, id ` + dirSQL
+	default:
+		return `created_at ` + dirSQL + `, id ` + dirSQL
+	}
+}
+
+func levelEventPlaceholders(level string) string {
+	evs := EventsForLevel(level)
+	if len(evs) == 0 {
+		return "''"
+	}
+	parts := make([]string, len(evs))
+	for i, e := range evs {
+		parts[i] = "'" + strings.ReplaceAll(e, "'", "''") + "'"
+	}
+	return strings.Join(parts, ",")
+}
+
+func notificationLevelOrderExpr() string {
+	return `CASE
+		WHEN event IN (` + levelEventPlaceholders("alert") + `) THEN 0
+		WHEN event IN (` + levelEventPlaceholders("warning") + `) THEN 1
+		ELSE 2 END`
 }
 
 func scanNotification(row rowScanner) (Notification, error) {

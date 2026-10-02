@@ -229,8 +229,14 @@ func clearOperatorFiltersURL(r *http.Request, keepKeys ...string) string {
 			}
 		}
 	}
-	// Empty status marks intentional clear so status cookies do not re-apply.
-	out.Set("status", "")
+	// Empty markers so filter cookies do not re-apply after Clear all.
+	for _, k := range []string{
+		"status", "domain", "kind", "origin",
+		"level", "nlevel", "unread",
+		"from", "to",
+	} {
+		out.Set(k, "")
+	}
 	u := *r.URL
 	enc := out.Encode()
 	if enc == "" {

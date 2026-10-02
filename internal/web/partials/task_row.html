@@ -1,12 +1,27 @@
 {{define "task_row"}}
-<li id="task-row-{{.ID}}" class="list-row" data-task-row-status="{{.Status}}"{{if .LanePaused}} data-lane-paused{{end}}>
+{{/* Open + finished tasks. Dot: taskView (Redirect empty → /tasks). */}}
+{{$redir := .Redirect}}{{if not $redir}}{{$redir = "/tasks"}}{{end}}
+{{$open := or (eq .Status "pending") (eq .Status "running")}}
+<li id="task-row-{{.ID}}" class="list-row" data-task-row-status="{{.Status}}"{{if .LanePaused}} data-lane-paused{{end}}{{if .Domain}} data-task-domain="{{.Domain}}"{{end}}>
   <span class="shrink-0 self-center inline-flex items-center justify-center min-w-[1.75rem] opacity-60" data-task-pos>
     {{if eq .Status "running"}}
     <span class="tooltip tooltip-top inline-flex" data-tip="Running" aria-label="Running">
       <i data-lucide="activity" class="size-5"></i>
     </span>
-    {{else}}
+    {{else if eq .Status "pending"}}
     <span class="font-mono text-lg tabular-nums" aria-label="Queue position {{.Position}}">#{{.Position}}</span>
+    {{else}}
+    <span class="tooltip tooltip-top inline-flex" data-tip="{{.Status}}" aria-label="{{.Status}}">
+      {{if eq .Status "done"}}
+      <i data-lucide="check" class="size-5 text-success"></i>
+      {{else if eq .Status "failed"}}
+      <i data-lucide="circle-alert" class="size-5 text-error"></i>
+      {{else if eq .Status "cancelled"}}
+      <i data-lucide="ban" class="size-5 opacity-70"></i>
+      {{else}}
+      <i data-lucide="circle" class="size-5 opacity-50"></i>
+      {{end}}
+    </span>
     {{end}}
   </span>
   <div class="list-col-grow min-w-0">
@@ -14,6 +29,7 @@
       <a class="link link-hover font-medium truncate" href="/task/{{.ID}}">{{.Kind}}</a>
     </div>
     <div class="text-xs opacity-60 flex flex-wrap gap-x-2 min-w-0">
+      {{if .Domain}}<span class="truncate">{{.Domain}}</span>{{end}}
       {{if .SeriesID}}
       <a class="link link-hover truncate" href="/series/{{.SeriesID}}">{{if .SeriesTitle}}{{.SeriesTitle}}{{else}}#{{.SeriesID}}{{end}}</a>
       {{end}}
@@ -23,11 +39,12 @@
       {{else}}
       <span class="truncate">{{.VideoTitle}}</span>
       {{end}}
-      {{else if not .SeriesID}}{{template "empty_value"}}{{end}}
+      {{else if and (not .SeriesID) (not .Domain)}}{{template "empty_value"}}{{end}}
     </div>
   </div>
   <div class="justify-self-end self-center flex items-center gap-2 min-w-0 max-w-full">
-    <span class="text-xs opacity-60 truncate min-w-0 max-w-[12rem] sm:max-w-xs text-right" data-task-message>{{if eq .Status "pending"}}Queued{{else if .Message}}{{.Message}}{{else}}{{template "empty_value"}}{{end}}</span>
+    <span class="text-xs truncate min-w-0 max-w-[12rem] sm:max-w-xs text-right{{if eq .Status "failed"}} text-error{{else}} opacity-60{{end}}" data-task-message>{{if eq .Status "pending"}}Queued{{else if .Message}}{{.Message}}{{else}}{{template "empty_value"}}{{end}}</span>
+    {{if $open}}
     <div class="w-24 sm:w-32 shrink-0" data-task-progress-wrap>
       {{if eq .Status "pending"}}
       <progress data-task-progress class="progress {{if .LanePaused}}progress-warning{{else}}progress-secondary{{end}} w-full" value="0" max="100" aria-label="pending"></progress>
@@ -46,7 +63,7 @@
       {{end}}
       <form method="post" action="/actions/task-to-front" class="contents" data-task-to-front>
         <input type="hidden" name="id" value="{{.ID}}" />
-        <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
+        <input type="hidden" name="redirect" value="{{$redir}}" data-keep-scroll-redirect />
         {{if $frontOff}}
         <span class="btn btn-soft btn-primary btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="{{$frontTip}}" aria-label="To top of queue" aria-disabled="true" role="button" tabindex="-1">
           <i data-lucide="arrow-up-to-line" class="size-3.5 opacity-50" aria-hidden="true"></i>
@@ -59,12 +76,13 @@
       </form>
       <form method="post" action="/actions/cancel-task" class="contents">
         <input type="hidden" name="id" value="{{.ID}}" />
-        <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
+        <input type="hidden" name="redirect" value="{{$redir}}" data-keep-scroll-redirect />
         <button type="submit" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Cancel" aria-label="Cancel">
           <i data-lucide="x" class="size-3.5"></i>
         </button>
       </form>
     </span>
+    {{end}}
   </div>
 </li>
 {{end}}

@@ -105,12 +105,99 @@ func TestClearOperatorFiltersURLKeepsExplorerScope(t *testing.T) {
 	if _, ok := q["status"]; !ok || q.Get("status") != "" {
 		t.Fatalf("want status=: %q", href)
 	}
+	for _, k := range []string{"level", "unread", "from", "to", "origin"} {
+		if _, ok := q[k]; !ok || q.Get(k) != "" {
+			t.Fatalf("want %s= clear marker: %q", k, href)
+		}
+	}
 }
 
-func TestEncodeParseSortCookie(t *testing.T) {
-	raw := encodeSortCookie(library.SortAdded, library.SortDirDesc)
-	sort, dir := parseSortCookie(raw)
-	if sort != library.SortAdded || dir != library.SortDirDesc {
-		t.Fatalf("got %q %q", sort, dir)
+func TestClearAllBlocksNotificationFilterCookie(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, clearOperatorFiltersURL(
+		httptest.NewRequest(http.MethodGet, "/browser?type=notifications&level=alert&unread=1&from=2024-01-01&sort=when&dir=desc", nil),
+	), nil)
+	r.AddCookie(&http.Cookie{
+		Name:  cookieFilterNotifications,
+		Value: "level=alert&unread=1&from=2024-01-01",
+	})
+	got := mergeNotificationsListPrefs(r)
+	q := got.URL.Query()
+	if q.Get("level") != "" || q.Get("unread") != "" || q.Get("from") != "" {
+		t.Fatalf("clear markers should block cookie restore, q=%v", q)
+	}
+	if q.Get("sort") != "when" || q.Get("dir") != "desc" {
+		t.Fatalf("sort/dir should stay: %q/%q", q.Get("sort"), q.Get("dir"))
+	}
+}
+
+func TestMergeTasksListPrefsFromFilterCookie(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/browser?type=tasks", nil)
+	r.AddCookie(&http.Cookie{
+		Name:  cookieFilterTasks,
+		Value: "status=done&status=failed&domain=example.com&kind=download&origin=user&from=2024-01-01&to=2024-01-31",
+	})
+	r.AddCookie(&http.Cookie{Name: cookieSortTasks, Value: "created:asc"})
+	got := mergeTasksListPrefs(r)
+	q := got.URL.Query()
+	if got := q["status"]; len(got) != 2 || got[0] != "done" || got[1] != "failed" {
+		t.Fatalf("status=%v", got)
+	}
+	if q.Get("domain") != "example.com" || q.Get("kind") != "download" || q.Get("origin") != "user" {
+		t.Fatalf("domain/kind/origin=%q/%q/%q", q.Get("domain"), q.Get("kind"), q.Get("origin"))
+	}
+	if q.Get("from") != "2024-01-01" || q.Get("to") != "2024-01-31" {
+		t.Fatalf("from/to=%q/%q", q.Get("from"), q.Get("to"))
+	}
+	if q.Get("sort") != "created" || q.Get("dir") != "asc" {
+		t.Fatalf("sort=%q dir=%q", q.Get("sort"), q.Get("dir"))
+	}
+}
+
+func TestMergeTasksListPrefsQueryWins(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/browser?type=tasks&status=&domain=other.example", nil)
+	r.AddCookie(&http.Cookie{
+		Name:  cookieFilterTasks,
+		Value: "status=done&domain=example.com",
+	})
+	got := mergeTasksListPrefs(r)
+	q := got.URL.Query()
+	if q.Get("status") != "" || len(q["status"]) != 1 {
+		t.Fatalf("status clear should win, got %v", q["status"])
+	}
+	if q.Get("domain") != "other.example" {
+		t.Fatalf("domain=%q", q.Get("domain"))
+	}
+}
+
+func TestMergeNotificationsListPrefsFromFilterCookie(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/browser?type=notifications", nil)
+	r.AddCookie(&http.Cookie{
+		Name:  cookieFilterNotifications,
+		Value: "level=alert&unread=1&from=2024-02-01&to=2024-02-28",
+	})
+	got := mergeNotificationsListPrefs(r)
+	q := got.URL.Query()
+	if q.Get("level") != "alert" || q.Get("unread") != "1" {
+		t.Fatalf("level/unread=%q/%q", q.Get("level"), q.Get("unread"))
+	}
+	if q.Get("from") != "2024-02-01" || q.Get("to") != "2024-02-28" {
+		t.Fatalf("from/to=%q/%q", q.Get("from"), q.Get("to"))
+	}
+}
+
+func TestEncodeFilterPrefCookie(t *testing.T) {
+	v := url.Values{}
+	v.Add("status", "done")
+	v.Set("domain", "example.com")
+	raw := encodeFilterPrefCookie(v)
+	back, err := url.ParseQuery(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.Get("status") != "done" || back.Get("domain") != "example.com" {
+		t.Fatalf("roundtrip=%v", back)
+	}
+	if encodeFilterPrefCookie(nil) != "" || encodeFilterPrefCookie(url.Values{}) != "" {
+		t.Fatal("empty should encode blank")
 	}
 }

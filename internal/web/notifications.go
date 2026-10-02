@@ -65,9 +65,9 @@ func (h *Handler) notificationDetail(w http.ResponseWriter, r *http.Request) {
 		RelatedTask     *notifyRelatedTaskView
 		RelatedSections []notifyFileSyncIssueSection
 	}{
-		pageBase: newPage(pageTitle, "history", nil),
+		pageBase: newPage(pageTitle, "browser", nil),
 		Crumbs: []breadcrumb{
-			crumb("/history", "History", "history"),
+			crumb("/browser?type=notifications", "Notifications", "bell"),
 			crumb("", pageTitle, "bell"),
 		},
 		Item:            view,
@@ -95,7 +95,7 @@ func (h *Handler) actionMarkNotificationRead(w http.ResponseWriter, r *http.Requ
 	}
 	redir := strings.TrimSpace(r.FormValue("redirect"))
 	if redir == "" {
-		redir = "/history#notifications"
+		redir = "/browser?type=notifications"
 	}
 	http.Redirect(w, r, redir, http.StatusSeeOther)
 }
@@ -104,7 +104,33 @@ func (h *Handler) actionMarkAllNotificationsRead(w http.ResponseWriter, r *http.
 	_, _ = notify.MarkAllRead(h.Queue.DB)
 	redir := strings.TrimSpace(r.FormValue("redirect"))
 	if redir == "" {
-		redir = "/history#notifications"
+		redir = "/browser?type=notifications"
+	}
+	http.Redirect(w, r, redir, http.StatusSeeOther)
+}
+
+func (h *Handler) actionToggleNotificationRead(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(strings.TrimSpace(r.FormValue("id")), 10, 64)
+	wantRead := strings.TrimSpace(r.FormValue("read")) == "1"
+	if id > 0 {
+		if wantRead {
+			_ = notify.MarkRead(h.Queue.DB, id)
+		} else {
+			_ = notify.MarkUnread(h.Queue.DB, id)
+		}
+	}
+	if r.Header.Get("HX-Request") != "" {
+		data, err := h.loadNotificationsListLive(w, r)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		render(w, "notifications_list_live", data)
+		return
+	}
+	redir := strings.TrimSpace(r.FormValue("redirect"))
+	if redir == "" {
+		redir = "/browser?type=notifications"
 	}
 	http.Redirect(w, r, redir, http.StatusSeeOther)
 }

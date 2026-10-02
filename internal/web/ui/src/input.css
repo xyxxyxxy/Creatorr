@@ -414,29 +414,13 @@ form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
 }
 
 /*
-  q_field: same .input.join-item chrome as Filter/Sort (search icon + field
-  select + chevron). Strip native select arrow/border so only the lucide
-  chevron shows; keep the control growing in the leftover space.
+  q_field: daisyUI .select.join-item (search icon + native select). Stock
+  select chrome / caret; no extra lucide chevron. Keep width compact in join.
 */
-.js-list-filters > label.input.join-item > select {
-  appearance: none;
-  background-color: transparent;
-  border: 0;
-  box-shadow: none;
-  outline: none;
-  padding: 0;
-  margin: 0;
-  min-width: 0;
-  flex: 1 1 auto;
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
-  line-height: inherit;
-}
-.js-list-filters > label.input.join-item > select:focus,
-.js-list-filters > label.input.join-item > select:focus-visible {
-  outline: none;
-  box-shadow: none;
+.js-list-filters > label.select.join-item {
+  width: auto;
+  max-width: 10rem;
+  flex-shrink: 0;
 }
 
 /*

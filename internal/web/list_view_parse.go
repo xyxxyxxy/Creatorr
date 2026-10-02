@@ -27,8 +27,7 @@ func parseVideoListFilter(r *http.Request, sources []library.Source, allowSeries
 		Actors:    parseMultiQuery(q, "actor"),
 		Sort:      parseVideoSort(q.Get("sort")),
 		SortDir:   parseSortDir(q.Get("dir")),
-		MediaType: strings.TrimSpace(q.Get("media_type")),
-	}
+		MediaType: strings.TrimSpace(q.Get("media_type"))}
 	f.Empty, f.NotEmpty = parsePresenceParams(q)
 	if raw := strings.TrimSpace(q.Get("year")); raw != "" {
 		if y, err := strconv.Atoi(raw); err == nil && y >= 1900 && y <= 2100 {
@@ -228,11 +227,10 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 			opts = append(opts, listFilterOpt{
 				Value:    strconv.FormatInt(ser.ID, 10),
 				Label:    ser.Title,
-				Selected: filter.SeriesID == ser.ID,
-			})
+				Selected: filter.SeriesID == ser.ID})
 		}
 		if len(opts) > 0 {
-			selects = append(selects, listFilterSelect{Name: "series", AriaLabel: "Series", EmptyLabel: "All series", Options: opts})
+			selects = append(selects, listFilterSelect{Name: "series", AriaLabel: "Series", Options: opts})
 		}
 	}
 	scope := seriesID
@@ -247,8 +245,7 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 	}
 	if len(yearOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "year", AriaLabel: "Upload year", EmptyLabel: "All years", Options: yearOpts,
-		})
+			Name: "year", AriaLabel: "Upload year", Options: yearOpts})
 	}
 	statuses, _ := h.Library.DistinctVideoStatuses(scope)
 	sel := ""
@@ -260,7 +257,7 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 		statusOpts = append(statusOpts, listFilterOpt{Value: st, Label: videoStatusLabel(st), Selected: st == sel})
 	}
 	if len(statusOpts) > 0 {
-		selects = append(selects, listFilterSelect{Name: "status", AriaLabel: "Status", EmptyLabel: "Any status", Options: statusOpts})
+		selects = append(selects, listFilterSelect{Name: "status", AriaLabel: "Status", Options: statusOpts})
 	}
 	studios, _ := h.Library.DistinctVideoScalar(scope, "studio")
 	studioOpts := make([]listFilterOpt, 0, len(studios))
@@ -269,9 +266,8 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 	}
 	if len(studioOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "studio", AriaLabel: "Studio", EmptyLabel: "Any studio", Options: studioOpts,
-			PresenceField: library.PresenceStudio,
-		})
+			Name: "studio", AriaLabel: "Studio", Options: studioOpts,
+			PresenceField: library.PresenceStudio})
 	}
 	countries, _ := h.Library.DistinctVideoScalar(scope, "country")
 	countryOpts := make([]listFilterOpt, 0, len(countries))
@@ -280,9 +276,8 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 	}
 	if len(countryOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "country", AriaLabel: "Country", EmptyLabel: "Any country", Options: countryOpts,
-			PresenceField: library.PresenceCountry,
-		})
+			Name: "country", AriaLabel: "Country", Options: countryOpts,
+			PresenceField: library.PresenceCountry})
 	}
 	mpaas, _ := h.Library.DistinctVideoScalar(scope, "mpaa")
 	mpaaOpts := make([]listFilterOpt, 0, len(mpaas))
@@ -291,9 +286,8 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 	}
 	if len(mpaaOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "mpaa", AriaLabel: "Content rating", EmptyLabel: "Any rating", Options: mpaaOpts,
-			PresenceField: library.PresenceMPAA,
-		})
+			Name: "mpaa", AriaLabel: "Content rating", Options: mpaaOpts,
+			PresenceField: library.PresenceMPAA})
 	}
 	mts, _ := h.Library.DistinctVideoScalar(scope, "media_type")
 	mtOpts := make([]listFilterOpt, 0, len(mts))
@@ -302,9 +296,8 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 	}
 	if len(mtOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "media_type", AriaLabel: "Media type", EmptyLabel: "Any media type", Options: mtOpts,
-			PresenceField: library.PresenceMediaType,
-		})
+			Name: "media_type", AriaLabel: "Media type", Options: mtOpts,
+			PresenceField: library.PresenceMediaType})
 	}
 	genres, _ := h.Library.DistinctVideoJSONStrings(scope, "genres")
 	genreOpts := make([]listFilterOpt, 0, len(genres))
@@ -318,9 +311,8 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 	}
 	if len(genreOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "genre", AriaLabel: "Genre", EmptyLabel: "Any genre", Options: genreOpts, Multi: true,
-			PresenceField: library.PresenceGenres,
-		})
+			Name: "genre", AriaLabel: "Genre", Options: genreOpts, Multi: true,
+			PresenceField: library.PresenceGenres})
 	}
 	tags, _ := h.Library.DistinctVideoJSONStrings(scope, "tags")
 	tagOpts := make([]listFilterOpt, 0, len(tags))
@@ -334,9 +326,8 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 	}
 	if len(tagOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "tag", AriaLabel: "Tag", EmptyLabel: "Any tag", Options: tagOpts, Multi: true,
-			PresenceField: library.PresenceTags,
-		})
+			Name: "tag", AriaLabel: "Tag", Options: tagOpts, Multi: true,
+			PresenceField: library.PresenceTags})
 	}
 	actors, _ := h.Library.DistinctVideoActorNames(scope)
 	actorOpts := make([]listFilterOpt, 0, len(actors))
@@ -350,9 +341,8 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 	}
 	if len(actorOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "actor", AriaLabel: "Actor", EmptyLabel: "Any actor", Options: actorOpts, Multi: true,
-			PresenceField: library.PresenceActors,
-		})
+			Name: "actor", AriaLabel: "Actor", Options: actorOpts, Multi: true,
+			PresenceField: library.PresenceActors})
 	}
 
 	if seriesID > 0 || len(sources) > 0 {
@@ -362,25 +352,22 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 			if nullImportCount > 0 {
 				srcOpts = append(srcOpts, listFilterOpt{
 					Value: library.VideoSourceImportQuery, Label: "Import",
-					Selected: filter.SourceID == library.VideoSourceImport,
-				})
+					Selected: filter.SourceID == library.VideoSourceImport})
 			}
 		}
 		for _, src := range sources {
 			srcOpts = append(srcOpts, listFilterOpt{
 				Value: strconv.FormatInt(src.ID, 10), Label: sourceFilterLabel(src),
-				Selected: filter.SourceID == src.ID,
-			})
+				Selected: filter.SourceID == src.ID})
 		}
 		if len(srcOpts) > 0 {
-			selects = append(selects, listFilterSelect{Name: "source", AriaLabel: "Source", EmptyLabel: "All sources", Options: srcOpts})
+			selects = append(selects, listFilterSelect{Name: "source", AriaLabel: "Source", Options: srcOpts})
 		}
 	}
 	kindOpts := make([]listFilterOpt, 0, len(library.PackRoleSelectOptions()))
 	for _, opt := range library.PackRoleSelectOptions() {
 		kindOpts = append(kindOpts, listFilterOpt{
-			Value: opt.Value, Label: opt.Label, Selected: filter.PackRole == opt.Value,
-		})
+			Value: opt.Value, Label: opt.Label, Selected: filter.PackRole == opt.Value})
 	}
 	selects = append(selects, specialKindFilterSelect(r, filter.PackRole, kindOpts))
 
@@ -407,8 +394,7 @@ func videoSortOpts(r *http.Request, current, curDir, defaultSort string) []listF
 		{Value: library.SortAdded, Label: "Date added", Selected: cur == library.SortAdded, Icon: "calendar-plus"},
 		{Value: library.SortAcquired, Label: "Acquired", Selected: cur == library.SortAcquired, Icon: "download"},
 		{Value: library.SortDuration, Label: "Duration", Selected: cur == library.SortDuration, Icon: "timer"},
-		{Value: library.SortTitle, Label: "Title", Selected: cur == library.SortTitle, Icon: "type"},
-	}
+		{Value: library.SortTitle, Label: "Title", Selected: cur == library.SortTitle, Icon: "type"}}
 	annotateSortOpts(r, opts, defaultSort, curDir)
 	return opts
 }
@@ -421,8 +407,7 @@ func qFieldOpts(current string) []listFilterOpt {
 		{Value: library.QFieldSortTitle, Label: "Sort title", Selected: cur == library.QFieldSortTitle},
 		{Value: library.QFieldOriginalTitle, Label: "Original title", Selected: cur == library.QFieldOriginalTitle},
 		{Value: library.QFieldTagline, Label: "Tagline", Selected: cur == library.QFieldTagline},
-		{Value: library.QFieldNotes, Label: "Notes", Selected: cur == library.QFieldNotes},
-	}
+		{Value: library.QFieldNotes, Label: "Notes", Selected: cur == library.QFieldNotes}}
 }
 
 func searchByPlaceholder(opts []listFilterOpt) string {
@@ -442,8 +427,7 @@ func viewOpts(r *http.Request, current string) []listFilterOpt {
 		{Value: viewList, Label: "List", Selected: current == viewList || current == ""},
 		{Value: viewCards, Label: "Card", Selected: current == viewCards},
 		{Value: viewGallery, Label: "Gallery", Selected: current == viewGallery},
-		{Value: viewTable, Label: "Table", Selected: current == viewTable},
-	}
+		{Value: viewTable, Label: "Table", Selected: current == viewTable}}
 	annotateViewOpts(r, opts)
 	return opts
 }
@@ -460,8 +444,7 @@ func seriesSortOpts(r *http.Request, current, curDir string) []listFilterOpt {
 		{Value: library.SortDownloaded, Label: "Downloaded", Selected: cur == library.SortDownloaded, Icon: "download"},
 		{Value: library.SortWanted, Label: "Wanted", Selected: cur == library.SortWanted, Icon: "circle-dashed"},
 		{Value: library.SortErrors, Label: "Errors", Selected: cur == library.SortErrors, Icon: "circle-alert"},
-		{Value: library.SortSize, Label: "Size", Selected: cur == library.SortSize, Icon: "hard-drive"},
-	}
+		{Value: library.SortSize, Label: "Size", Selected: cur == library.SortSize, Icon: "hard-drive"}}
 	annotateSortOpts(r, opts, library.SortTitle, curDir)
 	return opts
 }
@@ -600,37 +583,29 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 				label = root.Path
 			}
 			opts = append(opts, listFilterOpt{
-				Value: strconv.FormatInt(root.ID, 10), Label: label, Selected: filter.RootID == root.ID,
-			})
+				Value: strconv.FormatInt(root.ID, 10), Label: label, Selected: filter.RootID == root.ID})
 		}
-		selects = append(selects, listFilterSelect{Name: "root", AriaLabel: "Root folder", EmptyLabel: "All roots", Options: opts})
+		selects = append(selects, listFilterSelect{Name: "root", AriaLabel: "Root folder", Options: opts})
 	}
 	if len(profiles) > 0 {
 		opts := make([]listFilterOpt, 0, len(profiles))
 		for _, p := range profiles {
 			opts = append(opts, listFilterOpt{
-				Value: strconv.FormatInt(p.ID, 10), Label: p.Name, Selected: filter.QualityProfileID == p.ID,
-			})
+				Value: strconv.FormatInt(p.ID, 10), Label: p.Name, Selected: filter.QualityProfileID == p.ID})
 		}
-		selects = append(selects, listFilterSelect{Name: "quality", AriaLabel: "Quality profile", EmptyLabel: "All quality", Options: opts})
+		selects = append(selects, listFilterSelect{Name: "quality", AriaLabel: "Quality profile", Options: opts})
 	}
 	selects = append(selects, listFilterSelect{
-		Name: "delivery", AriaLabel: "Delivery mode", EmptyLabel: "All delivery",
-		Options: []listFilterOpt{
+		Name: "delivery", AriaLabel: "Delivery mode", Options: []listFilterOpt{
 			{Value: library.DeliveryVideo, Label: "Video", Selected: filter.DeliveryMode == library.DeliveryVideo},
-			{Value: library.DeliveryAudio, Label: "Audio", Selected: filter.DeliveryMode == library.DeliveryAudio},
-		},
-	})
+			{Value: library.DeliveryAudio, Label: "Audio", Selected: filter.DeliveryMode == library.DeliveryAudio}}})
 	selects = append(selects, listFilterSelect{
-		Name: "status", AriaLabel: "Status", EmptyLabel: "Any status",
-		Options: []listFilterOpt{
+		Name: "status", AriaLabel: "Status", Options: []listFilterOpt{
 			{Value: library.SeriesListStatusMonitored, Label: "Monitored", Selected: filter.Status == library.SeriesListStatusMonitored},
 			{Value: library.SeriesListStatusUnmonitored, Label: "Unmonitored", Selected: filter.Status == library.SeriesListStatusUnmonitored},
 			{Value: library.SeriesListStatusComplete, Label: "Complete", Selected: filter.Status == library.SeriesListStatusComplete},
 			{Value: library.SeriesListStatusIncomplete, Label: "Incomplete", Selected: filter.Status == library.SeriesListStatusIncomplete},
-			{Value: library.SeriesListStatusHasErrors, Label: "Has errors", Selected: filter.Status == library.SeriesListStatusHasErrors},
-		},
-	})
+			{Value: library.SeriesListStatusHasErrors, Label: "Has errors", Selected: filter.Status == library.SeriesListStatusHasErrors}}})
 	years, _ := h.Library.DistinctSeriesPremieredYears()
 	yearOpts := make([]listFilterOpt, 0, len(years))
 	for _, y := range years {
@@ -639,9 +614,8 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 	}
 	if len(yearOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "year", AriaLabel: "Premiered", EmptyLabel: "Any year", Options: yearOpts,
-			PresenceField: library.PresencePremiered,
-		})
+			Name: "year", AriaLabel: "Premiered", Options: yearOpts,
+			PresenceField: library.PresencePremiered})
 	} else {
 		selects = append(selects, presenceOnlySelect(r, library.PresencePremiered, "Premiered"))
 	}
@@ -652,9 +626,8 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 	}
 	if len(studioOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "studio", AriaLabel: "Studio", EmptyLabel: "Any studio", Options: studioOpts,
-			PresenceField: library.PresenceStudio,
-		})
+			Name: "studio", AriaLabel: "Studio", Options: studioOpts,
+			PresenceField: library.PresenceStudio})
 	}
 	countries, _ := h.Library.DistinctSeriesScalar("country")
 	countryOpts := make([]listFilterOpt, 0, len(countries))
@@ -663,9 +636,8 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 	}
 	if len(countryOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "country", AriaLabel: "Country", EmptyLabel: "Any country", Options: countryOpts,
-			PresenceField: library.PresenceCountry,
-		})
+			Name: "country", AriaLabel: "Country", Options: countryOpts,
+			PresenceField: library.PresenceCountry})
 	}
 	mpaas, _ := h.Library.DistinctSeriesScalar("mpaa")
 	mpaaOpts := make([]listFilterOpt, 0, len(mpaas))
@@ -674,9 +646,8 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 	}
 	if len(mpaaOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "mpaa", AriaLabel: "Content rating", EmptyLabel: "Any rating", Options: mpaaOpts,
-			PresenceField: library.PresenceMPAA,
-		})
+			Name: "mpaa", AriaLabel: "Content rating", Options: mpaaOpts,
+			PresenceField: library.PresenceMPAA})
 	}
 	genres, _ := h.Library.DistinctSeriesJSONStrings("genres")
 	genreOpts := make([]listFilterOpt, 0, len(genres))
@@ -690,9 +661,8 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 	}
 	if len(genreOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "genre", AriaLabel: "Genre", EmptyLabel: "Any genre", Options: genreOpts, Multi: true,
-			PresenceField: library.PresenceGenres,
-		})
+			Name: "genre", AriaLabel: "Genre", Options: genreOpts, Multi: true,
+			PresenceField: library.PresenceGenres})
 	}
 	tags, _ := h.Library.DistinctSeriesJSONStrings("tags")
 	tagOpts := make([]listFilterOpt, 0, len(tags))
@@ -706,9 +676,8 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 	}
 	if len(tagOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "tag", AriaLabel: "Tag", EmptyLabel: "Any tag", Options: tagOpts, Multi: true,
-			PresenceField: library.PresenceTags,
-		})
+			Name: "tag", AriaLabel: "Tag", Options: tagOpts, Multi: true,
+			PresenceField: library.PresenceTags})
 	}
 	actors, _ := h.Library.DistinctSeriesActorNames()
 	actorOpts := make([]listFilterOpt, 0, len(actors))
@@ -722,9 +691,8 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 	}
 	if len(actorOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "actor", AriaLabel: "Actor", EmptyLabel: "Any actor", Options: actorOpts, Multi: true,
-			PresenceField: library.PresenceActors,
-		})
+			Name: "actor", AriaLabel: "Actor", Options: actorOpts, Multi: true,
+			PresenceField: library.PresenceActors})
 	}
 	selects = append(selects,
 		presenceOnlySelect(r, library.PresencePlot, "Plot"),

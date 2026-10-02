@@ -617,7 +617,7 @@ func createdAgoPairShort(createdAt string, now time.Time) (absolute, ago string)
 	return absolute, ago
 }
 
-// createdAgoPairCompact is like createdAgoPair but uses compact units ("1 h 2 min").
+// createdAgoPairCompact is like createdAgoPair but uses compact units ("1 h 2 min ago").
 func createdAgoPairCompact(createdAt string, now time.Time) (absolute, ago string) {
 	absolute = createdAt
 	ago = createdAt

@@ -191,7 +191,8 @@ func (s *Store) taskKind(id int64) string {
 // Keeps tasks.progress when PersistLive ran on interrupt so the UI still shows last %.
 func (s *Store) RequeueStaleRunning() (int64, error) {
 	res, err := s.DB.SQL.Exec(`
-		UPDATE tasks SET status = ?, started_at = NULL, message = 'Requeued after restart'
+		UPDATE tasks SET status = ?, started_at = NULL, message = 'Requeued after restart',
+		    interrupt_count = COALESCE(interrupt_count, 0) + 1
 		WHERE status = ?
 	`, StatusPending, StatusRunning)
 	if err != nil {

@@ -203,14 +203,18 @@ export async function markAllNotificationsRead() {
 }
 
 export function refreshNotificationHistoryPanel() {
-  if (!location.pathname.startsWith("/history")) return;
-  const panel = document.getElementById("notification-history-live");
-  if (panel && window.htmx) {
-    const q = location.search || "";
-    window.htmx.ajax("GET", location.pathname + q, {
-      target: "#notification-history-live",
-      select: "#notification-history-live",
-      swap: "outerHTML",
-    });
-  }
+  const panel = document.getElementById("notifications-list-live");
+  if (!panel || !window.htmx) return;
+  const onBrowser =
+    location.pathname === "/browser" &&
+    new URLSearchParams(location.search).get("type") === "notifications";
+  if (!onBrowser) return;
+  const params = new URLSearchParams(location.search);
+  params.set("type", "notifications");
+  params.set("at", "browser");
+  window.htmx.ajax("GET", "/explorer/browse?" + params.toString(), {
+    target: "#notifications-list-live",
+    select: "#notifications-list-live",
+    swap: "outerHTML",
+  });
 }

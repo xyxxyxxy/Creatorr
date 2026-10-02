@@ -34,6 +34,41 @@ func readListPrefCookie(r *http.Request, name string) string {
 	return strings.TrimSpace(c.Value)
 }
 
+// mergeAbsentQueryKeys copies cookie query keys into q when the request omits
+// that key (explicit key= clears; cookie must not refill).
+func mergeAbsentQueryKeys(q url.Values, cookieRaw string, keys ...string) bool {
+	cookieRaw = strings.TrimSpace(cookieRaw)
+	if cookieRaw == "" {
+		return false
+	}
+	cq, err := url.ParseQuery(cookieRaw)
+	if err != nil {
+		return false
+	}
+	changed := false
+	for _, key := range keys {
+		if _, ok := q[key]; ok {
+			continue
+		}
+		for _, val := range cq[key] {
+			val = strings.TrimSpace(val)
+			if val == "" {
+				continue
+			}
+			q.Add(key, val)
+			changed = true
+		}
+	}
+	return changed
+}
+
+func encodeFilterPrefCookie(v url.Values) string {
+	if len(v) == 0 {
+		return ""
+	}
+	return v.Encode()
+}
+
 func encodeSortCookie(sort, dir string) string {
 	sort = strings.TrimSpace(sort)
 	dir = strings.TrimSpace(dir)
@@ -167,6 +202,29 @@ func clearQueryKey(r *http.Request, key string, extraDrop ...string) string {
 		q.Del(k)
 	}
 	q.Set(key, "")
+	u := *r.URL
+	enc := q.Encode()
+	if enc == "" {
+		u.RawQuery = ""
+	} else {
+		u.RawQuery = enc
+	}
+	return u.RequestURI()
+}
+
+// clearQueryKeys sets each key to empty so filter cookies do not re-apply, and
+// drops page/through. Use for multi-key clears (from+to).
+func clearQueryKeys(r *http.Request, keys ...string) string {
+	q := r.URL.Query()
+	q.Del("page")
+	q.Del("through")
+	for _, key := range keys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		q.Set(key, "")
+	}
 	u := *r.URL
 	enc := q.Encode()
 	if enc == "" {

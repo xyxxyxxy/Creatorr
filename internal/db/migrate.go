@@ -113,6 +113,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo24(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 25:
+			if err := d.migrateTo25(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -789,6 +793,21 @@ func quoteIdent(name string) string {
 func (d *DB) migrateTo23() error {
 	if _, err := d.SQL.Exec(`UPDATE videos SET status = 'downloaded_integrity_failed' WHERE status = 'integrity_check_failed'`); err != nil {
 		return fmt.Errorf("rename integrity_check_failed status: %w", err)
+	}
+	return nil
+}
+
+// migrateTo25: tasks.interrupt_count for restart requeue tally on Tasks Explorer.
+func (d *DB) migrateTo25() error {
+	has, err := d.tableHasColumn("tasks", "interrupt_count")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE tasks ADD COLUMN interrupt_count INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return fmt.Errorf("add tasks.interrupt_count: %w", err)
 	}
 	return nil
 }

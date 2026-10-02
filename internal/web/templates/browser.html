@@ -8,6 +8,8 @@
     <a href="/browser?type=series" class="btn join-item{{if eq .Type "series"}} btn-primary{{end}}"{{if eq .Type "series"}} aria-current="page"{{end}}>Series</a>
     <a href="/browser?type=sources" class="btn join-item{{if eq .Type "sources"}} btn-primary{{end}}"{{if eq .Type "sources"}} aria-current="page"{{end}}>Sources</a>
     <a href="/browser?type=videos" class="btn join-item{{if eq .Type "videos"}} btn-primary{{end}}"{{if eq .Type "videos"}} aria-current="page"{{end}}>Videos</a>
+    <a href="/browser?type=tasks" class="btn join-item{{if eq .Type "tasks"}} btn-primary{{end}}"{{if eq .Type "tasks"}} aria-current="page"{{end}}>Tasks</a>
+    <a href="/browser?type=notifications" class="btn join-item{{if eq .Type "notifications"}} btn-primary{{end}}"{{if eq .Type "notifications"}} aria-current="page"{{end}}>Notifications</a>
   </div>
   <a href="{{.WideHref}}" class="btn btn-ghost btn-square tooltip tooltip-left"
      data-tip="{{if .Wide}}Exit full width{{else}}Full width{{end}}"
@@ -19,6 +21,10 @@
 {{template "videos_live" .VideosLive}}
 {{else if eq .Type "sources"}}
 {{template "sources_list_live" .SourcesLive}}
+{{else if eq .Type "tasks"}}
+{{template "tasks_list_live" .TasksLive}}
+{{else if eq .Type "notifications"}}
+{{template "notifications_list_live" .NotificationsLive}}
 {{else}}
 {{template "series_list_live" .SeriesLive}}
 {{end}}
