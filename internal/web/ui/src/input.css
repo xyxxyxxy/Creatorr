@@ -539,6 +539,52 @@
 }
 
 /*
+  Series list banner: bleed past daisyUI .list-row padding (1rem) so art sits on
+  the list element border. Full height, right edge, intrinsic banner ratio
+  (1000/185). Fade + dark scrim mask from the art's left edge.
+*/
+.list .list-row > .series-list-banner-layer {
+  position: absolute;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  top: -1rem;
+  right: -1rem;
+  bottom: -1rem;
+  left: auto;
+  z-index: 0;
+  width: max-content;
+  max-width: calc(100% + 2rem);
+  height: auto;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+  display: block;
+}
+.series-list-banner-art {
+  position: relative;
+  height: 100%;
+  aspect-ratio: 1000 / 185;
+  max-width: calc(100% + 2rem);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 40%);
+  mask-image: linear-gradient(to right, transparent 0%, black 40%);
+}
+.series-list-banner-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+.series-list-banner-scrim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--color-neutral) 55%, transparent);
+}
+.list .list-row.series-list-banner-row.bg-base-200 .series-list-banner-layer {
+  opacity: 0;
+}
+
+/*
   App column floor: Tailwind md (48rem). Below that, main p-4 vs md:p-6 (and
   other md: rules) jump the content width; keep the floor at md so the column
   never sits in that band. Cap stays max-w-5xl in markup; narrower viewports

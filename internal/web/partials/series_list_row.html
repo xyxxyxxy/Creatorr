@@ -1,32 +1,60 @@
 {{define "series_list_row"}}
-{{/* Dot: seriesListRow with Series fields + PosterURL Line2 KindIcon KindTip StatusInd BulkEditBusy */}}
-{{template "list_row_shell" (dict
-  "MediaURL" .PosterURL
-  "MediaClass" "size-14 shrink-0"
-  "Circle" true
-  "PlaceholderIcon" "tv"
-  "TitleHref" (printf "/series/%d" .ID)
-  "Title" .Title
-  "KindIcon" .KindIcon
-  "KindTip" .KindTip
-  "StatusInd" .StatusInd
-  "Line2" .Line2
-  "ShowProgress" true
-  "ProgressTotal" .ProgressTotal
-  "DownloadedCount" .DownloadedCount
-  "ErrorCount" .ErrorCount
-  "WantedCount" .WantedCount
-  "Monitored" .Monitored
-  "Select" (dict "ID" .ID "Disabled" .BulkEditBusy)
-  "Monitor" (dict
-    "Action" "/actions/set-series-monitored"
-    "SeriesID" .ID
-    "Monitored" .Monitored
-    "Redirect" "/series"
-    "LiveTarget" "series-list-live"
-    "AsButton" true
-    "Title" "Include this series in scans and download-wanted"
-    "Disabled" .BulkEditBusy
-  )
-)}}
+{{/* Dot: seriesListRow. Circular poster + title/progress/monitor.
+     Banner is last child, abspos bleed past list-row padding (1rem) so it sits
+     on the list element edge: full height, right-aligned, aspect 1000/185.
+     Fade+scrim start at the banner art's left edge.
+     Bulk JS expects list-row + data-series-id. */}}
+<li class="list-row relative overflow-hidden min-h-20{{if .BannerURL}} series-list-banner-row{{end}}"
+    data-series-id="{{.ID}}"
+    style="--list-grid-cols: minmax(0, auto) 1fr max-content">
+  <div class="self-center hidden z-10" data-series-select-wrap>
+    <input type="checkbox" class="checkbox checkbox-sm js-series-select bg-base-100" value="{{.ID}}"
+           aria-label="Select series"
+           {{if .BulkEditBusy}}disabled{{end}} />
+  </div>
+  <div class="relative self-start size-14 shrink-0 z-10">
+    {{if .PosterURL}}
+    <img class="size-full rounded-full object-cover" src="{{.PosterURL}}" alt="" loading="lazy" />
+    {{else}}
+    <div class="bg-base-200 size-full rounded-full flex items-center justify-center" aria-hidden="true">
+      <i data-lucide="tv" class="size-6 opacity-40"></i>
+    </div>
+    {{end}}
+    {{with .StatusInd}}{{template "series_status_indicator" .}}{{end}}
+    {{if .KindIcon}}
+    <span class="absolute -bottom-0.5 -right-0.5 z-10 badge badge-sm badge-neutral shadow p-1 tooltip tooltip-top" data-tip="{{.KindTip}}" aria-label="{{.KindTip}}">
+      <i data-lucide="{{.KindIcon}}" class="size-3"></i>
+    </span>
+    {{end}}
+  </div>
+  <div class="list-col-grow min-w-0 relative z-10 py-1">
+    <div class="flex items-center gap-2 min-w-0">
+      <a class="link link-hover font-medium truncate" href="/series/{{.ID}}">{{.Title}}</a>
+    </div>
+    <div class="flex items-start gap-2 min-w-0">
+      <div class="w-1/2 min-w-0 text-xs opacity-60 truncate">{{with .Line2}}{{.}}{{end}}</div>
+      <div class="w-1/2 min-w-0">{{template "series_progress" .}}</div>
+    </div>
+  </div>
+  <div class="justify-self-end self-center relative z-10" data-series-monitor-wrap>
+    {{template "monitor_toggle" (dict
+      "Action" "/actions/set-series-monitored"
+      "SeriesID" .ID
+      "Monitored" .Monitored
+      "Redirect" .Redirect
+      "LiveTarget" .LiveTarget
+      "AsButton" true
+      "Title" "Include this series in scans and download-wanted"
+      "Disabled" .BulkEditBusy
+    )}}
+  </div>
+  {{if .BannerURL}}
+  <div class="series-list-banner-layer" aria-hidden="true">
+    <div class="series-list-banner-art">
+      <img src="{{.BannerURL}}" alt="" loading="lazy" />
+      <div class="series-list-banner-scrim"></div>
+    </div>
+  </div>
+  {{end}}
+</li>
 {{end}}

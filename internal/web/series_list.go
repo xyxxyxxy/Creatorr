@@ -17,8 +17,9 @@ type seriesListRow struct {
 	HasMonitoredSource bool
 	Busy               bool
 	BulkEditBusy       bool
-	StatusInd          *seriesStatusView // poster top-left: health errors/warnings only
+	StatusInd          *seriesStatusView // health errors/warnings (list: title row; cards: poster)
 	PosterURL          string
+	BannerURL          string
 	Line2              string
 	KindIcon           string
 	KindTip            string
@@ -161,9 +162,14 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 	rows := make([]seriesListRow, 0, len(list))
 	for _, s := range list {
 		best := pickBestTask(bySeries[s.ID])
+		art := h.Library.SeriesArtFlagsFor(&s)
 		posterURL := ""
-		if h.Library.SeriesArtFlagsFor(&s).Poster {
+		if art.Poster {
 			posterURL = fmt.Sprintf("/series/%d/art/poster", s.ID)
+		}
+		bannerURL := ""
+		if art.Banner {
+			bannerURL = fmt.Sprintf("/series/%d/art/banner", s.ID)
 		}
 		kindIcon, kindTip := "", ""
 		if s.IsAudio() {
@@ -195,6 +201,7 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 			BulkEditBusy:       bulkBusy,
 			StatusInd:          statusInd,
 			PosterURL:          posterURL,
+			BannerURL:          bannerURL,
 			Line2:              strings.Join(line2Parts, " - "),
 			KindIcon:           kindIcon,
 			KindTip:            kindTip,
