@@ -16,14 +16,15 @@ const (
 
 // integrityIndicatorView drives partials/integrity_indicator.html.
 type integrityIndicatorView struct {
-	State string // off | eligible | hashed | monitored | failed
-	Tip   string
+	State  string // off | eligible | hashed | monitored | failed
+	Tip    string
+	LastOK string // relative ago when media ok_at set; empty otherwise
 }
 
-// integrityIndicatorState picks the chip state from video + profile + hash + schedule.
-// Priority: failed → off → eligible → hashed → monitored.
-func integrityIndicatorState(videoStatus string, verifyMedia, hasHash, scheduleOn bool) string {
-	if videoStatus == "downloaded_integrity_failed" {
+// integrityIndicatorState picks the chip state from video + profile + hash + schedule + derived file fail.
+// Priority: failed (status or any derived-failed file) → off → eligible → hashed → monitored.
+func integrityIndicatorState(videoStatus string, verifyMedia, hasHash, scheduleOn, anyFileFailed bool) string {
+	if videoStatus == "downloaded_integrity_failed" || anyFileFailed {
 		return integrityIndFailed
 	}
 	if videoStatus != "downloaded" {
@@ -47,20 +48,9 @@ func integrityScheduleOn(cron string) bool {
 	return c != "" && !strings.EqualFold(c, "never")
 }
 
-// integrityIndicatorTip builds data-tip / aria-label text.
-// lastCheckedAt empty string means omit the last-checked clause.
-// Off and eligible never show last-checked: off = feature unused; eligible = no
-// current media hash (history may be from an older pack/check).
-func integrityIndicatorTip(state, videoStatus string, verifyMedia bool, lastCheckedAt string, now time.Time) string {
-	base := integrityIndicatorBaseTip(state, videoStatus, verifyMedia)
-	if state == integrityIndOff || state == integrityIndEligible || lastCheckedAt == "" {
-		return base
-	}
-	_, ago := createdAgoPairShort(lastCheckedAt, now)
-	if ago == "" {
-		return base
-	}
-	return base + " · Last checked " + ago
+// integrityIndicatorTip is state-only (no last-checked clause).
+func integrityIndicatorTip(state, videoStatus string, verifyMedia bool) string {
+	return integrityIndicatorBaseTip(state, videoStatus, verifyMedia)
 }
 
 func integrityIndicatorBaseTip(state, videoStatus string, verifyMedia bool) string {
@@ -84,9 +74,16 @@ func integrityIndicatorBaseTip(state, videoStatus string, verifyMedia bool) stri
 	}
 }
 
-func buildIntegrityIndicatorView(state, videoStatus string, verifyMedia bool, lastCheckedAt string, now time.Time) integrityIndicatorView {
+func buildIntegrityIndicatorView(state, videoStatus string, verifyMedia bool, lastOKAt string, now time.Time) integrityIndicatorView {
+	lastOK := ""
+	if strings.TrimSpace(lastOKAt) != "" {
+		if _, ago := createdAgoPairShort(lastOKAt, now); ago != "" {
+			lastOK = ago
+		}
+	}
 	return integrityIndicatorView{
-		State: state,
-		Tip:   integrityIndicatorTip(state, videoStatus, verifyMedia, lastCheckedAt, now),
+		State:  state,
+		Tip:    integrityIndicatorTip(state, videoStatus, verifyMedia),
+		LastOK: lastOK,
 	}
 }

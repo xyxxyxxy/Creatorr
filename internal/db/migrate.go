@@ -117,6 +117,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo25(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 26:
+			if err := d.migrateTo26(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -808,6 +812,23 @@ func (d *DB) migrateTo25() error {
 	}
 	if _, err := d.SQL.Exec(`ALTER TABLE tasks ADD COLUMN interrupt_count INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return fmt.Errorf("add tasks.interrupt_count: %w", err)
+	}
+	return nil
+}
+
+// migrateTo26: per-file integrity attempt/success stamps (derived failed when checked_at > ok_at).
+func (d *DB) migrateTo26() error {
+	for _, col := range []string{"content_hash_checked_at", "content_hash_ok_at"} {
+		has, err := d.tableHasColumn("files", col)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := d.SQL.Exec(`ALTER TABLE files ADD COLUMN ` + col + ` TEXT`); err != nil {
+			return fmt.Errorf("add files.%s: %w", col, err)
+		}
 	}
 	return nil
 }

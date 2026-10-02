@@ -126,6 +126,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/metadata-rescan-series", h.actionMetadataRescanSeries)
 	r.Post("/actions/metadata-rescan-video", h.actionMetadataRescanVideo)
 	r.Post("/actions/refresh-sidecars-video", h.actionRefreshSidecarsVideo)
+	r.Post("/actions/check-file-hash", h.actionCheckFileHash)
 	r.Post("/actions/want-video", h.actionWantVideo)
 	r.Post("/actions/set-source-monitored", h.actionSetSourceMonitored)
 	r.Post("/actions/set-series-monitored", h.actionSetSeriesMonitored)

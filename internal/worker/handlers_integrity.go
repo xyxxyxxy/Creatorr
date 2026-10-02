@@ -17,14 +17,25 @@ func VerifyAllMediaHandler(d Deps) TaskHandler {
 		if d.Library == nil {
 			return apperrors.New(apperrors.CodeInternal, "integrity check deps missing")
 		}
+		var recovered []notify.DigestItem
 		res, err := d.Library.VerifyAllMediaPass(ctx, t, progress, func(f library.VerifyAllMediaFail) {
 			_ = notify.VerifyFailed(ctx, d.Library.DB, t.ID, f.SeriesTitle, f.VideoTitle, f.Detail)
+		}, func(r library.VerifyAllMediaRecover) {
+			recovered = append(recovered, notify.DigestItem{
+				Series:  r.SeriesTitle,
+				Title:   r.VideoTitle,
+				VideoID: r.VideoID,
+				Kind:    "recovered",
+			})
 		})
 		if err != nil {
 			return err
 		}
 		if res == nil {
 			res = &library.VerifyAllMediaResult{}
+		}
+		if len(recovered) > 0 {
+			_ = notify.IntegrityRecoveredDigest(ctx, d.Library.DB, t.ID, recovered)
 		}
 		msg := library.VerifyAllMediaMessage(res.IntegrityChecked, res.Partial, res.Skipped, res.Failed)
 		progress(msg, ptrFloat(1))
@@ -73,6 +84,12 @@ func MediaVerifyHandler(d Deps) TaskHandler {
 			return nil
 		}
 
+		wasFailed := false
+		v, _ := d.Library.GetVideo(videoID)
+		if v != nil && v.Status == "downloaded_integrity_failed" {
+			wasFailed = true
+		}
+
 		report, err := d.Library.RunIntegrityCheckVideo(ctx, videoID, progress, library.IntegrityCheckOpts{
 			TaskID: t.ID,
 		})
@@ -85,7 +102,6 @@ func MediaVerifyHandler(d Deps) TaskHandler {
 			if report != nil {
 				_ = d.Library.Queue.MergeDetailJSON(t.ID, report.DetailMap())
 			}
-			v, _ := d.Library.GetVideo(videoID)
 			seriesTitle := ""
 			videoTitle := ""
 			if v != nil {
@@ -101,6 +117,90 @@ func MediaVerifyHandler(d Deps) TaskHandler {
 		if report != nil {
 			_ = d.Library.Queue.MergeDetailJSON(t.ID, report.DetailMap())
 		}
+		if wasFailed {
+			seriesTitle, videoTitle := "", ""
+			if v != nil {
+				videoTitle = v.Title
+				if ser, serr := d.Library.GetSeries(v.SeriesID, false); serr == nil && ser != nil {
+					seriesTitle = ser.Title
+				}
+			}
+			_ = notify.IntegrityRecovered(ctx, d.Library.DB, t.ID, seriesTitle, videoTitle)
+		}
+		return nil
+	}
+}
+
+func FileHashCheckHandler(d Deps) TaskHandler {
+	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
+		if d.Library == nil {
+			return apperrors.New(apperrors.CodeInternal, "file hash check deps missing")
+		}
+		var payload struct {
+			VideoID int64 `json:"video_id"`
+			FileID  int64 `json:"file_id"`
+		}
+		_ = json.Unmarshal([]byte(t.Payload), &payload)
+		videoID := payload.VideoID
+		if videoID <= 0 && t.VideoID.Valid {
+			videoID = t.VideoID.Int64
+		}
+		if videoID <= 0 || payload.FileID <= 0 {
+			return apperrors.New(apperrors.CodeIntegrityCheckFailed, "file_hash_check missing video_id/file_id")
+		}
+		ok, detail, err := d.Library.RunSingleFileIntegrityCheck(ctx, videoID, payload.FileID, progress)
+		if err != nil {
+			if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+				return context.Canceled
+			}
+			_ = d.Library.MarkVerifyFailed(videoID, t.ID, "Integrity check failed", nil)
+			v, _ := d.Library.GetVideo(videoID)
+			seriesTitle, videoTitle := "", ""
+			if v != nil {
+				videoTitle = v.Title
+				if ser, serr := d.Library.GetSeries(v.SeriesID, false); serr == nil && ser != nil {
+					seriesTitle = ser.Title
+				}
+			}
+			_ = notify.VerifyFailed(ctx, d.Library.DB, t.ID, seriesTitle, videoTitle, err.Error())
+			return err
+		}
+		if !ok {
+			_ = d.Library.MarkVerifyFailed(videoID, t.ID, "Integrity check failed", nil)
+			v, _ := d.Library.GetVideo(videoID)
+			seriesTitle, videoTitle := "", ""
+			if v != nil {
+				videoTitle = v.Title
+				if ser, serr := d.Library.GetSeries(v.SeriesID, false); serr == nil && ser != nil {
+					seriesTitle = ser.Title
+				}
+			}
+			msg := detail
+			if msg == "" {
+				msg = "Integrity check failed"
+			}
+			_ = notify.VerifyFailed(ctx, d.Library.DB, t.ID, seriesTitle, videoTitle, msg)
+			return apperrors.WithDetail(
+				apperrors.New(apperrors.CodeIntegrityCheckFailed, "integrity check failed"),
+				msg,
+			)
+		}
+		recovered, aerr := d.Library.ApplyFileIntegrityVideoStatus(videoID, t.ID)
+		if aerr != nil {
+			return aerr
+		}
+		if recovered {
+			v, _ := d.Library.GetVideo(videoID)
+			seriesTitle, videoTitle := "", ""
+			if v != nil {
+				videoTitle = v.Title
+				if ser, serr := d.Library.GetSeries(v.SeriesID, false); serr == nil && ser != nil {
+					seriesTitle = ser.Title
+				}
+			}
+			_ = notify.IntegrityRecovered(ctx, d.Library.DB, t.ID, seriesTitle, videoTitle)
+		}
+		progress("File hash ok", ptrFloat(1))
 		return nil
 	}
 }

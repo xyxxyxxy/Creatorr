@@ -25,8 +25,8 @@ func TestOpenFreshSchema(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "tasks", "queue_seq", true)
 	assertColumn(t, d.SQL, "tasks", "interrupt_count", true)
@@ -43,6 +43,8 @@ func TestOpenFreshSchema(t *testing.T) {
 	assertColumn(t, d.SQL, "domains", "cookies_after_fail", false)
 	assertColumn(t, d.SQL, "sources", "cookie_smart_prefer", true)
 	assertColumn(t, d.SQL, "files", "content_hash", true)
+	assertColumn(t, d.SQL, "files", "content_hash_checked_at", true)
+	assertColumn(t, d.SQL, "files", "content_hash_ok_at", true)
 	assertColumn(t, d.SQL, "tasks", "logs", true)
 	assertColumn(t, d.SQL, "series", "notes", true)
 	assertColumn(t, d.SQL, "videos", "notes", true)
@@ -111,8 +113,8 @@ func TestMigrateV2AddsFullScanLimitDropsCutoff(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "sources", "full_scan_limit", true)
 	assertColumn(t, d.SQL, "sources", "scan_cutoff", false)
@@ -194,8 +196,8 @@ func TestMigrateV3ClearsSourceHold(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	var st string
 	if err := d.SQL.QueryRow(`SELECT status FROM videos WHERE id = 1`).Scan(&st); err != nil {
@@ -262,8 +264,8 @@ func TestMigrateV4AddsAcquiredVia(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "videos", "acquired_via", true)
 	assertColumnNotNull(t, d.SQL, "videos", "acquired_via", false)
@@ -328,8 +330,8 @@ func TestMigrateV5AddsRootEpisodeFormat(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "root_folders", "episode_format", true)
 
@@ -417,8 +419,8 @@ func TestMigrateV6DropsAutoIgnoreColumns(t *testing.T) {
 		if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 			t.Fatal(err)
 		}
-		if ver != 25 {
-			t.Fatalf("schema_version=%d want 25", ver)
+		if ver != 26 {
+			t.Fatalf("schema_version=%d want 26", ver)
 		}
 		assertColumn(t, d.SQL, "sources", "auto_ignore_media_types", false)
 		assertColumn(t, d.SQL, "series", "auto_ignore_media_types", false)
@@ -489,8 +491,8 @@ func TestMigrateV6DropsAutoIgnoreColumns(t *testing.T) {
 		if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 			t.Fatal(err)
 		}
-		if ver != 25 {
-			t.Fatalf("schema_version=%d want 25", ver)
+		if ver != 26 {
+			t.Fatalf("schema_version=%d want 26", ver)
 		}
 		assertColumn(t, d.SQL, "sources", "auto_ignore_media_types", false)
 		assertColumn(t, d.SQL, "series", "auto_ignore_media_types", false)
@@ -536,8 +538,8 @@ func TestMigrateV7DropsVideosTool(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "videos", "tool", false)
 	assertColumn(t, d.SQL, "videos", "acquired_via", true)
@@ -587,8 +589,8 @@ func TestMigrateV8NullsUnacquiredVia(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "videos", "acquired_via", true)
 	assertColumnNotNull(t, d.SQL, "videos", "acquired_via", false)
@@ -657,8 +659,8 @@ func TestMigrateV9BumpsExactDefaultEpisodeFormat(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	var legacy, custom string
 	if err := d.SQL.QueryRow(`SELECT episode_format FROM root_folders WHERE path = '/legacy'`).Scan(&legacy); err != nil {
@@ -850,8 +852,8 @@ func TestMigrateV11OriginAndStripTrigger(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "tasks", "origin", true)
 	assertColumn(t, d.SQL, "tasks", "parent_task_id", true)
@@ -929,8 +931,8 @@ func TestMigrateV11SkipsMalformedDetailJSON(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	var detail1, detail2, payload1 string
 	if err := d.SQL.QueryRow(`SELECT detail, payload FROM tasks WHERE id = 1`).Scan(&detail1, &payload1); err != nil {
@@ -988,8 +990,8 @@ func TestMigrateV12VideoHistoryEvents(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 
 	var e1, d1, e2, d2, e3 string
@@ -1059,8 +1061,8 @@ func TestMigrateV14AddsCookiesAfterFail(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	var v int
 	if err := d.SQL.QueryRow(`SELECT smart_cookies FROM domains WHERE domain = 'example.com'`).Scan(&v); err != nil {
@@ -1121,8 +1123,8 @@ func TestMigrateV15QueueSeqDropsPriority(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "tasks", "queue_seq", true)
 	assertColumn(t, d.SQL, "tasks", "priority", false)
@@ -1200,8 +1202,8 @@ func TestMigrateV16PackRoleAndSpecialFormats(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "videos", "special_feature", true)
 	assertColumn(t, d.SQL, "root_folders", "special_episode_format", true)
@@ -1263,8 +1265,8 @@ func TestMigrateV17PackRoleEpisode(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "videos", "special_feature", true)
 	assertColumn(t, d.SQL, "videos", "pack_role", false)
@@ -1329,8 +1331,8 @@ func TestMigrateV19DropsImportSrc(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "videos", "import_src", false)
 	assertColumn(t, d.SQL, "videos", "acquired_via", true)
@@ -1384,8 +1386,8 @@ func TestMigrateV20SmartCookies(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "domains", "smart_cookies", true)
 	assertColumn(t, d.SQL, "domains", "cookies_after_fail", false)
@@ -1459,8 +1461,8 @@ func TestMigrateV21Notes(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "series", "notes", true)
 	assertColumn(t, d.SQL, "videos", "notes", true)
@@ -1566,8 +1568,8 @@ func TestMigrateV22PurgesDeleteSidecar(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	var n int
 	if err := d.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = 'delete_sidecar'`).Scan(&n); err != nil {
@@ -1681,8 +1683,8 @@ func TestMigrateV24SpecialFeatureNullableAndSourcePreset(t *testing.T) {
 	if err := d.SQL.QueryRow(`SELECT version FROM schema_version`).Scan(&ver); err != nil {
 		t.Fatal(err)
 	}
-	if ver != 25 {
-		t.Fatalf("schema_version=%d want 25", ver)
+	if ver != 26 {
+		t.Fatalf("schema_version=%d want 26", ver)
 	}
 	assertColumn(t, d.SQL, "sources", "studio", true)
 	assertColumn(t, d.SQL, "sources", "tags", true)

@@ -330,6 +330,16 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 				SELECT 1 FROM tasks WHERE kind = ? AND video_id = ? AND status IN (?, ?) LIMIT 1
 			`, KindIntegrityCheckInitial, p.VideoID, StatusPending, StatusRunning)
 		}
+	case KindFileHashCheck:
+		fileID := FileIDFromPayload(payloadJSON)
+		if fileID > 0 {
+			return s.rejectIfExists(`
+				SELECT 1 FROM tasks
+				WHERE kind = ? AND status IN (?, ?)
+				  AND CAST(COALESCE(json_extract(payload, '$.file_id'), 0) AS INTEGER) = ?
+				LIMIT 1
+			`, KindFileHashCheck, StatusPending, StatusRunning, fileID)
+		}
 	case KindPrefetchSeriesMeta:
 		if p.SeriesID > 0 {
 			return s.rejectIfExists(`

@@ -229,8 +229,9 @@
 <thead><tr><th>Type</th><th>File</th><th>Size</th><th class="w-14"></th></tr></thead>
 <tbody>
   {{range .Files}}
+  {{$errClass := ""}}{{if .IntegrityFailed}}{{$errClass = " text-error"}}{{end}}
   <tr>
-    <td class="whitespace-nowrap">
+    <td class="whitespace-nowrap{{$errClass}}">
       <span class="inline-flex items-center gap-1.5">
         {{if .Missing}}
         <span class="tooltip tooltip-top inline-flex shrink-0" data-tip="file missing" aria-label="file missing">
@@ -242,20 +243,20 @@
         <span>{{.KindLabel}}</span>
       </span>
     </td>
-    <td class="text-sm break-all">
+    <td class="text-sm break-all{{$errClass}}">
       {{if .Missing}}
       <span class="tooltip tooltip-top inline-flex max-w-full" data-tip="{{.Path}}">
         <code class="text-xs opacity-60">{{.Name}}</code>
       </span>
       {{else if .ViewHref}}
-      <a class="link link-hover" href="{{.ViewHref}}">
+      <a class="link link-hover{{if .IntegrityFailed}} text-error{{end}}" href="{{.ViewHref}}"{{if .IntegrityFailed}} title="Integrity check failed"{{end}}>
         <code class="text-xs">{{.Name}}</code>
       </a>
       {{else}}
       <code class="text-xs">{{.Name}}</code>
       {{end}}
     </td>
-    <td class="text-xs whitespace-nowrap tabular-nums">{{if eq .SizeLabel "-"}}{{template "empty_value"}}{{else}}{{.SizeLabel}}{{end}}</td>
+    <td class="text-xs whitespace-nowrap tabular-nums{{$errClass}}">{{if eq .SizeLabel "-"}}{{template "empty_value"}}{{else}}{{.SizeLabel}}{{end}}</td>
     <td class="text-right">
       {{if .CanDelete}}
       <label for="modal-delete-sidecar-{{.ID}}" class="btn btn-soft btn-error btn-square btn-sm tooltip tooltip-top" data-tip="Delete" aria-label="Delete {{.Name}}">

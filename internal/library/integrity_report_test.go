@@ -71,7 +71,7 @@ func TestIntegrityCheckReportDetailMapAndFinalize(t *testing.T) {
 	}
 }
 
-func TestMarkVerifiedPartialMessage(t *testing.T) {
+func TestMarkVerifiedMessage(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
@@ -89,11 +89,11 @@ func TestMarkVerifiedPartialMessage(t *testing.T) {
 	}
 	tid := seedTaskID(t, s)
 	rep := &library.IntegrityCheckReport{
-		Outcome: library.IntegrityOutcomePartial,
+		Outcome: library.IntegrityOutcomeOK,
 		Checks: []library.IntegrityCheckItem{
 			{Key: library.IntegrityCheckNullDecode, Result: library.IntegrityResultOK},
 			{Key: library.IntegrityCheckMediaChecksum, Result: library.IntegrityResultOK},
-			{Key: library.IntegrityCheckSidecarChecksum, Result: library.IntegrityResultPartial, Detail: "thumb"},
+			{Key: library.IntegrityCheckSidecarChecksum, Result: library.IntegrityResultOK},
 			{Key: library.IntegrityCheckNFO, Result: library.IntegrityResultOK},
 		},
 	}
@@ -108,14 +108,14 @@ func TestMarkVerifiedPartialMessage(t *testing.T) {
 	for _, e := range hist {
 		if e.Event == library.VideoHistIntegrityChecked {
 			found = true
-			if e.Message != "Integrity check ok (sidecar/NFO issues)" {
+			if e.Message != "Integrity check ok" {
 				t.Fatalf("message=%q", e.Message)
 			}
 			var raw map[string]any
 			if err := json.Unmarshal([]byte(e.Detail), &raw); err != nil {
 				t.Fatal(err)
 			}
-			if raw["outcome"] != library.IntegrityOutcomePartial {
+			if raw["outcome"] != library.IntegrityOutcomeOK {
 				t.Fatalf("outcome=%v", raw["outcome"])
 			}
 		}

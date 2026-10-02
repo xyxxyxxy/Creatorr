@@ -18,6 +18,7 @@ const (
 	EventRateLimited         = "rate_limited"
 	EventYtDlpFailed         = "ytdlp_failed"
 	EventVerifyFailed        = "integrity_check_failed"
+	EventIntegrityRecovered  = "integrity_recovered"
 	EventFileSyncIssues      = "file_sync_issues"
 	EventPOTProvider         = "pot_provider"
 	EventPathCollision       = "path_collision"
@@ -44,6 +45,7 @@ var AllEvents = []string{
 	EventDownloadDigest,
 	EventLiveSkipped,
 	EventArchiveFallback,
+	EventIntegrityRecovered,
 	EventYtDlpFailed,
 	EventVerifyFailed,
 	EventFileSyncIssues,
@@ -60,6 +62,7 @@ var EventLabels = map[string]string{
 	EventRateLimited:         "Rate limit / IP block",
 	EventYtDlpFailed:         "yt-dlp / site failure",
 	EventVerifyFailed:        "Integrity check failed",
+	EventIntegrityRecovered:  "Integrity recovered",
 	EventFileSyncIssues:      "File sync issues",
 	EventPOTProvider:         "PO token provider failure",
 	EventPathCollision:       "Episode path collision",
@@ -261,7 +264,7 @@ func notifyTypeFor(event string) apprise.NotifyType {
 		return apprise.NotifyFailure
 	case EventDownloadDigest:
 		return apprise.NotifySuccess
-	case EventLiveSkipped, EventArchiveFallback:
+	case EventLiveSkipped, EventArchiveFallback, EventIntegrityRecovered:
 		return apprise.NotifyInfo
 	default:
 		return apprise.NotifyInfo

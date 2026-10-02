@@ -83,27 +83,18 @@ func (r *IntegrityCheckReport) FinalizeCheckOutcome() {
 		return
 	}
 	hardFail := false
-	softPartial := false
 	for _, c := range r.Checks {
-		switch c.Key {
-		case IntegrityCheckNullDecode, IntegrityCheckMediaChecksum:
-			if c.Result == IntegrityResultFailed {
-				hardFail = true
-			}
-		case IntegrityCheckSidecarChecksum, IntegrityCheckNFO:
-			if c.Result == IntegrityResultFailed || c.Result == IntegrityResultPartial {
-				softPartial = true
-			}
+		if c.Result == IntegrityResultFailed || c.Result == IntegrityResultPartial {
+			// Any failed file check hard-fails the video (no soft sidecar partial).
+			hardFail = true
+			break
 		}
 	}
-	switch {
-	case hardFail:
+	if hardFail {
 		r.Outcome = IntegrityOutcomeFailed
-	case softPartial:
-		r.Outcome = IntegrityOutcomePartial
-	default:
-		r.Outcome = IntegrityOutcomeOK
+		return
 	}
+	r.Outcome = IntegrityOutcomeOK
 }
 
 // VerifyAllMediaResult is the finish summary for a bulk integrity_check task.

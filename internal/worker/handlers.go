@@ -41,6 +41,7 @@ func DefaultHandlers(d Deps) map[string]TaskHandler {
 	out[queue.KindDeleteFiles] = DeleteFilesHandler(d)
 	out[queue.KindSponsorblockCut] = SponsorblockCutHandler(d)
 	out[queue.KindIntegrityCheckInitial] = MediaVerifyHandler(d)
+	out[queue.KindFileHashCheck] = FileHashCheckHandler(d)
 	out[queue.KindYtDlpUpdate] = YtDlpUpdateHandler(d)
 	out[queue.KindBulkEditSeries] = BulkEditSeriesHandler(d)
 	out[queue.KindBulkEditVideos] = BulkEditVideosHandler(d)

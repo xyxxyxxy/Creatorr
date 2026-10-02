@@ -25,6 +25,7 @@ const (
 	KindDeleteFiles           = "delete_files"
 	KindSponsorblockCut       = "sponsorblock_cut"
 	KindIntegrityCheckInitial = "integrity_check_initial"
+	KindFileHashCheck         = "file_hash_check"
 	KindYtDlpUpdate           = "ytdlp_update"
 	KindBulkEditSeries        = "bulk_edit_series"
 	KindBulkEditVideos        = "bulk_edit_videos"
@@ -116,6 +117,17 @@ func SourceIDFromPayload(payload string) int64 {
 		return 0
 	}
 	return p.SourceID
+}
+
+// FileIDFromPayload reads file_id from a task payload JSON (file_hash_check).
+func FileIDFromPayload(payload string) int64 {
+	var p struct {
+		FileID int64 `json:"file_id"`
+	}
+	if json.Unmarshal([]byte(payload), &p) != nil {
+		return 0
+	}
+	return p.FileID
 }
 
 // FileDeleteIDsFromPayload reads series_ids and video_ids from a delete_files payload.

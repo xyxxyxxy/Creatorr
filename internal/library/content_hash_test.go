@@ -106,3 +106,118 @@ func TestVerifyAllMediaPassSkipsProfileOff(t *testing.T) {
 		t.Fatalf("kind=%s", task.Kind)
 	}
 }
+
+func TestFileHashStampsEqualOnOK(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Stamps", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.DB.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, status, season, episode)
+		VALUES (?, 'st1', 'Ep', 'downloaded', 2026, 1)
+	`, ser.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var videoID int64
+	if err := s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE remote_id = 'st1'`).Scan(&videoID); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "x.bin")
+	payload := []byte("stamp-ok")
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterFileKind(videoID, path, "json"); err != nil {
+		t.Fatal(err)
+	}
+	var fileID int64
+	if err := s.DB.SQL.QueryRow(`SELECT id FROM files WHERE video_id = ?`, videoID).Scan(&fileID); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(payload)
+	want := hex.EncodeToString(sum[:])
+	if err := s.SetFileContentHash(fileID, want); err != nil {
+		t.Fatal(err)
+	}
+	var checked, okAt sql.NullString
+	if err := s.DB.SQL.QueryRow(`SELECT content_hash_checked_at, content_hash_ok_at FROM files WHERE id = ?`, fileID).Scan(&checked, &okAt); err != nil {
+		t.Fatal(err)
+	}
+	if !checked.Valid || !okAt.Valid || checked.String == "" || checked.String != okAt.String {
+		t.Fatalf("fill stamps checked=%q ok=%q want equal non-empty", checked.String, okAt.String)
+	}
+	if err := s.MarkFileHashAttempted(fileID); err != nil {
+		t.Fatal(err)
+	}
+	var checked2, okAt2 sql.NullString
+	if err := s.DB.SQL.QueryRow(`SELECT content_hash_checked_at, content_hash_ok_at FROM files WHERE id = ?`, fileID).Scan(&checked2, &okAt2); err != nil {
+		t.Fatal(err)
+	}
+	if checked2.String == okAt2.String {
+		t.Fatal("attempted should advance checked only")
+	}
+	if okAt2.String != okAt.String {
+		t.Fatalf("ok_at changed on fail: %q -> %q", okAt.String, okAt2.String)
+	}
+	if library.FileIntegrityDerived(checked2.String, okAt2.String) != "failed" {
+		t.Fatalf("want derived failed")
+	}
+	failed, err := s.VideoHasFailedIntegrityFile(videoID)
+	if err != nil || !failed {
+		t.Fatalf("VideoHasFailedIntegrityFile=%v err=%v", failed, err)
+	}
+	if _, err := s.DB.SQL.Exec(`UPDATE videos SET status = 'downloaded_integrity_failed' WHERE id = ?`, videoID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkFileHashOK(fileID); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := s.ApplyFileIntegrityVideoStatus(videoID, seedTaskID(t, s))
+	if err != nil || !recovered {
+		t.Fatalf("recovered=%v err=%v", recovered, err)
+	}
+	v, err := s.GetVideo(videoID)
+	if err != nil || v.Status != "downloaded" {
+		t.Fatalf("status=%v err=%v", v.Status, err)
+	}
+}
+
+func TestEnqueueFileHashCheckBusy(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "BusyHash", SourceURL: "https://www.example.com/@busyhash", RootID: rootID,
+		QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "bh1", Title: "One", SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "f.bin")
+	_ = os.WriteFile(path, []byte("x"), 0o644)
+	if err := s.RegisterFileKind(res.VideoID, path, "json"); err != nil {
+		t.Fatal(err)
+	}
+	var fileID int64
+	if err := s.DB.SQL.QueryRow(`SELECT id FROM files WHERE video_id = ?`, res.VideoID).Scan(&fileID); err != nil {
+		t.Fatal(err)
+	}
+	id1, err := s.EnqueueFileHashCheck(res.VideoID, fileID)
+	if err != nil || id1 <= 0 {
+		t.Fatalf("id=%d err=%v", id1, err)
+	}
+	_, err = s.EnqueueFileHashCheck(res.VideoID, fileID)
+	if err == nil {
+		t.Fatal("want busy refuse")
+	}
+}

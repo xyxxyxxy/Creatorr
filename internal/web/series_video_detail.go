@@ -201,7 +201,7 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// integrityIndicatorForVideo loads profile / hash / cron / last-check for the Status chip.
+// integrityIndicatorForVideo loads profile / hash / cron / last-OK for the Status chip.
 func (h *Handler) integrityIndicatorForVideo(ser *library.Series, video *library.Video, now time.Time) integrityIndicatorView {
 	verifyMedia := false
 	if ser != nil {
@@ -214,10 +214,11 @@ func (h *Handler) integrityIndicatorForVideo(ser *library.Series, video *library
 	if h.Queue != nil && h.Queue.DB != nil {
 		cron, _ = settings.Get(h.Queue.DB, settings.KeyIntegrityCheckCron)
 	}
-	lastAt := ""
-	if t, ok, err := h.Library.LastIntegrityCheckAt(video.ID); err == nil && ok {
-		lastAt = t.UTC().Format(time.RFC3339)
+	anyFailed, _ := h.Library.VideoHasFailedIntegrityFile(video.ID)
+	lastOK := ""
+	if okAt, ok, err := h.Library.MediaContentHashOkAt(video.ID); err == nil && ok {
+		lastOK = okAt
 	}
-	state := integrityIndicatorState(video.Status, verifyMedia, hasHash, integrityScheduleOn(cron))
-	return buildIntegrityIndicatorView(state, video.Status, verifyMedia, lastAt, now)
+	state := integrityIndicatorState(video.Status, verifyMedia, hasHash, integrityScheduleOn(cron), anyFailed)
+	return buildIntegrityIndicatorView(state, video.Status, verifyMedia, lastOK, now)
 }

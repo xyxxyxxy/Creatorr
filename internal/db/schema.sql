@@ -130,7 +130,9 @@ CREATE TABLE IF NOT EXISTS files (
   kind TEXT NOT NULL,
   acquired_at TEXT NOT NULL,
   size_bytes INTEGER,
-  content_hash TEXT
+  content_hash TEXT,
+  content_hash_checked_at TEXT,
+  content_hash_ok_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tasks (

@@ -11,19 +11,59 @@
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
     {{if not .Missing}}
+    {{if .CheckHashBusy}}
+    <span class="btn btn-outline btn-disabled tooltip tooltip-top" data-tip="{{.CheckHashBusyTip}}" aria-disabled="true">
+      <i data-lucide="shield-check" class="size-4"></i>
+      Check hash
+    </span>
+    {{if .CheckHashTaskID}}
+    <a class="link link-hover text-xs" href="/task/{{.CheckHashTaskID}}">Open task</a>
+    {{end}}
+    {{else}}
+    <form method="post" action="/actions/check-file-hash" class="inline">
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <input type="hidden" name="video_id" value="{{.Video.ID}}" />
+      <input type="hidden" name="file_id" value="{{.FileID}}" />
+      <input type="hidden" name="redirect" value="/series/{{.Series.ID}}/videos/{{.Video.ID}}/files/{{.FileID}}" />
+      <button type="submit" class="btn btn-outline">
+        <i data-lucide="shield-check" class="size-4"></i>
+        Check hash
+      </button>
+    </form>
+    {{end}}
     <a class="btn btn-outline" href="{{.RawHref}}?download=1">
       <i data-lucide="download" class="size-4"></i>
       Download
     </a>
     {{end}}
     {{if .CanDelete}}
-    <label for="modal-delete-sidecar-{{.FileID}}" class="btn btn-soft btn-error">
+    <label for="modal-delete-sidecar-{{.FileID}}" class="btn btn-soft btn-error btn-square tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
       <i data-lucide="trash-2" class="size-4"></i>
-      Delete
     </label>
     {{end}}
   </div>
 </div>
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Details")}}
+{{template "list_table"}}
+<tbody>
+  <tr><th class="w-40">Type</th><td>{{.KindLabel}}</td></tr>
+  <tr><th class="w-40">Acquired at</th><td class="text-xs whitespace-nowrap">{{if .CreatedAgo}}{{template "rel_time" .}}{{else}}{{template "empty_value"}}{{end}}</td></tr>
+  <tr><th class="w-40">Size</th><td class="tabular-nums">{{if eq .DBSizeLabel "-"}}{{template "empty_value"}}{{else}}{{.DBSizeLabel}}{{end}}</td></tr>
+  <tr><th class="w-40">SHA-256</th><td class="text-xs font-mono break-all{{if .IntegrityFailed}} text-error{{end}}">{{if eq .HashLabel "-"}}{{template "empty_value"}}{{else}}{{.HashLabel}}{{end}}</td></tr>
+  <tr><th class="w-40">Last OK</th><td class="text-xs whitespace-nowrap">{{if .HashOkAgo}}{{template "rel_time" (dict "CreatedAt" .HashOkAt "CreatedAgo" .HashOkAgo)}}{{else}}{{template "empty_value"}}{{end}}</td></tr>
+  <tr><th class="w-40">Last checked</th><td class="text-xs whitespace-nowrap{{if .IntegrityFailed}} text-error{{end}}">{{if .HashCheckedAgo}}{{template "rel_time" (dict "CreatedAt" .HashCheckedAt "CreatedAgo" .HashCheckedAgo)}}{{else}}{{template "empty_value"}}{{end}}</td></tr>
+  {{if .NFOMatchLabel}}
+  <tr><th class="w-40">NFO match</th><td>{{.NFOMatchLabel}}</td></tr>
+  {{end}}
+  {{if .LastIssue}}
+  <tr><th class="w-40">Last issue</th><td class="text-sm{{if .IntegrityFailed}} text-error{{end}}">{{if .LastIssueTask}}<a class="link link-hover" href="/task/{{.LastIssueTask}}">{{.LastIssue}}</a>{{else}}{{.LastIssue}}{{end}}</td></tr>
+  {{end}}
+  <tr><th class="w-40">Path</th><td class="text-xs break-all"><code>{{.Path}}</code></td></tr>
+</tbody>
+{{template "list_table_end"}}
+{{template "list_panel_end"}}
 
 {{template "list_panel"}}
 <div{{if .HasPretty}} data-json-preview{{end}}>
@@ -64,31 +104,6 @@
 {{template "list_empty" "No in-app preview for this file type. Use Download."}}
 {{end}}
 </div>
-{{template "list_panel_end"}}
-
-{{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Details")}}
-{{template "list_table"}}
-<tbody>
-  <tr><th class="w-40">Type</th><td>{{.KindLabel}}</td></tr>
-  <tr><th class="w-40">Name</th><td><code class="text-xs">{{.Name}}</code></td></tr>
-  <tr><th class="w-40">Registered</th><td class="text-xs tabular-nums">{{if eq .Registered "-"}}{{template "empty_value"}}{{else}}{{.Registered}}{{end}}</td></tr>
-  <tr><th class="w-40">Modified</th><td class="text-xs tabular-nums">{{if .MtimeLabel}}{{.MtimeLabel}}{{else}}{{template "empty_value"}}{{end}}</td></tr>
-  <tr><th class="w-40">DB size</th><td class="tabular-nums">{{if eq .DBSizeLabel "-"}}{{template "empty_value"}}{{else}}{{.DBSizeLabel}}{{end}}</td></tr>
-  <tr><th class="w-40">On disk</th><td class="tabular-nums">{{if eq .DiskSizeLabel "-"}}{{template "empty_value"}}{{else}}{{.DiskSizeLabel}}{{end}}</td></tr>
-  <tr><th class="w-40">SHA-256</th><td class="text-xs font-mono">{{if eq .HashLabel "-"}}{{template "empty_value"}}{{else}}{{.HashLabel}}{{end}}</td></tr>
-  {{if .NFOMatchLabel}}
-  <tr><th class="w-40">NFO match</th><td>{{.NFOMatchLabel}}</td></tr>
-  {{end}}
-  {{if .LastIssue}}
-  <tr><th class="w-40">Last issue</th><td class="text-sm">{{if .LastIssueTask}}<a class="link link-hover" href="/task/{{.LastIssueTask}}">{{.LastIssue}}</a>{{else}}{{.LastIssue}}{{end}}</td></tr>
-  {{end}}
-  {{if .KindNote}}
-  <tr><th class="w-40">Note</th><td class="text-sm opacity-80">{{.KindNote}}</td></tr>
-  {{end}}
-  <tr><th class="w-40">Path</th><td class="text-xs break-all"><code>{{.Path}}</code></td></tr>
-</tbody>
-{{template "list_table_end"}}
 {{template "list_panel_end"}}
 
 {{if .CanDelete}}

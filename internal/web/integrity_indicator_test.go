@@ -6,25 +6,28 @@ import (
 )
 
 func TestIntegrityIndicatorState(t *testing.T) {
-	t.Parallel()
 	cases := []struct {
-		name                   string
-		status                 string
-		verify, hash, schedule bool
-		want                   string
+		name     string
+		status   string
+		verify   bool
+		hash     bool
+		schedule bool
+		fileFail bool
+		want     string
 	}{
-		{"failed overrides all", "downloaded_integrity_failed", true, true, true, integrityIndFailed},
-		{"failed even verify off", "downloaded_integrity_failed", false, false, false, integrityIndFailed},
-		{"wanted off", "wanted", true, true, true, integrityIndOff},
-		{"missing off", "missing", true, true, true, integrityIndOff},
-		{"downloaded verify off", "downloaded", false, true, true, integrityIndOff},
-		{"eligible no hash", "downloaded", true, false, true, integrityIndEligible},
-		{"hashed schedule off", "downloaded", true, true, false, integrityIndHashed},
-		{"monitored", "downloaded", true, true, true, integrityIndMonitored},
+		{"failed overrides all", "downloaded_integrity_failed", true, true, true, false, integrityIndFailed},
+		{"failed even verify off", "downloaded_integrity_failed", false, false, false, false, integrityIndFailed},
+		{"derived file fail", "downloaded", true, true, true, true, integrityIndFailed},
+		{"wanted off", "wanted", true, true, true, false, integrityIndOff},
+		{"missing off", "missing", true, true, true, false, integrityIndOff},
+		{"downloaded verify off", "downloaded", false, true, true, false, integrityIndOff},
+		{"eligible no hash", "downloaded", true, false, true, false, integrityIndEligible},
+		{"hashed schedule off", "downloaded", true, true, false, false, integrityIndHashed},
+		{"monitored", "downloaded", true, true, true, false, integrityIndMonitored},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := integrityIndicatorState(tc.status, tc.verify, tc.hash, tc.schedule)
+			got := integrityIndicatorState(tc.status, tc.verify, tc.hash, tc.schedule, tc.fileFail)
 			if got != tc.want {
 				t.Fatalf("got %q want %q", got, tc.want)
 			}
@@ -33,42 +36,45 @@ func TestIntegrityIndicatorState(t *testing.T) {
 }
 
 func TestIntegrityScheduleOn(t *testing.T) {
-	t.Parallel()
 	if integrityScheduleOn("") || integrityScheduleOn("  ") || integrityScheduleOn("never") || integrityScheduleOn("Never") {
-		t.Fatal("empty/never must be off")
+		t.Fatal("empty/never should be off")
 	}
 	if !integrityScheduleOn("@quarterly") || !integrityScheduleOn("0 0 1 */3 *") {
-		t.Fatal("cron must be on")
+		t.Fatal("cron should be on")
 	}
 }
 
-func TestIntegrityIndicatorTipLastChecked(t *testing.T) {
-	t.Parallel()
-	now := time.Date(2026, 9, 19, 18, 0, 0, 0, time.UTC)
-	last := now.Add(-2 * time.Hour).Format(time.RFC3339)
-	tip := integrityIndicatorTip(integrityIndMonitored, "downloaded", true, last, now)
-	if tip != "'File integrity' monitored · Last checked 2 hours ago" {
+func TestIntegrityIndicatorTipStateOnly(t *testing.T) {
+	tip := integrityIndicatorTip(integrityIndMonitored, "downloaded", true)
+	if tip != "'File integrity' monitored" {
 		t.Fatalf("tip=%q", tip)
 	}
-	noLast := integrityIndicatorTip(integrityIndEligible, "downloaded", true, "", now)
+	noLast := integrityIndicatorTip(integrityIndEligible, "downloaded", true)
 	if noLast != "'File integrity' eligible; no hash yet" {
-		t.Fatalf("noLast=%q", noLast)
+		t.Fatalf("tip=%q", noLast)
 	}
-	offPacked := integrityIndicatorTip(integrityIndOff, "downloaded", false, "", now)
+	offPacked := integrityIndicatorTip(integrityIndOff, "downloaded", false)
 	if offPacked != "This series quality profile has 'File integrity' turned off" {
-		t.Fatalf("offPacked=%q", offPacked)
+		t.Fatalf("tip=%q", offPacked)
 	}
-	offWanted := integrityIndicatorTip(integrityIndOff, "wanted", true, "", now)
+	offWanted := integrityIndicatorTip(integrityIndOff, "wanted", true)
 	if offWanted != "No packed media" {
-		t.Fatalf("offWanted=%q", offWanted)
+		t.Fatalf("tip=%q", offWanted)
 	}
-	// Off / eligible ignore stale last-checked history (no current media hash).
-	offStale := integrityIndicatorTip(integrityIndOff, "downloaded", false, last, now)
-	if offStale != offPacked {
-		t.Fatalf("off must omit last-checked, got %q", offStale)
+}
+
+func TestBuildIntegrityIndicatorViewLastOK(t *testing.T) {
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+	last := now.Add(-2 * time.Hour).Format(time.RFC3339)
+	v := buildIntegrityIndicatorView(integrityIndMonitored, "downloaded", true, last, now)
+	if v.Tip != "'File integrity' monitored" {
+		t.Fatalf("tip=%q", v.Tip)
 	}
-	eligibleStale := integrityIndicatorTip(integrityIndEligible, "downloaded", true, last, now)
-	if eligibleStale != "'File integrity' eligible; no hash yet" {
-		t.Fatalf("eligible must omit last-checked, got %q", eligibleStale)
+	if v.LastOK == "" {
+		t.Fatal("want LastOK relative")
+	}
+	empty := buildIntegrityIndicatorView(integrityIndEligible, "downloaded", true, "", now)
+	if empty.LastOK != "" {
+		t.Fatalf("LastOK=%q", empty.LastOK)
 	}
 }

@@ -1,17 +1,22 @@
 {{define "integrity_indicator"}}
-{{/* Five-state File integrity chip (video detail Details row). Tip carries name + optional last checked. */}}
+{{/* Five-state File integrity chip (video detail Details row). Tip is state-only; Last OK sits beside. */}}
 {{if .State}}
-<span class="inline-flex tooltip tooltip-top" data-tip="{{.Tip}}" aria-label="{{.Tip}}">
-  {{if eq .State "failed"}}
-  <i data-lucide="badge-alert" class="size-5 text-warning"></i>
-  {{else if eq .State "eligible"}}
-  <i data-lucide="badge-help" class="size-5 text-warning"></i>
-  {{else if eq .State "hashed"}}
-  <i data-lucide="badge-check" class="size-5 text-base-content/50"></i>
-  {{else if eq .State "monitored"}}
-  <i data-lucide="badge-check" class="size-5 text-success"></i>
-  {{else}}
-  <i data-lucide="badge-x" class="size-5 text-base-content/50"></i>
+<span class="inline-flex items-center gap-2 flex-nowrap">
+  <span class="inline-flex tooltip tooltip-top" data-tip="{{.Tip}}" aria-label="{{.Tip}}">
+    {{if eq .State "failed"}}
+    <i data-lucide="badge-alert" class="size-5 text-warning"></i>
+    {{else if eq .State "eligible"}}
+    <i data-lucide="badge-help" class="size-5 text-warning"></i>
+    {{else if eq .State "hashed"}}
+    <i data-lucide="badge-check" class="size-5 text-base-content/50"></i>
+    {{else if eq .State "monitored"}}
+    <i data-lucide="badge-check" class="size-5 text-success"></i>
+    {{else}}
+    <i data-lucide="badge-x" class="size-5 text-base-content/50"></i>
+    {{end}}
+  </span>
+  {{if .LastOK}}
+  <span class="text-xs opacity-60 whitespace-nowrap">Last OK {{.LastOK}}</span>
   {{end}}
 </span>
 {{end}}

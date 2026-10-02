@@ -77,10 +77,22 @@ type verifyAllMediaPayload struct {
 // VerifyAllMediaFail is one failed video from VerifyAllMediaPass (for notify).
 type VerifyAllMediaFail = integrity.VerifyAllMediaFail
 
+// VerifyAllMediaRecover is one video restored from downloaded_integrity_failed.
+type VerifyAllMediaRecover struct {
+	VideoID     int64
+	SeriesTitle string
+	VideoTitle  string
+}
+
 // VerifyAllMediaPass runs integrity check on packed downloaded/downloaded_integrity_failed media
 // with a cursor for resume. Skips videos whose quality profile has File integrity off.
 // onFail is optional; called after MarkVerifyFailed for each failure.
-func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64), onFail func(VerifyAllMediaFail)) (*VerifyAllMediaResult, error) {
+// onRecover is optional; called after MarkVerified when status was downloaded_integrity_failed.
+func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64), onFail func(VerifyAllMediaFail), onRecover ...func(VerifyAllMediaRecover)) (*VerifyAllMediaResult, error) {
+	var recoverFn func(VerifyAllMediaRecover)
+	if len(onRecover) > 0 {
+		recoverFn = onRecover[0]
+	}
 	var p verifyAllMediaPayload
 	_ = json.Unmarshal([]byte(task.Payload), &p)
 	res := &VerifyAllMediaResult{
@@ -280,17 +292,33 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 								})
 							}
 							dirty = true
-						} else if merr := s.MarkVerified(id, task.ID, report); merr != nil {
-							res.Failed++
-							dirty = true
 						} else {
-							bumpCheckAgg(res.Checks, report)
-							if report != nil && report.Outcome == IntegrityOutcomePartial {
-								res.Partial++
-							} else {
-								res.IntegrityChecked++
+							wasFailed := false
+							seriesTitle, videoTitle := "", ""
+							if v, gerr := s.GetVideo(id); gerr == nil && v != nil {
+								wasFailed = v.Status == "downloaded_integrity_failed"
+								videoTitle = v.Title
+								if ser, serr := s.GetSeries(v.SeriesID, false); serr == nil && ser != nil {
+									seriesTitle = ser.Title
+								}
 							}
-							dirty = true
+							if merr := s.MarkVerified(id, task.ID, report); merr != nil {
+								res.Failed++
+								dirty = true
+							} else {
+								bumpCheckAgg(res.Checks, report)
+								if report != nil && report.Outcome == IntegrityOutcomePartial {
+									res.Partial++
+								} else {
+									res.IntegrityChecked++
+								}
+								if wasFailed && recoverFn != nil {
+									recoverFn(VerifyAllMediaRecover{
+										VideoID: id, SeriesTitle: seriesTitle, VideoTitle: videoTitle,
+									})
+								}
+								dirty = true
+							}
 						}
 					}
 				}

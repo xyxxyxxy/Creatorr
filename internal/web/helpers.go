@@ -183,6 +183,8 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Metadata rescan enqueued.")
 	case "refresh-sidecars":
 		return flashOK("Sidecar refresh enqueued.")
+	case "check-file-hash":
+		return flashOK("File hash check enqueued.")
 	case "metadata":
 		return flashOK("Series metadata saved (tvshow.nfo + art).")
 	case "video-metadata":

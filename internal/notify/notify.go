@@ -199,6 +199,37 @@ func VerifyFailed(ctx context.Context, database *db.DB, taskID int64, series, ti
 	return SendEvent(ctx, database, EventVerifyFailed, nTitle, body, taskID)
 }
 
+// IntegrityRecovered notifies that a video left downloaded_integrity_failed after a successful check.
+func IntegrityRecovered(ctx context.Context, database *db.DB, taskID int64, series, title string) error {
+	label := strings.TrimSpace(series)
+	vt := strings.TrimSpace(title)
+	if vt == "" {
+		vt = "video"
+	}
+	nTitle := "Integrity recovered"
+	if label != "" {
+		nTitle = fmt.Sprintf("Integrity recovered (%s)", label)
+	}
+	body := fmt.Sprintf("%s: %s passed Integrity check; status restored to downloaded.", labelOrLibrary(label), vt)
+	return SendEvent(ctx, database, EventIntegrityRecovered, nTitle, body, taskID)
+}
+
+// IntegrityRecoveredDigest sends one info notification for multiple recoveries in a bulk check.
+func IntegrityRecoveredDigest(ctx context.Context, database *db.DB, taskID int64, items []DigestItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	title := fmt.Sprintf("%d integrity recovery(ies)", len(items))
+	return SendEvent(ctx, database, EventIntegrityRecovered, title, FormatDigestBody(items), taskID)
+}
+
+func labelOrLibrary(label string) string {
+	if strings.TrimSpace(label) == "" {
+		return "library"
+	}
+	return label
+}
+
 // POTProvider notifies that the PO token sidecar/plugin had a problem while
 // yt-dlp continued (warning level; download is not failed for this alone).
 func POTProvider(ctx context.Context, database *db.DB, taskID int64, domain, detail string) error {
