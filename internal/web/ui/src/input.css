@@ -592,11 +592,18 @@
 }
 
 /*
-  Series card monitor tip: card li no longer overflow-hides; raise tip host on
-  hover so tooltip-top clears the next card / grid gap.
+  Series card/list monitor tip: filter toolbar is relative z-40, so tip hosts
+  inside later cards paint under it. Raise the hovered row/card above the bar.
 */
-#series-list-rows > .card [data-series-monitor-wrap] .tooltip:is(:hover, :focus-within) {
-  z-index: 40;
+#series-list-rows > .card:has([data-series-monitor-wrap]:hover),
+#series-list-rows > .card:has([data-series-monitor-wrap]:focus-within),
+#series-list-rows > .list-row:has([data-series-monitor-wrap]:hover),
+#series-list-rows > .list-row:has([data-series-monitor-wrap]:focus-within) {
+  z-index: 50;
+}
+#series-list-rows > .card [data-series-monitor-wrap] .tooltip:is(:hover, :focus-within),
+#series-list-rows > .list-row [data-series-monitor-wrap] .tooltip:is(:hover, :focus-within) {
+  z-index: 50;
 }
 
 /*
