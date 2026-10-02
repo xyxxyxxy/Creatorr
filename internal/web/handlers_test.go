@@ -1513,7 +1513,7 @@ func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
 	if !strings.Contains(body, `id="videos-list-infinite"`) {
 		t.Fatalf("missing sentinel: %s", truncate(body, 400))
 	}
-	if strings.Contains(body, `««`) {
+	if strings.Contains(body, `data-lucide="chevron-first"`) {
 		t.Fatalf("pager should not show for infinite list")
 	}
 	if got := strings.Count(body, `data-video-id="`); got != web.InfiniteChunkSize {
@@ -1573,7 +1573,7 @@ func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
 	if got := strings.Count(body, `data-video-id="`); got != web.VideoPageSize {
 		t.Fatalf("table page rows=%d want %d", got, web.VideoPageSize)
 	}
-	if !strings.Contains(body, `««`) {
+	if !strings.Contains(body, `data-lucide="chevron-first"`) {
 		t.Fatalf("table missing pager")
 	}
 
@@ -1585,7 +1585,7 @@ func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
 	if strings.Contains(body, `id="series-videos`) && strings.Contains(body, `-infinite"`) {
 		t.Fatalf("series detail must not infinite-scroll videos")
 	}
-	if !strings.Contains(body, `««`) {
+	if !strings.Contains(body, `data-lucide="chevron-first"`) {
 		t.Fatalf("series detail videos missing pager")
 	}
 

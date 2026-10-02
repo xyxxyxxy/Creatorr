@@ -23,13 +23,13 @@ Glue already in `input.css` (the why, not the selectors):
 - A bulk-selected list row is square so the selection fill covers it.
 - A radio join highlights the checked choice.
 - The app column is at least the `md` width so page padding does not jump; narrower viewports scroll sideways.
-- Configurable list tables (`[data-list-table]`) scroll sideways in the wrap; Title (and select when shown) stick left, Actions stick right on video tables. A page summary and columns settings sit above the wrap so the columns menu is not clipped.
+- Configurable list tables (`[data-list-table]`) scroll sideways in the wrap; Title (and select when shown) stick left, Actions stick right on video tables. Table chrome is one row above the wrap: dataset summary left, columns settings then the top pager right (so the columns menu is not clipped). A matching pager sits below the wrap.
 
 **List load modes** (orthogonal to View `list` | `thumbs` | `table`):
 
 | Mode | Behavior | Size (v1) | Where |
 |------|----------|-----------|--------|
-| **paginated** | One page + pager (`?page=`) | 10 | Table view on `/series` and `/videos`; series detail Videos (all views); History/Tasks unchanged |
+| **paginated** | One page + pager above and below (`?page=`) | 10 | Table view on `/series` and `/videos`; series detail Videos (all views); History/Tasks unchanged |
 | **infinite** | Chunk + HTMX sentinel append; keep-depth `?through=` | 20 | `/series` and `/videos` list\|thumbs |
 | **fixed** | One shot of N; no pager, no sentinel, no `through` | 10 | Overview Recent additions |
 

@@ -1,9 +1,9 @@
 {{define "list_table_chrome"}}
 {{/* Dot: Page PageInfo, Noun string (plural), NounOne? string (singular when Total=1),
      Cols []tableCol, CookieName string.
-     Above the wrap: dataset summary left, columns settings right. */}}
-<div class="flex items-center justify-between gap-2 mb-1">
-  {{$noun := .Noun}}{{if and (eq .Page.Total 1) .NounOne}}{{$noun = .NounOne}}{{end}}
+     One row above the wrap: dataset summary left; columns settings then top pager right. */}}
+{{$noun := .Noun}}{{if and (eq .Page.Total 1) .NounOne}}{{$noun = .NounOne}}{{end}}
+<div class="flex flex-wrap items-center justify-between gap-2 my-3">
   <p class="text-sm opacity-60 tabular-nums min-w-0 truncate">
     {{if and (gt .Page.Total 0) (eq .Page.From 1) (eq .Page.To .Page.Total)}}
     {{.Page.Total}} {{$noun}}
@@ -13,6 +13,9 @@
     0 {{.Noun}}
     {{end}}
   </p>
-  {{template "list_table_col_picker" (dict "Cols" .Cols "CookieName" .CookieName)}}
+  <div class="flex items-center gap-2 shrink-0">
+    {{template "list_table_col_picker" (dict "Cols" .Cols "CookieName" .CookieName)}}
+    {{if .Page.Show}}{{template "pagination_join" .Page}}{{end}}
+  </div>
 </div>
 {{end}}
