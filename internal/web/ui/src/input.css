@@ -540,8 +540,9 @@
 
 /*
   Series list banner: bleed past daisyUI .list-row padding (1rem) so art sits on
-  the list element border. Full height, right edge, intrinsic banner ratio
-  (1000/185). Fade + dark scrim mask from the art's left edge.
+  the list element border. Full height, right edge; width from image aspect at
+  that height (capped to the row). Banner layer clips itself; the row stays
+  overflow:visible so monitor tooltip-top can paint outside.
 */
 .list .list-row > .series-list-banner-layer {
   position: absolute;
@@ -555,25 +556,31 @@
   width: max-content;
   max-width: calc(100% + 2rem);
   height: auto;
+  max-height: calc(100% + 2rem);
   margin: 0;
   padding: 0;
   pointer-events: none;
   display: block;
+  overflow: hidden;
+  border-radius: inherit;
 }
 .series-list-banner-art {
   position: relative;
   height: 100%;
-  aspect-ratio: 1000 / 185;
-  max-width: calc(100% + 2rem);
+  max-height: 100%;
+  width: auto;
+  max-width: 100%;
   -webkit-mask-image: linear-gradient(to right, transparent 0%, black 40%);
   mask-image: linear-gradient(to right, transparent 0%, black 40%);
 }
 .series-list-banner-art img {
   display: block;
-  width: 100%;
   height: 100%;
+  width: auto;
+  max-height: 100%;
+  max-width: none;
   object-fit: cover;
-  object-position: center;
+  object-position: right center;
 }
 .series-list-banner-scrim {
   position: absolute;
@@ -582,6 +589,14 @@
 }
 .list .list-row.series-list-banner-row.bg-base-200 .series-list-banner-layer {
   opacity: 0;
+}
+
+/*
+  Series card monitor tip: card li no longer overflow-hides; raise tip host on
+  hover so tooltip-top clears the next card / grid gap.
+*/
+#series-list-rows > .card [data-series-monitor-wrap] .tooltip:is(:hover, :focus-within) {
+  z-index: 40;
 }
 
 /*

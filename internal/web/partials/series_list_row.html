@@ -4,7 +4,7 @@
      on the list element edge: full height, right-aligned, aspect 1000/185.
      Fade+scrim start at the banner art's left edge.
      Bulk JS expects list-row + data-series-id. */}}
-<li class="list-row relative overflow-hidden min-h-20{{if .BannerURL}} series-list-banner-row{{end}}"
+<li class="list-row relative min-h-20{{if .BannerURL}} series-list-banner-row{{end}}"
     data-series-id="{{.ID}}"
     style="--list-grid-cols: minmax(0, auto) 1fr max-content">
   <div class="self-center hidden z-10" data-series-select-wrap>
