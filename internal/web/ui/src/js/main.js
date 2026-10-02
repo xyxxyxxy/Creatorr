@@ -18,6 +18,7 @@ import { bootSettingsAutosave } from "./settings_autosave.js";
 import { bootSeriesBulk } from "./series_bulk.js";
 import { bootVideoBulk } from "./video_bulk.js";
 import { bootConfirmNotify } from "./confirm_notify.js";
+import { bootListTable } from "./list_table.js";
 
 bootTheme();
 bootLanes();
@@ -38,3 +39,4 @@ bootSettingsAutosave();
 bootSeriesBulk();
 bootVideoBulk();
 bootConfirmNotify();
+bootListTable();

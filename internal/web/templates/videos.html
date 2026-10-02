@@ -61,6 +61,18 @@
   )}}
   {{end}}
 </ul>
+{{else if eq .ViewMode "table"}}
+{{template "video_table" (dict
+  "Videos" .Videos
+  "TableCols" .TableCols
+  "TableColsCookie" .TableColsCookie
+  "BulkEditBusy" .BulkEditBusy
+  "SeriesTitles" .SeriesTitles
+  "Select" true
+  "LiveTarget" "videos-list-live"
+  "RowsID" "videos-list-rows"
+  "Page" .Page
+)}}
 {{else}}
 <ul class="list bg-base-100 rounded-box border border-base-300" id="videos-list-rows">
   {{range .Videos}}

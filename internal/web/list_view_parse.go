@@ -147,8 +147,8 @@ func encodeVideoListFilter(filter library.VideoListFilter, page int, view string
 	} else if filter.Sort == library.SortUpload {
 		// omit default for series videos; callers may set explicitly for /videos defaults
 	}
-	if view == viewThumbs {
-		q.Set("view", viewThumbs)
+	if view == viewThumbs || view == viewTable {
+		q.Set("view", view)
 	}
 	if page > 1 {
 		q.Set("page", strconv.Itoa(page))
@@ -448,6 +448,7 @@ func viewOpts(r *http.Request, current string) []listFilterOpt {
 	opts := []listFilterOpt{
 		{Value: viewList, Label: "List", Selected: current == viewList || current == ""},
 		{Value: viewThumbs, Label: "Thumbs", Selected: current == viewThumbs},
+		{Value: viewTable, Label: "Table", Selected: current == viewTable},
 	}
 	annotateViewOpts(r, opts)
 	return opts

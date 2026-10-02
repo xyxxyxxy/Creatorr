@@ -27,14 +27,16 @@ type seriesListRow struct {
 }
 
 type seriesListLiveData struct {
-	Series       []seriesListRow
-	Page         PageInfo
-	SeriesFilter listViewToolbar
-	FilterActive bool
-	BulkEditBusy bool
-	FilterTotal  int
-	ViewMode     string
-	OOB          bool
+	Series          []seriesListRow
+	Page            PageInfo
+	SeriesFilter    listViewToolbar
+	FilterActive    bool
+	BulkEditBusy    bool
+	FilterTotal     int
+	ViewMode        string
+	TableCols       []tableCol
+	TableColsCookie string
+	OOB             bool
 }
 
 func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
@@ -204,13 +206,15 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 	}
 
 	return seriesListLiveData{
-		Series:       rows,
-		Page:         pageInfo,
-		SeriesFilter: toolbar,
-		FilterActive: filter.Active(),
-		BulkEditBusy: bulkBusy,
-		FilterTotal:  total,
-		ViewMode:     viewMode,
+		Series:          rows,
+		Page:            pageInfo,
+		SeriesFilter:    toolbar,
+		FilterActive:    filter.Active(),
+		BulkEditBusy:    bulkBusy,
+		FilterTotal:     total,
+		ViewMode:        viewMode,
+		TableCols:       parseTableColsCookie(r, cookieColsSeries, seriesTableColDefs()),
+		TableColsCookie: cookieColsSeries,
 	}, nil
 }
 

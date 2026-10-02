@@ -13,6 +13,7 @@ import (
 const (
 	viewList   = "list"
 	viewThumbs = "thumbs"
+	viewTable  = "table"
 
 	cookieModeSeries       = "creatorr_mode_series"
 	cookieModeSeriesVideos = "creatorr_mode_series_videos"
@@ -35,17 +36,20 @@ type listViewOpt struct {
 func resolveViewMode(r *http.Request, cookieName, defaultMode string) (mode string, writeCookie bool) {
 	raw := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("view")))
 	switch raw {
-	case viewThumbs, viewList:
+	case viewThumbs, viewList, viewTable:
 		return raw, true
 	}
 	if c, err := r.Cookie(cookieName); err == nil {
 		v := strings.ToLower(strings.TrimSpace(c.Value))
-		if v == viewThumbs || v == viewList {
+		if v == viewThumbs || v == viewList || v == viewTable {
 			return v, false
 		}
 	}
 	if defaultMode == viewThumbs {
 		return viewThumbs, false
+	}
+	if defaultMode == viewTable {
+		return viewTable, false
 	}
 	return viewList, false
 }

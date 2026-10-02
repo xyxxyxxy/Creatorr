@@ -8,15 +8,17 @@ import (
 )
 
 type videosPageLiveData struct {
-	Videos       []seriesVideoRow
-	Page         PageInfo
-	FilterTotal  int
-	VideoFilter  listViewToolbar
-	FilterActive bool
-	ViewMode     string
-	SeriesTitles map[int64]string
-	BulkEditBusy bool
-	OOB          bool
+	Videos          []seriesVideoRow
+	Page            PageInfo
+	FilterTotal     int
+	VideoFilter     listViewToolbar
+	FilterActive    bool
+	ViewMode        string
+	SeriesTitles    map[int64]string
+	BulkEditBusy    bool
+	TableCols       []tableCol
+	TableColsCookie string
+	OOB             bool
 }
 
 func (h *Handler) videosPage(w http.ResponseWriter, r *http.Request) {
@@ -123,13 +125,15 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 
 	bulkBusy, _ := h.Library.BulkEditVideosBusy()
 	return videosPageLiveData{
-		Videos:       rows,
-		Page:         pageInfo,
-		FilterTotal:  total,
-		VideoFilter:  toolbar,
-		FilterActive: filter.Active(),
-		ViewMode:     viewMode,
-		SeriesTitles: titles,
-		BulkEditBusy: bulkBusy,
+		Videos:          rows,
+		Page:            pageInfo,
+		FilterTotal:     total,
+		VideoFilter:     toolbar,
+		FilterActive:    filter.Active(),
+		ViewMode:        viewMode,
+		SeriesTitles:    titles,
+		BulkEditBusy:    bulkBusy,
+		TableCols:       parseTableColsCookie(r, cookieColsVideos, videoTableColDefs(true)),
+		TableColsCookie: cookieColsVideos,
 	}, nil
 }

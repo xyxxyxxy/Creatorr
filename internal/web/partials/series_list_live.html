@@ -77,6 +77,8 @@
   {{template "series_thumb_card" .}}
   {{end}}
 </ul>
+{{else if eq .ViewMode "table"}}
+{{template "series_table" .}}
 {{else}}
 <ul class="list bg-base-100 rounded-box border border-base-300" id="series-list-rows">
   {{range .Series}}

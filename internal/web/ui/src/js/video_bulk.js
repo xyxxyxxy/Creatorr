@@ -119,6 +119,7 @@ function syncVideoBulkUI() {
         if (modalFor) el.setAttribute("for", modalFor);
       }
     });
+    // Tip host is [data-video-row-actions] (never a td - docs/ui.md Tooltips).
     if (rowActionsDisabled) {
       wrap.classList.add("tooltip", "tooltip-top");
       wrap.setAttribute("data-tip", rowActionsTip);

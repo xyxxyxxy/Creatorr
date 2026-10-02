@@ -1,0 +1,85 @@
+{{define "series_table"}}
+{{/* Dot: Series []seriesListRow, TableCols, TableColsCookie, BulkEditBusy, Page PageInfo */}}
+<div data-list-table>
+  {{template "list_table_chrome" (dict
+    "Page" .Page
+    "Noun" "series"
+    "Cols" .TableCols
+    "CookieName" .TableColsCookie
+  )}}
+  <div class="list-table-wrap rounded-box border border-base-300">
+    <table class="table table-sm list-table w-full">
+      <thead>
+        <tr>
+          <th class="w-0 hidden" data-series-select-wrap aria-hidden="true"></th>
+          {{range .TableCols}}
+          <th data-col="{{.Key}}"{{if not .Visible}} class="hidden"{{end}}>{{.Label}}</th>
+          {{end}}
+        </tr>
+      </thead>
+      <tbody id="series-list-rows">
+        {{range .Series}}
+        <tr data-series-id="{{.ID}}" class="row-hover">
+          <td class="hidden w-0 align-middle" data-series-select-wrap>
+            <input type="checkbox" class="checkbox checkbox-sm js-series-select" value="{{.ID}}"
+                   aria-label="Select series"
+                   {{if $.BulkEditBusy}}disabled{{end}} />
+          </td>
+          {{$row := .}}
+          {{range $.TableCols}}
+          <td data-col="{{.Key}}" class="align-middle{{if not .Visible}} hidden{{end}}">
+            {{if eq .Key "title"}}
+            <div class="flex items-center gap-2 min-w-0 max-w-xs">
+              {{if $row.KindIcon}}
+              <span class="tooltip tooltip-top shrink-0" data-tip="{{$row.KindTip}}">
+                <i data-lucide="{{$row.KindIcon}}" class="size-4 opacity-70" aria-hidden="true"></i>
+              </span>
+              {{end}}
+              <a class="link link-hover font-medium truncate" href="/series/{{$row.ID}}">{{$row.Title}}</a>
+            </div>
+            {{else if eq .Key "monitored"}}
+            <div data-series-monitor-wrap>
+              {{template "monitor_toggle" (dict
+                "Action" "/actions/set-series-monitored"
+                "SeriesID" $row.ID
+                "Monitored" $row.Monitored
+                "Redirect" "/series"
+                "LiveTarget" "series-list-live"
+                "AsButton" true
+                "Title" "Include this series in scans and download-wanted"
+                "Disabled" $.BulkEditBusy
+              )}}
+            </div>
+            {{else if eq .Key "progress"}}
+            <div class="min-w-40 max-w-56">
+              {{template "series_progress" $row}}
+            </div>
+            {{else if eq .Key "status"}}
+            {{with $ind := $row.StatusInd}}
+            {{$badge := "badge-error"}}{{if eq $ind.Kind "downloaded_integrity_failed"}}{{$badge = "badge-warning"}}{{end}}
+            <span class="badge badge-sm {{$badge}} tooltip tooltip-top tabular-nums" data-tip="{{$ind.Title}}" aria-label="{{$ind.Title}}">
+              {{if gt $ind.Count 0}}{{$ind.Count}}{{else}}!{{end}}
+            </span>
+            {{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "root"}}
+            {{if $row.RootName}}{{$row.RootName}}{{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "quality"}}
+            {{if $row.IsAudio}}best{{else if $row.QualityProfileName}}{{$row.QualityProfileName}}{{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "downloaded"}}
+            <span class="tabular-nums">{{$row.DownloadedCount}}</span>
+            {{else if eq .Key "wanted"}}
+            <span class="tabular-nums">{{$row.WantedCount}}</span>
+            {{else if eq .Key "errors"}}
+            <span class="tabular-nums">{{$row.ErrorCount}}</span>
+            {{else if eq .Key "delivery"}}
+            {{if $row.IsAudio}}Audio{{else}}Video{{end}}
+            {{end}}
+          </td>
+          {{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}

@@ -77,6 +77,58 @@
 }
 
 /*
+  Configurable series/videos table view: many optional columns. Scroll sideways
+  inside the wrap; Title (and select when shown) stick left, Actions stick right
+  on video tables. Columns settings sit above the wrap (not clipped). Sticky
+  cells need their own bg so scrolled content does not show through; match row
+  hover and bulk-select fill.
+*/
+[data-list-table] .list-table-wrap {
+  overflow-x: auto;
+}
+[data-list-table] .list-table [data-col="title"],
+[data-list-table] .list-table [data-series-select-wrap]:not(.hidden),
+[data-list-table] .list-table [data-video-select-wrap]:not(.hidden),
+[data-list-table] .list-table .list-table-sticky-end {
+  position: sticky;
+  z-index: 2;
+  background-color: var(--color-base-100);
+}
+[data-list-table] .list-table thead [data-col="title"],
+[data-list-table] .list-table thead [data-series-select-wrap]:not(.hidden),
+[data-list-table] .list-table thead [data-video-select-wrap]:not(.hidden),
+[data-list-table] .list-table thead .list-table-sticky-end {
+  z-index: 4;
+  background-color: var(--color-base-200);
+}
+[data-list-table] .list-table [data-series-select-wrap]:not(.hidden),
+[data-list-table] .list-table [data-video-select-wrap]:not(.hidden) {
+  left: 0;
+  z-index: 3;
+}
+[data-list-table] .list-table [data-col="title"] {
+  left: 0;
+}
+[data-list-table] .list-table tr:has([data-series-select-wrap]:not(.hidden)) [data-col="title"],
+[data-list-table] .list-table tr:has([data-video-select-wrap]:not(.hidden)) [data-col="title"] {
+  left: 2.75rem;
+}
+[data-list-table] .list-table .list-table-sticky-end {
+  right: 0;
+  z-index: 3;
+}
+[data-list-table] .list-table tr.row-hover:hover [data-col="title"],
+[data-list-table] .list-table tr.row-hover:hover [data-series-select-wrap]:not(.hidden),
+[data-list-table] .list-table tr.row-hover:hover [data-video-select-wrap]:not(.hidden),
+[data-list-table] .list-table tr.row-hover:hover .list-table-sticky-end,
+[data-list-table] .list-table tr.bg-base-200 [data-col="title"],
+[data-list-table] .list-table tr.bg-base-200 [data-series-select-wrap]:not(.hidden),
+[data-list-table] .list-table tr.bg-base-200 [data-video-select-wrap]:not(.hidden),
+[data-list-table] .list-table tr.bg-base-200 .list-table-sticky-end {
+  background-color: var(--color-base-200);
+}
+
+/*
   Inline Import match dropdowns sit inside scrolling list rows. Raise open
   panels above the next row so search + rich options stay clickable.
   details[open] is the click-toggle path (focus-based div.dropdown needed

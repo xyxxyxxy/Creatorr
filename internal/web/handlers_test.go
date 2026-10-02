@@ -1467,6 +1467,64 @@ func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
 	}
 }
 
+func TestSeriesAndVideosTableView(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
+		SeriesID:   ser.ID,
+		Title:      "Ep One",
+		UploadDate: "2024-01-02T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	for _, path := range []string{"/series?view=table", "/videos?view=table", "/series/" + itoa(ser.ID) + "?view=table"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("%s status %d: %s", path, rec.Code, truncate(rec.Body.String(), 300))
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, `data-list-table`) || !strings.Contains(body, `data-list-table-cols`) {
+			t.Fatalf("%s missing table chrome: %s", path, truncate(body, 400))
+		}
+		wantSummary := "1 series"
+		if strings.Contains(path, "videos") || strings.Contains(path, "/series/") {
+			wantSummary = "1 video"
+		}
+		if !strings.Contains(body, wantSummary) {
+			t.Fatalf("%s missing table summary %q: %s", path, wantSummary, truncate(body, 400))
+		}
+		if strings.Contains(path, "/videos") || strings.Contains(path, "/series/") {
+			if !strings.Contains(body, `list-table-sticky-end`) {
+				t.Fatalf("%s missing sticky Actions column: %s", path, truncate(body, 400))
+			}
+		}
+		if !strings.Contains(body, `data-table-col="title"`) {
+			t.Fatalf("%s missing title column picker: %s", path, truncate(body, 400))
+		}
+	}
+}
+
 func TestVideosPageHasBulkSelect(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {

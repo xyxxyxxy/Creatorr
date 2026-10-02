@@ -130,6 +130,8 @@ type seriesVideosLiveData struct {
 	VideoFilter        listViewToolbar
 	FilterActive       bool
 	ViewMode           string
+	TableCols          []tableCol
+	TableColsCookie    string
 	OOB                bool
 }
 
@@ -242,6 +244,8 @@ func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, s
 		VideoFilter:        videoFilter,
 		FilterActive:       filter.Active(),
 		ViewMode:           viewMode,
+		TableCols:          parseTableColsCookie(r, cookieColsSeriesVideos, videoTableColDefs(false)),
+		TableColsCookie:    cookieColsSeriesVideos,
 	}, nil
 }
 
