@@ -11,7 +11,7 @@ import (
 // Source list sort values (empty = series).
 const (
 	SortSourceSeries      = "series"
-	SortSourceLabel       = "label"
+	SortSourceLabel       = "name" // Explorer UI; DB column remains sources.label
 	SortSourceKind        = "kind"
 	SortSourceDomain      = "domain"
 	SortSourceLastScanned = "last_scanned"
@@ -125,10 +125,10 @@ const sourceDomainSortSQL = `lower(replace(
 	''
 ))`
 
-// Source text query field ids for q_field (default label / Name).
+// Source text query field ids for q_field (default name; DB column sources.label).
 const (
 	QFieldSourceURL    = "url"
-	QFieldSourceLabel  = "label"
+	QFieldSourceLabel  = "name"
 	QFieldSourceSeries = "series"
 )
 
@@ -136,7 +136,7 @@ const (
 type SourceListFilter struct {
 	SeriesID        int64  // 0 = all series (browser operator filter or series-detail lock)
 	Q               string // case-insensitive substring against QField
-	QField          string // url|label|series; empty = label
+	QField          string // url|name|series; empty = name; legacy label accepted
 	Kind            string // feed|single|""
 	Domain          string // hostname (facet); matched against URL
 	HasError        *bool  // nil = any; true = last event scan_error; false = not
@@ -170,13 +170,15 @@ func (f SourceListFilter) Active() bool {
 		f.SeriesMonitored != nil
 }
 
-// NormalizeSourceQField returns a known Sources text field id or label.
+// NormalizeSourceQField returns a known Sources text field id or name.
 func NormalizeSourceQField(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case QFieldSourceURL:
 		return QFieldSourceURL
 	case QFieldSourceSeries:
 		return QFieldSourceSeries
+	case QFieldSourceLabel, "label": // "label" = legacy Explorer query value
+		return QFieldSourceLabel
 	default:
 		return QFieldSourceLabel
 	}
@@ -278,7 +280,7 @@ func (f SourceListFilter) orderBy() string {
 	switch sort {
 	case SortTitle, SortSourceSeries:
 		return "s.title COLLATE NOCASE " + dir + ", src.id ASC"
-	case "url", SortSourceLabel:
+	case "url", SortSourceLabel, "label": // "label" = legacy sort query value
 		return "IFNULL(src.label, src.url) COLLATE NOCASE " + dir + ", src.id ASC"
 	case SortSourceKind:
 		return "src.kind " + dir + ", src.id ASC"

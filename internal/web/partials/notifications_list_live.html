@@ -77,7 +77,7 @@
       <thead>
         <tr>
           {{range .TableCols}}
-          <th data-col="{{.Key}}"{{if not .Visible}} class="hidden"{{end}}>{{.Label}}</th>
+          {{template "list_table_th" (dict "Col" . "LiveTarget" $.Page.LiveTarget)}}
           {{end}}
         </tr>
       </thead>

@@ -249,7 +249,9 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 		BulkEditBusy:    bulkBusy,
 		FilterTotal:     total,
 		ViewMode:        viewMode,
-		TableCols:       parseTableColsCookie(r, cookieColsSeries, seriesTableColDefs()),
+		TableCols: annotateTableColsSort(
+			parseTableColsCookie(r, cookieColsSeries, seriesTableColDefs()),
+			toolbar.SortOpts, toolbar.SortDir),
 		TableColsCookie: cookieColsSeries,
 		ShowSelectAll:   showSelectAll,
 		InfiniteID:      infiniteID,

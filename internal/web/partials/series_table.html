@@ -13,7 +13,7 @@
         <tr>
           <th class="w-0 hidden" data-series-select-wrap aria-hidden="true"></th>
           {{range .TableCols}}
-          <th data-col="{{.Key}}"{{if not .Visible}} class="hidden"{{end}}>{{.Label}}</th>
+          {{template "list_table_th" (dict "Col" . "LiveTarget" $.Page.LiveTarget)}}
           {{end}}
         </tr>
       </thead>

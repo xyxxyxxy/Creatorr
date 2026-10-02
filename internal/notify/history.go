@@ -34,7 +34,7 @@ type ListFilter struct {
 	To         string // inclusive UTC RFC3339Nano on created_at
 	UnreadOnly bool
 	ReadOnly   bool   // only read (or non-unread-event) rows; mutually exclusive with UnreadOnly
-	Sort       string // when | level; empty = when
+	Sort       string // created | level; empty = created; legacy when accepted
 	SortDir    string // asc|desc
 }
 
@@ -263,7 +263,7 @@ func notificationOrderSQL(f ListFilter) string {
 	switch strings.ToLower(strings.TrimSpace(f.Sort)) {
 	case "level":
 		return notificationLevelOrderExpr() + ` ` + dirSQL + `, id ` + dirSQL
-	default:
+	default: // created (and legacy when)
 		return `created_at ` + dirSQL + `, id ` + dirSQL
 	}
 }

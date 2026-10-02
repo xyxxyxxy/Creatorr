@@ -168,6 +168,21 @@ form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
 }
 
 /*
+  Sortable column headers: whole-cell hit target. Inherit th font/color; no
+  underline. Active sort arrow stays muted (same as Sort toolbar).
+*/
+[data-list-table] .list-table thead a.list-table-sort-link {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/*
   Inline Import match dropdowns sit inside scrolling list rows. Raise open
   panels above the next row so search + rich options stay clickable.
   details[open] is the click-toggle path (focus-based div.dropdown needed

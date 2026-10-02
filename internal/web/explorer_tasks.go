@@ -177,7 +177,9 @@ func (h *Handler) loadTasksListLive(w http.ResponseWriter, r *http.Request) (tas
 		Filter:          toolbar,
 		FilterActive:    toolbar.FilterActive,
 		ViewMode:        viewMode,
-		TableCols:       parseTableColsCookie(r, cookieColsTasks, tasksTableColDefs()),
+		TableCols: annotateTableColsSort(
+			parseTableColsCookie(r, cookieColsTasks, tasksTableColDefs()),
+			toolbar.SortOpts, toolbar.SortDir),
 		TableColsCookie: cookieColsTasks,
 	}
 	rewriteExplorerInfinite(&out.Load, explorerTypeTasks, 0)

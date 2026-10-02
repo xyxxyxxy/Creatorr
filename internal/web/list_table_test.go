@@ -3,7 +3,10 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/xyxxyxxy/Creatorr/internal/library"
 )
 
 func TestParseTableColsCookieDefaultsAndMinOne(t *testing.T) {
@@ -60,6 +63,55 @@ func TestVideoTableColDefsSeriesOptional(t *testing.T) {
 	}
 	if hasTableColKey(without, "series") {
 		t.Fatal("series detail videos omit series column")
+	}
+}
+
+func TestAnnotateTableColsSortJoinsKeyToSortOpt(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/series?view=table&sort=downloaded", nil)
+	opts := seriesSortOpts(r, library.SortDownloaded, library.SortDirDesc)
+	cols := parseTableColsCookie(r, cookieColsSeries, seriesTableColDefs())
+	cols = annotateTableColsSort(cols, opts, library.SortDirDesc)
+
+	var dl, monitored, title *tableCol
+	for i := range cols {
+		switch cols[i].Key {
+		case "downloaded":
+			dl = &cols[i]
+		case "monitored":
+			monitored = &cols[i]
+		case "title":
+			title = &cols[i]
+		}
+	}
+	if dl == nil || dl.SortHref == "" || !dl.SortSelected || dl.SortDir != library.SortDirDesc {
+		t.Fatalf("downloaded should be selected sort: %+v", dl)
+	}
+	if !strings.Contains(dl.SortHref, "sort=downloaded") {
+		t.Fatalf("downloaded href should keep sort: %q", dl.SortHref)
+	}
+	if monitored == nil || monitored.SortHref != "" || monitored.SortSelected {
+		t.Fatalf("monitored has no SortOpt: %+v", monitored)
+	}
+	if title == nil || title.SortHref == "" || title.SortSelected {
+		t.Fatalf("title should be sortable but not selected: %+v", title)
+	}
+}
+
+func TestAnnotateTableColsSortSourcesName(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/browser?type=sources&view=table&sort=name", nil)
+	opts := sourcesSortOpts(r, library.SortSourceLabel, library.SortDirAsc)
+	cols := annotateTableColsSort(
+		parseTableColsCookie(r, "creatorr_cols_sources", sourcesTableColDefs(true)),
+		opts, library.SortDirAsc)
+	var name *tableCol
+	for i := range cols {
+		if cols[i].Key == "name" {
+			name = &cols[i]
+			break
+		}
+	}
+	if name == nil || name.SortHref == "" || !name.SortSelected {
+		t.Fatalf("name col should match SortSourceLabel after rename: %+v", name)
 	}
 }
 

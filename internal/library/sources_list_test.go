@@ -231,4 +231,7 @@ func TestNormalizeSourceQField(t *testing.T) {
 	if got := NormalizeSourceQField("name"); got != QFieldSourceLabel {
 		t.Fatalf("name alias: got %q", got)
 	}
+	if got := NormalizeSourceQField("label"); got != QFieldSourceLabel {
+		t.Fatalf("legacy label: got %q", got)
+	}
 }

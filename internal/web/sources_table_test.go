@@ -79,7 +79,7 @@ func TestSourcesTableView(t *testing.T) {
 	if !strings.Contains(body, `class="select join-item`) {
 		t.Fatalf("q_field should use select join-item chrome: %s", body[:min(1200, len(body))])
 	}
-	if !strings.Contains(body, `name="q_field"`) || !strings.Contains(body, `value="url"`) || !strings.Contains(body, `value="label"`) {
+	if !strings.Contains(body, `name="q_field"`) || !strings.Contains(body, `value="url"`) || !strings.Contains(body, `value="name"`) {
 		t.Fatalf("sources toolbar missing q_field select: %s", body[:min(1200, len(body))])
 	}
 	qfIdx := strings.Index(body, `name="q_field"`)
@@ -91,12 +91,12 @@ func TestSourcesTableView(t *testing.T) {
 	if searchIconIdx < 0 || searchIconIdx >= qfIdx {
 		t.Fatalf("search icon should live in q_field select, not the input: icon=%d q_field=%d", searchIconIdx, qfIdx)
 	}
-	labelIdx := strings.Index(body, `value="label"`)
+	nameIdx := strings.Index(body, `value="name"`)
 	urlIdx := strings.Index(body, `value="url"`)
 	seriesIdx := strings.Index(body, `value="series"`)
-	if labelIdx < 0 || urlIdx < 0 || seriesIdx < 0 || labelIdx >= urlIdx || urlIdx >= seriesIdx {
-		t.Fatalf("browser sources q_field order want Name, URL, Series: label=%d url=%d series=%d body=%s",
-			labelIdx, urlIdx, seriesIdx, body[:min(1200, len(body))])
+	if nameIdx < 0 || urlIdx < 0 || seriesIdx < 0 || nameIdx >= urlIdx || urlIdx >= seriesIdx {
+		t.Fatalf("browser sources q_field order want Name, URL, Series: name=%d url=%d series=%d body=%s",
+			nameIdx, urlIdx, seriesIdx, body[:min(1200, len(body))])
 	}
 	if !strings.Contains(body, `>Series</span>`) || !strings.Contains(body, "series=") {
 		t.Fatalf("browser sources Filter missing Series select: %s", body[:min(1600, len(body))])

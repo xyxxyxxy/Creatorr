@@ -155,7 +155,7 @@ func parseSourceSort(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case library.SortTitle, library.SortSourceSeries:
 		return library.SortSourceSeries
-	case library.SortSourceLabel, "url":
+	case library.SortSourceLabel, "label", "url":
 		return library.SortSourceLabel
 	case library.SortSourceKind:
 		return library.SortSourceKind
@@ -373,7 +373,9 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 		SourceFilter:    toolbar,
 		FilterActive:    !seriesDetail && filter.Active(),
 		ViewMode:        viewMode,
-		TableCols:       parseTableColsCookie(r, "creatorr_cols_sources", sourcesTableColDefs(showSeries)),
+		TableCols: annotateTableColsSort(
+			parseTableColsCookie(r, "creatorr_cols_sources", sourcesTableColDefs(showSeries)),
+			toolbar.SortOpts, toolbar.SortDir),
 		TableColsCookie: "creatorr_cols_sources",
 		InfiniteID:      sourcesInfiniteID,
 		RowsID:          sourcesRowsID,

@@ -14,9 +14,12 @@ const (
 
 // tableCol is one configurable list-table column.
 type tableCol struct {
-	Key     string
-	Label   string
-	Visible bool
+	Key          string
+	Label        string
+	Visible      bool
+	SortHref     string // empty = plain header (no SortOpt for Key)
+	SortSelected bool
+	SortDir      string // asc|desc when SortSelected
 }
 
 type tableColDef struct {
@@ -136,4 +139,30 @@ func tableColVisible(cols []tableCol, key string) bool {
 		}
 	}
 	return false
+}
+
+// annotateTableColsSort joins col.Key to SortOpt.Value. Matching cols get the
+// same Href as the Sort toolbar (apply or toggle dir). No match → plain header.
+func annotateTableColsSort(cols []tableCol, opts []listFilterOpt, curDir string) []tableCol {
+	if len(cols) == 0 || len(opts) == 0 {
+		return cols
+	}
+	byVal := make(map[string]listFilterOpt, len(opts))
+	for _, o := range opts {
+		byVal[o.Value] = o
+	}
+	out := make([]tableCol, len(cols))
+	copy(out, cols)
+	for i := range out {
+		o, ok := byVal[out[i].Key]
+		if !ok || o.Href == "" {
+			continue
+		}
+		out[i].SortHref = o.Href
+		out[i].SortSelected = o.Selected
+		if o.Selected {
+			out[i].SortDir = curDir
+		}
+	}
+	return out
 }

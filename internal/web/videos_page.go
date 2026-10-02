@@ -173,7 +173,9 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		ViewMode:        viewMode,
 		SeriesTitles:    titles,
 		BulkEditBusy:    bulkBusy,
-		TableCols:       parseTableColsCookie(r, cookieColsVideos, videoTableColDefs(true)),
+		TableCols: annotateTableColsSort(
+			parseTableColsCookie(r, cookieColsVideos, videoTableColDefs(true)),
+			toolbar.SortOpts, toolbar.SortDir),
 		TableColsCookie: cookieColsVideos,
 		ShowSelectAll:   showSelectAll,
 		InfiniteID:      infiniteID,

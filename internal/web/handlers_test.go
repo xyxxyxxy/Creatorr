@@ -1802,6 +1802,61 @@ func TestSeriesAndVideosTableView(t *testing.T) {
 	}
 }
 
+func TestSeriesTableHeaderSortDownloaded(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	if _, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/series?view=table&sort=downloaded", nil)
+	req.AddCookie(&http.Cookie{Name: "creatorr_cols_series", Value: "title,downloaded,monitored"})
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 300))
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-col="downloaded"`) {
+		t.Fatalf("missing downloaded column: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, `aria-sort="descending"`) {
+		t.Fatalf("active downloaded sort should set aria-sort: %s", truncate(body, 800))
+	}
+	if !strings.Contains(body, `class="list-table-sort-link"`) || !strings.Contains(body, `sort=downloaded`) {
+		t.Fatalf("want whole-cell sort link for downloaded: %s", truncate(body, 800))
+	}
+	if !strings.Contains(body, `data-lucide="arrow-down"`) {
+		t.Fatalf("active downloaded sort should show down arrow: %s", truncate(body, 800))
+	}
+	if !strings.Contains(body, `data-lucide="arrow-up-down"`) {
+		t.Fatalf("inactive sortable headers should show up-down cue: %s", truncate(body, 800))
+	}
+	// Monitored has no SortOpt: plain th label, no sort link on that col.
+	monIdx := strings.Index(body, `data-col="monitored"`)
+	if monIdx < 0 {
+		t.Fatal("missing monitored column")
+	}
+	monChunk := body[monIdx:min(monIdx+200, len(body))]
+	if strings.Contains(monChunk, `list-table-sort-link`) {
+		t.Fatalf("monitored header must stay plain: %s", monChunk)
+	}
+}
+
 func TestVideosPageHasBulkSelect(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {

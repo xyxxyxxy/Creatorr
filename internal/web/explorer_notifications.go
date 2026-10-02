@@ -118,7 +118,9 @@ func (h *Handler) loadNotificationsListLive(w http.ResponseWriter, r *http.Reque
 		toolbar.Badges = notificationsListBadges(r, filter, fromDay, toDay)
 	}
 
-	cols := parseTableColsCookie(r, cookieColsNotifications, notificationsTableColDefs())
+	cols := annotateTableColsSort(
+		parseTableColsCookie(r, cookieColsNotifications, notificationsTableColDefs()),
+		toolbar.SortOpts, toolbar.SortDir)
 	out := notificationsListLiveData{
 		Items:           rows,
 		Page:            page,
@@ -175,8 +177,10 @@ func parseNotifySort(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "level":
 		return "level"
+	case "created", "when", "":
+		return "created"
 	default:
-		return "when"
+		return "created"
 	}
 }
 
@@ -235,10 +239,10 @@ func notificationsFilterSelects(r *http.Request, f notify.ListFilter) []listFilt
 func notificationsSortOpts(r *http.Request, sort, dir string) []listFilterOpt {
 	sort = parseNotifySort(sort)
 	opts := []listFilterOpt{
-		{Value: "when", Label: "Created", Selected: sort == "when", Icon: "clock"},
+		{Value: "created", Label: "Created", Selected: sort == "created", Icon: "clock"},
 		{Value: "level", Label: "Level", Selected: sort == "level", Icon: "triangle-alert"},
 	}
-	annotateSortOpts(r, opts, "when", dir)
+	annotateSortOpts(r, opts, "created", dir)
 	return opts
 }
 

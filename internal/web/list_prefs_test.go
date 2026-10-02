@@ -86,7 +86,7 @@ func TestClearQueryKeyMarksStatus(t *testing.T) {
 }
 
 func TestClearOperatorFiltersURLKeepsExplorerScope(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/explorer/browse?type=sources&at=series-detail&series_id=9&kind=feed&q=x&domain=example.com&sort=label&view=table&page=2", nil)
+	r := httptest.NewRequest(http.MethodGet, "/explorer/browse?type=sources&at=series-detail&series_id=9&kind=feed&q=x&domain=example.com&sort=name&view=table&page=2", nil)
 	href := clearOperatorFiltersURL(r)
 	u, err := url.Parse(href)
 	if err != nil {
@@ -96,7 +96,7 @@ func TestClearOperatorFiltersURLKeepsExplorerScope(t *testing.T) {
 	if q.Get("type") != "sources" || q.Get("at") != "series-detail" || q.Get("series_id") != "9" {
 		t.Fatalf("scope dropped: %q", href)
 	}
-	if q.Get("sort") != "label" || q.Get("view") != "table" {
+	if q.Get("sort") != "name" || q.Get("view") != "table" {
 		t.Fatalf("sort/view dropped: %q", href)
 	}
 	if q.Get("kind") != "" || q.Get("q") != "" || q.Get("domain") != "" || q.Get("page") != "" {
@@ -114,7 +114,7 @@ func TestClearOperatorFiltersURLKeepsExplorerScope(t *testing.T) {
 
 func TestClearAllBlocksNotificationFilterCookie(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, clearOperatorFiltersURL(
-		httptest.NewRequest(http.MethodGet, "/browser?type=notifications&level=alert&unread=1&from=2024-01-01&sort=when&dir=desc", nil),
+		httptest.NewRequest(http.MethodGet, "/browser?type=notifications&level=alert&unread=1&from=2024-01-01&sort=created&dir=desc", nil),
 	), nil)
 	r.AddCookie(&http.Cookie{
 		Name:  cookieFilterNotifications,
@@ -125,7 +125,7 @@ func TestClearAllBlocksNotificationFilterCookie(t *testing.T) {
 	if q.Get("level") != "" || q.Get("unread") != "" || q.Get("from") != "" {
 		t.Fatalf("clear markers should block cookie restore, q=%v", q)
 	}
-	if q.Get("sort") != "when" || q.Get("dir") != "desc" {
+	if q.Get("sort") != "created" || q.Get("dir") != "desc" {
 		t.Fatalf("sort/dir should stay: %q/%q", q.Get("sort"), q.Get("dir"))
 	}
 }
@@ -199,5 +199,32 @@ func TestEncodeFilterPrefCookie(t *testing.T) {
 	}
 	if encodeFilterPrefCookie(nil) != "" || encodeFilterPrefCookie(url.Values{}) != "" {
 		t.Fatal("empty should encode blank")
+	}
+}
+
+func TestParseNotifySortCreatedAndLegacyWhen(t *testing.T) {
+	if got := parseNotifySort("created"); got != "created" {
+		t.Fatalf("created=%q", got)
+	}
+	if got := parseNotifySort("when"); got != "created" {
+		t.Fatalf("legacy when=%q", got)
+	}
+	if got := parseNotifySort(""); got != "created" {
+		t.Fatalf("empty=%q", got)
+	}
+	if got := parseNotifySort("level"); got != "level" {
+		t.Fatalf("level=%q", got)
+	}
+}
+
+func TestParseSourceSortNameAndLegacyLabel(t *testing.T) {
+	if got := parseSourceSort("name"); got != library.SortSourceLabel {
+		t.Fatalf("name=%q", got)
+	}
+	if got := parseSourceSort("label"); got != library.SortSourceLabel {
+		t.Fatalf("legacy label=%q", got)
+	}
+	if got := parseSourceSort("series"); got != library.SortSourceSeries {
+		t.Fatalf("series=%q", got)
 	}
 }
