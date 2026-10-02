@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 const sidecarViewMaxBytes = 2 << 20 // 2 MiB text preview
@@ -251,10 +252,25 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 
 	checkBusy, checkTaskID, _ := h.Library.FileHashCheckBusy(vid, fid)
 	checkBusyTip := ""
-	if checkBusy {
+	checkTaskKind, checkTaskPrefix := "", ""
+	checkDisabled := f.Kind == "nfo"
+	checkDisabledTip := ""
+	if checkDisabled {
+		checkDisabledTip = "NFO is generated from metadata - regenerate instead of Check hash"
+		checkBusy = false
+		checkTaskID = 0
+	} else if checkBusy {
 		checkBusyTip = "Integrity check already queued"
 		if checkTaskID > 0 {
-			checkBusyTip = "Integrity check already queued (open task)"
+			checkBusyTip = "Integrity check already queued - see Check in Details"
+			checkTaskKind = queue.KindFileHashCheck
+			checkTaskPrefix = "Queued"
+			if h.Queue != nil {
+				if t, err := h.Queue.GetTask(checkTaskID); err == nil && t != nil {
+					checkTaskKind = t.Kind
+					checkTaskPrefix = activeTaskLinkPrefix(t.Status)
+				}
+			}
 		}
 	}
 
@@ -284,11 +300,15 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		LastIssue         string
 		LastIssueTask     int64
 		Missing           bool
-		CanDelete         bool
-		CheckHashBusy     bool
-		CheckHashBusyTip  string
-		CheckHashTaskID   int64
-		IsImage           bool
+		CanDelete           bool
+		CheckHashDisabled   bool
+		CheckHashDisabledTip string
+		CheckHashBusy       bool
+		CheckHashBusyTip    string
+		CheckHashTaskID     int64
+		CheckHashTaskKind   string
+		CheckHashTaskPrefix string
+		IsImage             bool
 		IsVideo           bool
 		IsText            bool
 		IsJSON            bool
@@ -320,16 +340,20 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		NFOMatchLabel:    nfoMatchLabel,
 		LastIssue:        lastIssue,
 		LastIssueTask:    lastTaskID,
-		Missing:          missing,
-		CanDelete:        library.DeletableSidecarKind(f.Kind),
-		CheckHashBusy:    checkBusy,
-		CheckHashBusyTip: checkBusyTip,
-		CheckHashTaskID:  checkTaskID,
-		IsImage:          sidecarIsImage(f.Kind, f.Path),
-		IsVideo:          sidecarIsVideo(f.Kind, f.Path),
-		IsText:           sidecarIsText(f.Kind, f.Path),
-		IsJSON:           sidecarIsJSON(f.Kind, f.Path),
-		RawHref:          rawHref,
+		Missing:              missing,
+		CanDelete:            library.DeletableSidecarKind(f.Kind),
+		CheckHashDisabled:    checkDisabled,
+		CheckHashDisabledTip: checkDisabledTip,
+		CheckHashBusy:        checkBusy,
+		CheckHashBusyTip:     checkBusyTip,
+		CheckHashTaskID:      checkTaskID,
+		CheckHashTaskKind:    checkTaskKind,
+		CheckHashTaskPrefix:  checkTaskPrefix,
+		IsImage:              sidecarIsImage(f.Kind, f.Path),
+		IsVideo:              sidecarIsVideo(f.Kind, f.Path),
+		IsText:               sidecarIsText(f.Kind, f.Path),
+		IsJSON:               sidecarIsJSON(f.Kind, f.Path),
+		RawHref:              rawHref,
 		Crumbs: []breadcrumb{
 			crumb("/series", "Series", "tv"),
 			crumb(fmt.Sprintf("/series/%d", ser.ID), ser.Title, "clapperboard"),

@@ -11,14 +11,16 @@
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
     {{if not .Missing}}
-    {{if .CheckHashBusy}}
+    {{if .CheckHashDisabled}}
+    <span class="btn btn-outline btn-disabled tooltip tooltip-top" data-tip="{{.CheckHashDisabledTip}}" aria-disabled="true">
+      <i data-lucide="shield-check" class="size-4"></i>
+      Check hash
+    </span>
+    {{else if .CheckHashBusy}}
     <span class="btn btn-outline btn-disabled tooltip tooltip-top" data-tip="{{.CheckHashBusyTip}}" aria-disabled="true">
       <i data-lucide="shield-check" class="size-4"></i>
       Check hash
     </span>
-    {{if .CheckHashTaskID}}
-    <a class="link link-hover text-xs" href="/task/{{.CheckHashTaskID}}">Open task</a>
-    {{end}}
     {{else}}
     <form method="post" action="/actions/check-file-hash" class="inline">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
@@ -54,6 +56,21 @@
   <tr><th class="w-40">SHA-256</th><td class="text-xs font-mono break-all{{if .IntegrityFailed}} text-error{{end}}">{{if eq .HashLabel "-"}}{{template "empty_value"}}{{else}}{{.HashLabel}}{{end}}</td></tr>
   <tr><th class="w-40">Last OK</th><td class="text-xs whitespace-nowrap">{{if .HashOkAgo}}{{template "rel_time" (dict "CreatedAt" .HashOkAt "CreatedAgo" .HashOkAgo)}}{{else}}{{template "empty_value"}}{{end}}</td></tr>
   <tr><th class="w-40">Last checked</th><td class="text-xs whitespace-nowrap{{if .IntegrityFailed}} text-error{{end}}">{{if .HashCheckedAgo}}{{template "rel_time" (dict "CreatedAt" .HashCheckedAt "CreatedAgo" .HashCheckedAgo)}}{{else}}{{template "empty_value"}}{{end}}</td></tr>
+  {{if and .CheckHashBusy (not .CheckHashDisabled)}}
+  <tr>
+    <th class="w-40">Check</th>
+    <td>
+      <div class="inline-flex items-center gap-2 flex-nowrap whitespace-nowrap">
+        {{if .CheckHashTaskID}}
+        <span class="text-xs opacity-60">{{.CheckHashTaskPrefix}}</span>
+        <a class="link link-hover text-xs" href="/task/{{.CheckHashTaskID}}">{{.CheckHashTaskKind}}</a>
+        {{else}}
+        <span class="text-xs opacity-60">Integrity check open</span>
+        {{end}}
+      </div>
+    </td>
+  </tr>
+  {{end}}
   {{if .NFOMatchLabel}}
   <tr><th class="w-40">NFO match</th><td>{{.NFOMatchLabel}}</td></tr>
   {{end}}

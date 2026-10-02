@@ -116,16 +116,19 @@ func (s *Store) EnqueueFileHashCheck(videoID, fileID int64) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
 	}
+	f, err := s.GetVideoFile(videoID, fileID)
+	if err != nil {
+		return 0, err
+	}
+	if f.Kind == "nfo" {
+		return 0, fmt.Errorf("%w: NFO is generated from metadata - regenerate instead of Check hash", ErrInvalid)
+	}
 	busy, taskID, err := s.FileHashCheckBusy(videoID, fileID)
 	if err != nil {
 		return 0, err
 	}
 	if busy {
 		return 0, fmt.Errorf("%w: integrity check already queued (task %d)", ErrConflict, taskID)
-	}
-	f, err := s.GetVideoFile(videoID, fileID)
-	if err != nil {
-		return 0, err
 	}
 	v, err := s.GetVideo(videoID)
 	if err != nil {
