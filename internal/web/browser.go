@@ -44,6 +44,7 @@ func (h *Handler) browserPage(w http.ResponseWriter, r *http.Request) {
 		SeriesLive          seriesListLiveData
 		VideosLive          videosPageLiveData
 		SourcesLive         sourcesListLiveData
+		FilesLive           filesListLiveData
 		TasksLive           tasksListLiveData
 		NotificationsLive   notificationsListLiveData
 		Roots               []library.RootFolder
@@ -78,6 +79,13 @@ func (h *Handler) browserPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.SourcesLive = live
+	case explorerTypeFiles:
+		live, err := h.loadFilesListLive(w, req)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		data.FilesLive = live
 	case explorerTypeTasks:
 		live, err := h.loadTasksListLive(w, req)
 		if err != nil {

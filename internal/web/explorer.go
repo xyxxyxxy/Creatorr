@@ -11,6 +11,7 @@ const (
 	explorerTypeSeries        = "series"
 	explorerTypeVideos        = "videos"
 	explorerTypeSources       = "sources"
+	explorerTypeFiles         = "files"
 	explorerTypeTasks         = "tasks"
 	explorerTypeNotifications = "notifications"
 
@@ -37,6 +38,8 @@ func (h *Handler) explorerBrowse(w http.ResponseWriter, r *http.Request) {
 		h.explorerBrowseVideos(w, r)
 	case explorerTypeSources:
 		h.explorerBrowseSources(w, r)
+	case explorerTypeFiles:
+		h.explorerBrowseFiles(w, r)
 	case explorerTypeTasks:
 		h.explorerBrowseTasks(w, r)
 	case explorerTypeNotifications:
@@ -235,6 +238,16 @@ func explorerCanonicalURL(r *http.Request, typ string) string {
 		path = "/series/" + sid
 		out.Del("series_id")
 		out.Del("type")
+	case explorerAtVideoDet:
+		sid := strings.TrimSpace(q.Get("series_id"))
+		vid := strings.TrimSpace(q.Get("video_id"))
+		if sid == "" || vid == "" {
+			return ""
+		}
+		path = "/series/" + sid + "/videos/" + vid
+		out.Del("series_id")
+		out.Del("video_id")
+		out.Del("type")
 	default:
 		path = "/series"
 	}
@@ -267,12 +280,12 @@ func redirectExplorerLive(typ string) http.HandlerFunc {
 func parseBrowserType(r *http.Request) string {
 	t := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("type")))
 	switch t {
-	case explorerTypeSeries, explorerTypeVideos, explorerTypeSources, explorerTypeTasks, explorerTypeNotifications:
+	case explorerTypeSeries, explorerTypeVideos, explorerTypeSources, explorerTypeFiles, explorerTypeTasks, explorerTypeNotifications:
 		return t
 	}
 	if c := readListPrefCookie(r, cookieBrowserType); c != "" {
 		switch c {
-		case explorerTypeSeries, explorerTypeVideos, explorerTypeSources, explorerTypeTasks, explorerTypeNotifications:
+		case explorerTypeSeries, explorerTypeVideos, explorerTypeSources, explorerTypeFiles, explorerTypeTasks, explorerTypeNotifications:
 			return c
 		}
 	}

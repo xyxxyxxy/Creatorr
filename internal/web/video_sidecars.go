@@ -212,10 +212,6 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 			dbSizeLabel = library.FormatBytes(f.SizeBytes.Int64)
 		}
 	}
-	hashLabel := "-"
-	if f.ContentHash.Valid && strings.TrimSpace(f.ContentHash.String) != "" {
-		hashLabel = strings.TrimSpace(f.ContentHash.String)
-	}
 	acquiredAt, acquiredAgo := "", ""
 	if strings.TrimSpace(f.AcquiredAt) != "" {
 		acquiredAt, acquiredAgo = createdAgoPair(f.AcquiredAt, time.Now().UTC())
@@ -240,15 +236,20 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 	}
 	lastIssue, lastTaskID := h.Library.LastFileIntegrityIssue(vid, fid, f.Kind)
 
-	hashCheckedAt, hashCheckedAgo := "", ""
-	if f.ContentHashCheckedAt.Valid && strings.TrimSpace(f.ContentHashCheckedAt.String) != "" {
-		hashCheckedAt, hashCheckedAgo = createdAgoPair(f.ContentHashCheckedAt.String, time.Now().UTC())
-	}
-	hashOkAt, hashOkAgo := "", ""
-	if f.ContentHashOkAt.Valid && strings.TrimSpace(f.ContentHashOkAt.String) != "" {
-		hashOkAt, hashOkAgo = createdAgoPair(f.ContentHashOkAt.String, time.Now().UTC())
-	}
 	integrityFailed := f.IntegrityFailed()
+	hasOK := f.ContentHashOkAt.Valid && strings.TrimSpace(f.ContentHashOkAt.String) != ""
+	integrityAt, integrityAgo, integrityOkAt, integrityOkAgo := "", "", "", ""
+	now := time.Now().UTC()
+	if integrityFailed {
+		if f.ContentHashCheckedAt.Valid && strings.TrimSpace(f.ContentHashCheckedAt.String) != "" {
+			integrityAt, integrityAgo = createdAgoPair(f.ContentHashCheckedAt.String, now)
+		}
+		if hasOK {
+			integrityOkAt, integrityOkAgo = createdAgoPair(f.ContentHashOkAt.String, now)
+		}
+	} else if hasOK {
+		integrityAt, integrityAgo = createdAgoPair(f.ContentHashOkAt.String, now)
+	}
 
 	checkBusy, checkTaskID, _ := h.Library.FileHashCheckBusy(vid, fid)
 	checkBusyTip := ""
@@ -256,7 +257,7 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 	checkDisabled := f.Kind == "nfo"
 	checkDisabledTip := ""
 	if checkDisabled {
-		checkDisabledTip = "NFO is generated from metadata - regenerate instead of Check hash"
+		checkDisabledTip = "Integrity check skipped, can be regenerated"
 		checkBusy = false
 		checkTaskID = 0
 	} else if checkBusy {
@@ -273,6 +274,7 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	integrityStatus, integrityTip := fileIntegrityDisplay(integrityFailed, hasOK, !checkDisabled, missing, checkDisabledTip)
 
 	rawHref := fmt.Sprintf("/series/%d/videos/%d/files/%d/raw", seriesID, vid, fid)
 	view := struct {
@@ -290,11 +292,12 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		DBSizeLabel       string
 		CreatedAt         string // acquired_at absolute (rel_time tip)
 		CreatedAgo        string // acquired_at relative
-		HashLabel         string
-		HashCheckedAt     string
-		HashCheckedAgo    string
-		HashOkAt          string
-		HashOkAgo         string
+		IntegrityStatus   string // OK | Failed | Unchecked | N/A | Inactive
+		IntegrityAt       string // last checked absolute (Details rel_time tip)
+		IntegrityAgo      string // last checked since / ISO>7d (indicator tip + Details)
+		IntegrityOkAt     string // last OK absolute; Failed only
+		IntegrityOkAgo    string // last OK relative; Failed only
+		IntegrityTip      string // tip when not OK/Failed
 		IntegrityFailed   bool
 		NFOMatchLabel     string
 		LastIssue         string
@@ -331,11 +334,12 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		DBSizeLabel:      dbSizeLabel,
 		CreatedAt:        acquiredAt,
 		CreatedAgo:       acquiredAgo,
-		HashLabel:        hashLabel,
-		HashCheckedAt:    hashCheckedAt,
-		HashCheckedAgo:   hashCheckedAgo,
-		HashOkAt:         hashOkAt,
-		HashOkAgo:        hashOkAgo,
+		IntegrityStatus:  integrityStatus,
+		IntegrityAt:      integrityAt,
+		IntegrityAgo:     integrityAgo,
+		IntegrityOkAt:    integrityOkAt,
+		IntegrityOkAgo:   integrityOkAgo,
+		IntegrityTip:     integrityTip,
 		IntegrityFailed:  integrityFailed,
 		NFOMatchLabel:    nfoMatchLabel,
 		LastIssue:        lastIssue,

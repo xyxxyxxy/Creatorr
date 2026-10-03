@@ -18,8 +18,10 @@ func VerifyAllMediaHandler(d Deps) TaskHandler {
 			return apperrors.New(apperrors.CodeInternal, "integrity check deps missing")
 		}
 		var recovered []notify.DigestItem
-		res, err := d.Library.VerifyAllMediaPass(ctx, t, progress, func(f library.VerifyAllMediaFail) {
+		res, err := d.Library.VerifyAllMediaPassExt(ctx, t, progress, func(f library.VerifyAllMediaFail) {
 			_ = notify.VerifyFailed(ctx, d.Library.DB, t.ID, f.SeriesTitle, f.VideoTitle, f.Detail)
+		}, func(f library.VerifyAllMediaSeriesMetaFail) {
+			_ = notify.SeriesMetaVerifyFailed(ctx, d.Library.DB, t.ID, f.SeriesTitle, f.Kind, f.Detail)
 		}, func(r library.VerifyAllMediaRecover) {
 			recovered = append(recovered, notify.DigestItem{
 				Series:  r.SeriesTitle,
@@ -137,15 +139,57 @@ func FileHashCheckHandler(d Deps) TaskHandler {
 			return apperrors.New(apperrors.CodeInternal, "file hash check deps missing")
 		}
 		var payload struct {
-			VideoID int64 `json:"video_id"`
-			FileID  int64 `json:"file_id"`
+			VideoID  int64 `json:"video_id"`
+			SeriesID int64 `json:"series_id"`
+			FileID   int64 `json:"file_id"`
 		}
 		_ = json.Unmarshal([]byte(t.Payload), &payload)
+		if payload.FileID <= 0 {
+			return apperrors.New(apperrors.CodeIntegrityCheckFailed, "file_hash_check missing file_id")
+		}
+		f, gerr := d.Library.GetFile(payload.FileID)
+		if gerr != nil {
+			return apperrors.New(apperrors.CodeIntegrityCheckFailed, "file_hash_check file not found")
+		}
+		if f.IsSeriesMeta() {
+			ok, detail, err := d.Library.RunSingleSeriesMetaFileIntegrityCheck(ctx, payload.FileID, progress)
+			seriesTitle := ""
+			if ser, serr := d.Library.GetSeries(f.SeriesID, false); serr == nil && ser != nil {
+				seriesTitle = ser.Title
+			}
+			if err != nil {
+				if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+					return context.Canceled
+				}
+				_ = notify.SeriesMetaVerifyFailed(ctx, d.Library.DB, t.ID, seriesTitle, f.Kind, err.Error())
+				return err
+			}
+			if !ok {
+				msg := detail
+				if msg == "" {
+					msg = "Integrity check failed"
+				}
+				_ = notify.SeriesMetaVerifyFailed(ctx, d.Library.DB, t.ID, seriesTitle, f.Kind, msg)
+				return apperrors.WithDetail(
+					apperrors.New(apperrors.CodeIntegrityCheckFailed, "integrity check failed"),
+					msg,
+				)
+			}
+			stillFailed, ferr := d.Library.SeriesHasFailedIntegrityFile(f.SeriesID)
+			if ferr == nil && !stillFailed {
+				_ = notify.SeriesIntegrityRecovered(ctx, d.Library.DB, t.ID, seriesTitle)
+			}
+			progress("File hash ok", ptrFloat(1))
+			return nil
+		}
 		videoID := payload.VideoID
 		if videoID <= 0 && t.VideoID.Valid {
 			videoID = t.VideoID.Int64
 		}
-		if videoID <= 0 || payload.FileID <= 0 {
+		if videoID <= 0 && f.VideoID.Valid {
+			videoID = f.VideoID.Int64
+		}
+		if videoID <= 0 {
 			return apperrors.New(apperrors.CodeIntegrityCheckFailed, "file_hash_check missing video_id/file_id")
 		}
 		ok, detail, err := d.Library.RunSingleFileIntegrityCheck(ctx, videoID, payload.FileID, progress)

@@ -37,10 +37,13 @@ type sourcesListLiveData struct {
 	SeriesID        int64 // locked scope when > 0
 	SeriesTitle     string
 	ImportNullCount int
-	ShowSeriesCol   bool
-	ShowRowActions  bool // series-detail: scan/edit/delete join
-	ShowToolbar     bool // Browser Sources only; series-detail is a plain list
-	OOB             bool
+	ShowSeriesCol       bool
+	ShowRowActions      bool // scan/edit/delete join (Browser + series-detail)
+	ShowToolbar         bool // Browser Sources only; series-detail is a plain list
+	Suggestions         library.MetaSuggestions
+	PackRoleOptions     []struct{ Value, Label string }
+	ScanCronDescriptors []string
+	OOB                 bool
 }
 
 type sourcesExplorerRow struct {
@@ -55,7 +58,6 @@ type sourcesExplorerRow struct {
 	LastScannedAgo      string
 	LastScannedTip      string
 	StatusInd           sourceStatusView
-	HasRetryable        bool
 	VideoCount          int
 	Redirect            string
 	LiveTarget          string
@@ -276,20 +278,29 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 	if err != nil {
 		return sourcesListLiveData{}, err
 	}
+	sug, _ := h.Library.ListMetaSuggestions()
 
 	at := explorerAtFrom(r, explorerAtBrowser)
 	if seriesDetail {
 		at = explorerAtSeriesDetail
 	}
 	showSeries := !seriesDetail
-	showActions := seriesDetail
+	showActions := true
 
 	now := time.Now().UTC()
 	rows := make([]sourcesExplorerRow, 0, len(list))
 	redir := r.URL.RequestURI()
-	var vcounts map[int64]int
-	if seriesDetail {
-		vcounts, _ = h.Library.CountVideosBySource(filter.SeriesID)
+	vcounts := map[int64]int{}
+	seenSeries := map[int64]bool{}
+	for _, src := range list {
+		if seenSeries[src.SeriesID] {
+			continue
+		}
+		seenSeries[src.SeriesID] = true
+		m, _ := h.Library.CountVideosBySource(src.SeriesID)
+		for k, v := range m {
+			vcounts[k] = v
+		}
 	}
 	for _, src := range list {
 		active, _ := h.Library.HasActiveScanForSource(src.ID)
@@ -308,11 +319,7 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 			SeriesMonitored: src.SeriesMonitored, DomainActive: dAct, DomainDisabledTitle: disTitle,
 			ScanCronLabel: cronLabel, Summary: summary, HasScanned: hasScanned, HistoryID: taskID,
 			Now: now, LastTipScannedAt: tipAt})
-		retryable, _ := h.Library.SourceHasRetryableVideos(src.ID)
-		vc := 0
-		if vcounts != nil {
-			vc = vcounts[src.ID]
-		}
+		vc := vcounts[src.ID]
 		lastAgo, lastTip := "", ""
 		if src.LastScannedAt != "" {
 			lastTip, lastAgo = createdAgoPairShort(src.LastScannedAt, now)
@@ -328,9 +335,8 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 			ScanCronLabel:       cronLabel,
 			LastScannedAgo:      lastAgo,
 			LastScannedTip:      lastTip,
-			StatusInd:           statusInd,
-			HasRetryable:        retryable,
-			VideoCount:          vc,
+			StatusInd:  statusInd,
+			VideoCount: vc,
 			Redirect:            redir,
 			LiveTarget:          sourcesLiveTarget,
 			ShowSeries:          showSeries,
@@ -380,9 +386,12 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 		InfiniteID:      sourcesInfiniteID,
 		RowsID:          sourcesRowsID,
 		SeriesID:        filter.SeriesID,
-		ShowSeriesCol:   showSeries,
-		ShowRowActions:  showActions,
-		ShowToolbar:     !seriesDetail}
+		ShowSeriesCol:       showSeries,
+		ShowRowActions:      showActions,
+		ShowToolbar:         !seriesDetail,
+		Suggestions:         sug,
+		PackRoleOptions:     library.PackRoleSelectOptions(),
+		ScanCronDescriptors: scanCronDescriptors()}
 	if seriesDetail {
 		if ser, err := h.Library.GetSeries(filter.SeriesID, false); err == nil && ser != nil {
 			out.SeriesTitle = ser.Title

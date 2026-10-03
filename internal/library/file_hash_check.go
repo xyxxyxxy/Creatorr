@@ -154,6 +154,7 @@ func (s *Store) EnqueueFileHashCheck(videoID, fileID int64) (int64, error) {
 }
 
 // FileHashCheckBusy reports an open file_hash_check for fileID or covering video integrity task.
+// videoID 0 skips the video-scoped integrity busy check (series-meta files).
 func (s *Store) FileHashCheckBusy(videoID, fileID int64) (busy bool, taskID int64, err error) {
 	if s.Queue == nil {
 		return false, 0, nil
@@ -170,6 +171,9 @@ func (s *Store) FileHashCheckBusy(videoID, fileID int64) (busy bool, taskID int6
 	}
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return false, 0, err
+	}
+	if videoID <= 0 {
+		return false, 0, nil
 	}
 	t, err := s.Queue.IntegrityTaskLinkForVideo(videoID)
 	if err != nil {

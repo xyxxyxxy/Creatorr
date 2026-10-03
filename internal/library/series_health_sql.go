@@ -100,10 +100,22 @@ func (s *Store) SeriesWarnLevels(seriesIDs []int64) (map[int64]SeriesWarnLevel, 
 	for seriesID := range scanErrSeries {
 		out[seriesID] = SeriesWarnError
 	}
+
+	// Hard series rollup: any derived-failed files row (series-meta or video files).
+	fileFails, err := s.SeriesFailedIntegrityFileCounts(argsToInt64(args))
+	if err != nil {
+		return nil, err
+	}
+	for seriesID, n := range fileFails {
+		if n > 0 {
+			out[seriesID] = SeriesWarnError
+		}
+	}
 	return out, nil
 }
 
 // SeriesVideoErrorFlagsMap returns error flags per series ID (missing keys = no errors).
+// HasVerifyFailed also covers series-meta / any derived-failed files row (hard series rollup).
 func (s *Store) SeriesVideoErrorFlagsMap(seriesIDs []int64) (map[int64]SeriesVideoErrorFlags, error) {
 	out := make(map[int64]SeriesVideoErrorFlags, len(seriesIDs))
 	if len(seriesIDs) == 0 {
@@ -144,7 +156,25 @@ func (s *Store) SeriesVideoErrorFlagsMap(seriesIDs []int64) (map[int64]SeriesVid
 			VerifyFailedCount:  verifyErr,
 		}
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	fileFails, err := s.SeriesFailedIntegrityFileCounts(argsToInt64(args))
+	if err != nil {
+		return nil, err
+	}
+	for seriesID, n := range fileFails {
+		if n <= 0 {
+			continue
+		}
+		cur := out[seriesID]
+		cur.HasVerifyFailed = true
+		if n > cur.VerifyFailedCount {
+			cur.VerifyFailedCount = n
+		}
+		out[seriesID] = cur
+	}
+	return out, nil
 }
 
 // CountSeriesWithError returns how many series have SeriesWarnError health

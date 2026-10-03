@@ -19,17 +19,19 @@ const (
 )
 
 type notificationsListLiveData struct {
-	Items           []notifyExplorerRow
-	Page            PageInfo
-	Load            ListLoad
-	ListMode        ListMode
-	FilterTotal     int
-	Filter          listViewToolbar
-	FilterActive    bool
-	ViewMode        string
-	TableCols       []tableCol
-	TableColsCookie string
-	OOB             bool
+	Items            []notifyExplorerRow
+	Page             PageInfo
+	Load             ListLoad
+	ListMode         ListMode
+	FilterTotal      int
+	SelectableTotal  int // alert/warning rows (bulk read/unread)
+	Filter           listViewToolbar
+	FilterActive     bool
+	ViewMode         string
+	TableCols        []tableCol
+	TableColsCookie  string
+	ShowSelectAll    bool
+	OOB              bool
 }
 
 type notifyExplorerRow struct {
@@ -96,21 +98,22 @@ func (h *Handler) loadNotificationsListLive(w http.ResponseWriter, r *http.Reque
 
 	fromDay, toDay := parseFilterDay(r.URL.Query().Get("from")), parseFilterDay(r.URL.Query().Get("to"))
 	toolbar := listViewToolbar{
-		AriaLabel:        "Notification filters",
-		QueryPlaceholder: "Search",
-		SortOpts:         notificationsSortOpts(r, filter.Sort, filter.SortDir),
-		SortDir:          notifySortDir(filter.Sort, filter.SortDir),
-		ViewOpts:         sourcesViewOpts(r, viewMode),
-		ShowView:         true,
-		FromDay:          fromDay,
-		ToDay:            toDay,
-		ShowDateRange:    true,
-		ShowDatePresence: false,
-		DateRangeLabel:   "Created",
-		Selects:          notificationsFilterSelects(r, filter),
-		FilterActive:     notificationsFilterActive(filter, fromDay, toDay),
-		LiveTarget:       notificationsLiveTarget,
-		FormAction:       explorerFragmentPath(r),
+		AriaLabel:             "Notification filters",
+		QueryPlaceholder:      "Search",
+		SortOpts:              notificationsSortOpts(r, filter.Sort, filter.SortDir),
+		SortDir:               notifySortDir(filter.Sort, filter.SortDir),
+		ViewOpts:              sourcesViewOpts(r, viewMode),
+		ShowView:              true,
+		FromDay:               fromDay,
+		ToDay:                 toDay,
+		ShowDateRange:         true,
+		ShowDatePresence:      false,
+		DateRangeLabel:        "Created",
+		Selects:               notificationsFilterSelects(r, filter),
+		FilterActive:          notificationsFilterActive(filter, fromDay, toDay),
+		LiveTarget:            notificationsLiveTarget,
+		FormAction:            explorerFragmentPath(r),
+		NotificationsBulkMode: true,
 	}
 	applyExplorerToolbar(&toolbar, explorerTypeNotifications, at)
 	if toolbar.FilterActive {
@@ -121,17 +124,27 @@ func (h *Handler) loadNotificationsListLive(w http.ResponseWriter, r *http.Reque
 	cols := annotateTableColsSort(
 		parseTableColsCookie(r, cookieColsNotifications, notificationsTableColDefs()),
 		toolbar.SortOpts, toolbar.SortDir)
+	selIDs, _ := notify.ListNotificationIDs(h.Queue.DB, filter, true)
+	selTotal := len(selIDs)
+	pageSel := 0
+	for _, row := range rows {
+		if row.CanToggle {
+			pageSel++
+		}
+	}
 	out := notificationsListLiveData{
 		Items:           rows,
 		Page:            page,
 		Load:            load,
 		ListMode:        ListModePaginated,
 		FilterTotal:     total,
+		SelectableTotal: selTotal,
 		Filter:          toolbar,
 		FilterActive:    toolbar.FilterActive,
 		ViewMode:        viewMode,
 		TableCols:       cols,
 		TableColsCookie: cookieColsNotifications,
+		ShowSelectAll:   selTotal > pageSel,
 	}
 	rewriteExplorerInfinite(&out.Load, explorerTypeNotifications, 0)
 	return out, nil

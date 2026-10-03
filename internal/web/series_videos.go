@@ -165,6 +165,8 @@ type listViewToolbar struct {
 	Hidden               []listHiddenField
 	SeriesBulkMode       bool
 	VideoBulkMode        bool
+	FilesBulkMode         bool
+	NotificationsBulkMode bool
 }
 
 func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, ser *library.Series, byVideo map[int64][]queue.Task) (seriesVideosLiveData, error) {

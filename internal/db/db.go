@@ -16,7 +16,7 @@ import (
 var schemaFS embed.FS
 
 // schemaVersion is the latest schema. Fresh installs record this; existing DBs migrate up.
-const schemaVersion = 26
+const schemaVersion = 27
 
 // busyTimeoutMS is how long pooled connections wait on SQLITE_BUSY before failing.
 // Must be set via DSN _pragma so every pool conn gets it (Exec PRAGMA only hits one conn).
@@ -108,6 +108,31 @@ func (d *DB) applySchema() error {
 	// (schema.sql CREATE TABLE IF NOT EXISTS leaves older tables unchanged).
 	if _, err := d.SQL.Exec(`CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id)`); err != nil {
 		return fmt.Errorf("idx_tasks_parent: %w", err)
+	}
+	if err := d.ensureFilesFillSeriesIDTrigger(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ensureFilesFillSeriesIDTrigger installs the series_id backfill trigger once the column exists.
+func (d *DB) ensureFilesFillSeriesIDTrigger() error {
+	has, err := d.tableHasColumn("files", "series_id")
+	if err != nil || !has {
+		return err
+	}
+	_, err = d.SQL.Exec(`
+		CREATE TRIGGER IF NOT EXISTS files_fill_series_id
+		AFTER INSERT ON files
+		FOR EACH ROW
+		WHEN NEW.series_id IS NULL AND NEW.video_id IS NOT NULL
+		BEGIN
+		  UPDATE files SET series_id = (SELECT series_id FROM videos WHERE id = NEW.video_id)
+		  WHERE id = NEW.id;
+		END
+	`)
+	if err != nil {
+		return fmt.Errorf("files_fill_series_id trigger: %w", err)
 	}
 	return nil
 }

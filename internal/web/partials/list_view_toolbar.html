@@ -34,6 +34,30 @@
     </button>
   </div>
   {{end}}
+  {{if .FilesBulkMode}}
+  <div class="input join-item shrink-0 js-list-toolbar-dd">
+    <button type="button"
+            class="js-list-toolbar-dd-btn tooltip tooltip-top"
+            data-files-bulk-mode
+            aria-pressed="false"
+            aria-label="Multi-select"
+            data-tip="Multi-select">
+      <i data-lucide="list-checks" class="size-4" aria-hidden="true"></i>
+    </button>
+  </div>
+  {{end}}
+  {{if .NotificationsBulkMode}}
+  <div class="input join-item shrink-0 js-list-toolbar-dd">
+    <button type="button"
+            class="js-list-toolbar-dd-btn tooltip tooltip-top"
+            data-notifications-bulk-mode
+            aria-pressed="false"
+            aria-label="Multi-select"
+            data-tip="Multi-select">
+      <i data-lucide="list-checks" class="size-4" aria-hidden="true"></i>
+    </button>
+  </div>
+  {{end}}
   {{if $hasQField}}
   <label class="select join-item w-auto max-w-40 shrink-0">
     <i data-lucide="search" class="size-4 shrink-0 opacity-70" aria-hidden="true"></i>

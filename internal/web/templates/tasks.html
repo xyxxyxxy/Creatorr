@@ -205,6 +205,7 @@
     </div>
   </div>
   {{if or .Tasks .ScheduledTasks}}
+  {{template "pagination" .Page}}
   <ul class="list bg-base-100 rounded-box border border-base-300 mt-1">
     {{range .ScheduledTasks}}{{template "scheduled_task_row" .}}{{end}}
     {{range .Tasks}}{{template "task_row" .}}{{end}}

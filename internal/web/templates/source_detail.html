@@ -18,10 +18,10 @@
     </p>
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
-    {{if and (ne .Source.Kind "single") (or .Source.FullScanDone .ScanActive)}}
-    {{$scanOff := or .ScanActive (not .DomainActive)}}
+    {{$isSingle := eq .Source.Kind "single"}}
+    {{$scanOff := or $isSingle .ScanActive (not .DomainActive) (not .Source.FullScanDone)}}
     {{$tipScan := "Scan for new videos"}}
-    {{if .ScanActive}}{{$tipScan = "'Scan' already queued or running"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{end}}
+    {{if $isSingle}}{{$tipScan = "Scan is for feeds only"}}{{else if .ScanActive}}{{$tipScan = "Scan already queued or running"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under Settings → Queue / Domains."}}{{end}}{{else if not .Source.FullScanDone}}{{$tipScan = "Finish Full scan first"}}{{end}}
     <form method="post" action="/actions/scan-source">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
@@ -33,16 +33,9 @@
         </button>
       </span>
     </form>
-    {{end}}
-    {{if .HasRetryable}}
-    <label for="modal-retry-source" class="btn btn-primary tooltip tooltip-top" data-tip="Clear download errors on this source and put videos back to wanted">
-      <i data-lucide="rotate-ccw" class="size-4"></i>
-      Retry
-    </label>
-    {{end}}
     {{$fullOff := or .ScanActive (not .DomainActive)}}
-    {{$tipFull := "Start 'Full scan'"}}
-    {{if .ScanActive}}{{$tipFull = "'Full scan' already queued or running"}}{{else if not .DomainActive}}{{$tipFull = .DomainDisabledTitle}}{{if not $tipFull}}{{$tipFull = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{else if .Source.FullScanDone}}{{$tipFull = "Start 'Full scan'. Keeps videos; adds new findings."}}{{end}}
+    {{$tipFull := "Start Full scan"}}
+    {{if .ScanActive}}{{$tipFull = "Full scan already queued or running"}}{{else if not .DomainActive}}{{$tipFull = .DomainDisabledTitle}}{{if not $tipFull}}{{$tipFull = "Domain is inactive. Activate under Settings → Queue / Domains."}}{{end}}{{else if .Source.FullScanDone}}{{$tipFull = "Start Full scan. Keeps videos; adds new findings."}}{{end}}
     <form method="post" action="/actions/full-rescan-source">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
@@ -134,6 +127,7 @@
 {{if not .History}}
 {{template "list_empty" "No history for this source yet."}}
 {{else}}
+{{template "pagination" .HistoryPage}}
 {{/* table-fixed: long Message truncates instead of widening the page */}}
 <div class="list-table-wrap rounded-box border border-base-300">
   <table class="table table-sm list-table w-full table-fixed">
@@ -225,26 +219,6 @@
   </div>
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
-
-{{if .HasRetryable}}
-<input type="checkbox" id="modal-retry-source" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Retry download errors</h3>
-    <p class="text-sm mb-4">Set wanted_download_error / wanted_archive videos back to wanted for this source. Cancels pending Web Archive downloads. Does not enqueue downloads.</p>
-    <form method="post" action="/actions/retry-source-errors">
-      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <input type="hidden" name="source_id" value="{{.Source.ID}}" />
-      <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <div class="modal-action">
-        <label for="modal-retry-source" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary">Retry</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-{{end}}
 
 {{template "foot" .}}
 {{end}}

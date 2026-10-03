@@ -12,50 +12,6 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 )
 
-// seriesMetaFileView is one Files-table row for series folder metadata (art / tvshow.nfo).
-type seriesMetaFileView struct {
-	Role      string
-	KindLabel string
-	Icon      string
-	Name      string
-	Path      string
-	SizeLabel string
-	ViewHref  string
-}
-
-func seriesMetaFileViews(lib *library.Store, ser *library.Series) []seriesMetaFileView {
-	if lib == nil || ser == nil {
-		return nil
-	}
-	root, err := lib.GetRoot(ser.RootID)
-	if err != nil {
-		return nil
-	}
-	dir := library.SeriesDir(root.Path, ser.Title)
-	files := library.ListSeriesMetaFiles(dir)
-	if len(files) == 0 {
-		return nil
-	}
-	out := make([]seriesMetaFileView, 0, len(files))
-	for _, f := range files {
-		name := filepath.Base(f.Path)
-		sizeLabel := "-"
-		if st, err := os.Stat(f.Path); err == nil && !st.IsDir() {
-			sizeLabel = library.FormatBytes(st.Size())
-		}
-		out = append(out, seriesMetaFileView{
-			Role:      f.Role,
-			KindLabel: seriesMetaKindLabel(f.Role),
-			Icon:      seriesMetaKindIcon(f.Role),
-			Name:      name,
-			Path:      f.Path,
-			SizeLabel: sizeLabel,
-			ViewHref:  fmt.Sprintf("/series/%d/files/%s", ser.ID, f.Role),
-		})
-	}
-	return out
-}
-
 func seriesMetaKindLabel(role string) string {
 	switch role {
 	case library.SeriesMetaFileRoleNFO:

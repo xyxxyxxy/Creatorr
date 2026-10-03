@@ -1,0 +1,41 @@
+{{define "files_bulk_modals"}}
+{{/* Host on Browser Files, series detail, and video detail. */}}
+<form method="post" action="/actions/bulk-check-file-hash" id="form-bulk-check-file-hash" class="hidden">
+  <input type="hidden" name="redirect" value="" data-bulk-files-redirect />
+  <div data-bulk-file-ids></div>
+</form>
+
+<input type="checkbox" id="modal-bulk-check-file-hash" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-files-bulk-check-title>Check integrity</h3>
+    <p class="text-sm mb-4">Enqueue integrity checks for selected files. NFO, missing, and already-queued rows are skipped.</p>
+    <form method="post" action="/actions/bulk-check-file-hash" id="form-bulk-check-file-hash-confirm">
+      <input type="hidden" name="redirect" value="" data-bulk-files-redirect />
+      <div data-bulk-file-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-check-file-hash" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Check integrity</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-delete-video-sidecar" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-files-bulk-delete-title>Delete sidecars</h3>
+    <p class="text-sm mb-4">Delete selected subtitle, thumb, and other sidecars. Media, NFO, info.json, and SponsorBlock are skipped.</p>
+    <form method="post" action="/actions/bulk-delete-video-sidecar" id="form-bulk-delete-video-sidecar">
+      <input type="hidden" name="redirect" value="" data-bulk-files-redirect />
+      <div data-bulk-file-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-delete-video-sidecar" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-error">Delete</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}

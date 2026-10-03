@@ -1,4 +1,5 @@
 import { refreshBadge, refreshNotificationHistoryPanel, refreshNotifyBadge, refreshNotifyDropdown } from "./badges.js";
+import { maybeRefreshFilesList } from "./files_live.js";
 import { refreshTasksPanel } from "./lanes.js";
 import { maybeRefreshMaintenance } from "./maintenance.js";
 import { maybeRefreshSeriesList, maybeRefreshSeriesVideos } from "./series_live.js";
@@ -70,6 +71,7 @@ function onSSE(ev) {
   }
   maybeRefreshSeriesVideos(ev);
   maybeRefreshSeriesList(ev);
+  maybeRefreshFilesList(ev);
   maybeRefreshMaintenance(ev);
   maybeRefreshYtDlpConnect(ev);
   if (typeof window.refreshImportTasksBusy === "function") {

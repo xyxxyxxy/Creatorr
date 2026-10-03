@@ -573,24 +573,26 @@ form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
 }
 
 /*
-  Series list banner: bleed past daisyUI .list-row padding (1rem) so art sits on
-  the list element border. Full height, right edge; width from image aspect at
-  that height (capped to the row). Banner layer clips itself; the row stays
-  overflow:visible so monitor tooltip-top can paint outside.
+  Series list banner: fill the list-row padding box (right-aligned fanart).
+  daisyUI sets `.list .list-row > * { grid-row-start: 1 }`, which makes the
+  abspos containing block the content track; override to auto so CB is the
+  padding box. (On the content track, top/bottom -1rem + width:max-content
+  let fanart aspect win and spill ~1rem into the next row.) Width from image
+  aspect at that height (capped to the row). Layer clips; row stays
+  overflow:visible for tooltips.
 */
 .list .list-row > .series-list-banner-layer {
   position: absolute;
-  grid-column: 1 / -1;
-  grid-row: 1;
-  top: -1rem;
-  right: -1rem;
-  bottom: -1rem;
+  grid-row: auto;
+  grid-column: auto;
+  top: 0;
+  right: 0;
+  bottom: 0;
   left: auto;
   z-index: 0;
   width: max-content;
-  max-width: calc(100% + 2rem);
+  max-width: 100%;
   height: auto;
-  max-height: calc(100% + 2rem);
   margin: 0;
   padding: 0;
   pointer-events: none;

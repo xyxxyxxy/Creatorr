@@ -8,16 +8,6 @@ import (
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
 )
 
-// SourceHasRetryableVideos is true when Retry would change any video status.
-func (s *Store) SourceHasRetryableVideos(sourceID int64) (bool, error) {
-	var n int
-	err := s.DB.SQL.QueryRow(`
-		SELECT COUNT(*) FROM videos
-		WHERE source_id = ? AND status IN ('wanted_download_error', 'wanted_archive')
-	`, sourceID).Scan(&n)
-	return n > 0, err
-}
-
 // MarkDownloadFailed sets video status to wanted_download_error and appends history.
 func (s *Store) MarkDownloadFailed(videoID, taskID int64, code, message string) error {
 	cur, err := s.GetVideo(videoID)
@@ -68,6 +58,7 @@ func shortHistoryError(message string) string {
 
 // RetrySourceErrors sets wanted_download_error / wanted_archive back to wanted for videos on this source.
 // Cancels pending/running archive.org-lane downloads for those videos. Does not enqueue downloads.
+// No UI entry point: operators clear errors per video or via video bulk (filter by source).
 func (s *Store) RetrySourceErrors(sourceID int64) (int, error) {
 	if _, err := s.GetSourceByID(sourceID); err != nil {
 		return 0, err

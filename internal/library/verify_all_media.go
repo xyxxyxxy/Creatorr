@@ -71,6 +71,7 @@ type verifyAllMediaPayload struct {
 	SkippedBusyIDs    []int64                   `json:"skipped_busy_ids"`
 	SkippedProfileIDs []int64                   `json:"skipped_profile_off_ids"`
 	SkippedNoMediaIDs []int64                   `json:"skipped_no_media_ids"`
+	SeriesMetaDone    []int64                   `json:"series_meta_done"` // series IDs whose art was checked once
 	Checks            map[string]map[string]int `json:"checks"`
 }
 
@@ -84,11 +85,21 @@ type VerifyAllMediaRecover struct {
 	VideoTitle  string
 }
 
+// VerifyAllMediaSeriesMetaFail is one series-art failure from the bulk pass.
+type VerifyAllMediaSeriesMetaFail = SeriesMetaIntegrityFail
+
 // VerifyAllMediaPass runs integrity check on packed downloaded/downloaded_integrity_failed media
 // with a cursor for resume. Skips videos whose quality profile has File integrity off.
+// Series art is checked once per series in scope (skips tvshow.nfo).
 // onFail is optional; called after MarkVerifyFailed for each failure.
 // onRecover is optional; called after MarkVerified when status was downloaded_integrity_failed.
+// onSeriesMetaFail is optional; called for each failed series-meta art file.
 func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64), onFail func(VerifyAllMediaFail), onRecover ...func(VerifyAllMediaRecover)) (*VerifyAllMediaResult, error) {
+	return s.VerifyAllMediaPassExt(ctx, task, progress, onFail, nil, onRecover...)
+}
+
+// VerifyAllMediaPassExt is VerifyAllMediaPass with an optional series-meta fail callback.
+func (s *Store) VerifyAllMediaPassExt(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64), onFail func(VerifyAllMediaFail), onSeriesMetaFail func(VerifyAllMediaSeriesMetaFail), onRecover ...func(VerifyAllMediaRecover)) (*VerifyAllMediaResult, error) {
 	var recoverFn func(VerifyAllMediaRecover)
 	if len(onRecover) > 0 {
 		recoverFn = onRecover[0]
@@ -133,6 +144,9 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 		if len(p.VideoIDs) > 0 {
 			m["video_ids"] = p.VideoIDs
 		}
+		if len(p.SeriesMetaDone) > 0 {
+			m["series_meta_done"] = p.SeriesMetaDone
+		}
 		if len(res.SkippedBusyIDs) > 0 {
 			m["skipped_busy_ids"] = res.SkippedBusyIDs
 		}
@@ -155,6 +169,45 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 		progress(fmt.Sprintf("Integrity check %d…", done), &pct)
 	}
 	if res.IntegrityChecked+res.Partial+res.Skipped+res.Failed > 0 {
+		reportLive()
+	}
+
+	// Series art once per series in scope (before video loop; resume via series_meta_done).
+	metaIDs, merr := s.seriesIDsForIntegrityMeta(p.SeriesIDs, p.VideoIDs)
+	if merr != nil {
+		return res, merr
+	}
+	doneMeta := map[int64]struct{}{}
+	for _, id := range p.SeriesMetaDone {
+		doneMeta[id] = struct{}{}
+	}
+	for _, sid := range metaIDs {
+		if _, ok := doneMeta[sid]; ok {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			_ = persist()
+			return res, ctx.Err()
+		default:
+		}
+		fails, cerr := s.RunSeriesMetaIntegrityCheck(ctx, sid, progress)
+		if cerr != nil {
+			if ctx.Err() != nil {
+				_ = persist()
+				return res, ctx.Err()
+			}
+			res.Failed++
+		}
+		for _, f := range fails {
+			res.Failed++
+			if onSeriesMetaFail != nil {
+				onSeriesMetaFail(f)
+			}
+		}
+		p.SeriesMetaDone = append(p.SeriesMetaDone, sid)
+		doneMeta[sid] = struct{}{}
+		_ = persist()
 		reportLive()
 	}
 
@@ -338,6 +391,54 @@ func (s *Store) VerifyAllMediaPass(ctx context.Context, task *queue.Task, progre
 	_ = persist()
 	res.FinalizeOutcome()
 	return res, nil
+}
+
+// seriesIDsForIntegrityMeta lists series whose art should be checked once in this pass.
+// Empty series+video scope = all series; video-only scope = distinct series of those videos.
+func (s *Store) seriesIDsForIntegrityMeta(seriesIDs, videoIDs []int64) ([]int64, error) {
+	seriesIDs = uniqInt64(seriesIDs)
+	videoIDs = uniqInt64(videoIDs)
+	if len(seriesIDs) > 0 {
+		return seriesIDs, nil
+	}
+	if len(videoIDs) > 0 {
+		args := make([]any, len(videoIDs))
+		for i, id := range videoIDs {
+			args[i] = id
+		}
+		rows, err := s.DB.SQL.Query(`
+			SELECT DISTINCT series_id FROM videos
+			WHERE id IN (`+sqlIntPlaceholders(len(args))+`)
+			ORDER BY series_id
+		`, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = rows.Close() }()
+		var out []int64
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				return nil, err
+			}
+			out = append(out, id)
+		}
+		return out, rows.Err()
+	}
+	rows, err := s.DB.SQL.Query(`SELECT id FROM series ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 // VerifyAllMediaMessage formats the finish message for an integrity check batch.

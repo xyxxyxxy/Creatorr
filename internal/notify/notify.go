@@ -199,6 +199,33 @@ func VerifyFailed(ctx context.Context, database *db.DB, taskID int64, series, ti
 	return SendEvent(ctx, database, EventVerifyFailed, nTitle, body, taskID)
 }
 
+// SeriesMetaVerifyFailed notifies that series art failed hash check (videos unchanged).
+func SeriesMetaVerifyFailed(ctx context.Context, database *db.DB, taskID int64, series, kind, detail string) error {
+	detail = truncateDetailTail(detail)
+	label := strings.TrimSpace(series)
+	if label == "" {
+		label = "library"
+	}
+	k := strings.TrimSpace(kind)
+	if k == "" {
+		k = "art"
+	}
+	nTitle := fmt.Sprintf("Integrity check failed (%s)", label)
+	body := fmt.Sprintf("%s: series %s failed Integrity check. File kept; series integrity indicator raised.\n\n%s", label, k, detail)
+	return SendEvent(ctx, database, EventVerifyFailed, nTitle, body, taskID)
+}
+
+// SeriesIntegrityRecovered notifies when a series has zero derived-failed files again.
+func SeriesIntegrityRecovered(ctx context.Context, database *db.DB, taskID int64, series string) error {
+	label := strings.TrimSpace(series)
+	nTitle := "Integrity recovered"
+	if label != "" {
+		nTitle = fmt.Sprintf("Integrity recovered (%s)", label)
+	}
+	body := fmt.Sprintf("%s: all series files passed Integrity check; series integrity indicator cleared.", labelOrLibrary(label))
+	return SendEvent(ctx, database, EventIntegrityRecovered, nTitle, body, taskID)
+}
+
 // IntegrityRecovered notifies that a video left downloaded_integrity_failed after a successful check.
 func IntegrityRecovered(ctx context.Context, database *db.DB, taskID int64, series, title string) error {
 	label := strings.TrimSpace(series)

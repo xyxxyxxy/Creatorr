@@ -30,6 +30,7 @@
 {{end}}
 {{if and .ShowToolbar (ne .ViewMode "table")}}{{template "list_load_controls" .}}{{end}}
 {{end}}
+{{if .ShowRowActions}}{{template "sources_row_modals" .}}{{end}}
 </div>
 {{end}}
 
@@ -43,6 +44,7 @@
 <div data-infinite-chunk>
   {{template "sources_rows_inner" .}}
   {{template "list_infinite_sentinel" .}}
+  {{if .ShowRowActions}}{{template "sources_row_modals" .}}{{end}}
 </div>
 {{end}}
 
@@ -75,16 +77,11 @@
   {{if .ShowRowActions}}
   <div class="self-center justify-self-end whitespace-nowrap">
     <div class="join">
-      {{if .HasRetryable}}
-      <label for="modal-retry-source-{{.ID}}" class="btn btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Clear download errors on this source and put videos back to wanted" aria-label="Retry">
-        <i data-lucide="rotate-ccw" class="size-3.5"></i>
-      </label>
-      {{end}}
       {{template "source_scan_actions" .}}
-      <label for="modal-edit-source-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+      <label for="modal-edit-source-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="Edit" aria-label="Edit">
         <i data-lucide="pencil" class="size-3.5"></i>
       </label>
-      <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+      <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-left" data-tip="Delete" aria-label="Delete">
         <i data-lucide="trash-2" class="size-3.5"></i>
       </label>
     </div>
@@ -149,16 +146,11 @@
           {{if $.ShowRowActions}}
           <td class="whitespace-nowrap text-end">
             <div class="join">
-              {{if .HasRetryable}}
-              <label for="modal-retry-source-{{.ID}}" class="btn btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Clear download errors on this source and put videos back to wanted" aria-label="Retry">
-                <i data-lucide="rotate-ccw" class="size-3.5"></i>
-              </label>
-              {{end}}
               {{template "source_scan_actions" .}}
-              <label for="modal-edit-source-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+              <label for="modal-edit-source-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="Edit" aria-label="Edit">
                 <i data-lucide="pencil" class="size-3.5"></i>
               </label>
-              <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+              <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-left" data-tip="Delete" aria-label="Delete">
                 <i data-lucide="trash-2" class="size-3.5"></i>
               </label>
             </div>

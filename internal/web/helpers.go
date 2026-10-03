@@ -185,6 +185,26 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Sidecar refresh enqueued.")
 	case "check-file-hash":
 		return flashOK("File hash check enqueued.")
+	case "bulk_check_file_hash":
+		msg := "Integrity checks enqueued"
+		if n := r.URL.Query().Get("n"); n != "" {
+			msg += " (" + n + ")"
+		}
+		msg += "."
+		if skipped := r.URL.Query().Get("skipped"); skipped != "" && skipped != "0" {
+			return flashWarn(strings.TrimSuffix(msg, ".") + "; " + skipped + " skipped.")
+		}
+		return flashOK(msg)
+	case "bulk_sidecar_deleted":
+		msg := "Sidecars deleted"
+		if n := r.URL.Query().Get("n"); n != "" {
+			msg += " (" + n + ")"
+		}
+		msg += "."
+		if skipped := r.URL.Query().Get("skipped"); skipped != "" && skipped != "0" {
+			return flashWarn(strings.TrimSuffix(msg, ".") + "; " + skipped + " skipped.")
+		}
+		return flashOK(msg)
 	case "metadata":
 		return flashOK("Series metadata saved (tvshow.nfo + art).")
 	case "video-metadata":
@@ -398,7 +418,8 @@ func parseFeedScanCron(r *http.Request, emptyDefault string) (string, error) {
 // Honors redirect when it is under /series/; otherwise the series page.
 func seriesSourceRedirect(r *http.Request, seriesID, _ int64) string {
 	redir := strings.TrimSpace(r.FormValue("redirect"))
-	if strings.HasPrefix(redir, "/series/") && !strings.Contains(redir, "://") {
+	if !strings.Contains(redir, "://") &&
+		(strings.HasPrefix(redir, "/series/") || strings.HasPrefix(redir, "/browser")) {
 		return redir
 	}
 	return fmt.Sprintf("/series/%d", seriesID)

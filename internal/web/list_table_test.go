@@ -3,11 +3,35 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 )
+
+func TestListTableChromeTopPagerBesideColumns(t *testing.T) {
+	// String-guard: multi-page table chrome puts pagination_join right of Columns.
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller")
+	}
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(thisFile), "partials", "list_table_chrome.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(b)
+	iCols := strings.Index(body, `list_table_col_picker`)
+	iPager := strings.Index(body, `pagination_join`)
+	if iCols < 0 || iPager < 0 || iPager < iCols {
+		t.Fatal("list_table_chrome must render pagination_join after Columns picker")
+	}
+	if !strings.Contains(body, `.Page.Show`) {
+		t.Fatal("top table pager must gate on Page.Show")
+	}
+}
 
 func TestParseTableColsCookieDefaultsAndMinOne(t *testing.T) {
 	defs := seriesTableColDefs()

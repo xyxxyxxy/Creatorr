@@ -243,9 +243,10 @@ func TestBulkThumbCardClickSelectsNotNavigates(t *testing.T) {
 	for _, tip := range []string{
 		`Use the multi-select bar`,
 		`VIDEO_BULK_CONFIRM_AFTER = 5`,
+		`SERIES_BULK_CONFIRM_AFTER = 5`,
 	} {
 		if !strings.Contains(js, tip) {
-			t.Fatalf("app.js missing video bulk contract %q", tip)
+			t.Fatalf("app.js missing bulk contract %q", tip)
 		}
 	}
 }

@@ -2,11 +2,13 @@
 {{/*
   Quick monitored/active toggle for list rows.
   Required: Action, and Monitored (series/source) or Active (domain)
-  Optional: SeriesID, SourceID, VideoID, Domain, Redirect, Title, Disabled, DisabledTitle, LiveTarget, AsButton, TipClass
+  Optional: SeriesID, SourceID, VideoID, Domain, Redirect, Title, Disabled, DisabledTitle,
+            LiveTarget, AsButton, BtnClass, TipClass
 
   HTMX swaps this root so the page does not reload (no scroll jump / button twitch).
   When LiveTarget is set (element id without #), swap that panel instead (filter refresh).
-  AsButton: clickable icon (no btn chrome) instead of checkbox toggle (series list / detail).
+  AsButton: clickable icon instead of checkbox toggle (series list / detail).
+  BtnClass: when set with AsButton, use daisyUI btn chrome (e.g. "btn btn-square"); else bare icon.
 */}}
 {{$on := .Monitored}}
 {{$field := "monitored"}}
@@ -32,10 +34,18 @@
   {{if .Domain}}{{if $on}}{{$tip = "Deactivate"}}{{else}}{{$tip = "Activate"}}{{end}}{{end}}
 {{end}}
 {{$tipClass := .TipClass}}{{if not $tipClass}}{{$tipClass = "tooltip-top"}}{{end}}
+{{$btnClass := .BtnClass}}
+{{$useBtn := and .AsButton $btnClass}}
+{{/* Btn chrome (detail navbar): outline bookmark only - no success/fill. List AsButton keeps filled state. */}}
+{{if $useBtn}}{{$iconClass = "size-4"}}{{end}}
 <span class="monitor-toggle-root inline-flex items-center">
 {{if .Disabled}}
 <span class="tooltip {{$tipClass}} inline-flex items-center" data-tip="{{if .DisabledTitle}}{{.DisabledTitle}}{{else}}Disabled{{end}}">
-  {{if .AsButton}}
+  {{if $useBtn}}
+  <span class="{{$btnClass}} btn-disabled" aria-label="{{if .DisabledTitle}}{{.DisabledTitle}}{{else}}{{$label}}{{end}}" aria-disabled="true">
+    <i data-lucide="{{$icon}}" class="{{$iconClass}} opacity-40"></i>
+  </span>
+  {{else if .AsButton}}
   <span class="inline-flex size-10 items-center justify-center shrink-0" aria-label="{{if .DisabledTitle}}{{.DisabledTitle}}{{else}}{{$label}}{{end}}" aria-disabled="true">
     <i data-lucide="{{$icon}}" class="size-5 opacity-40"></i>
   </span>
@@ -59,9 +69,15 @@
   {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
   {{if .AsButton}}
   <input type="hidden" name="{{$field}}" value="{{if $on}}0{{else}}1{{end}}" />
+  {{if $useBtn}}
+  <button type="submit" class="{{$btnClass}} tooltip {{$tipClass}}" data-tip="{{$tip}}" aria-label="{{$tip}}">
+    <i data-lucide="{{$icon}}" class="{{$iconClass}}"></i>
+  </button>
+  {{else}}
   <button type="submit" class="inline-flex size-10 items-center justify-center shrink-0 cursor-pointer bg-transparent border-0 p-0 tooltip {{$tipClass}}" data-tip="{{$tip}}" aria-label="{{$tip}}">
     <i data-lucide="{{$icon}}" class="{{$iconClass}}"></i>
   </button>
+  {{end}}
   {{else}}
   <input type="hidden" name="{{$field}}" value="{{if $on}}1{{else}}0{{end}}" class="monitor-toggle-value" />
   <span class="tooltip {{$tipClass}} inline-flex items-center" data-tip="{{$tip}}">

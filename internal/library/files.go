@@ -155,9 +155,11 @@ func (s *Store) VideoJSONPathMap(videoIDs []int64) (map[int64]string, error) {
 	return out, rows.Err()
 }
 
-// VideoFile is one row from the files table for a video.
+// VideoFile is one row from the files table (video-scoped or series-meta).
 type VideoFile struct {
 	ID                   int64
+	SeriesID             int64
+	VideoID              sql.NullInt64
 	Path                 string
 	Kind                 string
 	AcquiredAt           string
@@ -167,12 +169,22 @@ type VideoFile struct {
 	ContentHashOkAt      sql.NullString
 }
 
-const videoFileSelectCols = `id, path, kind, acquired_at, size_bytes, content_hash, content_hash_checked_at, content_hash_ok_at`
+const videoFileSelectCols = `id, COALESCE(series_id, 0), video_id, path, kind, acquired_at, size_bytes, content_hash, content_hash_checked_at, content_hash_ok_at`
 
 func scanVideoFile(scan func(dest ...any) error) (VideoFile, error) {
 	var f VideoFile
-	err := scan(&f.ID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes, &f.ContentHash, &f.ContentHashCheckedAt, &f.ContentHashOkAt)
+	err := scan(&f.ID, &f.SeriesID, &f.VideoID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes, &f.ContentHash, &f.ContentHashCheckedAt, &f.ContentHashOkAt)
 	return f, err
+}
+
+// IsSeriesMeta reports a series-folder metadata row (no video_id).
+func (f VideoFile) IsSeriesMeta() bool {
+	return !f.VideoID.Valid || f.VideoID.Int64 <= 0
+}
+
+// Missing reports size_bytes sentinel for known-missing on disk.
+func (f VideoFile) Missing() bool {
+	return f.SizeBytes.Valid && f.SizeBytes.Int64 == sidecarMissingSizeSentinel
 }
 
 // IntegrityFailed reports derived failed from stamps.
@@ -398,6 +410,22 @@ func (s *Store) GetVideoFile(videoID, fileID int64) (*VideoFile, error) {
 	return &f, nil
 }
 
+// GetFile loads one files row by id (video or series-meta).
+func (s *Store) GetFile(fileID int64) (*VideoFile, error) {
+	row := s.DB.SQL.QueryRow(`
+		SELECT `+videoFileSelectCols+`
+		FROM files WHERE id = ?
+	`, fileID)
+	f, err := scanVideoFile(row.Scan)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
 // DeletableSidecarKind reports whether an operator may delete this files.kind
 // individually (sub, thumb, other). Generated/provenance kinds are excluded.
 func DeletableSidecarKind(kind string) bool {
@@ -463,8 +491,9 @@ func (s *Store) RegisterFileKind(videoID int64, path, kind string) error {
 	acquired := nowRFC3339()
 	_, _ = s.DB.SQL.Exec(`DELETE FROM files WHERE video_id = ? AND kind = ?`, videoID, kind)
 	_, err := s.DB.SQL.Exec(`
-		INSERT INTO files (video_id, path, kind, acquired_at, size_bytes) VALUES (?, ?, ?, ?, NULL)
-	`, videoID, path, kind, acquired)
+		INSERT INTO files (series_id, video_id, path, kind, acquired_at, size_bytes)
+		SELECT v.series_id, v.id, ?, ?, ?, NULL FROM videos v WHERE v.id = ?
+	`, path, kind, acquired, videoID)
 	return err
 }
 

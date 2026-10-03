@@ -182,18 +182,6 @@
     </td>
   </tr>
   <tr>
-    <th class="w-40">File integrity</th>
-    <td>
-      <div class="inline-flex items-center gap-2 flex-nowrap whitespace-nowrap">
-        {{template "integrity_indicator" .IntegrityInd}}
-        {{if .IntegrityTaskID}}
-        <span class="text-xs opacity-60">{{.IntegrityTaskPrefix}}</span>
-        <a class="link link-hover text-xs" href="/task/{{.IntegrityTaskID}}">{{.IntegrityTaskKind}}</a>
-        {{end}}
-      </div>
-    </td>
-  </tr>
-	<tr>
     <th class="w-40">Acquired</th>
     <td>
       {{if .Video.AcquiredAt.Valid}}{{template "local_time" .Video.AcquiredAt.String}}{{else}}<span class="opacity-60">none</span>{{end}}
@@ -222,59 +210,9 @@
 
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Files" "icon" "files")}}
-{{if not .Files}}
-{{template "list_empty" "No files"}}
-{{else}}
-{{template "list_table"}}
-<thead><tr><th>Type</th><th>File</th><th>Size</th><th class="w-14"></th></tr></thead>
-<tbody>
-  {{range .Files}}
-  {{$errClass := ""}}{{if .IntegrityFailed}}{{$errClass = " text-error"}}{{end}}
-  <tr>
-    <td class="whitespace-nowrap{{$errClass}}">
-      <span class="inline-flex items-center gap-1.5">
-        {{if .Missing}}
-        <span class="tooltip tooltip-top inline-flex shrink-0" data-tip="file missing" aria-label="file missing">
-          <i data-lucide="file-exclamation-point" class="size-4 text-warning"></i>
-        </span>
-        {{else}}
-        <i data-lucide="{{.Icon}}" class="size-4 shrink-0 opacity-70"></i>
-        {{end}}
-        <span>{{.KindLabel}}</span>
-      </span>
-    </td>
-    <td class="text-sm break-all{{$errClass}}">
-      {{if .Missing}}
-      <span class="tooltip tooltip-top inline-flex max-w-full" data-tip="{{.Path}}">
-        <code class="text-xs opacity-60">{{.Name}}</code>
-      </span>
-      {{else if .ViewHref}}
-      <a class="link link-hover{{if .IntegrityFailed}} text-error{{end}}" href="{{.ViewHref}}"{{if .IntegrityFailed}} title="Integrity check failed"{{end}}>
-        <code class="text-xs">{{.Name}}</code>
-      </a>
-      {{else}}
-      <code class="text-xs">{{.Name}}</code>
-      {{end}}
-    </td>
-    <td class="text-xs whitespace-nowrap tabular-nums{{$errClass}}">{{if eq .SizeLabel "-"}}{{template "empty_value"}}{{else}}{{.SizeLabel}}{{end}}</td>
-    <td class="text-right">
-      {{if .CanDelete}}
-      <label for="modal-delete-sidecar-{{.ID}}" class="btn btn-soft btn-error btn-square btn-sm tooltip tooltip-top" data-tip="Delete" aria-label="Delete {{.Name}}">
-        <i data-lucide="trash-2" class="size-4" aria-hidden="true"></i>
-      </label>
-      {{end}}
-    </td>
-  </tr>
-  {{end}}
-</tbody>
-{{template "list_table_end"}}
-{{range .Files}}
-{{if .CanDelete}}
-{{template "delete_sidecar_modal" (dict "FileID" .ID "SeriesID" $.Series.ID "VideoID" $.Video.ID "Name" .Name "KindLabel" .KindLabel)}}
-{{end}}
-{{end}}
-{{end}}
+{{template "files_list_live" .FilesLive}}
 {{template "list_panel_end"}}
+{{template "files_bulk_modals"}}
 
 {{template "list_panel"}}
 <div id="video-history-live">
@@ -282,6 +220,7 @@
 {{if not .History}}
 {{template "list_empty" "No history yet."}}
 {{else}}
+{{template "pagination" .HistoryPage}}
 {{template "timeline_vertical" .History}}
 {{template "pagination" .HistoryPage}}
 {{end}}

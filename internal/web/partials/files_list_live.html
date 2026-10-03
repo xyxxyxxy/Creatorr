@@ -1,0 +1,224 @@
+{{define "files_list_live"}}
+<div id="files-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
+     data-filter-total="{{.FilterTotal}}"
+     data-view-mode="{{.ViewMode}}"
+     data-list-mode="{{.ListMode}}"
+     data-series-id="{{.SeriesID}}"
+     data-video-id="{{.VideoID}}"
+     data-bulk-mode="0">
+{{if and .ShowToolbar (or .Files .FilterActive)}}
+{{template "list_view_toolbar" .Filter}}
+{{else if and .FilesBulkMode .Files}}
+{{/* Embeds: multi-select without the full Filter toolbar. */}}
+<div class="mb-2">
+  <button type="button"
+          class="btn btn-ghost btn-square tooltip tooltip-top"
+          data-files-bulk-mode
+          aria-pressed="false"
+          aria-label="Multi-select"
+          data-tip="Multi-select">
+    <i data-lucide="list-checks" class="size-4" aria-hidden="true"></i>
+  </button>
+</div>
+{{end}}
+{{if not .Files}}
+{{if .FilterActive}}
+{{template "list_empty" "No files match the filters."}}
+{{else if gt .VideoID 0}}
+{{template "list_empty" "No files for this video."}}
+{{else if gt .SeriesID 0}}
+{{template "list_empty" "No files for this series."}}
+{{else}}
+{{template "list_empty" "No files registered yet."}}
+{{end}}
+{{else}}
+{{if .FilesBulkMode}}{{template "files_bulk_bar" .}}{{end}}
+{{if eq .ViewMode "table"}}
+{{template "files_table" .}}
+{{else}}
+{{template "pagination" .Page}}
+<ul class="list bg-base-100 rounded-box border border-base-300" id="files-list-rows">
+  {{range .Files}}
+  {{template "files_list_row" .}}
+  {{end}}
+</ul>
+{{template "pagination" .Page}}
+{{end}}
+{{end}}
+{{range .Files}}
+{{if .CanDelete}}
+{{template "delete_sidecar_modal" (dict "FileID" .ID "SeriesID" .SeriesID "VideoID" .VideoID "Name" .Name "KindLabel" .KindLabel "Redirect" .Redirect)}}
+{{end}}
+{{end}}
+</div>
+{{end}}
+
+{{define "files_list_row"}}
+{{$errClass := ""}}{{if .IntegrityFailed}}{{$errClass = " text-error"}}{{end}}
+{{/* Integrity track fixed at 7rem so shield icons stack (labels OK vs Unchecked differ). */}}
+<li class="list-row" data-file-id="{{.ID}}" style="--list-grid-cols: max-content 1fr 7rem max-content">
+  <div class="self-center hidden" data-file-select-wrap>
+    <input type="checkbox" class="checkbox checkbox-sm js-file-select" value="{{.ID}}"
+           aria-label="Select file" />
+  </div>
+  <div class="self-center shrink-0{{$errClass}}">
+    {{template "files_kind_icon" .}}
+  </div>
+  <div class="list-col-grow min-w-0 self-center{{$errClass}}">
+    <div class="flex items-center gap-2 min-w-0">
+      {{if .Missing}}
+      <code class="text-xs opacity-60 truncate" title="{{.Path}}">{{.Name}}</code>
+      {{else if .ViewHref}}
+      <a class="link link-hover min-w-0 truncate{{if .IntegrityFailed}} text-error{{end}}" href="{{.ViewHref}}"{{if .IntegrityFailed}} title="Integrity check failed"{{end}}>
+        <code class="text-xs">{{.Name}}</code>
+      </a>
+      {{else}}
+      <code class="text-xs truncate">{{.Name}}</code>
+      {{end}}
+    </div>
+    {{if .SeriesTitle}}
+    <div class="text-xs opacity-60 truncate">
+      <a class="link link-hover" href="/series/{{.SeriesID}}">{{.SeriesTitle}}</a>
+      {{if .VideoTitle}}
+      <span class="opacity-50"> / </span>
+      <a class="link link-hover" href="/series/{{.SeriesID}}/videos/{{.VideoID}}">{{.VideoTitle}}</a>
+      {{end}}
+    </div>
+    {{else if .VideoTitle}}
+    <div class="text-xs opacity-60 truncate">
+      <a class="link link-hover" href="/series/{{.SeriesID}}/videos/{{.VideoID}}">{{.VideoTitle}}</a>
+    </div>
+    {{end}}
+  </div>
+  <div class="self-center min-w-0 whitespace-nowrap">
+    {{template "file_integrity_indicator" (dict
+      "Status" .IntegrityStatus
+      "CheckedAgo" .IntegrityAgo
+      "Tip" .IntegrityTip
+    )}}
+  </div>
+  <div class="self-center justify-self-end whitespace-nowrap" data-files-row-actions>
+    {{template "files_row_actions" .}}
+  </div>
+</li>
+{{end}}
+
+{{define "files_kind_icon"}}
+{{/* Type icon only; tip = KindLabel (and missing). Tip wraps a child, not the table cell. */}}
+{{$tip := .KindLabel}}{{if .Missing}}{{$tip = printf "%s (missing)" .KindLabel}}{{end}}
+<span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="{{$tip}}" aria-label="{{$tip}}">
+  {{if .Missing}}
+  <i data-lucide="file-exclamation-point" class="size-4 text-warning" aria-hidden="true"></i>
+  {{else}}
+  <i data-lucide="{{.Icon}}" class="size-4 opacity-70" aria-hidden="true"></i>
+  {{end}}
+</span>
+{{end}}
+
+{{define "files_row_actions"}}
+{{/* tooltip-left: trailing action col; top tips clip on .list-table-wrap overflow-x. */}}
+<div class="join shrink-0">
+  {{if .CanCheckHash}}
+  <form method="post" action="/actions/check-file-hash" class="contents">
+    <input type="hidden" name="file_id" value="{{.ID}}" />
+    <input type="hidden" name="series_id" value="{{.SeriesID}}" />
+    {{if gt .VideoID 0}}<input type="hidden" name="video_id" value="{{.VideoID}}" />{{end}}
+    <input type="hidden" name="redirect" value="{{.Redirect}}" />
+    <button type="submit" class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="Check integrity" aria-label="Check integrity">
+      <i data-lucide="shield-check" class="size-3.5"></i>
+    </button>
+  </form>
+  {{else if .CheckDisabledTip}}
+  {{/* Mute icon only - opacity on tip host fades the bubble. */}}
+  <span class="btn btn-xs btn-square join-item tooltip tooltip-left cursor-not-allowed" data-tip="{{.CheckDisabledTip}}" aria-label="Check integrity" aria-disabled="true" role="button" tabindex="-1">
+    <i data-lucide="shield-check" class="size-3.5 opacity-50" aria-hidden="true"></i>
+  </span>
+  {{end}}
+  {{if .CanDelete}}
+  <label for="modal-delete-sidecar-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-left" data-tip="Delete" aria-label="Delete {{.Name}}">
+    <i data-lucide="trash-2" class="size-3.5"></i>
+  </label>
+  {{else}}
+  <span class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-left cursor-not-allowed" data-tip="{{.DeleteDisabledTip}}" aria-label="Delete" aria-disabled="true" role="button" tabindex="-1">
+    <i data-lucide="trash-2" class="size-3.5 opacity-50" aria-hidden="true"></i>
+  </span>
+  {{end}}
+</div>
+{{end}}
+
+{{define "files_table"}}
+<div data-list-table>
+  {{template "list_table_chrome" (dict
+    "Page" .Page
+    "Noun" "files"
+    "Cols" .TableCols
+    "CookieName" .TableColsCookie
+  )}}
+  <div class="list-table-wrap rounded-box border border-base-300">
+    <table class="table table-sm list-table w-full">
+      <thead>
+        <tr>
+          {{if $.FilesBulkMode}}<th class="w-0 hidden" data-file-select-wrap aria-hidden="true"></th>{{end}}
+          {{range .TableCols}}
+          {{template "list_table_th" (dict "Col" . "LiveTarget" $.Page.LiveTarget)}}
+          {{end}}
+          {{if .ShowRowActions}}<th class="w-0"></th>{{end}}
+        </tr>
+      </thead>
+      <tbody id="files-list-rows">
+        {{range .Files}}
+        {{$errClass := ""}}{{if .IntegrityFailed}}{{$errClass = " text-error"}}{{end}}
+        <tr class="row-hover" data-file-id="{{.ID}}">
+          {{if $.FilesBulkMode}}
+          <td class="hidden w-0 align-middle" data-file-select-wrap>
+            <input type="checkbox" class="checkbox checkbox-sm js-file-select" value="{{.ID}}"
+                   aria-label="Select file" />
+          </td>
+          {{end}}
+          {{$row := .}}
+          {{range $.TableCols}}
+          <td data-col="{{.Key}}" class="align-middle{{$errClass}}{{if not .Visible}} hidden{{end}}">
+            {{if eq .Key "kind"}}
+            {{template "files_kind_icon" $row}}
+            {{else if eq .Key "path"}}
+            {{if $row.Missing}}
+            <code class="text-xs opacity-60" title="{{$row.Path}}">{{$row.Name}}</code>
+            {{else if $row.ViewHref}}
+            <a class="link link-hover{{if $row.IntegrityFailed}} text-error{{end}}" href="{{$row.ViewHref}}"><code class="text-xs">{{$row.Name}}</code></a>
+            {{else}}
+            <code class="text-xs">{{$row.Name}}</code>
+            {{end}}
+            {{else if eq .Key "filepath"}}
+            {{if $row.Path}}<code class="text-xs break-all">{{$row.Path}}</code>{{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "series"}}
+            {{if $row.SeriesTitle}}<a class="link link-hover" href="/series/{{$row.SeriesID}}">{{$row.SeriesTitle}}</a>{{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "video"}}
+            {{if $row.VideoTitle}}<a class="link link-hover" href="/series/{{$row.SeriesID}}/videos/{{$row.VideoID}}">{{$row.VideoTitle}}</a>{{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "integrity"}}
+            {{template "file_integrity_indicator" (dict
+              "Status" $row.IntegrityStatus
+              "CheckedAgo" $row.IntegrityAgo
+              "Tip" $row.IntegrityTip
+            )}}
+            {{else if eq .Key "size"}}
+            {{if eq $row.SizeLabel "-"}}{{template "empty_value"}}{{else}}{{$row.SizeLabel}}{{end}}
+            {{else if eq .Key "acquired"}}
+            {{if $row.AcquiredAgo}}
+            <span class="text-sm opacity-80 tabular-nums{{if $row.AcquiredAt}} tooltip tooltip-top{{end}}"{{if $row.AcquiredAt}} data-tip="{{$row.AcquiredAt}}"{{end}}>{{$row.AcquiredAgo}}</span>
+            {{else}}{{template "empty_value"}}{{end}}
+            {{end}}
+          </td>
+          {{end}}
+          {{if $.ShowRowActions}}
+          <td class="whitespace-nowrap text-end" data-files-row-actions>
+            {{template "files_row_actions" .}}
+          </td>
+          {{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{template "pagination" .Page}}
+</div>
+{{end}}

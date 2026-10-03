@@ -135,7 +135,11 @@ func (s *Store) SaveSeriesMetadata(seriesID int64, p SaveSeriesMetadataParams) e
 	if err != nil {
 		return err
 	}
-	return s.writeSeriesNFOFor(ser, root.Path)
+	if err := s.writeSeriesNFOFor(ser, root.Path); err != nil {
+		return err
+	}
+	// Register series-meta files rows (size only; no auto hash enqueue).
+	return s.SyncSeriesMetaFiles(seriesID)
 }
 
 // SeriesHasBusyMediaTasks reports pending/running download, sponsorblock_cut, or media_verify.

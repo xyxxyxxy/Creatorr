@@ -27,6 +27,16 @@
       <i data-lucide="file-pen" class="size-4"></i>
       Edit metadata
     </label>
+    {{template "monitor_toggle" (dict
+      "Action" "/actions/set-series-monitored"
+      "SeriesID" .Series.ID
+      "Monitored" .Series.Monitored
+      "Redirect" (printf "/series/%d" .Series.ID)
+      "AsButton" true
+      "BtnClass" "btn btn-square"
+      "Disabled" .Deleting
+      "DisabledTitle" "Series is queued for deletion"
+    )}}
     {{if .Deleting}}
     <span class="tooltip tooltip-top" data-tip="Delete">
       <label for="modal-delete-series" class="btn btn-soft btn-error btn-square btn-disabled" aria-disabled="true" aria-label="Delete">
@@ -101,36 +111,11 @@
 
 {{template "notes_editor" (dict "Value" .Series.Notes "Action" "/actions/save-series-notes" "IDName" "series_id" "ID" .Series.ID)}}
 
-{{if .HasVideos}}
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Series folder metadata: tvshow.nfo and art (poster, banner, fanart, clearlogo).")}}
-{{if not .MetaFiles}}
-{{template "list_empty" "No series metadata files yet."}}
-{{else}}
-{{template "list_table"}}
-<thead><tr><th>Type</th><th>File</th><th>Size</th></tr></thead>
-<tbody>
-  {{range .MetaFiles}}
-  <tr>
-    <td class="whitespace-nowrap">
-      <span class="inline-flex items-center gap-1.5">
-        <i data-lucide="{{.Icon}}" class="size-4 shrink-0 opacity-70"></i>
-        <span>{{.KindLabel}}</span>
-      </span>
-    </td>
-    <td class="text-sm break-all">
-      <a class="link link-hover" href="{{.ViewHref}}">
-        <code class="text-xs">{{.Name}}</code>
-      </a>
-    </td>
-    <td class="text-xs whitespace-nowrap tabular-nums">{{if eq .SizeLabel "-"}}{{template "empty_value"}}{{else}}{{.SizeLabel}}{{end}}</td>
-  </tr>
-  {{end}}
-</tbody>
-{{template "list_table_end"}}
-{{end}}
+{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "All registered files for this series: folder metadata (tvshow.nfo, art) and episode media/sidecars. DB-only list; missing means size_bytes -1.")}}
+{{template "files_list_live" .FilesLive}}
 {{template "list_panel_end"}}
-{{end}}
+{{template "files_bulk_modals"}}
 
 <input type="checkbox" id="modal-add-source" class="modal-toggle" />
 <div class="modal">
@@ -197,97 +182,6 @@
   </div>
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
-
-{{range .Sources}}
-<input type="checkbox" id="modal-edit-source-{{.ID}}" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box max-w-xl">
-    <h3 class="font-bold text-lg mb-2">Edit {{if eq .Kind "single"}}single{{else}}feed{{end}}</h3>
-        <form method="post" action="/actions/update-source" class="space-y-2">
-      <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
-      <input type="hidden" name="source_id" value="{{.ID}}" />
-      {{template "field_input" (dict
-        "Label" "URL"
-        "Value" .URL
-        "Disabled" true
-        "DisabledTitle" "Source URL cannot be changed later. Create a different source instead."
-        "NoPlaceholder" true
-      )}}
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">Name (optional)</legend>
-        <input name="label" class="input w-full" value="{{if .Label.Valid}}{{.Label.String}}{{end}}" />
-      </fieldset>
-      {{if ne .Kind "single"}}
-      {{template "scan_cron_field" (dict
-        "Value" .ScanCron
-        "ID" (printf "edit-source-scan-cron-%d" .ID)
-        "CronDescriptors" $.ScanCronDescriptors
-      )}}
-      {{end}}
-      {{if ne .Kind "single"}}
-      {{template "source_filter_fields" (dict
-        "FullScanLimit" .FullScanLimit
-        "FullScanLimitID" (printf "edit-source-full-scan-limit-%d" .ID)
-        "IndexAsIgnored" .IndexAsIgnored
-        "TitleRegexpInclude" .TitleRegexpInclude
-        "TitleRegexpIncludeID" (printf "edit-source-title-include-%d" .ID)
-        "TitleRegexpExclude" .TitleRegexpExclude
-        "TitleRegexpExcludeID" (printf "edit-source-title-exclude-%d" .ID)
-      )}}
-      {{end}}
-      {{template "source_default_metadata" (dict
-        "Source" .
-        "Suggestions" $.MetaForm.Suggestions
-        "PackRoleOptions" $.PackRoleOptions
-        "ListPrefix" (printf "edit-src-%d" .ID)
-      )}}
-      <div class="modal-action">
-        <label for="modal-edit-source-{{.ID}}" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary">Save</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-
-<input type="checkbox" id="modal-delete-source-{{.ID}}" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Delete source</h3>
-    <p class="text-sm mb-2">Removes this source and <strong>all of its indexed videos</strong> ({{.VideoCount}}) including library files on disk. Related scan/download tasks are cancelled.</p>
-    <p class="text-sm opacity-70 mb-4">To keep videos and only stop scanning, edit this source and turn off 'enabled' on 'Scan schedule'.</p>
-    <form method="post" action="/actions/delete-source" class="space-y-3 js-confirm-submit">
-      <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
-      <input type="hidden" name="source_id" value="{{.ID}}" />
-      {{template "checkbox_field" (dict "Name" "confirm_delete" "Label" "Delete all videos related to this source" "InputClass" "js-confirm-submit-check")}}
-      <div class="modal-action">
-        <label for="modal-delete-source-{{.ID}}" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-error" disabled>Delete source and videos</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-
-{{if .HasRetryable}}
-<input type="checkbox" id="modal-retry-source-{{.ID}}" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Retry download errors</h3>
-    <p class="text-sm mb-4">Set wanted_download_error / wanted_archive videos back to wanted for this source. Cancels pending Web Archive downloads. Does not enqueue downloads.</p>
-    <form method="post" action="/actions/retry-source-errors">
-      <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
-      <input type="hidden" name="source_id" value="{{.ID}}" />
-      <div class="modal-action">
-        <label for="modal-retry-source-{{.ID}}" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary">Retry</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-{{end}}
-{{end}}
 
 {{template "series_metadata_form" .MetaForm}}
 

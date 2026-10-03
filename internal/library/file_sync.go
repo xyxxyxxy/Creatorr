@@ -151,6 +151,9 @@ func (s *Store) FileSyncPass(taskID int64, progress ...ProgressFn) (FileSyncResu
 	out.SidecarRestored = sidecarRest
 	out.SidecarChanged = sidecarChg
 
+	s.reportTaskProgress(taskID, prog, "Checking series metadata files…", 0.85)
+	_ = s.SyncAllSeriesMetaFiles()
+
 	total := out.Total()
 	msg := "No changes"
 	if total > 0 {

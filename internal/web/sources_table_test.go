@@ -79,6 +79,12 @@ func TestSourcesTableView(t *testing.T) {
 	if !strings.Contains(body, `class="select join-item`) {
 		t.Fatalf("q_field should use select join-item chrome: %s", body[:min(1200, len(body))])
 	}
+	if !strings.Contains(body, `data-tip="Edit"`) || !strings.Contains(body, `modal-edit-source-`) {
+		t.Fatalf("Browser Sources table missing Edit row action/modal: %s", body[:min(1200, len(body))])
+	}
+	if !strings.Contains(body, `data-tip="Delete"`) || !strings.Contains(body, `/actions/full-rescan-source`) {
+		t.Fatalf("Browser Sources table missing Delete/scan row actions: %s", body[:min(1200, len(body))])
+	}
 	if !strings.Contains(body, `name="q_field"`) || !strings.Contains(body, `value="url"`) || !strings.Contains(body, `value="name"`) {
 		t.Fatalf("sources toolbar missing q_field select: %s", body[:min(1200, len(body))])
 	}

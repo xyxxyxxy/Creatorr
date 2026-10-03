@@ -2,11 +2,12 @@
 {{/*
   Shared series fields for Add series, Edit series (single), and bulk Edit.
   Expects: Roots, Profiles.
-  Optional: Bulk (bool) - No change sentinels; hide title; monitored/delivery No-change option.
+  Optional: Bulk (bool) - No change sentinels; hide title; delivery No-change option.
             Title, TitleID, TitleInfo/Hint, TitlePlaceholder, TitleDisabled, TitleDisabledTitle,
-            RootID, ProfileID, DeliveryMode, Monitored,
+            RootID, ProfileID, DeliveryMode,
             RootInfo, RootDisabled, RootDisabledTitle, ProfileInfo.
-  Order: title (single) → delivery → monitored → root → quality.
+  Order: title (single) → delivery → root → quality.
+  Monitored is a page/list action (monitor_toggle / bulk Monitor), not a form field.
 */}}
 {{$bulk := .Bulk}}
 {{$titlePH := .TitlePlaceholder}}{{if not $titlePH}}{{$titlePH = "Series title"}}{{end}}
@@ -28,15 +29,6 @@
 )}}
 {{end}}
 {{template "delivery_mode_field" (dict "Value" .DeliveryMode "Bulk" $bulk)}}
-<fieldset class="fieldset">
-  <legend class="fieldset-legend">Monitored</legend>
-  <select name="monitored" class="select w-full" aria-label="Monitored">
-    {{if $bulk}}<option value="">No change</option>{{end}}
-    <option value="1"{{if and (not $bulk) .Monitored}} selected{{end}}>Yes</option>
-    <option value="0"{{if and (not $bulk) (not .Monitored)}} selected{{end}}>No</option>
-  </select>
-  <p class="label whitespace-normal">When on, scheduled tip scans and download-wanted include this series. Manual scan and Download now always run.</p>
-</fieldset>
 {{if and (not $bulk) .RootDisabled}}
 <input type="hidden" name="root_id" value="{{.RootID}}" />
 <fieldset class="fieldset">

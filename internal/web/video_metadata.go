@@ -455,7 +455,28 @@ func (h *Handler) actionCheckFileHash(w http.ResponseWriter, r *http.Request) {
 	fid, _ := strconv.ParseInt(r.FormValue("file_id"), 10, 64)
 	redir := r.FormValue("redirect")
 	if redir == "" {
-		redir = fmt.Sprintf("/series/%d/videos/%d/files/%d", sid, vid, fid)
+		if vid > 0 {
+			redir = fmt.Sprintf("/series/%d/videos/%d/files/%d", sid, vid, fid)
+		} else {
+			redir = fmt.Sprintf("/series/%d", sid)
+		}
+	}
+	f, gerr := h.Library.GetFile(fid)
+	if gerr != nil {
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(gerr.Error())), http.StatusSeeOther)
+		return
+	}
+	if f.IsSeriesMeta() {
+		_, err := h.Library.EnqueueSeriesMetaFileHashCheck(fid)
+		if err != nil {
+			http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, appendQuery(redir, "ok=check-file-hash"), http.StatusSeeOther)
+		return
+	}
+	if vid <= 0 && f.VideoID.Valid {
+		vid = f.VideoID.Int64
 	}
 	if err := h.errIfVideoDeleting(vid); err != nil {
 		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)

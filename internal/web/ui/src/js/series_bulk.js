@@ -121,7 +121,9 @@ function syncSeriesBulkUI() {
     const countEl = bar.querySelector("[data-series-bulk-count]");
     if (countEl) countEl.textContent = n + "/" + m;
     const busy = seriesBulkBusy();
-    bar.querySelectorAll("[data-series-bulk-edit], [data-series-bulk-metadata], [data-series-bulk-delete]").forEach((btn) => {
+    bar.querySelectorAll(
+      "[data-series-bulk-monitor], [data-series-bulk-unmonitor], [data-series-bulk-edit], [data-series-bulk-metadata], [data-series-bulk-delete]"
+    ).forEach((btn) => {
       btn.disabled = busy || n === 0;
     });
     const selectAllBtn = bar.querySelector("[data-series-select-all-matching]");
@@ -189,7 +191,7 @@ export function resetBulkMetadataForm(form) {
 
 function resetBulkSettingsForm(form) {
   if (!form) return;
-  form.querySelectorAll('select[name="delivery_mode"], select[name="monitored"], select[name="root_id"]').forEach((el) => {
+  form.querySelectorAll('select[name="delivery_mode"], select[name="root_id"]').forEach((el) => {
     el.value = "";
   });
   const qp = form.querySelector("[data-quality-profile-select]") || form.querySelector('select[name="quality_profile_id"]');
@@ -293,9 +295,6 @@ async function hydrateBulkSettingsForm() {
     if (data.delivery_mode && data.delivery_mode.same && data.delivery_mode.value) {
       setSelect("delivery_mode", data.delivery_mode.value);
     }
-    if (data.monitored && data.monitored.same) {
-      setSelect("monitored", data.monitored.value ? "1" : "0");
-    }
     if (data.root_id && data.root_id.same && data.root_id.value) {
       setSelect("root_id", data.root_id.value);
     }
@@ -314,11 +313,41 @@ async function hydrateBulkSettingsForm() {
   }
 }
 
+/** Confirm modal only when selection exceeds this (≤5 submit immediately). */
+const SERIES_BULK_CONFIRM_AFTER = 5;
+
+function submitSeriesBulkForm(formId) {
+  fillSeriesBulkIDs(document);
+  const form = document.getElementById(formId);
+  if (form) form.requestSubmit();
+}
+
 function runSeriesBulkAction(action) {
   if (!seriesBulkMode || seriesBulkBusy() || seriesBulkSelected.size === 0) return;
   const n = seriesBulkSelected.size;
   const m = seriesBulkFilterTotal();
   fillSeriesBulkIDs(document);
+  const needConfirm = n > SERIES_BULK_CONFIRM_AFTER;
+  if (action === "monitor") {
+    if (!needConfirm) {
+      submitSeriesBulkForm("form-bulk-monitor-series");
+      return;
+    }
+    const title = document.querySelector("[data-bulk-monitor-title]");
+    if (title) title.textContent = "Monitor " + n + "/" + m + " series";
+    openSeriesBulkModal("modal-bulk-monitor-series");
+    return;
+  }
+  if (action === "unmonitor") {
+    if (!needConfirm) {
+      submitSeriesBulkForm("form-bulk-unmonitor-series");
+      return;
+    }
+    const title = document.querySelector("[data-bulk-unmonitor-title]");
+    if (title) title.textContent = "Unmonitor " + n + "/" + m + " series";
+    openSeriesBulkModal("modal-bulk-unmonitor-series");
+    return;
+  }
   if (action === "edit") {
     const title = document.querySelector("[data-bulk-edit-title]");
     if (title) title.textContent = "Edit " + n + "/" + m + " series";
@@ -422,6 +451,18 @@ export function bootSeriesBulk() {
       selectAllMatchingSeries()
         .catch(() => {})
         .finally(() => syncSeriesBulkUI());
+      return;
+    }
+    const monitor = ev.target.closest("[data-series-bulk-monitor]");
+    if (monitor) {
+      ev.preventDefault();
+      runSeriesBulkAction("monitor");
+      return;
+    }
+    const unmonitor = ev.target.closest("[data-series-bulk-unmonitor]");
+    if (unmonitor) {
+      ev.preventDefault();
+      runSeriesBulkAction("unmonitor");
       return;
     }
     const edit = ev.target.closest("[data-series-bulk-edit]");

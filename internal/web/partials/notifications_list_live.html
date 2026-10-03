@@ -1,8 +1,9 @@
 {{define "notifications_list_live"}}
 <div id="notifications-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
-     data-filter-total="{{.FilterTotal}}"
+     data-filter-total="{{.SelectableTotal}}"
      data-view-mode="{{.ViewMode}}"
-     data-list-mode="{{.ListMode}}">
+     data-list-mode="{{.ListMode}}"
+     data-bulk-mode="0">
 {{if or .Items .FilterActive}}
 {{template "list_view_toolbar" .Filter}}
 {{end}}
@@ -13,22 +14,51 @@
 {{template "list_empty" "No notifications yet."}}
 {{end}}
 {{else}}
+{{template "notifications_bulk_bar" .}}
 {{if eq .ViewMode "table"}}
 {{template "notifications_table" .}}
 {{else}}
+{{template "list_load_controls" .}}
 <ul class="list bg-base-100 rounded-box border border-base-300" id="notifications-list-rows">
   {{range .Items}}
   {{template "notifications_list_row" .}}
   {{end}}
 </ul>
+{{template "list_load_controls" .}}
 {{end}}
-{{if ne .ViewMode "table"}}{{template "list_load_controls" .}}{{end}}
 {{end}}
+<form id="form-bulk-notification-read" method="post" action="/actions/bulk-notification-read"
+      hx-post="/actions/bulk-notification-read"
+      hx-target="#notifications-list-live"
+      hx-select="#notifications-list-live"
+      hx-swap="outerHTML"
+      class="hidden">
+  <input type="hidden" name="read" value="1" />
+  {{if .Items}}{{with index .Items 0}}{{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}{{end}}{{end}}
+  <div data-bulk-notification-ids></div>
+</form>
+<form id="form-bulk-notification-unread" method="post" action="/actions/bulk-notification-read"
+      hx-post="/actions/bulk-notification-read"
+      hx-target="#notifications-list-live"
+      hx-select="#notifications-list-live"
+      hx-swap="outerHTML"
+      class="hidden">
+  <input type="hidden" name="read" value="0" />
+  {{if .Items}}{{with index .Items 0}}{{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}{{end}}{{end}}
+  <div data-bulk-notification-ids></div>
+</form>
 </div>
 {{end}}
 
 {{define "notifications_list_row"}}
-<li class="list-row{{if .Unread}} font-semibold{{end}}" style="--list-grid-cols: max-content 1fr max-content{{if .CanToggle}} max-content{{end}}">
+<li class="list-row{{if .Unread}} font-semibold{{end}}"{{if .CanToggle}} data-notification-id="{{.ID}}"{{end}}
+    style="--list-grid-cols: {{if .CanToggle}}max-content 1fr max-content{{else}}max-content 1fr{{end}}">
+  {{if .CanToggle}}
+  <div class="self-center hidden" data-notification-select-wrap>
+    <input type="checkbox" class="checkbox checkbox-sm js-notification-select" value="{{.ID}}"
+           aria-label="Select notification" />
+  </div>
+  {{end}}
   <div class="self-center shrink-0">
     {{if eq .Level "alert"}}
     <span class="inline-flex tooltip tooltip-top text-error" data-tip="alert" aria-label="alert">
@@ -57,7 +87,7 @@
     </div>
   </div>
   {{if .CanToggle}}
-  <div class="self-center justify-self-end">
+  <div class="self-center justify-self-end" data-notifications-row-actions>
     {{template "notify_read_toggle" .}}
   </div>
   {{end}}
@@ -76,6 +106,7 @@
     <table class="table table-sm list-table w-full">
       <thead>
         <tr>
+          <th class="w-0 hidden" data-notification-select-wrap aria-hidden="true"></th>
           {{range .TableCols}}
           {{template "list_table_th" (dict "Col" . "LiveTarget" $.Page.LiveTarget)}}
           {{end}}
@@ -83,7 +114,13 @@
       </thead>
       <tbody id="notifications-list-rows">
         {{range .Items}}
-        <tr class="row-hover{{if .Unread}} font-semibold{{end}}">
+        <tr class="row-hover{{if .Unread}} font-semibold{{end}}"{{if .CanToggle}} data-notification-id="{{.ID}}"{{end}}>
+          <td class="hidden w-0 align-middle" data-notification-select-wrap>
+            {{if .CanToggle}}
+            <input type="checkbox" class="checkbox checkbox-sm js-notification-select" value="{{.ID}}"
+                   aria-label="Select notification" />
+            {{end}}
+          </td>
           {{$row := .}}
           {{range $.TableCols}}
           <td data-col="{{.Key}}" class="align-middle{{if not .Visible}} hidden{{end}}">
@@ -104,7 +141,7 @@
             {{else if eq .Key "task"}}
               {{if $row.TaskID}}<a class="link link-hover" href="/task/{{$row.TaskID}}">#{{$row.TaskID}}</a>{{else}}-{{end}}
             {{else if eq .Key "read"}}
-              {{if $row.CanToggle}}{{template "notify_read_toggle" $row}}{{else}}-{{end}}
+              {{if $row.CanToggle}}<span data-notifications-row-actions>{{template "notify_read_toggle" $row}}</span>{{else}}-{{end}}
             {{end}}
           </td>
           {{end}}

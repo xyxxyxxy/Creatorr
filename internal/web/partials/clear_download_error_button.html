@@ -1,16 +1,18 @@
 {{define "clear_download_error_button"}}
-{{/* Clear wanted_download_error → wanted, no enqueue. Expects VideoID, SeriesID, Status, Class, optional FormClass, Redirect, KeepScroll, LiveSwap, Icons. */}}
+{{/* Clear wanted_download_error → wanted, no enqueue. Expects VideoID, SeriesID, Status, Class, optional FormClass, Redirect, KeepScroll, LiveSwap, Icons.
+     Icons (list/table trailing actions): tooltip-left so tips clear .list-table-wrap overflow. */}}
 {{if eq .Status "wanted_download_error"}}
 {{$formClass := ""}}{{if .LiveSwap}}{{$formClass = "inline"}}{{else if .KeepScroll}}{{$formClass = "inline js-keep-scroll"}}{{end}}
 {{if .FormClass}}{{$formClass = .FormClass}}{{end}}
 {{$icon := "size-4"}}{{if .Icons}}{{$icon = "size-5"}}{{end}}
+{{$tipDir := "tooltip-top"}}{{if .Icons}}{{$tipDir = "tooltip-left"}}{{end}}
 {{$live := .LiveSwap}}
 {{$target := "series-videos-live"}}{{if .LiveTarget}}{{$target = .LiveTarget}}{{end}}
 <form method="post" action="/actions/clear-video-download-error"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/clear-video-download-error" hx-target="#{{$target}}" hx-swap="outerHTML"{{end}}>
   <input type="hidden" name="video_id" value="{{.VideoID}}" />
   <input type="hidden" name="series_id" value="{{.SeriesID}}" />
   {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
-  <button type="submit" class="{{.Class}} tooltip tooltip-top" aria-label="Clear error" data-tip="Clear download error - marks wanted; does not enqueue">
+  <button type="submit" class="{{.Class}} tooltip {{$tipDir}}" aria-label="Clear error" data-tip="Clear download error - marks wanted; does not enqueue">
     <i data-lucide="badge-x" class="{{$icon}}"></i>{{if not .Icons}} Clear error{{end}}
   </button>
 </form>

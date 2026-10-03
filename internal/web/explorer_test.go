@@ -3,6 +3,7 @@ package web_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/config"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/web"
@@ -34,6 +36,12 @@ func TestExplorerBrowseAndBrowserShell(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := d.SQL.Exec(`
+		INSERT INTO files (series_id, video_id, path, kind, acquired_at, size_bytes)
+		VALUES (?, NULL, ?, 'poster', datetime('now'), 3)
+	`, ser.ID, filepath.Join(t.TempDir(), "poster.jpg")); err != nil {
+		t.Fatal(err)
+	}
 	h := &web.Handler{Library: lib, Queue: q}
 	r := chi.NewRouter()
 	h.Mount(r)
@@ -50,11 +58,34 @@ func TestExplorerBrowseAndBrowserShell(t *testing.T) {
 		"/explorer/browse?type=series&at=series",
 		"/explorer/browse?type=videos&at=videos",
 		"/explorer/browse?type=sources&at=browser",
+		"/explorer/browse?type=files&at=browser",
 	} {
 		rec := get(path)
 		if rec.Code != 200 {
 			t.Fatalf("%s status %d: %s", path, rec.Code, truncate(rec.Body.String(), 300))
 		}
+	}
+	filesLiveRec := get("/explorer/browse?type=files&at=browser")
+	filesLive := filesLiveRec.Body.String()
+	if !strings.Contains(filesLive, `id="files-list-live"`) {
+		t.Fatalf("files explorer missing live root: %s", truncate(filesLive, 400))
+	}
+	if strings.Contains(filesLive, `value="cards"`) || strings.Contains(filesLive, `value="gallery"`) {
+		t.Fatalf("files explorer must not offer cards/gallery: %s", truncate(filesLive, 400))
+	}
+	// Default sort is Acquired (server-side); selected toggle href may omit sort= when URL has none.
+	if !strings.Contains(filesLive, "Sort: Acquired") || !strings.Contains(filesLive, `name="sort" value="acquired"`) {
+		t.Fatalf("browser files default sort should be Acquired: %s", truncate(filesLive, 600))
+	}
+	gotSortCookie := false
+	for _, c := range filesLiveRec.Result().Cookies() {
+		if c.Name == "creatorr_sort_files" && strings.HasPrefix(c.Value, "acquired") {
+			gotSortCookie = true
+			break
+		}
+	}
+	if !gotSortCookie {
+		t.Fatalf("browser files should remember Acquired sort cookie: %v", filesLiveRec.Result().Cookies())
 	}
 	srcLive := get("/explorer/browse?type=sources&at=browser").Body.String()
 	if !strings.Contains(srcLive, `id="sources-list-live"`) {
@@ -197,3 +228,153 @@ func TestExplorerBrowseAndBrowserShell(t *testing.T) {
 		t.Fatalf("series detail should not use sources_page pager")
 	}
 }
+
+func TestFilesExplorerBulkModeAndIDs(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Bulk Files", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://www.example.com/@bulkfiles",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SQL.Exec(`
+		INSERT INTO files (series_id, video_id, path, kind, acquired_at, size_bytes)
+		VALUES (?, NULL, ?, 'poster', datetime('now'), 3)
+	`, ser.ID, filepath.Join(t.TempDir(), "poster.jpg")); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/explorer/browse?type=files&at=browser", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-files-bulk-mode`) || !strings.Contains(body, `js-file-select`) {
+		t.Fatalf("files explorer missing multi-select: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `data-files-bulk-bar`) {
+		t.Fatalf("files explorer missing bulk bar: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, ">Status</span>") || !strings.Contains(body, "status=failed") ||
+		!strings.Contains(body, "status=ok") || !strings.Contains(body, "status=unchecked") ||
+		!strings.Contains(body, "status=inactive") || !strings.Contains(body, "status=na") {
+		t.Fatalf("files explorer missing Status filter: %s", truncate(body, 800))
+	}
+	if strings.Contains(body, "missing=1") || strings.Contains(body, "integrity=failed") {
+		t.Fatalf("legacy Missing/Integrity filters must be gone: %s", truncate(body, 800))
+	}
+	idsRec := httptest.NewRecorder()
+	r.ServeHTTP(idsRec, httptest.NewRequest(http.MethodGet, "/files/ids?type=files&at=browser", nil))
+	if idsRec.Code != 200 {
+		t.Fatalf("ids status %d: %s", idsRec.Code, idsRec.Body.String())
+	}
+	if !strings.Contains(idsRec.Body.String(), `"ids"`) {
+		t.Fatalf("ids json: %s", idsRec.Body.String())
+	}
+}
+
+func TestFilesExplorerCheckIntegrityDisabledWhenQueued(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Busy Check", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://www.example.com/@busycheck",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := lib.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "bc1", Title: "Clip", SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "clip.bin")
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.RegisterFileKind(res.VideoID, path, "json"); err != nil {
+		t.Fatal(err)
+	}
+	var fileID int64
+	if err := d.SQL.QueryRow(`SELECT id FROM files WHERE video_id = ? AND kind = 'json'`, res.VideoID).Scan(&fileID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.EnqueueFileHashCheck(res.VideoID, fileID); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+	req := httptest.NewRequest(http.MethodGet, "/explorer/browse?type=files&at=browser", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 300))
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-tip="Integrity check already queued"`) {
+		t.Fatalf("queued file should disable Check integrity: %s", truncate(body, 800))
+	}
+	if strings.Contains(body, `action="/actions/check-file-hash"`) {
+		t.Fatal("Check integrity form must not render while queued")
+	}
+}
+
+func TestNotificationsExplorerBulkModeAndIDs(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	if _, err := notify.InsertNotification(d, notify.EventVerifyFailed, "bulk notify", "x", 0, false, ""); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/explorer/browse?type=notifications&at=browser", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 300))
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-notifications-bulk-mode`) || !strings.Contains(body, `js-notification-select`) {
+		t.Fatalf("notifications missing multi-select: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `data-notifications-bulk-bar`) {
+		t.Fatalf("notifications missing bulk bar: %s", truncate(body, 600))
+	}
+	idsRec := httptest.NewRecorder()
+	r.ServeHTTP(idsRec, httptest.NewRequest(http.MethodGet, "/notifications/ids?type=notifications&at=browser", nil))
+	if idsRec.Code != 200 {
+		t.Fatalf("ids status %d: %s", idsRec.Code, idsRec.Body.String())
+	}
+	if !strings.Contains(idsRec.Body.String(), `"ids"`) {
+		t.Fatalf("ids json: %s", idsRec.Body.String())
+	}
+}
+

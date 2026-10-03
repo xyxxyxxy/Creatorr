@@ -142,6 +142,44 @@ func CountNotifications(database *db.DB, f ListFilter) (int, error) {
 	return n, err
 }
 
+// ListNotificationIDs returns notification ids matching filter (list order).
+// When toggleableOnly, restricts to alert/warning events (CanToggle in Explorer).
+func ListNotificationIDs(database *db.DB, f ListFilter, toggleableOnly bool) ([]int64, error) {
+	if database == nil {
+		return nil, nil
+	}
+	where, args := notificationWhere(f)
+	if toggleableOnly {
+		evs := UnreadEvents()
+		ph := strings.Repeat("?,", len(evs))
+		ph = ph[:len(ph)-1]
+		clause := `event IN (` + ph + `)`
+		if where == "" {
+			where = ` WHERE ` + clause
+		} else {
+			where += ` AND ` + clause
+		}
+		for _, e := range evs {
+			args = append(args, e)
+		}
+	}
+	q := `SELECT id FROM notifications` + where + ` ORDER BY ` + notificationOrderSQL(f)
+	rows, err := database.SQL.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // CountUnread returns unread alert notifications.
 func CountUnread(database *db.DB) (int, error) {
 	return CountNotifications(database, ListFilter{UnreadOnly: true})
@@ -174,6 +212,66 @@ func MarkUnread(database *db.DB, id int64) error {
 		publishRead(database, id)
 	}
 	return err
+}
+
+// MarkReadMany sets read_at on alert/warning ids (one SSE publish).
+func MarkReadMany(database *db.DB, ids []int64) (int64, error) {
+	return markReadStateMany(database, ids, true)
+}
+
+// MarkUnreadMany clears read_at on alert/warning ids (one SSE publish).
+func MarkUnreadMany(database *db.DB, ids []int64) (int64, error) {
+	return markReadStateMany(database, ids, false)
+}
+
+func markReadStateMany(database *db.DB, ids []int64, wantRead bool) (int64, error) {
+	if database == nil || len(ids) == 0 {
+		return 0, nil
+	}
+	clean := make([]int64, 0, len(ids))
+	seen := map[int64]struct{}{}
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		clean = append(clean, id)
+	}
+	if len(clean) == 0 {
+		return 0, nil
+	}
+	evs := UnreadEvents()
+	idPh := strings.Repeat("?,", len(clean))
+	idPh = idPh[:len(idPh)-1]
+	evPh := strings.Repeat("?,", len(evs))
+	evPh = evPh[:len(evPh)-1]
+	args := make([]any, 0, 1+len(clean)+len(evs))
+	var q string
+	if wantRead {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		args = append(args, now)
+		q = `UPDATE notifications SET read_at = ? WHERE id IN (` + idPh + `) AND read_at IS NULL AND event IN (` + evPh + `)`
+	} else {
+		q = `UPDATE notifications SET read_at = NULL WHERE id IN (` + idPh + `) AND read_at IS NOT NULL AND event IN (` + evPh + `)`
+	}
+	for _, id := range clean {
+		args = append(args, id)
+	}
+	for _, e := range evs {
+		args = append(args, e)
+	}
+	res, err := database.SQL.Exec(q, args...)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	if n > 0 {
+		publishRead(database, 0)
+	}
+	return n, nil
 }
 
 // MarkAllRead marks all unread alert/warning notifications as read.

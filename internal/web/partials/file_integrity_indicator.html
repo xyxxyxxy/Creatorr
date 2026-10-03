@@ -1,0 +1,42 @@
+{{define "file_integrity_indicator"}}
+{{/*
+  Integrity status: shield icon + short label.
+  Status: OK | Failed | Unchecked | N/A | Inactive | "".
+  Tip: CheckedAgo (rel_time since / ISO date when >7 days) for OK/Failed;
+  else Tip when set. Mute icon/label only - opacity on tip host fades bubble.
+*/}}
+{{if eq .Status ""}}
+{{template "empty_value"}}
+{{else}}
+{{$tip := .Tip}}
+{{if .CheckedAgo}}{{$tip = .CheckedAgo}}{{else if .CheckedAt}}{{$tip = .CheckedAt}}{{end}}
+{{if eq .Status "Failed"}}
+<span class="inline-flex items-center gap-1.5 text-error{{if $tip}} tooltip tooltip-top{{end}}"{{if $tip}} data-tip="{{$tip}}"{{end}} aria-label="{{.Status}}">
+  <i data-lucide="shield-x" class="size-4 shrink-0" aria-hidden="true"></i>
+  <span class="text-xs whitespace-nowrap">{{.Status}}</span>
+</span>
+{{else if eq .Status "OK"}}
+<span class="inline-flex items-center gap-1.5 text-success{{if $tip}} tooltip tooltip-top{{end}}"{{if $tip}} data-tip="{{$tip}}"{{end}} aria-label="{{.Status}}">
+  <i data-lucide="shield-check" class="size-4 shrink-0" aria-hidden="true"></i>
+  <span class="text-xs whitespace-nowrap">{{.Status}}</span>
+</span>
+{{else if eq .Status "Unchecked"}}
+<span class="inline-flex items-center gap-1.5{{if $tip}} tooltip tooltip-top{{end}}"{{if $tip}} data-tip="{{$tip}}"{{end}} aria-label="{{.Status}}">
+  <i data-lucide="shield-question" class="size-4 shrink-0 opacity-60" aria-hidden="true"></i>
+  <span class="text-xs whitespace-nowrap opacity-60">{{.Status}}</span>
+</span>
+{{else if eq .Status "N/A"}}
+<span class="inline-flex items-center gap-1.5{{if $tip}} tooltip tooltip-top{{end}}"{{if $tip}} data-tip="{{$tip}}"{{end}} aria-label="Not applicable">
+  <i data-lucide="shield-off" class="size-4 shrink-0 opacity-60" aria-hidden="true"></i>
+  <span class="text-xs whitespace-nowrap opacity-60">{{.Status}}</span>
+</span>
+{{else if eq .Status "Inactive"}}
+<span class="inline-flex items-center gap-1.5{{if $tip}} tooltip tooltip-top{{end}}"{{if $tip}} data-tip="{{$tip}}"{{end}} aria-label="{{.Status}}">
+  <i data-lucide="shield-ban" class="size-4 shrink-0 opacity-60" aria-hidden="true"></i>
+  <span class="text-xs whitespace-nowrap opacity-60">{{.Status}}</span>
+</span>
+{{else}}
+{{template "empty_value"}}
+{{end}}
+{{end}}
+{{end}}

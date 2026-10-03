@@ -16,13 +16,14 @@
 {{if eq .ViewMode "table"}}
 {{template "tasks_explorer_table" .}}
 {{else}}
+{{template "list_load_controls" .}}
 <ul class="list bg-base-100 rounded-box border border-base-300 mt-1" id="tasks-list-rows">
   {{range .ListRows}}
   {{template "task_row" .}}
   {{end}}
 </ul>
+{{template "list_load_controls" .}}
 {{end}}
-{{if ne .ViewMode "table"}}{{template "list_load_controls" .}}{{end}}
 {{end}}
 </div>
 {{end}}

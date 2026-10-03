@@ -125,15 +125,18 @@ CREATE TABLE IF NOT EXISTS videos (
 
 CREATE TABLE IF NOT EXISTS files (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  series_id INTEGER REFERENCES series(id) ON DELETE CASCADE,
+  video_id INTEGER REFERENCES videos(id) ON DELETE CASCADE,
   path TEXT NOT NULL,
   kind TEXT NOT NULL,
   acquired_at TEXT NOT NULL,
   size_bytes INTEGER,
   content_hash TEXT,
   content_hash_checked_at TEXT,
-  content_hash_ok_at TEXT
+  content_hash_ok_at TEXT,
+  CHECK (series_id IS NOT NULL OR video_id IS NOT NULL)
 );
+-- files_fill_series_id trigger is installed after migrate (needs series_id column).
 
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

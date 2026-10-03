@@ -174,6 +174,12 @@ func TestSeriesListAudioQualityShowsBest(t *testing.T) {
 	if !strings.Contains(body, "modal-bulk-edit-series") || !strings.Contains(body, "modal-bulk-edit-series-metadata") {
 		t.Fatalf("missing bulk edit modals: %s", truncate(body, 500))
 	}
+	if !strings.Contains(body, "data-series-bulk-monitor") || !strings.Contains(body, "data-series-bulk-unmonitor") {
+		t.Fatalf("missing series bulk Monitor/Unmonitor actions: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, `action="/actions/bulk-set-series-monitored"`) {
+		t.Fatalf("missing bulk set-series-monitored forms: %s", truncate(body, 500))
+	}
 	if !strings.Contains(body, "monitor-toggle-root") || !strings.Contains(body, "data-series-monitor-wrap") {
 		t.Fatalf("series list missing monitor AsButton wrap: %s", truncate(body, 400))
 	}
@@ -1418,7 +1424,7 @@ func TestSetSeriesMonitoredHTMX(t *testing.T) {
 	}
 }
 
-func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
+func TestSeriesDetailHasMonitoredActionNotOnEditForm(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -1454,14 +1460,27 @@ func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if strings.Contains(body, "monitor-toggle-root") || strings.Contains(body, `action="/actions/set-series-monitored"`) {
-		t.Fatalf("series detail should not use bookmark monitor toggle: %s", truncate(body, 400))
+	if !strings.Contains(body, "monitor-toggle-root") || !strings.Contains(body, `action="/actions/set-series-monitored"`) {
+		t.Fatalf("series detail missing monitor action: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, `name="monitored"`) || !strings.Contains(body, "Monitored") {
-		t.Fatalf("series detail edit form missing monitored select: %s", truncate(body, 400))
+	// Detail BtnClass path: outline bookmark only (no green fill).
+	if idx := strings.Index(body, `data-tip="Unmonitor"`); idx >= 0 {
+		snip := body[idx:]
+		if len(snip) > 180 {
+			snip = snip[:180]
+		}
+		if strings.Contains(snip, "text-success") || strings.Contains(snip, "fill-current") {
+			t.Fatalf("series detail monitor btn must not use filled success icon: %s", snip)
+		}
 	}
-	if !strings.Contains(body, `<option value="1"`) || !strings.Contains(body, `<option value="0"`) {
-		t.Fatalf("series detail monitored should be Yes/No select: %s", truncate(body, 400))
+	if i := strings.Index(body, `id="modal-edit-series"`); i >= 0 {
+		edit := body[i:]
+		if j := strings.Index(edit, `id="modal-edit-series-metadata"`); j > 0 {
+			edit = edit[:j]
+		}
+		if strings.Contains(edit, `name="monitored"`) {
+			t.Fatalf("series detail edit form must not include monitored: %s", truncate(edit, 400))
+		}
 	}
 	if strings.Contains(body, "delivery-mode-join") {
 		t.Fatalf("series detail should use delivery select, not radio join: %s", truncate(body, 400))
@@ -1988,15 +2007,24 @@ func TestSeriesSourceScanButtons(t *testing.T) {
 	if _, err := d.SQL.Exec(`DELETE FROM tasks WHERE kind = 'scan'`); err != nil {
 		t.Fatal(err)
 	}
+	incomplete := get(seriesPath)
+	// html/template escapes apostrophes in attributes (&#39;).
+	if !strings.Contains(incomplete, `data-tip="Finish Full scan first"`) ||
+		!strings.Contains(incomplete, `aria-label="Scan for new videos" aria-disabled="true"`) {
+		t.Fatalf("tip Scan should stay visible and disabled until full scan finishes: %s", truncate(incomplete, 600))
+	}
+	if strings.Contains(incomplete, `aria-label="Start full scan" aria-disabled="true"`) {
+		t.Fatalf("Full scan should be enabled while tip Scan waits on full_scan_done: %s", truncate(incomplete, 600))
+	}
 	if err := lib.MarkFullScanDone(src.ID); err != nil {
 		t.Fatal(err)
 	}
 	idle := get(seriesPath)
-	wantBtn := `class="btn btn-xs btn-square join-item tooltip tooltip-top"`
+	wantBtn := `class="btn btn-xs btn-square join-item tooltip tooltip-left"`
 	if strings.Count(idle, wantBtn) < 2 || strings.Contains(idle, `aria-label="Scan for new videos" aria-disabled="true"`) {
 		t.Fatalf("idle scan buttons should be secondary and enabled: %s", truncate(idle, 600))
 	}
-	wantEdit := `class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit"`
+	wantEdit := `class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="Edit" aria-label="Edit"`
 	if !strings.Contains(idle, wantEdit) {
 		t.Fatalf("edit button should be a plain button: %s", truncate(idle, 800))
 	}
@@ -2005,6 +2033,10 @@ func TestSeriesSourceScanButtons(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertQueued(get(seriesPath))
+	oob := get(seriesPath + "/task-indicators")
+	if strings.Contains(oob, "can't evaluate field") || !strings.Contains(oob, "source-scan-actions-") {
+		t.Fatalf("task-indicators OOB must render source_scan_actions: %s", truncate(oob, 600))
+	}
 	detail := get(seriesPath + "/sources/" + itoa(src.ID))
 	if strings.Count(detail, `class="btn btn-outline" disabled`) < 2 || !strings.Contains(detail, `for="modal-edit-source" class="btn btn-outline"`) {
 		t.Fatalf("source detail should keep Scan and Full scan disabled: %s", truncate(detail, 800))

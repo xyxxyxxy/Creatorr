@@ -5,39 +5,41 @@
   Disabled: tip must stay on a real .btn.join-item (same chrome as enabled) -
   daisyUI .btn-disabled sets pointer-events:none so tip cannot sit on that class.
   Use aria-disabled + cursor-not-allowed; mute the icon only (tip-safe).
+  tooltip-left: trailing action col; top tips clip on .list-table-wrap overflow-x.
 */}}
 <span id="source-scan-actions-{{.ID}}" class="contents source-scan-actions" {{if .OOB}}hx-swap-oob="true"{{end}}>
-  {{/* Keep Scan visible while a scan is queued. Full scan clears full_scan_done immediately, which would otherwise hide this button. */}}
-  {{if and (ne .Kind "single") (or .FullScanDone .ScanActive)}}
-  {{$scanOff := or .ScanActive (not .DomainActive)}}
+  {{/* Always show tip Scan; disable with reason tip (single / queued / domain / full scan). */}}
+  {{$isSingle := eq .Kind "single"}}
+  {{$scanOff := or $isSingle .ScanActive (not .DomainActive) (not .FullScanDone)}}
   {{$tipScan := "Scan for new videos"}}
-  {{if .ScanActive}}{{$tipScan = "'Scan' queued"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{end}}
+  {{if $isSingle}}{{$tipScan = "Scan is for feeds only"}}{{else if .ScanActive}}{{$tipScan = "Scan queued"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under Settings → Queue / Domains."}}{{end}}{{else if not .FullScanDone}}{{$tipScan = "Finish Full scan first"}}{{end}}
   <form method="post" action="/actions/scan-source" class="contents">
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     <input type="hidden" name="source_id" value="{{.ID}}" />
+    {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
     {{if $scanOff}}
-    <span class="btn btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="{{$tipScan}}" aria-label="Scan for new videos" aria-disabled="true" role="button" tabindex="-1">
+    <span class="btn btn-xs btn-square join-item tooltip tooltip-left cursor-not-allowed" data-tip="{{$tipScan}}" aria-label="Scan for new videos" aria-disabled="true" role="button" tabindex="-1">
       <i data-lucide="scan-line" class="size-3.5 opacity-50" aria-hidden="true"></i>
     </span>
     {{else}}
-    <button type="submit" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="{{$tipScan}}" aria-label="Scan for new videos">
+    <button type="submit" class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="{{$tipScan}}" aria-label="Scan for new videos">
       <i data-lucide="scan-line" class="size-3.5"></i>
     </button>
     {{end}}
   </form>
-  {{end}}
   {{$fullOff := or .ScanActive (not .DomainActive)}}
-  {{$tipFull := "Start 'Full scan'"}}
-  {{if .ScanActive}}{{$tipFull = "'Full scan' queued"}}{{else if not .DomainActive}}{{$tipFull = .DomainDisabledTitle}}{{if not $tipFull}}{{$tipFull = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{end}}
+  {{$tipFull := "Start Full scan"}}
+  {{if .ScanActive}}{{$tipFull = "Full scan queued"}}{{else if not .DomainActive}}{{$tipFull = .DomainDisabledTitle}}{{if not $tipFull}}{{$tipFull = "Domain is inactive. Activate under Settings → Queue / Domains."}}{{end}}{{end}}
   <form method="post" action="/actions/full-rescan-source" class="contents">
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     <input type="hidden" name="source_id" value="{{.ID}}" />
+    {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
     {{if $fullOff}}
-    <span class="btn btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="{{$tipFull}}" aria-label="Start full scan" aria-disabled="true" role="button" tabindex="-1">
+    <span class="btn btn-xs btn-square join-item tooltip tooltip-left cursor-not-allowed" data-tip="{{$tipFull}}" aria-label="Start full scan" aria-disabled="true" role="button" tabindex="-1">
       <i data-lucide="scan-text" class="size-3.5 opacity-50" aria-hidden="true"></i>
     </span>
     {{else}}
-    <button type="submit" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="{{$tipFull}}" aria-label="Start full scan">
+    <button type="submit" class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="{{$tipFull}}" aria-label="Start full scan">
       <i data-lucide="scan-text" class="size-3.5"></i>
     </button>
     {{end}}

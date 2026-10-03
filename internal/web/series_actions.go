@@ -36,11 +36,6 @@ func (h *Handler) actionUpdateSeries(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
 		return
 	}
-	monitored := r.FormValue("monitored") == "1"
-	if err := h.Library.SetSeriesMonitored(sid, monitored); err != nil {
-		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
 	ok := "updated"
 	if out.MoveQueued {
 		ok = "series-rename"
@@ -171,11 +166,12 @@ func (h *Handler) actionDeleteSource(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, appendQuery(seriesSourceRedirect(r, sid, srcID), "err="+urlQuery("confirm delete to remove this source")), http.StatusSeeOther)
 		return
 	}
+	redir := seriesSourceRedirect(r, sid, srcID)
 	if err := h.Library.DeleteSource(sid, srcID); err != nil {
-		http.Redirect(w, r, appendQuery(seriesSourceRedirect(r, sid, srcID), "err="+urlQuery(err.Error())), http.StatusSeeOther)
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/series/%d?ok=source-deleted", sid), http.StatusSeeOther)
+	http.Redirect(w, r, appendQuery(redir, "ok=source-deleted"), http.StatusSeeOther)
 }
 
 func (h *Handler) actionDeleteSeries(w http.ResponseWriter, r *http.Request) {
@@ -342,7 +338,7 @@ func (h *Handler) actionSetSeriesMonitored(w http.ResponseWriter, r *http.Reques
 		if h.tryRenderSeriesListLive(w, r) {
 			return
 		}
-		// Detail (and other pages): monitored is on Edit form; refresh whole page.
+		// Detail (and other pages): refresh so progress mute / tips match new state.
 		hxRedirect(w, redir)
 		return
 	}
@@ -423,19 +419,6 @@ func (h *Handler) actionClearSeriesDownloadErrors(w http.ResponseWriter, r *http
 		return
 	}
 	http.Redirect(w, r, appendQuery(redir, "ok=clear-error&n="+strconv.FormatInt(int64(n), 10)), http.StatusSeeOther)
-}
-
-func (h *Handler) actionRetrySourceErrors(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	srcID, _ := strconv.ParseInt(r.FormValue("source_id"), 10, 64)
-	redir := seriesSourceRedirect(r, sid, srcID)
-	n, err := h.Library.RetrySourceErrors(srcID)
-	if err != nil {
-		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, appendQuery(redir, "ok=retry&n="+strconv.FormatInt(int64(n), 10)), http.StatusSeeOther)
 }
 
 func (h *Handler) actionIgnoreVideo(w http.ResponseWriter, r *http.Request) {
