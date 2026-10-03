@@ -3,23 +3,23 @@
 {{$redir := .Redirect}}{{if not $redir}}{{$redir = "/tasks"}}{{end}}
 {{$open := or (eq .Status "pending") (eq .Status "running")}}
 <li id="task-row-{{.ID}}" class="list-row" data-task-row-status="{{.Status}}"{{if .LanePaused}} data-lane-paused{{end}}{{if .Domain}} data-task-domain="{{.Domain}}"{{end}}>
-  <span class="shrink-0 self-center inline-flex items-center justify-center min-w-[1.75rem] opacity-60" data-task-pos>
+  <span class="shrink-0 self-center inline-flex items-center justify-center min-w-[1.75rem]" data-task-pos>
     {{if eq .Status "running"}}
-    <span class="tooltip tooltip-top inline-flex" data-tip="Running" aria-label="Running">
-      <i data-lucide="activity" class="size-5"></i>
+    <span class="tooltip tooltip-top inline-flex opacity-60" data-tip="Running" aria-label="Running">
+      <i data-lucide="activity" class="size-4"></i>
     </span>
     {{else if eq .Status "pending"}}
-    <span class="font-mono text-lg tabular-nums" aria-label="Queue position {{.Position}}">#{{.Position}}</span>
+    <span class="font-mono text-lg tabular-nums opacity-60" aria-label="Queue position {{.Position}}">#{{.Position}}</span>
     {{else}}
     <span class="tooltip tooltip-top inline-flex" data-tip="{{.Status}}" aria-label="{{.Status}}">
       {{if eq .Status "done"}}
-      <i data-lucide="check" class="size-5 text-success"></i>
+      <i data-lucide="check" class="size-4 text-success"></i>
       {{else if eq .Status "failed"}}
-      <i data-lucide="circle-alert" class="size-5 text-error"></i>
+      <i data-lucide="circle-alert" class="size-4 text-error"></i>
       {{else if eq .Status "cancelled"}}
-      <i data-lucide="ban" class="size-5 opacity-70"></i>
+      <i data-lucide="ban" class="size-4 opacity-70"></i>
       {{else}}
-      <i data-lucide="circle" class="size-5 opacity-50"></i>
+      <i data-lucide="circle" class="size-4 opacity-50"></i>
       {{end}}
     </span>
     {{end}}

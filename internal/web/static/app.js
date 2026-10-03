@@ -4614,7 +4614,10 @@
     "series-videos-live",
     "series-list-live",
     "videos-list-live",
-    "sources-list-live"
+    "sources-list-live",
+    "files-list-live",
+    "tasks-list-live",
+    "notifications-list-live"
   ]);
   function isListLiveEl(el) {
     return !!(el && el.id && LIST_LIVE_IDS.has(el.id));

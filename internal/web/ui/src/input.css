@@ -465,6 +465,7 @@ form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
   that would crush .dropdown-content (height/nowrap/flex).
 */
 .js-list-filters > .js-list-toolbar-dd.input {
+  position: relative;
   width: auto;
   max-width: none;
   padding-inline: 0;
@@ -519,9 +520,11 @@ form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
   margin-inline-end: 0.875rem;
 }
 .js-list-filters > .js-list-toolbar-dd.input:not(:focus-within):not(.dropdown-open) > .dropdown-content {
-  display: none;
+  /* !important: beat .input>* {display:flex} after HTMX reinject (Files search). */
+  display: none !important;
   opacity: 0;
   scale: 0.95;
+  pointer-events: none;
 }
 
 /*

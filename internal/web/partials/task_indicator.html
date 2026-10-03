@@ -26,7 +26,7 @@
     </span>
   {{else if .VideoStatus}}
     {{if eq .VideoStatus "wanted"}}
-    <i data-lucide="download" class="size-5 text-warning"></i>
+    <i data-lucide="circle-dashed" class="size-5 text-warning"></i>
     {{else if eq .VideoStatus "wanted_download_error"}}
     <i data-lucide="circle-x" class="size-5 text-error"></i>
     {{else if eq .VideoStatus "wanted_archive"}}

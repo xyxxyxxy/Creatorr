@@ -369,6 +369,9 @@ func TestListLiveSearchPinsViewportAnchor(t *testing.T) {
 	for _, pin := range []string{
 		"listLiveAnchorTop",
 		"sources-list-live",
+		"files-list-live",
+		"tasks-list-live",
+		"notifications-list-live",
 		"getBoundingClientRect().top",
 	} {
 		if !strings.Contains(js, pin) {

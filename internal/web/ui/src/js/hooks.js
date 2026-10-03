@@ -17,6 +17,9 @@ const LIST_LIVE_IDS = new Set([
   "series-list-live",
   "videos-list-live",
   "sources-list-live",
+  "files-list-live",
+  "tasks-list-live",
+  "notifications-list-live",
 ]);
 
 function isListLiveEl(el) {

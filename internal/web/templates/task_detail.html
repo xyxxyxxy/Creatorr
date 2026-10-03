@@ -151,7 +151,7 @@
         </span>
         {{else if eq .State "wanted"}}
         <span class="inline-flex tooltip tooltip-top text-warning" data-tip="{{.StatusTip}}" aria-label="{{.StatusTip}}">
-          <i data-lucide="download" class="size-4"></i>
+          <i data-lucide="circle-dashed" class="size-4"></i>
         </span>
         {{else}}
         {{template "status_badge" .State}}
