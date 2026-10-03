@@ -23,6 +23,7 @@ const (
 	explorerAtBrowser      = "browser"
 	explorerAtSeriesDetail = "series-detail"
 	explorerAtTasks        = "tasks"
+	explorerAtOverview     = "overview"
 )
 
 // explorerBrowse is the single Explorer fragment API.
@@ -230,6 +231,9 @@ func explorerCanonicalURL(r *http.Request, typ string) string {
 	case explorerAtTasks:
 		path = "/tasks"
 		out.Del("type")
+	case explorerAtOverview:
+		// Locked Overview embeds stay on `/` (no filter query in the address bar).
+		return "/"
 	case explorerAtSeriesDetail:
 		sid := strings.TrimSpace(q.Get("series_id"))
 		if sid == "" {

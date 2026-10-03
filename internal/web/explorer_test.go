@@ -3,8 +3,10 @@ package web_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -337,6 +339,83 @@ func TestFilesExplorerCheckIntegrityDisabledWhenQueued(t *testing.T) {
 	}
 	if strings.Contains(body, `action="/actions/check-file-hash"`) {
 		t.Fatal("Check integrity form must not render while queued")
+	}
+}
+
+func TestSourcesExplorerBulkModeAndIDs(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Bulk Sources", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://www.example.com/@bulksources",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcID := ser.Sources[0].ID
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/explorer/browse?type=sources&at=browser", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 300))
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-sources-bulk-mode`) || !strings.Contains(body, `js-source-select`) {
+		t.Fatalf("sources explorer missing multi-select: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `data-sources-bulk-bar`) {
+		t.Fatalf("sources explorer missing bulk bar: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `action="/actions/bulk-scan-sources"`) ||
+		!strings.Contains(body, `action="/actions/bulk-delete-sources"`) {
+		t.Fatalf("sources explorer missing bulk actions: %s", truncate(body, 600))
+	}
+	idsRec := httptest.NewRecorder()
+	r.ServeHTTP(idsRec, httptest.NewRequest(http.MethodGet, "/sources/ids?type=sources&at=browser", nil))
+	if idsRec.Code != 200 {
+		t.Fatalf("ids status %d: %s", idsRec.Code, idsRec.Body.String())
+	}
+	if !strings.Contains(idsRec.Body.String(), `"ids"`) ||
+		!strings.Contains(idsRec.Body.String(), strconv.FormatInt(srcID, 10)) {
+		t.Fatalf("ids json: %s", idsRec.Body.String())
+	}
+	impactRec := httptest.NewRecorder()
+	r.ServeHTTP(impactRec, httptest.NewRequest(http.MethodGet,
+		"/sources/delete-impact?source_id="+strconv.FormatInt(srcID, 10), nil))
+	if impactRec.Code != 200 {
+		t.Fatalf("delete-impact status %d: %s", impactRec.Code, impactRec.Body.String())
+	}
+	if !strings.Contains(impactRec.Body.String(), `"indexed"`) ||
+		!strings.Contains(impactRec.Body.String(), `"downloaded"`) {
+		t.Fatalf("delete-impact json: %s", impactRec.Body.String())
+	}
+
+	delRec := httptest.NewRecorder()
+	form := url.Values{}
+	form.Set("source_id", strconv.FormatInt(srcID, 10))
+	form.Set("confirm_delete", "1")
+	form.Set("redirect", "/browser?type=sources")
+	req := httptest.NewRequest(http.MethodPost, "/actions/bulk-delete-sources", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.ServeHTTP(delRec, req)
+	if delRec.Code != http.StatusSeeOther {
+		t.Fatalf("bulk delete status %d: %s", delRec.Code, delRec.Body.String())
+	}
+	loc := delRec.Header().Get("Location")
+	if !strings.Contains(loc, "ok=bulk_sources_deleted") {
+		t.Fatalf("bulk delete redirect: %s", loc)
+	}
+	if _, err := lib.GetSourceByID(srcID); err == nil {
+		t.Fatal("source should be gone after bulk delete")
 	}
 }
 

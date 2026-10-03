@@ -15,6 +15,8 @@ const (
 	cookieFilterNotifications = "creatorr_filter_notifications"
 	cookieColsNotifications   = "creatorr_cols_notifications"
 	notificationsLiveTarget   = "notifications-list-live"
+	notificationsInfiniteID   = "notifications-list-infinite"
+	notificationsRowsID       = "notifications-list-rows"
 	notificationsPageSize     = SeriesPageSize
 )
 
@@ -31,6 +33,8 @@ type notificationsListLiveData struct {
 	TableCols        []tableCol
 	TableColsCookie  string
 	ShowSelectAll    bool
+	InfiniteID       string
+	RowsID           string
 	OOB              bool
 }
 
@@ -42,6 +46,21 @@ type notifyExplorerRow struct {
 }
 
 func (h *Handler) explorerBrowseNotifications(w http.ResponseWriter, r *http.Request) {
+	target := r.Header.Get("HX-Target")
+	if target == notificationsInfiniteID {
+		data, err := h.loadNotificationsListLive(w, r)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		if !data.Load.Append {
+			maybeExplorerPushURL(w, r, explorerTypeNotifications)
+			render(w, "notifications_list_live", data)
+			return
+		}
+		render(w, "notifications_infinite_chunk", data)
+		return
+	}
 	data, err := h.loadNotificationsListLive(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -69,8 +88,19 @@ func (h *Handler) loadNotificationsListLive(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		return notificationsListLiveData{}, err
 	}
-	load := resolvePaginatedLoad(r, total, notificationsPageSize, notificationsLiveTarget, "page")
-	items, err := notify.ListNotifications(h.Queue.DB, filter, load.PageSize, OffsetSize(load.Page.Page, load.PageSize))
+	mode := libraryListMode(viewMode)
+	var load ListLoad
+	var limit, offset int
+	switch mode {
+	case ListModeInfinite:
+		load = resolveInfiniteLoad(r, total, notificationsLiveTarget, notificationsInfiniteID, "page")
+		limit, offset = infiniteLimitOffset(load)
+	default:
+		load = resolvePaginatedLoad(r, total, notificationsPageSize, notificationsLiveTarget, "page")
+		limit = load.PageSize
+		offset = OffsetSize(load.Page.Page, load.PageSize)
+	}
+	items, err := notify.ListNotifications(h.Queue.DB, filter, limit, offset)
 	if err != nil {
 		return notificationsListLiveData{}, err
 	}
@@ -86,7 +116,7 @@ func (h *Handler) loadNotificationsListLive(w http.ResponseWriter, r *http.Reque
 		v := notificationToView(n, now)
 		rows = append(rows, notifyExplorerRow{
 			notifyHistoryView: v,
-			CanToggle:         notify.IsUnreadEvent(n.Event),
+			CanToggle:         true,
 			LiveTarget:        notificationsLiveTarget,
 			Redirect:          redirect,
 		})
@@ -136,7 +166,7 @@ func (h *Handler) loadNotificationsListLive(w http.ResponseWriter, r *http.Reque
 		Items:           rows,
 		Page:            page,
 		Load:            load,
-		ListMode:        ListModePaginated,
+		ListMode:        mode,
 		FilterTotal:     total,
 		SelectableTotal: selTotal,
 		Filter:          toolbar,
@@ -145,6 +175,8 @@ func (h *Handler) loadNotificationsListLive(w http.ResponseWriter, r *http.Reque
 		TableCols:       cols,
 		TableColsCookie: cookieColsNotifications,
 		ShowSelectAll:   selTotal > pageSel,
+		InfiniteID:      notificationsInfiniteID,
+		RowsID:          notificationsRowsID,
 	}
 	rewriteExplorerInfinite(&out.Load, explorerTypeNotifications, 0)
 	return out, nil

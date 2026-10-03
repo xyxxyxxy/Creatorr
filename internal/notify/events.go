@@ -141,7 +141,8 @@ func IsWarningEvent(event string) bool {
 	return slices.Contains(WarningEvents, event)
 }
 
-// IsUnreadEvent reports whether event stays unread until in-app acknowledgment.
+// IsUnreadEvent reports whether event is inserted unread (alert/warning).
+// Info is inserted read; operators can still mark any row unread later.
 func IsUnreadEvent(event string) bool {
 	return IsAlertEvent(event) || IsWarningEvent(event)
 }
@@ -178,7 +179,7 @@ func EventsForLevel(level string) []string {
 	}
 }
 
-// UnreadEvents returns alert + warning event ids (SQL IN lists, mark-all).
+// UnreadEvents returns alert + warning event ids (nav badge CountUnread).
 func UnreadEvents() []string {
 	out := make([]string, 0, len(AlertEvents)+len(WarningEvents))
 	out = append(out, AlertEvents...)

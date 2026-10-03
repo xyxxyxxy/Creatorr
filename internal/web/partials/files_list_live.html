@@ -3,6 +3,9 @@
      data-filter-total="{{.FilterTotal}}"
      data-view-mode="{{.ViewMode}}"
      data-list-mode="{{.ListMode}}"
+     data-loaded-through="{{.Load.Through}}"
+     data-through-clamped="{{if .Load.ThroughClamped}}1{{else}}0{{end}}"
+     data-loaded-count="{{.Load.LoadedCount}}"
      data-series-id="{{.SeriesID}}"
      data-video-id="{{.VideoID}}"
      data-bulk-mode="0">
@@ -33,23 +36,40 @@
 {{end}}
 {{else}}
 {{if .FilesBulkMode}}{{template "files_bulk_bar" .}}{{end}}
+{{if and (ne .ViewMode "table") (eq .ListMode "paginated")}}{{template "pagination" .Page}}{{end}}
 {{if eq .ViewMode "table"}}
 {{template "files_table" .}}
 {{else}}
-{{template "pagination" .Page}}
 <ul class="list bg-base-100 rounded-box border border-base-300" id="files-list-rows">
-  {{range .Files}}
-  {{template "files_list_row" .}}
-  {{end}}
+  {{template "files_rows_inner" .}}
+  {{if eq .ListMode "infinite"}}{{template "list_infinite_sentinel" .}}{{end}}
 </ul>
-{{template "pagination" .Page}}
 {{end}}
+{{if and (ne .ViewMode "table") (eq .ListMode "paginated")}}{{template "pagination" .Page}}{{end}}
 {{end}}
 {{range .Files}}
 {{if .CanDelete}}
 {{template "delete_sidecar_modal" (dict "FileID" .ID "SeriesID" .SeriesID "VideoID" .VideoID "Name" .Name "KindLabel" .KindLabel "Redirect" .Redirect)}}
 {{end}}
 {{end}}
+</div>
+{{end}}
+
+{{define "files_rows_inner"}}
+{{range .Files}}
+{{template "files_list_row" .}}
+{{end}}
+{{end}}
+
+{{define "files_infinite_chunk"}}
+<div data-infinite-chunk>
+  {{template "files_rows_inner" .}}
+  {{template "list_infinite_sentinel" .}}
+  {{range .Files}}
+  {{if .CanDelete}}
+  {{template "delete_sidecar_modal" (dict "FileID" .ID "SeriesID" .SeriesID "VideoID" .VideoID "Name" .Name "KindLabel" .KindLabel "Redirect" .Redirect)}}
+  {{end}}
+  {{end}}
 </div>
 {{end}}
 

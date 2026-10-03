@@ -18,6 +18,8 @@ export function refreshTasksPanel(force) {
     params.set("type", "tasks");
     params.set("at", "browser");
     url = "/explorer/browse?" + params.toString();
+  } else if (location.pathname === "/" || location.pathname === "") {
+    url = "/explorer/browse?type=tasks&at=overview&view=list";
   } else {
     return;
   }

@@ -21,9 +21,9 @@ type Notification struct {
 	ReadAt     sql.NullString
 }
 
-// Unread reports whether this alert/warning notification is still unread.
+// Unread reports whether read_at is unset (any level; info can be marked unread).
 func (n Notification) Unread() bool {
-	return IsUnreadEvent(n.Event) && !n.ReadAt.Valid
+	return !n.ReadAt.Valid
 }
 
 // ListFilter selects notification rows.
@@ -32,8 +32,8 @@ type ListFilter struct {
 	Level      string // info | warning | alert; empty = all
 	From       string // inclusive UTC RFC3339Nano on created_at
 	To         string // inclusive UTC RFC3339Nano on created_at
-	UnreadOnly bool
-	ReadOnly   bool   // only read (or non-unread-event) rows; mutually exclusive with UnreadOnly
+	UnreadOnly bool   // read_at IS NULL (any event)
+	ReadOnly   bool   // read_at IS NOT NULL; mutually exclusive with UnreadOnly
 	Sort       string // created | level; empty = created; legacy when accepted
 	SortDir    string // asc|desc
 }
@@ -143,26 +143,13 @@ func CountNotifications(database *db.DB, f ListFilter) (int, error) {
 }
 
 // ListNotificationIDs returns notification ids matching filter (list order).
-// When toggleableOnly, restricts to alert/warning events (CanToggle in Explorer).
+// toggleableOnly is kept for callers; all in-app rows are toggleable (incl. info).
 func ListNotificationIDs(database *db.DB, f ListFilter, toggleableOnly bool) ([]int64, error) {
 	if database == nil {
 		return nil, nil
 	}
+	_ = toggleableOnly
 	where, args := notificationWhere(f)
-	if toggleableOnly {
-		evs := UnreadEvents()
-		ph := strings.Repeat("?,", len(evs))
-		ph = ph[:len(ph)-1]
-		clause := `event IN (` + ph + `)`
-		if where == "" {
-			where = ` WHERE ` + clause
-		} else {
-			where += ` AND ` + clause
-		}
-		for _, e := range evs {
-			args = append(args, e)
-		}
-	}
 	q := `SELECT id FROM notifications` + where + ` ORDER BY ` + notificationOrderSQL(f)
 	rows, err := database.SQL.Query(q, args...)
 	if err != nil {
@@ -180,9 +167,24 @@ func ListNotificationIDs(database *db.DB, f ListFilter, toggleableOnly bool) ([]
 	return out, rows.Err()
 }
 
-// CountUnread returns unread alert notifications.
+// CountUnread returns unread alert/warning count for the nav badge (info ignored).
 func CountUnread(database *db.DB) (int, error) {
-	return CountNotifications(database, ListFilter{UnreadOnly: true})
+	if database == nil {
+		return 0, nil
+	}
+	evs := UnreadEvents()
+	ph := strings.Repeat("?,", len(evs))
+	ph = ph[:len(ph)-1]
+	args := make([]any, 0, len(evs))
+	for _, e := range evs {
+		args = append(args, e)
+	}
+	var n int
+	err := database.SQL.QueryRow(
+		`SELECT COUNT(*) FROM notifications WHERE read_at IS NULL AND event IN (`+ph+`)`,
+		args...,
+	).Scan(&n)
+	return n, err
 }
 
 // MarkRead sets read_at on one notification (no-op if already read).
@@ -214,12 +216,12 @@ func MarkUnread(database *db.DB, id int64) error {
 	return err
 }
 
-// MarkReadMany sets read_at on alert/warning ids (one SSE publish).
+// MarkReadMany sets read_at on selected ids (one SSE publish).
 func MarkReadMany(database *db.DB, ids []int64) (int64, error) {
 	return markReadStateMany(database, ids, true)
 }
 
-// MarkUnreadMany clears read_at on alert/warning ids (one SSE publish).
+// MarkUnreadMany clears read_at on selected ids (one SSE publish).
 func MarkUnreadMany(database *db.DB, ids []int64) (int64, error) {
 	return markReadStateMany(database, ids, false)
 }
@@ -243,25 +245,19 @@ func markReadStateMany(database *db.DB, ids []int64, wantRead bool) (int64, erro
 	if len(clean) == 0 {
 		return 0, nil
 	}
-	evs := UnreadEvents()
 	idPh := strings.Repeat("?,", len(clean))
 	idPh = idPh[:len(idPh)-1]
-	evPh := strings.Repeat("?,", len(evs))
-	evPh = evPh[:len(evPh)-1]
-	args := make([]any, 0, 1+len(clean)+len(evs))
+	args := make([]any, 0, 1+len(clean))
 	var q string
 	if wantRead {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
 		args = append(args, now)
-		q = `UPDATE notifications SET read_at = ? WHERE id IN (` + idPh + `) AND read_at IS NULL AND event IN (` + evPh + `)`
+		q = `UPDATE notifications SET read_at = ? WHERE id IN (` + idPh + `) AND read_at IS NULL`
 	} else {
-		q = `UPDATE notifications SET read_at = NULL WHERE id IN (` + idPh + `) AND read_at IS NOT NULL AND event IN (` + evPh + `)`
+		q = `UPDATE notifications SET read_at = NULL WHERE id IN (` + idPh + `) AND read_at IS NOT NULL`
 	}
 	for _, id := range clean {
 		args = append(args, id)
-	}
-	for _, e := range evs {
-		args = append(args, e)
 	}
 	res, err := database.SQL.Exec(q, args...)
 	if err != nil {
@@ -274,24 +270,16 @@ func markReadStateMany(database *db.DB, ids []int64, wantRead bool) (int64, erro
 	return n, nil
 }
 
-// MarkAllRead marks all unread alert/warning notifications as read.
+// MarkAllRead marks every notification with null read_at as read (any level).
 func MarkAllRead(database *db.DB) (int64, error) {
 	if database == nil {
 		return 0, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	evs := UnreadEvents()
-	ph := strings.Repeat("?,", len(evs))
-	ph = ph[:len(ph)-1]
-	args := make([]any, 0, 1+len(evs))
-	args = append(args, now)
-	for _, e := range evs {
-		args = append(args, e)
-	}
 	res, err := database.SQL.Exec(`
 		UPDATE notifications SET read_at = ?
-		WHERE read_at IS NULL AND event IN (`+ph+`)
-	`, args...)
+		WHERE read_at IS NULL
+	`, now)
 	if err != nil {
 		return 0, err
 	}
@@ -326,22 +314,9 @@ func notificationWhere(f ListFilter) (string, []any) {
 		args = append(args, to)
 	}
 	if f.UnreadOnly {
-		evs := UnreadEvents()
-		ph := strings.Repeat("?,", len(evs))
-		ph = ph[:len(ph)-1]
-		parts = append(parts, `read_at IS NULL AND event IN (`+ph+`)`)
-		for _, e := range evs {
-			args = append(args, e)
-		}
+		parts = append(parts, `read_at IS NULL`)
 	} else if f.ReadOnly {
-		evs := UnreadEvents()
-		ph := strings.Repeat("?,", len(evs))
-		ph = ph[:len(ph)-1]
-		// Read = not (unread-event AND read_at IS NULL): either read_at set or non-unread event.
-		parts = append(parts, `(read_at IS NOT NULL OR event NOT IN (`+ph+`))`)
-		for _, e := range evs {
-			args = append(args, e)
-		}
+		parts = append(parts, `read_at IS NOT NULL`)
 	}
 	if len(parts) == 0 {
 		return "", args

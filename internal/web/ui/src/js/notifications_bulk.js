@@ -3,6 +3,9 @@ const notificationsBulkSelected = new Set();
 
 let notificationsBulkMode = false;
 
+/** Confirm modal only when selection exceeds this (≤5 submit immediately). */
+const NOTIFICATIONS_BULK_CONFIRM_AFTER = 5;
+
 const NOTIFICATIONS_BULK_ROW = "#notifications-list-rows > [data-notification-id]";
 
 function notificationsBulkLive() {
@@ -81,27 +84,41 @@ function syncNotificationsBulkUI() {
   });
   const rowActionsDisabled = notificationsBulkMode;
   live.querySelectorAll("[data-notifications-row-actions]").forEach((wrap) => {
+    wrap.classList.remove("tooltip", "tooltip-left");
+    wrap.removeAttribute("data-tip");
     wrap.querySelectorAll("button").forEach((btn) => {
       if (rowActionsDisabled) {
         if (!btn.hasAttribute("data-bulk-prev-disabled")) {
           btn.setAttribute("data-bulk-prev-disabled", btn.disabled ? "1" : "0");
         }
         btn.disabled = true;
+        if (!btn.hasAttribute("data-bulk-prev-tip")) {
+          btn.setAttribute("data-bulk-prev-tip", btn.getAttribute("data-tip") || "");
+          btn.setAttribute(
+            "data-bulk-prev-tooltip",
+            btn.classList.contains("tooltip") ? "1" : "0"
+          );
+        }
+        btn.removeAttribute("data-tip");
+        btn.classList.remove("tooltip", "tooltip-top", "tooltip-left");
+        btn.classList.add("opacity-50", "cursor-not-allowed");
       } else {
         const prev = btn.getAttribute("data-bulk-prev-disabled");
         if (prev !== null) {
           btn.disabled = prev === "1";
           btn.removeAttribute("data-bulk-prev-disabled");
         }
+        if (btn.hasAttribute("data-bulk-prev-tip")) {
+          const tip = btn.getAttribute("data-bulk-prev-tip");
+          const hadTip = btn.getAttribute("data-bulk-prev-tooltip") === "1";
+          btn.removeAttribute("data-bulk-prev-tip");
+          btn.removeAttribute("data-bulk-prev-tooltip");
+          if (tip) btn.setAttribute("data-tip", tip);
+          if (hadTip) btn.classList.add("tooltip", "tooltip-top");
+        }
+        btn.classList.remove("opacity-50", "cursor-not-allowed");
       }
     });
-    if (rowActionsDisabled) {
-      wrap.classList.add("tooltip", "tooltip-left");
-      wrap.setAttribute("data-tip", "Use the multi-select bar");
-    } else {
-      wrap.classList.remove("tooltip", "tooltip-left");
-      wrap.removeAttribute("data-tip");
-    }
   });
   live.querySelectorAll(NOTIFICATIONS_BULK_ROW).forEach((row) => {
     row.classList.toggle("cursor-pointer", notificationsBulkMode);
@@ -168,6 +185,38 @@ function submitNotificationsBulk(formId) {
   if (!form) return;
   notificationsBulkSelected.clear();
   form.requestSubmit();
+}
+
+function openNotificationsBulkModal(id) {
+  const toggle = document.getElementById(id);
+  if (toggle) toggle.checked = true;
+}
+
+function runNotificationsBulkAction(action) {
+  if (!notificationsBulkMode || notificationsBulkSelected.size === 0) return;
+  const n = notificationsBulkSelected.size;
+  fillNotificationsBulkIDs(document);
+  const setTitle = (sel, text) => {
+    const el = document.querySelector(sel);
+    if (el) el.textContent = text;
+  };
+  if (action === "read") {
+    if (n <= NOTIFICATIONS_BULK_CONFIRM_AFTER) {
+      submitNotificationsBulk("form-bulk-notification-read");
+      return;
+    }
+    setTitle("[data-notifications-bulk-read-title]", "Mark read " + n + " notifications");
+    openNotificationsBulkModal("modal-bulk-notification-read");
+    return;
+  }
+  if (action === "unread") {
+    if (n <= NOTIFICATIONS_BULK_CONFIRM_AFTER) {
+      submitNotificationsBulk("form-bulk-notification-unread");
+      return;
+    }
+    setTitle("[data-notifications-bulk-unread-title]", "Mark unread " + n + " notifications");
+    openNotificationsBulkModal("modal-bulk-notification-unread");
+  }
 }
 
 async function selectAllMatchingNotifications() {
@@ -262,16 +311,26 @@ export function bootNotificationsBulk() {
     const read = ev.target.closest("[data-notifications-bulk-read]");
     if (read) {
       ev.preventDefault();
-      if (!notificationsBulkMode || notificationsBulkSelected.size === 0) return;
-      submitNotificationsBulk("form-bulk-notification-read");
+      runNotificationsBulkAction("read");
       return;
     }
     const unread = ev.target.closest("[data-notifications-bulk-unread]");
     if (unread) {
       ev.preventDefault();
-      if (!notificationsBulkMode || notificationsBulkSelected.size === 0) return;
-      submitNotificationsBulk("form-bulk-notification-unread");
+      runNotificationsBulkAction("unread");
     }
+  });
+
+  document.body.addEventListener("submit", (ev) => {
+    const form = ev.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    if (
+      form.id !== "form-bulk-notification-read-confirm" &&
+      form.id !== "form-bulk-notification-unread-confirm"
+    ) {
+      return;
+    }
+    fillNotificationsBulkIDs(document);
   });
 
   document.body.addEventListener("htmx:beforeRequest", (ev) => {

@@ -3,6 +3,9 @@
      data-filter-total="{{.SelectableTotal}}"
      data-view-mode="{{.ViewMode}}"
      data-list-mode="{{.ListMode}}"
+     data-loaded-through="{{.Load.Through}}"
+     data-through-clamped="{{if .Load.ThroughClamped}}1{{else}}0{{end}}"
+     data-loaded-count="{{.Load.LoadedCount}}"
      data-bulk-mode="0">
 {{if or .Items .FilterActive}}
 {{template "list_view_toolbar" .Filter}}
@@ -15,17 +18,16 @@
 {{end}}
 {{else}}
 {{template "notifications_bulk_bar" .}}
+{{if and (ne .ViewMode "table") (eq .ListMode "paginated")}}{{template "list_load_controls" .}}{{end}}
 {{if eq .ViewMode "table"}}
 {{template "notifications_table" .}}
 {{else}}
-{{template "list_load_controls" .}}
 <ul class="list bg-base-100 rounded-box border border-base-300" id="notifications-list-rows">
-  {{range .Items}}
-  {{template "notifications_list_row" .}}
-  {{end}}
+  {{template "notifications_rows_inner" .}}
+  {{if eq .ListMode "infinite"}}{{template "list_infinite_sentinel" .}}{{end}}
 </ul>
-{{template "list_load_controls" .}}
 {{end}}
+{{if and (ne .ViewMode "table") (eq .ListMode "paginated")}}{{template "list_load_controls" .}}{{end}}
 {{end}}
 <form id="form-bulk-notification-read" method="post" action="/actions/bulk-notification-read"
       hx-post="/actions/bulk-notification-read"
@@ -47,6 +49,20 @@
   {{if .Items}}{{with index .Items 0}}{{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}{{end}}{{end}}
   <div data-bulk-notification-ids></div>
 </form>
+{{template "notifications_bulk_modals" .}}
+</div>
+{{end}}
+
+{{define "notifications_rows_inner"}}
+{{range .Items}}
+{{template "notifications_list_row" .}}
+{{end}}
+{{end}}
+
+{{define "notifications_infinite_chunk"}}
+<div data-infinite-chunk>
+  {{template "notifications_rows_inner" .}}
+  {{template "list_infinite_sentinel" .}}
 </div>
 {{end}}
 
@@ -76,10 +92,10 @@
   </div>
   <div class="list-col-grow min-w-0 self-center">
     <div class="flex items-center gap-2 min-w-0">
-      <a class="link link-hover font-medium min-w-0 truncate{{if .Unread}} text-error{{end}}" href="/notification/{{.ID}}">{{.EventLabel}}</a>
+      <a class="link link-hover font-medium min-w-0 truncate" href="/notification/{{.ID}}">{{.EventLabel}}</a>
     </div>
-    <div class="text-xs opacity-60 truncate{{if .Unread}} text-error{{end}}" title="{{.Title}}">{{.Title}}</div>
-    <div class="text-xs opacity-50 flex flex-wrap gap-x-2">
+    <div class="text-xs opacity-60 truncate" title="{{.Title}}">{{.Title}}</div>
+    <div class="text-xs text-base-content/50 flex flex-wrap gap-x-2">
       {{template "rel_time" .}}
       {{if .TaskID}}
       <a class="link link-hover" href="/task/{{.TaskID}}">Task #{{.TaskID}}</a>
@@ -133,11 +149,11 @@
               <span class="inline-flex tooltip tooltip-top" data-tip="info" aria-label="info"><i data-lucide="bell" class="size-4 opacity-70"></i></span>
               {{end}}
             {{else if eq .Key "title"}}
-              <span class="block truncate{{if $row.Unread}} text-error{{end}}" title="{{$row.Title}}">{{$row.Title}}</span>
+              <span class="block truncate" title="{{$row.Title}}">{{$row.Title}}</span>
             {{else if eq .Key "created"}}
               {{template "rel_time" $row}}
             {{else if eq .Key "event"}}
-              <a class="link link-hover{{if $row.Unread}} text-error{{end}}" href="/notification/{{$row.ID}}">{{$row.EventLabel}}</a>
+              <a class="link link-hover" href="/notification/{{$row.ID}}">{{$row.EventLabel}}</a>
             {{else if eq .Key "task"}}
               {{if $row.TaskID}}<a class="link link-hover" href="/task/{{$row.TaskID}}">#{{$row.TaskID}}</a>{{else}}-{{end}}
             {{else if eq .Key "read"}}

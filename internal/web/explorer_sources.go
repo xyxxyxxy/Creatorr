@@ -32,6 +32,7 @@ type sourcesListLiveData struct {
 	TableCols       []tableCol
 	TableColsCookie string
 	ShowSelectAll   bool
+	SourcesBulkMode bool
 	InfiniteID      string
 	RowsID          string
 	SeriesID        int64 // locked scope when > 0
@@ -363,7 +364,9 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 			FilterActive:     filter.Active(),
 			Badges:           sourcesListBadges(r, filter, seriesTitles),
 			LiveTarget:       sourcesLiveTarget,
-			FormAction:       "/explorer/browse"}
+			FormAction:       "/explorer/browse",
+			SourcesBulkMode:  true,
+		}
 		if filter.Active() {
 			toolbar.ClearAllHref = clearOperatorFiltersURL(r)
 		}
@@ -383,6 +386,8 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 			parseTableColsCookie(r, "creatorr_cols_sources", sourcesTableColDefs(showSeries)),
 			toolbar.SortOpts, toolbar.SortDir),
 		TableColsCookie: "creatorr_cols_sources",
+		ShowSelectAll:   total > len(rows),
+		SourcesBulkMode: true,
 		InfiniteID:      sourcesInfiniteID,
 		RowsID:          sourcesRowsID,
 		SeriesID:        filter.SeriesID,

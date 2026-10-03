@@ -1,0 +1,46 @@
+{{define "notifications_bulk_modals"}}
+{{/* Host inside notifications_list_live. One-shot confirm when selection > 5. */}}
+<input type="checkbox" id="modal-bulk-notification-read" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-notifications-bulk-read-title>Mark read</h3>
+    <p class="text-sm mb-4">Mark selected notifications as read.</p>
+    <form id="form-bulk-notification-read-confirm" method="post" action="/actions/bulk-notification-read"
+          hx-post="/actions/bulk-notification-read"
+          hx-target="#notifications-list-live"
+          hx-select="#notifications-list-live"
+          hx-swap="outerHTML">
+      <input type="hidden" name="read" value="1" />
+      {{if .Items}}{{with index .Items 0}}{{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}{{end}}{{end}}
+      <div data-bulk-notification-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-notification-read" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Mark read</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-notification-unread" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-notifications-bulk-unread-title>Mark unread</h3>
+    <p class="text-sm mb-4">Mark selected notifications as unread.</p>
+    <form id="form-bulk-notification-unread-confirm" method="post" action="/actions/bulk-notification-read"
+          hx-post="/actions/bulk-notification-read"
+          hx-target="#notifications-list-live"
+          hx-select="#notifications-list-live"
+          hx-swap="outerHTML">
+      <input type="hidden" name="read" value="0" />
+      {{if .Items}}{{with index .Items 0}}{{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}{{end}}{{end}}
+      <div data-bulk-notification-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-notification-unread" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Mark unread</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}

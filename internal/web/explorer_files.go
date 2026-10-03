@@ -17,6 +17,8 @@ const (
 	cookieSortFiles     = "creatorr_sort_files"
 	cookieColsFiles     = "creatorr_cols_files"
 	filesLiveTarget     = "files-list-live"
+	filesInfiniteID     = "files-list-infinite"
+	filesRowsID         = "files-list-rows"
 	filesExplorerPageSz = SeriesPageSize
 	explorerAtVideoDet  = "video-detail"
 )
@@ -40,6 +42,8 @@ type filesListLiveData struct {
 	ShowRowActions  bool
 	FilesBulkMode   bool
 	ShowSelectAll   bool
+	InfiniteID      string
+	RowsID          string
 	OOB             bool
 }
 
@@ -72,6 +76,21 @@ type filesExplorerRow struct {
 }
 
 func (h *Handler) explorerBrowseFiles(w http.ResponseWriter, r *http.Request) {
+	target := r.Header.Get("HX-Target")
+	if target == filesInfiniteID {
+		data, err := h.loadFilesListLive(w, r)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		if !data.Load.Append {
+			maybeExplorerPushURL(w, r, explorerTypeFiles)
+			render(w, "files_list_live", data)
+			return
+		}
+		render(w, "files_infinite_chunk", data)
+		return
+	}
 	data, err := h.loadFilesListLive(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -171,8 +190,28 @@ func (h *Handler) loadFilesListLive(w http.ResponseWriter, r *http.Request) (fil
 	if err != nil {
 		return filesListLiveData{}, err
 	}
-	load := resolvePaginatedLoad(r, total, filesExplorerPageSz, filesLiveTarget, "page")
-	list, err := h.Library.ListFilesFiltered(filter, load.PageSize, OffsetSize(load.Page.Page, load.PageSize))
+	var load ListLoad
+	var limit, offset int
+	var mode ListMode
+	if embed {
+		// Series/video detail embeds stay paginated (Notes sit below).
+		mode = ListModePaginated
+		load = resolvePaginatedLoad(r, total, filesExplorerPageSz, filesLiveTarget, "page")
+		limit = load.PageSize
+		offset = OffsetSize(load.Page.Page, load.PageSize)
+	} else {
+		mode = libraryListMode(viewMode)
+		switch mode {
+		case ListModeInfinite:
+			load = resolveInfiniteLoad(r, total, filesLiveTarget, filesInfiniteID, "page")
+			limit, offset = infiniteLimitOffset(load)
+		default:
+			load = resolvePaginatedLoad(r, total, filesExplorerPageSz, filesLiveTarget, "page")
+			limit = load.PageSize
+			offset = OffsetSize(load.Page.Page, load.PageSize)
+		}
+	}
+	list, err := h.Library.ListFilesFiltered(filter, limit, offset)
 	if err != nil {
 		return filesListLiveData{}, err
 	}
@@ -252,7 +291,7 @@ func (h *Handler) loadFilesListLive(w http.ResponseWriter, r *http.Request) (fil
 		Files:           rows,
 		Page:            page,
 		Load:            load,
-		ListMode:        ListModePaginated,
+		ListMode:        mode,
 		FilterTotal:     total,
 		Filter:          toolbar,
 		FilterActive:    !embed && filter.Active(),
@@ -269,8 +308,13 @@ func (h *Handler) loadFilesListLive(w http.ResponseWriter, r *http.Request) (fil
 		ShowRowActions:  true,
 		FilesBulkMode:   true,
 		ShowSelectAll:   showSelectAll,
+		InfiniteID:      filesInfiniteID,
+		RowsID:          filesRowsID,
 	}
 	rewriteExplorerInfinite(&out.Load, explorerTypeFiles, filter.SeriesID)
+	if videoEmbed {
+		out.Load.NextHref = appendQueryParam(out.Load.NextHref, "video_id", filter.VideoID)
+	}
 	return out, nil
 }
 

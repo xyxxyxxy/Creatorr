@@ -15,10 +15,10 @@
     </span>
     {{end}}
   </td>
-  <td class="text-sm truncate"><a class="link link-hover{{if .Unread}} text-error{{end}}" href="/notification/{{.ID}}">{{.EventLabel}}</a></td>
+  <td class="text-sm truncate"><a class="link link-hover" href="/notification/{{.ID}}">{{.EventLabel}}</a></td>
   <td class="text-xs whitespace-nowrap">{{template "rel_time" .}}</td>
   <td class="text-sm min-w-0">
-    <span class="block truncate{{if .Unread}} text-error{{end}}" title="{{.Title}}">{{.Title}}</span>
+    <span class="block truncate" title="{{.Title}}">{{.Title}}</span>
   </td>
 </tr>
 {{end}}

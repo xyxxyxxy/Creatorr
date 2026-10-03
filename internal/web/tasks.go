@@ -27,6 +27,7 @@ type taskView struct {
 	Progress    *float64
 	LanePaused  bool   // domain soft-pause: pending bars use warning
 	Redirect    string // form redirect; empty = /tasks
+	NoActions   bool   // hide To front / Cancel (Overview locked glance)
 }
 
 type laneView struct {

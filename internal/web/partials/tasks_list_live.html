@@ -2,29 +2,44 @@
 <div id="tasks-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
      data-filter-total="{{.FilterTotal}}"
      data-view-mode="{{.ViewMode}}"
-     data-list-mode="{{.ListMode}}">
-{{if or .Items .FilterActive}}
+     data-list-mode="{{.ListMode}}"
+     data-loaded-through="{{.Load.Through}}"
+     data-through-clamped="{{if .Load.ThroughClamped}}1{{else}}0{{end}}"
+     data-loaded-count="{{.Load.LoadedCount}}">
+{{if and .ShowToolbar (or .Items .FilterActive)}}
 {{template "list_view_toolbar" .Filter}}
 {{end}}
 {{if not .Items}}
 {{if .FilterActive}}
 {{template "list_empty" "No tasks match the filters."}}
 {{else}}
-{{template "list_empty" "No tasks."}}
+{{template "list_empty" .EmptyText}}
 {{end}}
 {{else}}
 {{if eq .ViewMode "table"}}
 {{template "tasks_explorer_table" .}}
 {{else}}
-{{template "list_load_controls" .}}
+{{if and .ShowToolbar (eq .ListMode "paginated")}}{{template "list_load_controls" .}}{{end}}
 <ul class="list bg-base-100 rounded-box border border-base-300 mt-1" id="tasks-list-rows">
-  {{range .ListRows}}
-  {{template "task_row" .}}
-  {{end}}
+  {{template "tasks_rows_inner" .}}
+  {{if and .ShowToolbar (eq .ListMode "infinite")}}{{template "list_infinite_sentinel" .}}{{end}}
 </ul>
-{{template "list_load_controls" .}}
+{{if and .ShowToolbar (eq .ListMode "paginated")}}{{template "list_load_controls" .}}{{end}}
 {{end}}
 {{end}}
+</div>
+{{end}}
+
+{{define "tasks_rows_inner"}}
+{{range .ListRows}}
+{{template "task_row" .}}
+{{end}}
+{{end}}
+
+{{define "tasks_infinite_chunk"}}
+<div data-infinite-chunk>
+  {{template "tasks_rows_inner" .}}
+  {{template "list_infinite_sentinel" .}}
 </div>
 {{end}}
 

@@ -346,6 +346,26 @@ func scanSourceListRow(scanner interface {
 	return row, nil
 }
 
+// ListSourceIDsFiltered returns all source ids matching filter (Select all bulk).
+func (s *Store) ListSourceIDsFiltered(filter SourceListFilter) ([]int64, error) {
+	where, args := filter.where()
+	q := `SELECT src.id` + where + ` ORDER BY ` + filter.orderBy()
+	rows, err := s.DB.SQL.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // ListSourcesFiltered returns a page of sources with series titles.
 func (s *Store) ListSourcesFiltered(filter SourceListFilter, limit, offset int) ([]SourceListRow, error) {
 	if limit < 1 {

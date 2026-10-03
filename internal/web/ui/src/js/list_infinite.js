@@ -3,6 +3,9 @@
 
 import { refreshSeriesBulkAfterDOM } from "./series_bulk.js";
 import { refreshVideoBulkAfterDOM } from "./video_bulk.js";
+import { refreshSourcesBulkAfterDOM } from "./sources_bulk.js";
+import { refreshFilesBulkAfterDOM } from "./files_bulk.js";
+import { refreshNotificationsBulkAfterDOM } from "./notifications_bulk.js";
 
 function syncThroughURL(live) {
   if (!live || live.getAttribute("data-list-mode") !== "infinite") return;
@@ -19,9 +22,19 @@ function syncThroughURL(live) {
 
 function updateLoadedCount(live) {
   const rowHost =
-    live.querySelector("#videos-list-rows") || live.querySelector("#series-list-rows");
+    live.querySelector("#videos-list-rows") ||
+    live.querySelector("#series-list-rows") ||
+    live.querySelector("#sources-list-rows") ||
+    live.querySelector("#files-list-rows") ||
+    live.querySelector("#tasks-list-rows") ||
+    live.querySelector("#notifications-list-rows");
   if (!rowHost) return;
-  const n = rowHost.querySelectorAll(":scope > [data-video-id], :scope > [data-series-id]").length;
+  let n = 0;
+  for (const el of rowHost.children) {
+    if (el.id && String(el.id).endsWith("-infinite")) continue;
+    if (el.getAttribute("role") === "status") continue;
+    n++;
+  }
   live.setAttribute("data-loaded-count", String(n));
 }
 
@@ -29,6 +42,9 @@ function resyncBulk(live) {
   if (!live) return;
   if (live.id === "videos-list-live") refreshVideoBulkAfterDOM();
   else if (live.id === "series-list-live") refreshSeriesBulkAfterDOM();
+  else if (live.id === "sources-list-live") refreshSourcesBulkAfterDOM();
+  else if (live.id === "files-list-live") refreshFilesBulkAfterDOM();
+  else if (live.id === "notifications-list-live") refreshNotificationsBulkAfterDOM();
 }
 
 function scrollLiveToTop(live) {
@@ -47,7 +63,11 @@ function onInfiniteAfterSwap(ev) {
     const live =
       (target && target.closest && target.closest("[data-list-mode='infinite']")) ||
       document.getElementById("videos-list-live") ||
-      document.getElementById("series-list-live");
+      document.getElementById("series-list-live") ||
+      document.getElementById("sources-list-live") ||
+      document.getElementById("files-list-live") ||
+      document.getElementById("tasks-list-live") ||
+      document.getElementById("notifications-list-live");
     if (live && live.getAttribute("data-list-mode") === "infinite") {
       const page = parseInt(elt.getAttribute("data-infinite-page") || "0", 10);
       if (Number.isFinite(page) && page > 0) {

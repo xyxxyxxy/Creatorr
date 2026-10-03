@@ -30,16 +30,10 @@
   </div>
 </div>
 
-{{if .RunningTasks}}
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Running tasks" "icon" "loader-circle" "help" "Tasks currently in progress across all queues (system + domains).")}}
-<ul class="list bg-base-100 rounded-box border border-base-300">
-  {{range .RunningTasks}}
-  {{template "overview_running_task_row" .}}
-  {{end}}
-</ul>
+{{template "list_header" (dict "level" "section" "title" "Recent tasks" "icon" "list-ordered" "help" "Latest open tasks across all queues (running and queued), or the last finished tasks when idle. Locked list: up to 4 rows, no Cancel.")}}
+{{template "tasks_list_live" .TasksLive}}
 {{template "list_panel_end"}}
-{{end}}
 
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Recent additions" "icon" "square-play" "help" "Latest downloaded videos across all series (acquired order). Browse and filter on Videos.")}}

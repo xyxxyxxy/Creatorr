@@ -22,8 +22,10 @@ const (
 	SeriesPageSize = 10
 	// InfiniteChunkSize is rows per infinite-scroll chunk (/series and /videos list|cards|gallery).
 	InfiniteChunkSize = 20
-	// FixedDefault is the one-shot size for fixed lists (Overview Recent).
+	// FixedDefault is the one-shot size for fixed lists (Overview Recent additions).
 	FixedDefault = 10
+	// OverviewTasksFixed is the one-shot size for Overview Recent tasks.
+	OverviewTasksFixed = 4
 	// MaxInfiniteRows caps auto-load append browsing.
 	MaxInfiniteRows = 500
 	// MaxRefreshRows caps rows returned on a full live outerHTML refresh (Want/Ignore, etc.).
@@ -46,7 +48,8 @@ type ListLoad struct {
 	BrowseCapped   bool // reached MaxInfiniteRows; show refine message, no sentinel
 }
 
-// libraryListMode returns infinite for /series and /videos list|cards|gallery; else paginated.
+// libraryListMode returns infinite for list|cards|gallery; table stays paginated.
+// Browser Explorer list views always use this (never paginated list).
 func libraryListMode(viewMode string) ListMode {
 	if viewMode == viewTable {
 		return ListModePaginated

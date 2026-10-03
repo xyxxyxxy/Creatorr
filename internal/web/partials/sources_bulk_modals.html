@@ -1,0 +1,48 @@
+{{define "sources_bulk_modals"}}
+{{/* Host inside sources_list_live (Browser + series detail). */}}
+<form method="post" action="/actions/bulk-scan-sources" id="form-bulk-scan-sources" class="hidden">
+  <input type="hidden" name="redirect" value="" data-bulk-sources-redirect />
+  <div data-bulk-source-ids></div>
+</form>
+
+<input type="checkbox" id="modal-bulk-scan-sources" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-sources-bulk-scan-title>Scan sources</h3>
+    <p class="text-sm mb-4" data-sources-bulk-scan-summary>Enqueue tip Scan for each selected source. Already-queued or inactive-domain rows are skipped.</p>
+    <form method="post" action="/actions/bulk-scan-sources" id="form-bulk-scan-sources-confirm">
+      <input type="hidden" name="redirect" value="" data-bulk-sources-redirect />
+      <div data-bulk-source-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-scan-sources" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary" data-sources-bulk-scan-confirm>Scan</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-delete-sources" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-sources-bulk-delete-title>Delete sources</h3>
+    <p class="text-sm mb-2" data-sources-bulk-delete-summary>Removes each selected source and <strong>all of its indexed videos</strong> including library files on disk. Related scan/download tasks are cancelled.</p>
+    <p class="text-sm opacity-70 mb-4">To keep videos and only stop scanning, edit a source and turn off 'enabled' on 'Scan schedule'.</p>
+    <form method="post" action="/actions/bulk-delete-sources" id="form-bulk-delete-sources" class="space-y-3 js-confirm-submit">
+      <input type="hidden" name="redirect" value="" data-bulk-sources-redirect />
+      <div data-bulk-source-ids></div>
+      <fieldset class="fieldset">
+        <label class="label justify-start gap-2 cursor-pointer">
+          <input type="checkbox" name="confirm_delete" class="checkbox js-confirm-submit-check" value="1" />
+          <span class="label-text text-base-content" data-sources-bulk-delete-confirm>Delete downloaded and indexed videos</span>
+        </label>
+      </fieldset>
+      <div class="modal-action">
+        <label for="modal-bulk-delete-sources" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-error" disabled>Delete sources and videos</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}

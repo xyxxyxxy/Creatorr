@@ -18,6 +18,8 @@ const (
 	cookieFilterTasks     = "creatorr_filter_tasks"
 	cookieColsTasks       = "creatorr_cols_tasks"
 	tasksListLiveTarget   = "tasks-list-live"
+	tasksInfiniteID       = "tasks-list-infinite"
+	tasksRowsID           = "tasks-list-rows"
 	tasksExplorerPageSize = SeriesPageSize
 )
 
@@ -33,6 +35,10 @@ type tasksListLiveData struct {
 	ViewMode        string
 	TableCols       []tableCol
 	TableColsCookie string
+	ShowToolbar     bool // false for Overview locked glance
+	EmptyText       string
+	InfiniteID      string
+	RowsID          string
 	OOB             bool
 }
 
@@ -63,6 +69,21 @@ type taskExplorerRow struct {
 }
 
 func (h *Handler) explorerBrowseTasks(w http.ResponseWriter, r *http.Request) {
+	target := r.Header.Get("HX-Target")
+	if target == tasksInfiniteID {
+		data, err := h.loadTasksListLive(w, r)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		if !data.Load.Append {
+			maybeExplorerPushURL(w, r, explorerTypeTasks)
+			render(w, "tasks_list_live", data)
+			return
+		}
+		render(w, "tasks_infinite_chunk", data)
+		return
+	}
 	data, err := h.loadTasksListLive(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -73,36 +94,71 @@ func (h *Handler) explorerBrowseTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) loadTasksListLive(w http.ResponseWriter, r *http.Request) (tasksListLiveData, error) {
-	r = mergeTasksListPrefs(r)
+	at := explorerAtFrom(r, explorerAtBrowser)
+	overview := at == explorerAtOverview
+	if !overview {
+		r = mergeTasksListPrefs(r)
+	}
 	filter := parseTasksExplorerFilter(r)
-	writeTasksListPrefs(w, r, filter)
-
-	viewMode, writeCookie := resolveViewMode(r, cookieModeTasks, viewList)
-	if mode := coerceListTableView(viewMode); mode != viewMode {
-		viewMode = mode
-		writeCookie = true
-	}
-	if writeCookie {
-		writeViewCookie(w, cookieModeTasks, viewMode)
+	if !overview {
+		writeTasksListPrefs(w, r, filter)
 	}
 
-	total, err := h.Queue.CountTasks(filter)
-	if err != nil {
-		return tasksListLiveData{}, err
+	viewMode := viewList
+	if !overview {
+		var writeCookie bool
+		viewMode, writeCookie = resolveViewMode(r, cookieModeTasks, viewList)
+		if mode := coerceListTableView(viewMode); mode != viewMode {
+			viewMode = mode
+			writeCookie = true
+		}
+		if writeCookie {
+			writeViewCookie(w, cookieModeTasks, viewMode)
+		}
 	}
-	load := resolvePaginatedLoad(r, total, tasksExplorerPageSize, tasksListLiveTarget, "page")
-	items, err := h.Queue.ListTasks(filter, load.PageSize, OffsetSize(load.Page.Page, load.PageSize))
+
+	var load ListLoad
+	var items []queue.Task
+	var total int
+	var err error
+	var listMode ListMode
+	if overview {
+		items, filter, total, err = h.loadOverviewTaskItems()
+		if err != nil {
+			return tasksListLiveData{}, err
+		}
+		load = resolveFixedLoad(total, OverviewTasksFixed)
+		listMode = ListModeFixed
+	} else {
+		total, err = h.Queue.CountTasks(filter)
+		if err != nil {
+			return tasksListLiveData{}, err
+		}
+		listMode = libraryListMode(viewMode)
+		var limit, offset int
+		switch listMode {
+		case ListModeInfinite:
+			load = resolveInfiniteLoad(r, total, tasksListLiveTarget, tasksInfiniteID, "page")
+			limit, offset = infiniteLimitOffset(load)
+		default:
+			load = resolvePaginatedLoad(r, total, tasksExplorerPageSize, tasksListLiveTarget, "page")
+			limit = load.PageSize
+			offset = OffsetSize(load.Page.Page, load.PageSize)
+		}
+		items, err = h.Queue.ListTasks(filter, limit, offset)
+	}
 	if err != nil {
 		return tasksListLiveData{}, err
 	}
 
 	now := time.Now().UTC()
-	at := explorerAtFrom(r, explorerAtBrowser)
 	atTasks := at == explorerAtTasks
 	redirect := explorerCanonicalURL(r, explorerTypeTasks)
 	if redirect == "" {
 		if atTasks {
 			redirect = "/tasks"
+		} else if overview {
+			redirect = "/"
 		} else {
 			redirect = "/browser?type=tasks"
 		}
@@ -136,12 +192,15 @@ func (h *Handler) loadTasksListLive(w http.ResponseWriter, r *http.Request) (tas
 			Progress:    er.Progress,
 			LanePaused:  paused[er.Domain],
 			Redirect:    redirect,
+			NoActions:   overview,
 		})
 	}
 
 	page := load.Page
 	page.LiveTarget = tasksListLiveTarget
-	rewriteExplorerPageInfo(&page, explorerTypeTasks, 0)
+	if !overview {
+		rewriteExplorerPageInfo(&page, explorerTypeTasks, 0)
+	}
 
 	fromDay, toDay := parseFilterDay(r.URL.Query().Get("from")), parseFilterDay(r.URL.Query().Get("to"))
 	toolbar := listViewToolbar{
@@ -161,30 +220,68 @@ func (h *Handler) loadTasksListLive(w http.ResponseWriter, r *http.Request) (tas
 		LiveTarget:         tasksListLiveTarget,
 		FormAction:         explorerFragmentPath(r),
 	}
-	applyExplorerToolbar(&toolbar, explorerTypeTasks, at)
-	if toolbar.FilterActive {
-		toolbar.ClearAllHref = clearOperatorFiltersURL(r)
-		toolbar.Badges = h.tasksListBadges(r, filter, fromDay, toDay)
+	if !overview {
+		applyExplorerToolbar(&toolbar, explorerTypeTasks, at)
+		if toolbar.FilterActive {
+			toolbar.ClearAllHref = clearOperatorFiltersURL(r)
+			toolbar.Badges = h.tasksListBadges(r, filter, fromDay, toDay)
+		}
 	}
+
+	emptyText := "No tasks."
 
 	out := tasksListLiveData{
 		Items:           rows,
 		ListRows:        listRows,
 		Page:            page,
 		Load:            load,
-		ListMode:        ListModePaginated,
+		ListMode:        listMode,
 		FilterTotal:     total,
 		Filter:          toolbar,
-		FilterActive:    toolbar.FilterActive,
+		FilterActive:    !overview && toolbar.FilterActive,
 		ViewMode:        viewMode,
+		ShowToolbar:     !overview,
+		EmptyText:       emptyText,
+		InfiniteID:      tasksInfiniteID,
+		RowsID:          tasksRowsID,
 		TableCols: annotateTableColsSort(
 			parseTableColsCookie(r, cookieColsTasks, tasksTableColDefs()),
 			toolbar.SortOpts, toolbar.SortDir),
 		TableColsCookie: cookieColsTasks,
 	}
-	rewriteExplorerInfinite(&out.Load, explorerTypeTasks, 0)
+	if !overview {
+		rewriteExplorerInfinite(&out.Load, explorerTypeTasks, 0)
+	}
 
 	return out, nil
+}
+
+// loadOverviewTaskItems returns up to OverviewTasksFixed open tasks (running then
+// queued). When the queues are idle, falls back to the newest finished tasks.
+func (h *Handler) loadOverviewTaskItems() ([]queue.Task, queue.TaskListFilter, int, error) {
+	open := queue.TaskListFilter{
+		Statuses: []string{queue.StatusPending, queue.StatusRunning},
+		Sort:     queue.TaskSortQueue,
+	}
+	n, err := h.Queue.CountTasks(open)
+	if err != nil {
+		return nil, open, 0, err
+	}
+	if n > 0 {
+		items, err := h.Queue.ListTasks(open, OverviewTasksFixed, 0)
+		return items, open, n, err
+	}
+	past := queue.TaskListFilter{
+		Statuses: append([]string{}, queue.HistoryStatuses...),
+		Sort:     queue.TaskSortCreated,
+		SortDir:  "desc",
+	}
+	n, err = h.Queue.CountTasks(past)
+	if err != nil {
+		return nil, past, 0, err
+	}
+	items, err := h.Queue.ListTasks(past, OverviewTasksFixed, 0)
+	return items, past, n, err
 }
 
 func (h *Handler) taskToExplorerRow(t queue.Task, now time.Time, titles, videoTitles map[int64]string, redirect string) taskExplorerRow {

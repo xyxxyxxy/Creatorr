@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	apprise "github.com/unraid/apprise-go"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
@@ -680,5 +681,45 @@ func TestLiveSkippedInfoWithTaskID(t *testing.T) {
 	}
 	if !strings.Contains(items[0].Body, "Series / On air") {
 		t.Fatalf("body=%q", items[0].Body)
+	}
+}
+
+func TestMarkInfoUnread(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "info-unread.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	id, err := notify.InsertNotification(d, notify.EventDownloadDigest, "Digest", "body", 0, false, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := notify.GetNotification(d, id)
+	if err != nil || n.Unread() {
+		t.Fatalf("want stored read: %#v err=%v", n, err)
+	}
+	if err := notify.MarkUnread(d, id); err != nil {
+		t.Fatal(err)
+	}
+	n, err = notify.GetNotification(d, id)
+	if err != nil || !n.Unread() {
+		t.Fatalf("want unread after MarkUnread: %#v err=%v", n, err)
+	}
+	if badge, _ := notify.CountUnread(d); badge != 0 {
+		t.Fatalf("info unread must not bump badge, got %d", badge)
+	}
+	unread, err := notify.ListNotifications(d, notify.ListFilter{UnreadOnly: true}, 10, 0)
+	if err != nil || len(unread) != 1 || unread[0].ID != id {
+		t.Fatalf("Unread filter should include info: %v err=%v", unread, err)
+	}
+	if _, err := notify.MarkUnreadMany(d, []int64{id}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := notify.MarkReadMany(d, []int64{id}); err != nil || n != 1 {
+		t.Fatalf("MarkReadMany n=%d err=%v", n, err)
+	}
+	n, err = notify.GetNotification(d, id)
+	if err != nil || n.Unread() {
+		t.Fatalf("want read after MarkReadMany: %#v err=%v", n, err)
 	}
 }

@@ -326,12 +326,21 @@ func TestOverviewRenders(t *testing.T) {
 	if !strings.Contains(body, "Recent additions") {
 		t.Fatalf("missing recent additions section: %s", truncate(body, 400))
 	}
-	if strings.Contains(body, "Running tasks") {
-		t.Fatalf("running tasks section should hide when empty: %s", truncate(body, 400))
+	if !strings.Contains(body, "Recent tasks") || !strings.Contains(body, "No tasks.") {
+		t.Fatalf("recent tasks section must show empty state: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `id="tasks-list-live"`) || !strings.Contains(body, `data-list-mode="fixed"`) {
+		t.Fatalf("overview recent tasks must use locked tasks Explorer: %s", truncate(body, 600))
+	}
+	if strings.Contains(body, `id="overview-recent-list"`) {
+		t.Fatalf("overview Recent must stay gallery, not list: %s", truncate(body, 400))
+	}
+	if strings.Contains(body, `id="overview-recent-gallery"`) && !strings.Contains(body, `sm:grid-cols-5`) {
+		t.Fatalf("overview Recent gallery must use sm:grid-cols-5: %s", truncate(body, 400))
 	}
 }
 
-func TestOverviewShowsRunningTasks(t *testing.T) {
+func TestOverviewShowsRecentTasks(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -372,11 +381,14 @@ func TestOverviewShowsRunningTasks(t *testing.T) {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Running tasks") {
-		t.Fatalf("missing running tasks section: %s", truncate(body, 400))
+	if !strings.Contains(body, "Recent tasks") {
+		t.Fatalf("missing recent tasks section: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, `data-overview-running-task="`+strconv.FormatInt(runningID, 10)+`"`) {
+	if !strings.Contains(body, `id="task-row-`+strconv.FormatInt(runningID, 10)+`"`) {
 		t.Fatalf("missing running task row: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `id="task-row-`+strconv.FormatInt(pendingID, 10)+`"`) {
+		t.Fatalf("queued task must appear in overview recent tasks: %s", truncate(body, 600))
 	}
 	if !strings.Contains(body, "download") || !strings.Contains(body, "cdn.example") {
 		t.Fatalf("missing kind/domain on running row: %s", truncate(body, 600))
@@ -384,16 +396,62 @@ func TestOverviewShowsRunningTasks(t *testing.T) {
 	if !strings.Contains(body, `href="/task/`+strconv.FormatInt(runningID, 10)+`"`) {
 		t.Fatalf("running row must link to task detail: %s", truncate(body, 600))
 	}
-	if strings.Contains(body, `data-overview-running-task="`+strconv.FormatInt(pendingID, 10)+`"`) {
-		t.Fatalf("pending task must not appear in running list")
-	}
 	if strings.Contains(body, "/actions/cancel-task") {
-		t.Fatalf("overview running list must not offer cancel")
+		t.Fatalf("overview recent tasks must not offer cancel")
 	}
-	idxRun := strings.Index(body, "Running tasks")
+	if strings.Contains(body, "list_view_toolbar") || strings.Contains(body, `aria-label="Task filters"`) {
+		t.Fatalf("overview recent tasks must omit Filter toolbar: %s", truncate(body, 600))
+	}
+	idxTasks := strings.Index(body, "Recent tasks")
 	idxRecent := strings.Index(body, "Recent additions")
-	if idxRun < 0 || idxRecent < 0 || idxRun > idxRecent {
-		t.Fatalf("running tasks must appear above recent additions")
+	if idxTasks < 0 || idxRecent < 0 || idxTasks > idxRecent {
+		t.Fatalf("recent tasks must appear above recent additions")
+	}
+
+	// Cap at 4 open tasks.
+	for i := 0; i < 5; i++ {
+		if _, err := q.Enqueue(queue.EnqueueParams{
+			Origin: queue.OriginManual,
+			Kind:   queue.KindScan, Domain: "example.com", Message: "extra " + strconv.Itoa(i),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status %d after extras: %s", rec.Code, rec.Body.String())
+	}
+	body = rec.Body.String()
+	if got := strings.Count(body, `id="task-row-`); got != web.OverviewTasksFixed {
+		t.Fatalf("overview recent tasks want %d rows, got %d", web.OverviewTasksFixed, got)
+	}
+
+	// Idle queues: fall back to newest finished.
+	if _, err := d.SQL.Exec(`UPDATE tasks SET status = ?`, queue.StatusDone); err != nil {
+		t.Fatal(err)
+	}
+	doneID, err := q.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
+		Kind:   queue.KindSyncFiles, Domain: "system", Message: "finished glance",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SQL.Exec(`UPDATE tasks SET status = ? WHERE id = ?`, queue.StatusDone, doneID); err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status %d when idle: %s", rec.Code, rec.Body.String())
+	}
+	body = rec.Body.String()
+	if !strings.Contains(body, `id="task-row-`+strconv.FormatInt(doneID, 10)+`"`) {
+		t.Fatalf("idle overview must show finished task: %s", truncate(body, 600))
+	}
+	if strings.Count(body, `id="task-row-`) > web.OverviewTasksFixed {
+		t.Fatalf("idle overview must still cap at %d rows", web.OverviewTasksFixed)
 	}
 }
 

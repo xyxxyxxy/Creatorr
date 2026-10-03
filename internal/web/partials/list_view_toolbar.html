@@ -46,6 +46,18 @@
     </button>
   </div>
   {{end}}
+  {{if .SourcesBulkMode}}
+  <div class="input join-item shrink-0 js-list-toolbar-dd">
+    <button type="button"
+            class="js-list-toolbar-dd-btn tooltip tooltip-top"
+            data-sources-bulk-mode
+            aria-pressed="false"
+            aria-label="Multi-select"
+            data-tip="Multi-select">
+      <i data-lucide="list-checks" class="size-4" aria-hidden="true"></i>
+    </button>
+  </div>
+  {{end}}
   {{if .NotificationsBulkMode}}
   <div class="input join-item shrink-0 js-list-toolbar-dd">
     <button type="button"

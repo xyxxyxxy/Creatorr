@@ -13,7 +13,7 @@ import (
 )
 
 func TestListTableChromeTopPagerBesideColumns(t *testing.T) {
-	// String-guard: multi-page table chrome puts pagination_join right of Columns.
+	// String-guard: Columns left of summary; multi-page pager on the right.
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller")
@@ -24,12 +24,24 @@ func TestListTableChromeTopPagerBesideColumns(t *testing.T) {
 	}
 	body := string(b)
 	iCols := strings.Index(body, `list_table_col_picker`)
+	iSummary := strings.Index(body, `tabular-nums`)
 	iPager := strings.Index(body, `pagination_join`)
-	if iCols < 0 || iPager < 0 || iPager < iCols {
-		t.Fatal("list_table_chrome must render pagination_join after Columns picker")
+	if iCols < 0 || iSummary < 0 || iCols > iSummary {
+		t.Fatal("list_table_chrome must render Columns picker left of dataset summary")
+	}
+	if iPager < 0 || iPager < iSummary {
+		t.Fatal("list_table_chrome must render pagination_join after summary (right side)")
 	}
 	if !strings.Contains(body, `.Page.Show`) {
 		t.Fatal("top table pager must gate on Page.Show")
+	}
+	picker, err := os.ReadFile(filepath.Join(filepath.Dir(thisFile), "partials", "list_table_col_picker.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pBody := string(picker)
+	if strings.Contains(pBody, `dropdown-end`) || strings.Contains(pBody, `tooltip-left`) {
+		t.Fatal("Columns picker on leading edge must open right (no dropdown-end / tooltip-left)")
 	}
 }
 

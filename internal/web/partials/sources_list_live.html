@@ -6,9 +6,22 @@
      data-loaded-through="{{.Load.Through}}"
      data-through-clamped="{{if .Load.ThroughClamped}}1{{else}}0{{end}}"
      data-loaded-count="{{.Load.LoadedCount}}"
-     data-series-id="{{.SeriesID}}">
+     data-series-id="{{.SeriesID}}"
+     data-bulk-mode="0">
 {{if and .ShowToolbar (or .Sources .FilterActive)}}
 {{template "list_view_toolbar" .SourceFilter}}
+{{else if and .SourcesBulkMode .Sources}}
+{{/* Series-detail embed: multi-select without the full Filter toolbar. */}}
+<div class="mb-2">
+  <button type="button"
+          class="btn btn-ghost btn-square tooltip tooltip-top"
+          data-sources-bulk-mode
+          aria-pressed="false"
+          aria-label="Multi-select"
+          data-tip="Multi-select">
+    <i data-lucide="list-checks" class="size-4" aria-hidden="true"></i>
+  </button>
+</div>
 {{end}}
 {{if not .Sources}}
 {{if .FilterActive}}
@@ -19,6 +32,7 @@
 {{template "list_empty" "No sources on this series yet."}}
 {{end}}
 {{else}}
+{{if .SourcesBulkMode}}{{template "sources_bulk_bar" .}}{{end}}
 {{if and .ShowToolbar (ne .ViewMode "table")}}{{template "list_load_controls" .}}{{end}}
 {{if eq .ViewMode "table"}}
 {{template "sources_table" .}}
@@ -31,6 +45,7 @@
 {{if and .ShowToolbar (ne .ViewMode "table")}}{{template "list_load_controls" .}}{{end}}
 {{end}}
 {{if .ShowRowActions}}{{template "sources_row_modals" .}}{{end}}
+{{if .SourcesBulkMode}}{{template "sources_bulk_modals"}}{{end}}
 </div>
 {{end}}
 
@@ -49,7 +64,11 @@
 {{end}}
 
 {{define "sources_list_row"}}
-<li class="list-row" style="--list-grid-cols: max-content 1fr max-content{{if .ShowRowActions}} max-content{{end}}">
+<li class="list-row" data-source-id="{{.ID}}" style="--list-grid-cols: max-content 1fr 11rem{{if .ShowRowActions}} max-content{{end}}">
+  <div class="self-center shrink-0 hidden" data-source-select-wrap>
+    <input type="checkbox" class="checkbox checkbox-sm js-source-select" value="{{.ID}}"
+           aria-label="Select source" />
+  </div>
   <div class="self-center shrink-0">
     {{template "source_kind_icon" .}}
   </div>
@@ -71,11 +90,11 @@
     {{end}}
     {{template "source_stalled" .}}
   </div>
-  <div class="self-center justify-self-end min-w-0">
+  <div class="self-center min-w-0 w-full">
     {{template "source_status_cell" .StatusInd}}
   </div>
   {{if .ShowRowActions}}
-  <div class="self-center justify-self-end whitespace-nowrap">
+  <div class="self-center justify-self-end whitespace-nowrap" data-sources-row-actions>
     <div class="join">
       {{template "source_scan_actions" .}}
       <label for="modal-edit-source-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="Edit" aria-label="Edit">
@@ -103,6 +122,7 @@
     <table class="table table-sm list-table w-full">
       <thead>
         <tr>
+          {{if $.SourcesBulkMode}}<th class="w-0 hidden" data-source-select-wrap aria-hidden="true"></th>{{end}}
           {{range .TableCols}}
           {{template "list_table_th" (dict "Col" . "LiveTarget" $.Page.LiveTarget)}}
           {{end}}
@@ -111,7 +131,13 @@
       </thead>
       <tbody id="sources-list-rows">
         {{range .Sources}}
-        <tr class="row-hover">
+        <tr class="row-hover" data-source-id="{{.ID}}">
+          {{if $.SourcesBulkMode}}
+          <td class="hidden w-0 align-middle" data-source-select-wrap>
+            <input type="checkbox" class="checkbox checkbox-sm js-source-select" value="{{.ID}}"
+                   aria-label="Select source" />
+          </td>
+          {{end}}
           {{$row := .}}
           {{range $.TableCols}}
           <td data-col="{{.Key}}" class="align-middle{{if not .Visible}} hidden{{end}}">
@@ -145,7 +171,7 @@
           {{end}}
           {{if $.ShowRowActions}}
           <td class="whitespace-nowrap text-end">
-            <div class="join">
+            <div class="join" data-sources-row-actions>
               {{template "source_scan_actions" .}}
               <label for="modal-edit-source-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="Edit" aria-label="Edit">
                 <i data-lucide="pencil" class="size-3.5"></i>

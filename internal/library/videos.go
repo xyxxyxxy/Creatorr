@@ -542,6 +542,29 @@ func (s *Store) CountVideosBySource(seriesID int64) (map[int64]int, error) {
 	return out, rows.Err()
 }
 
+// CountVideosForSources returns indexed (all statuses) and downloaded (packed media
+// statuses) video counts across the given source ids. Used by bulk delete confirm.
+func (s *Store) CountVideosForSources(sourceIDs []int64) (indexed, downloaded int, err error) {
+	sourceIDs = uniqInt64(sourceIDs)
+	if len(sourceIDs) == 0 {
+		return 0, 0, nil
+	}
+	placeholders := make([]string, len(sourceIDs))
+	args := make([]any, len(sourceIDs))
+	for i, id := range sourceIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	q := `
+		SELECT COUNT(*),
+		       COALESCE(SUM(CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END), 0)
+		FROM videos
+		WHERE source_id IN (` + strings.Join(placeholders, ",") + `)`
+	args = append([]any{StatusDownloaded, StatusDownloadedIntegrityFailed}, args...)
+	err = s.DB.SQL.QueryRow(q, args...).Scan(&indexed, &downloaded)
+	return indexed, downloaded, err
+}
+
 func (s *Store) GetVideo(id int64) (*Video, error) {
 	row := s.DB.SQL.QueryRow(`
 		SELECT `+videoSelectCols+`

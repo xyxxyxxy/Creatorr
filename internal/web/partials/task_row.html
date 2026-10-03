@@ -55,6 +55,7 @@
       <progress data-task-progress class="progress progress-secondary w-full" max="100" aria-label="In progress"></progress>
       {{end}}
     </div>
+    {{if not .NoActions}}
     <span class="join shrink-0">
       {{$frontOff := or (eq .Status "running") (and (eq .Status "pending") (eq .Position 1))}}
       {{$frontTip := "To top of queue"}}
@@ -82,6 +83,7 @@
         </button>
       </form>
     </span>
+    {{end}}
     {{end}}
   </div>
 </li>

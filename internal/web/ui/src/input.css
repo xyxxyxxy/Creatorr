@@ -439,6 +439,27 @@ form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
 }
 
 /*
+  Explorer toolbars put hidden type/at (and scope) inputs before the first
+  .join-item. daisyUI .join only rounds :first-child / :last-child, so the
+  leading Multi-select stays square and also picks up the non-first negative
+  margin. Cap start radius on the first .join-item instead; when it is also
+  the last .join-item, round all corners.
+*/
+.js-list-filters.join > .join-item:not(.join-item ~ .join-item) {
+  --join-ss: var(--radius-field);
+  --join-se: calc(var(--radius-field) * var(--join-v));
+  --join-es: calc(var(--radius-field) * var(--join-h));
+  --join-ee: 0;
+  margin-inline-start: 0;
+  margin-block-start: 0;
+}
+.js-list-filters.join > .join-item:not(.join-item ~ .join-item):not(:has(~ .join-item)) {
+  --join-se: var(--radius-field);
+  --join-es: var(--radius-field);
+  --join-ee: var(--radius-field);
+}
+
+/*
   List-view Filter/Sort/View: wrappers are .input.join-item (stock field chrome,
   same as search / history clear). Triggers stay borderless. Undo .input>* rules
   that would crush .dropdown-content (height/nowrap/flex).

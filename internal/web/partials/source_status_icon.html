@@ -1,5 +1,6 @@
 {{define "source_status_icon"}}
-{{/* Icon only for combined Status. Expects Kind, Progress (optional). */}}
+{{/* Icon only for combined Status. Expects Kind, Progress (optional).
+     Scheduled (future tip scan) = calendar-clock success; schedule off = calendar-minus muted. */}}
 <span class="inline-flex items-center justify-center shrink-0 size-5"
       {{if or (eq .Kind "running") (eq .Kind "pending")}}aria-busy="true"{{else}}aria-busy="false"{{end}}>
   {{if eq .Kind "scan_error"}}
@@ -24,10 +25,12 @@
   <i data-lucide="list-ordered" class="size-5 text-base-content/50"></i>
   {{else if eq .Kind "scheduled"}}
   <i data-lucide="calendar-clock" class="size-5 text-success"></i>
+  {{else if eq .Kind "unscheduled"}}
+  <i data-lucide="calendar-minus" class="size-5 text-base-content/40"></i>
   {{else if eq .Kind "indexed"}}
   <i data-lucide="calendar-check-2" class="size-5 text-success"></i>
   {{else}}
-  <i data-lucide="calendar-off" class="size-5 opacity-50"></i>
+  <i data-lucide="calendar-minus" class="size-5 text-base-content/40"></i>
   {{end}}
 </span>
 {{end}}

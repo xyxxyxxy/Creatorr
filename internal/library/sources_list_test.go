@@ -47,6 +47,13 @@ func TestListSourcesFiltered(t *testing.T) {
 	if err != nil || n < 3 {
 		t.Fatalf("library-wide count=%d err=%v", n, err)
 	}
+	ids, err := s.ListSourceIDsFiltered(SourceListFilter{SeriesID: a.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) < 2 {
+		t.Fatalf("ListSourceIDsFiltered series a want >=2 got %v", ids)
+	}
 	scoped, err := s.CountSourcesFiltered(SourceListFilter{SeriesID: a.ID})
 	if err != nil || scoped != 2 {
 		t.Fatalf("series A count=%d want 2 err=%v", scoped, err)

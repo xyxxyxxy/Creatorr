@@ -163,9 +163,10 @@ type listViewToolbar struct {
 	ExplorerType         string // series|videos|sources for /explorer/browse
 	ExplorerAt           string // series|videos|browser|series-detail
 	Hidden               []listHiddenField
-	SeriesBulkMode       bool
-	VideoBulkMode        bool
+	SeriesBulkMode        bool
+	VideoBulkMode         bool
 	FilesBulkMode         bool
+	SourcesBulkMode       bool
 	NotificationsBulkMode bool
 }
 
