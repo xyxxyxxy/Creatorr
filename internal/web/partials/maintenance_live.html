@@ -111,11 +111,11 @@
 
     <div class="fieldset bg-base-200 border border-base-300 rounded-box p-4 gap-3 w-full min-w-0" data-maintenance-scope>
       <div class="fieldset-legend">Select scope</div>
-      <p class="label whitespace-normal -mt-1">Optional. Empty means the whole library. Add one or more series; scope clears after Run.</p>
+      <p class="label whitespace-normal -mt-1">Required. Choose whole library or one or more series; scope clears after Run.</p>
       <ul id="maintenance-scope-chips" class="flex flex-col gap-1.5 w-full min-w-0 list-none p-0 m-0" aria-label="Selected series"></ul>
       <div class="join join-horizontal w-full max-w-full">
         <details class="dropdown dropdown-bottom js-maintenance-series-dd grow min-w-0">
-          <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden w-full">
+          <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden w-full js-maintenance-series-summary">
             <span class="opacity-60">Select series</span>
           </summary>
           <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-80 max-w-[min(20rem,100vw)]">
@@ -124,14 +124,14 @@
           </div>
         </details>
       </div>
+      <label class="label justify-start gap-2 cursor-pointer w-fit">
+        <input type="checkbox" class="checkbox js-maintenance-scope-all" />
+        <span class="label-text text-base-content">All series</span>
+      </label>
       <div id="maintenance-scope-fields" class="hidden" aria-hidden="true"></div>
     </div>
 
-    <div class="join w-full">
-      <button type="button" class="btn join-item grow tooltip tooltip-top cursor-not-allowed" id="maintenance-preview-rename"
-        data-tip="Select 'Apply episode format' to preview renames" aria-disabled="true">Preview renames</button>
-      <button type="submit" class="btn btn-warning join-item grow" id="maintenance-run-submit" disabled>Run selected</button>
-    </div>
+    <button type="submit" class="btn btn-warning w-full" id="maintenance-run-submit" disabled>Run selected</button>
   </form>
 </div>
 {{template "list_panel_end"}}

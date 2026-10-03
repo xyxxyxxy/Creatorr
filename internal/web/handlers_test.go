@@ -904,11 +904,14 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, `action="/actions/maintenance-run"`) {
 				t.Fatalf("%s missing maintenance-run form", path)
 			}
-			if !strings.Contains(body, `id="maintenance-preview-rename"`) || !strings.Contains(body, "Preview renames") {
-				t.Fatalf("%s missing Preview renames", path)
+			if !strings.Contains(body, `id="maintenance-run-submit"`) || !strings.Contains(body, "Run selected") {
+				t.Fatalf("%s missing Run selected", path)
 			}
-			if !strings.Contains(body, `id="modal-maintenance-rename-preview"`) {
-				t.Fatalf("%s missing rename preview modal", path)
+			if strings.Contains(body, `id="maintenance-preview-rename"`) || strings.Contains(body, "Preview renames") {
+				t.Fatalf("%s still has standalone Preview renames", path)
+			}
+			if !strings.Contains(body, `id="modal-maintenance-rename-preview"`) || !strings.Contains(body, `id="maintenance-rename-preview-continue"`) {
+				t.Fatalf("%s missing rename preview Continue step", path)
 			}
 			if !strings.Contains(body, `id="maintenance-confirm-affected"`) || !strings.Contains(body, `id="maintenance-confirm-external"`) {
 				t.Fatalf("%s missing confirm affected/external chrome", path)
@@ -936,6 +939,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			}
 			if !strings.Contains(body, "maintenance-scope-chips") || !strings.Contains(body, "js-maintenance-series-dd") {
 				t.Fatalf("%s missing maintenance series scope picker", path)
+			}
+			if !strings.Contains(body, "js-maintenance-scope-all") || !strings.Contains(body, "All series") {
+				t.Fatalf("%s missing All series scope checkbox", path)
 			}
 			if strings.Contains(body, "modal-library-picker") || strings.Contains(body, "maintenance-scope-choose") {
 				t.Fatalf("%s still has removed library picker / Choose scope", path)
