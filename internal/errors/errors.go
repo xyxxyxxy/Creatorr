@@ -60,6 +60,7 @@ const (
 	CodeHandlerCapabilityMissing = "HandlerCapabilityMissing"
 	CodeLiveBroadcastSkipped = "LiveBroadcastSkipped"
 	CodeAgeRestricted        = "AgeRestricted"
+	CodeMemberOnly           = "MemberOnly"
 	CodeArchiveFallbackQueued = "ArchiveFallbackQueued"
 	CodeIntegrityCheckFailed = "IntegrityCheckFailed"
 	CodeUnauthorized = "Unauthorized"

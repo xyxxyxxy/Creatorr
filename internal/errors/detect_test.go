@@ -6,6 +6,12 @@ import (
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
 )
 
+const (
+	youtubeMembersMsg = "ERROR: [youtube] wz_HDa2f0tc: This video is available to this channel's members on level: Director's Commentary (or any higher level). Join this channel to get access to member"
+	mdeTierMsg        = "ERROR: [mdetv] id: mde.tv stream sign HTTP 403: video is outside your membership tier (needs regular access); use an account that includes this content"
+	mdeLoginMsg       = "ERROR: [mdetv] id: mde.tv stream sign HTTP 403: membership login required or session expired; use --username (email) and --password"
+)
+
 func TestDetectPauseCode(t *testing.T) {
 	cases := []struct {
 		msg  string
@@ -15,9 +21,10 @@ func TestDetectPauseCode(t *testing.T) {
 		{"ERROR: Unable to download", ""},
 		{"ERROR: cookies are no longer valid", apperrors.CodeCookieInvalid},
 		{"HTTP Error 403: Please sign in", apperrors.CodeCookieInvalid},
-		{"ERROR: [mdetv] id: mde.tv stream sign HTTP 403: membership login required or session expired; use --username (email) and --password", apperrors.CodeCookieInvalid},
+		{mdeLoginMsg, apperrors.CodeCookieInvalid},
 		// Per-video product gate: not a domain cookie failure.
-		{"ERROR: [mdetv] id: mde.tv stream sign HTTP 403: video is outside your membership tier (needs regular access); use an account that includes this content", ""},
+		{mdeTierMsg, ""},
+		{youtubeMembersMsg, ""},
 		// Bare CDN/media 403 (signed URL rejected): not cookie/session.
 		{"ERROR: unable to download video data: HTTP Error 403: Forbidden", ""},
 		{"ERROR: Unable to download webpage: HTTP Error 429: Too Many Requests", apperrors.CodeRateLimited},
@@ -73,12 +80,40 @@ func TestUpgradeCode(t *testing.T) {
 	if got != apperrors.CodeCookieInvalid {
 		t.Fatalf("AgeRestricted→CookieInvalid=%q", got)
 	}
+	got = apperrors.UpgradeCode(apperrors.CodeDownloadFailed, youtubeMembersMsg)
+	if got != apperrors.CodeMemberOnly {
+		t.Fatalf("youtube members upgrade=%q want MemberOnly", got)
+	}
+	got = apperrors.UpgradeCode(apperrors.CodeDownloadFailed, mdeTierMsg)
+	if got != apperrors.CodeMemberOnly {
+		t.Fatalf("mde tier upgrade=%q want MemberOnly", got)
+	}
+	got = apperrors.UpgradeCode(apperrors.CodeDownloadFailed, mdeLoginMsg)
+	if got != apperrors.CodeCookieInvalid {
+		t.Fatalf("mde login upgrade=%q want CookieInvalid", got)
+	}
+	got = apperrors.UpgradeCode(apperrors.CodeMemberOnly, both)
+	if got != apperrors.CodeCookieInvalid {
+		t.Fatalf("MemberOnly→CookieInvalid=%q", got)
+	}
 }
 
 func TestDetectAgeRestricted(t *testing.T) {
 	msg := "ERROR: [youtube] zHLscLwx0rM: Take a few minutes to verify your age."
 	if !apperrors.DetectAgeRestricted(msg) {
 		t.Fatal("expected age restricted")
+	}
+}
+
+func TestDetectMemberOnly(t *testing.T) {
+	if !apperrors.DetectMemberOnly(youtubeMembersMsg) {
+		t.Fatal("expected youtube members")
+	}
+	if !apperrors.DetectMemberOnly(mdeTierMsg) {
+		t.Fatal("expected mde tier")
+	}
+	if apperrors.DetectMemberOnly(mdeLoginMsg) {
+		t.Fatal("mde login required must not be MemberOnly")
 	}
 }
 
@@ -90,6 +125,7 @@ func TestDetectVideoUnavailable(t *testing.T) {
 		{"", false},
 		{"ERROR: Unable to download", false},
 		{"ERROR: [youtube] abc: Video unavailable", true},
+		{"ERROR: This video is no longer available", true},
 		{"ERROR: This video has been removed by the uploader", true},
 		{"ERROR: This video has been deleted", true},
 		{"ERROR: Account associated with this video has been terminated", true},
@@ -97,6 +133,8 @@ func TestDetectVideoUnavailable(t *testing.T) {
 		{"ERROR: HTTP Error 429: Too Many Requests", false},
 		{"Sign in to confirm your age", false},
 		{"ERROR: Private video. Sign in if you've been granted access", false},
+		{youtubeMembersMsg, false},
+		{mdeTierMsg, false},
 	}
 	for _, tc := range cases {
 		if got := apperrors.DetectVideoUnavailable(tc.msg); got != tc.want {
@@ -116,8 +154,9 @@ func TestIsYtDlpPauseCode(t *testing.T) {
 		apperrors.IsYtDlpPauseCode(apperrors.CodePackFailed) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodeIntegrityCheckFailed) ||
 		apperrors.IsYtDlpPauseCode(apperrors.CodeLiveBroadcastSkipped) ||
-		apperrors.IsYtDlpPauseCode(apperrors.CodeAgeRestricted) {
-		t.Fatal("download/resolve/remux/pack/verify/live-skip/age-restrict must not pause")
+		apperrors.IsYtDlpPauseCode(apperrors.CodeAgeRestricted) ||
+		apperrors.IsYtDlpPauseCode(apperrors.CodeMemberOnly) {
+		t.Fatal("download/resolve/remux/pack/verify/live-skip/age-restrict/member-only must not pause")
 	}
 }
 

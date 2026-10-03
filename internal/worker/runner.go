@@ -303,13 +303,13 @@ func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task 
 	if task.Domain == "" || task.Domain == "unknown" || task.Domain == "system" {
 		return
 	}
-	if code == apperrors.CodeAgeRestricted {
+	if code == apperrors.CodeAgeRestricted || code == apperrors.CodeMemberOnly {
 		return
 	}
 	switch code {
 	case apperrors.CodeCookieInvalid, apperrors.CodeRateLimited,
 		apperrors.CodeRemuxFailed, apperrors.CodePackFailed, apperrors.CodeIntegrityCheckFailed,
-		apperrors.CodeLiveBroadcastSkipped, apperrors.CodeAgeRestricted:
+		apperrors.CodeLiveBroadcastSkipped, apperrors.CodeAgeRestricted, apperrors.CodeMemberOnly:
 		// keep classified code (do not re-detect remux/pack/verify/age into pause)
 	default:
 		detectSrc := detail
