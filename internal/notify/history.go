@@ -71,7 +71,8 @@ func InsertNotification(database *db.DB, event, title, body string, taskID int64
 	return res.LastInsertId()
 }
 
-// MarkExternalOK sets external_ok=1. Does not change read_at; in-app ack only.
+// MarkExternalOK sets external_ok=1. Does not change read_at by itself; SendEvent
+// may also MarkRead when a successful Apprise channel has MarkExternalRead.
 func MarkExternalOK(database *db.DB, id int64) error {
 	if database == nil || id <= 0 {
 		return nil

@@ -42,6 +42,7 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		VideoCount          int
 		SizeHuman           string
 		TasksLive           tasksListLiveData
+		VideosBrowseHref    string
 		RecentVideos        []seriesVideoRow
 		SeriesTitles        map[int64]string
 		Roots               []library.RootFolder
@@ -53,6 +54,7 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		VideoCount:          totals.VideoCount,
 		SizeHuman:           library.FormatBytes(totals.SizeBytes),
 		TasksLive:           tasksLive,
+		VideosBrowseHref:    overviewVideosBrowseHref,
 		RecentVideos:        recentRows,
 		SeriesTitles:        seriesTitles,
 		Roots:               roots,

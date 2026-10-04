@@ -126,7 +126,8 @@ func (h *Handler) settingsConnect(w http.ResponseWriter, r *http.Request) {
 		}
 		chViews = append(chViews, notifyChannelView{
 			ID: c.ID, Name: c.Name, URL: c.URL, URLMasked: maskAppriseURL(c.URL),
-			Events: c.Events, EventLabels: labels, InApp: notify.IsInAppChannel(c),
+			Events: c.Events, EventLabels: labels, MarkExternalRead: c.MarkExternalRead,
+			InApp: notify.IsInAppChannel(c),
 		})
 	}
 	evGroups := notifyEventGroups()

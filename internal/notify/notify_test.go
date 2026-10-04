@@ -147,14 +147,14 @@ func TestChannelCRUDAndSendEvent(t *testing.T) {
 	})
 	defer notify.SetSendFnForTest(old)
 
-	id, err := notify.Upsert(d, 0, "alerts", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventCookieInvalid})
+	id, err := notify.Upsert(d, 0, "alerts", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventCookieInvalid}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if id <= 0 {
 		t.Fatal("id")
 	}
-	_, err = notify.Upsert(d, 0, "other", "discord://222222222222222222/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventDownloadDigest})
+	_, err = notify.Upsert(d, 0, "other", "discord://222222222222222222/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventDownloadDigest}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,8 +169,12 @@ func TestChannelCRUDAndSendEvent(t *testing.T) {
 	if err != nil || len(items) != 1 {
 		t.Fatalf("items=%v err=%v", items, err)
 	}
-	if !items[0].ExternalOK || !items[0].Unread() {
-		t.Fatalf("cookie with channel: want external_ok + still unread: %#v", items[0])
+	if !items[0].ExternalOK || items[0].Unread() {
+		t.Fatalf("cookie with channel: want external_ok + read (default mark_external_read): %#v", items[0])
+	}
+	got, err := notify.Get(d, id)
+	if err != nil || !got.MarkExternalRead {
+		t.Fatalf("MarkExternalRead default: %#v err=%v", got, err)
 	}
 
 	if err := notify.DownloadDigest(context.Background(), d, []notify.DigestItem{
@@ -198,13 +202,39 @@ func TestChannelCRUDAndSendEvent(t *testing.T) {
 	}
 }
 
+func TestMarkExternalReadOffKeepsUnread(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "mark-off.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	taskID := seedTask(t, d)
+	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
+		return nil
+	})
+	defer notify.SetSendFnForTest(old)
+	if _, err := notify.Upsert(d, 0, "alerts", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventCookieInvalid}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := notify.CookieInvalid(context.Background(), d, taskID, "example.com", "bad cookie"); err != nil {
+		t.Fatal(err)
+	}
+	items, err := notify.ListNotifications(d, notify.ListFilter{}, 10, 0)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%v err=%v", items, err)
+	}
+	if !items[0].ExternalOK || !items[0].Unread() {
+		t.Fatalf("mark_external_read off: want external_ok + unread: %#v", items[0])
+	}
+}
+
 func TestInAppChannelReadOnly(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "inapp.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
-	_, err = notify.Upsert(d, 0, "x", notify.InAppURL, notify.AllEvents)
+	_, err = notify.Upsert(d, 0, "x", notify.InAppURL, notify.AllEvents, true)
 	if err == nil {
 		t.Fatal("expected upsert reject")
 	}
@@ -226,7 +256,7 @@ func TestListForEventAllSubscription(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
-	id, err := notify.Upsert(d, 0, "everything", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventAll})
+	id, err := notify.Upsert(d, 0, "everything", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventAll}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -431,7 +461,7 @@ func TestYtDlpFailedExternalFailStaysUnread(t *testing.T) {
 		return context.DeadlineExceeded
 	})
 	defer notify.SetSendFnForTest(old)
-	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventYtDlpFailed}); err != nil {
+	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventYtDlpFailed}, true); err != nil {
 		t.Fatal(err)
 	}
 	_ = notify.YtDlpFailed(context.Background(), d, taskID, "example.com", "boom")
@@ -653,7 +683,7 @@ func TestLiveSkippedInfoWithTaskID(t *testing.T) {
 		return nil
 	})
 	defer notify.SetSendFnForTest(old)
-	if _, err := notify.Upsert(d, 0, "ap", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventLiveSkipped}); err != nil {
+	if _, err := notify.Upsert(d, 0, "ap", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventLiveSkipped}, true); err != nil {
 		t.Fatal(err)
 	}
 

@@ -125,6 +125,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo27(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 28:
+			if err := d.migrateTo28(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -867,6 +871,21 @@ func (d *DB) migrateTo27() error {
 		}
 	}
 	return d.ensureFilesFillSeriesIDTrigger()
+}
+
+// migrateTo28: Apprise channels may mark in-app notifications read after external OK.
+func (d *DB) migrateTo28() error {
+	has, err := d.tableHasColumn("notification_channels", "mark_external_read")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE notification_channels ADD COLUMN mark_external_read INTEGER NOT NULL DEFAULT 1`); err != nil {
+		return fmt.Errorf("add notification_channels.mark_external_read: %w", err)
+	}
+	return nil
 }
 
 // Note: series-meta disk registration runs after open via library.SyncAllSeriesMetaFiles

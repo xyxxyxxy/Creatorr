@@ -3,8 +3,10 @@ package web_test
 import (
 	"bytes"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -332,6 +334,21 @@ func TestOverviewRenders(t *testing.T) {
 	if !strings.Contains(body, `id="tasks-list-live"`) || !strings.Contains(body, `data-list-mode="fixed"`) {
 		t.Fatalf("overview recent tasks must use locked tasks Explorer: %s", truncate(body, 600))
 	}
+	if !overviewBrowseHrefHas(body, map[string][]string{
+		"type":   {"videos"},
+		"status": {"downloaded"},
+		"sort":   {"acquired"},
+		"view":   {"gallery"},
+	}) {
+		t.Fatalf("recent additions Browse must open Browser Videos downloaded/acquired gallery: %s", truncate(body, 800))
+	}
+	if !overviewBrowseHrefHas(body, map[string][]string{
+		"type":   {"tasks"},
+		"status": {queue.StatusDone, queue.StatusFailed, queue.StatusCancelled},
+		"sort":   {queue.TaskSortCreated},
+	}) {
+		t.Fatalf("empty overview Recent tasks Browse must open finished Browser Tasks filter: %s", truncate(body, 800))
+	}
 	if strings.Contains(body, `id="overview-recent-list"`) {
 		t.Fatalf("overview Recent must stay gallery, not list: %s", truncate(body, 400))
 	}
@@ -383,6 +400,13 @@ func TestOverviewShowsRecentTasks(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "Recent tasks") {
 		t.Fatalf("missing recent tasks section: %s", truncate(body, 400))
+	}
+	if !overviewBrowseHrefHas(body, map[string][]string{
+		"type":   {"tasks"},
+		"status": {queue.StatusPending, queue.StatusRunning},
+		"sort":   {queue.TaskSortQueue},
+	}) {
+		t.Fatalf("open overview Recent tasks Browse must open pending+running Browser Tasks: %s", truncate(body, 800))
 	}
 	if !strings.Contains(body, `id="task-row-`+strconv.FormatInt(runningID, 10)+`"`) {
 		t.Fatalf("missing running task row: %s", truncate(body, 600))
@@ -452,6 +476,13 @@ func TestOverviewShowsRecentTasks(t *testing.T) {
 	}
 	if strings.Count(body, `id="task-row-`) > web.OverviewTasksFixed {
 		t.Fatalf("idle overview must still cap at %d rows", web.OverviewTasksFixed)
+	}
+	if !overviewBrowseHrefHas(body, map[string][]string{
+		"type":   {"tasks"},
+		"status": {queue.StatusDone, queue.StatusFailed, queue.StatusCancelled},
+		"sort":   {queue.TaskSortCreated},
+	}) {
+		t.Fatalf("idle overview Recent tasks Browse must open finished Browser Tasks filter: %s", truncate(body, 800))
 	}
 }
 
@@ -2243,6 +2274,52 @@ func TestActionAddSeriesURLRequiresTitleWithoutDraft(t *testing.T) {
 	list, _ := lib.ListSeries()
 	if len(list) != 0 {
 		t.Fatalf("should not create series without title/draft, got %d", len(list))
+	}
+}
+
+// overviewBrowseHrefHas reports whether body contains an href="/browser?…" whose
+// query includes every want key/value (order-insensitive; multi status ok).
+func overviewBrowseHrefHas(body string, want map[string][]string) bool {
+	const prefix = `href="/browser?`
+	for {
+		i := strings.Index(body, prefix)
+		if i < 0 {
+			return false
+		}
+		start := i + len(`href="`)
+		end := strings.IndexByte(body[start:], '"')
+		if end < 0 {
+			return false
+		}
+		raw := html.UnescapeString(body[start : start+end])
+		u, err := url.Parse(raw)
+		if err != nil {
+			body = body[start+1:]
+			continue
+		}
+		q := u.Query()
+		ok := true
+		for k, vals := range want {
+			got := q[k]
+			have := map[string]int{}
+			for _, g := range got {
+				have[g]++
+			}
+			for _, v := range vals {
+				if have[v] == 0 {
+					ok = false
+					break
+				}
+				have[v]--
+			}
+			if !ok {
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+		body = body[start+1:]
 	}
 }
 

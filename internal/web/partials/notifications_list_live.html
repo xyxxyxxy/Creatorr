@@ -172,7 +172,7 @@
 
 {{define "notify_read_toggle"}}
 {{$tip := "Mark read"}}{{if not .Unread}}{{$tip = "Mark unread"}}{{end}}
-{{$icon := "mail"}}{{$iconClass := "size-4 text-error"}}
+{{$icon := "mail"}}{{$iconClass := "size-4"}}
 {{if not .Unread}}{{$icon = "mail-open"}}{{$iconClass = "size-4 opacity-50"}}{{end}}
 <span class="notify-read-toggle-root inline-flex items-center">
 <form method="post" action="/actions/toggle-notification-read"

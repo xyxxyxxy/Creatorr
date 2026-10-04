@@ -40,6 +40,28 @@ type tasksListLiveData struct {
 	InfiniteID      string
 	RowsID          string
 	OOB             bool
+	BrowseHref      string // Overview: Browser Tasks URL matching the locked glance filter
+}
+
+// overviewVideosBrowseHref is Browser Videos with the Recent additions glance filter.
+const overviewVideosBrowseHref = "/browser?type=videos&status=downloaded&sort=acquired&view=gallery"
+
+// browserTasksBrowseHref builds /browser?type=tasks with the overview glance filter.
+func browserTasksBrowseHref(f queue.TaskListFilter) string {
+	q := url.Values{}
+	q.Set("type", explorerTypeTasks)
+	for _, s := range f.Statuses {
+		if s != "" {
+			q.Add("status", s)
+		}
+	}
+	if sort := queue.NormalizeTaskSort(f.Sort); sort != "" {
+		q.Set("sort", sort)
+	}
+	if dir := strings.ToLower(strings.TrimSpace(f.SortDir)); dir == "asc" || dir == "desc" {
+		q.Set("dir", dir)
+	}
+	return "/browser?" + q.Encode()
 }
 
 type taskExplorerRow struct {
@@ -248,6 +270,9 @@ func (h *Handler) loadTasksListLive(w http.ResponseWriter, r *http.Request) (tas
 			parseTableColsCookie(r, cookieColsTasks, tasksTableColDefs()),
 			toolbar.SortOpts, toolbar.SortDir),
 		TableColsCookie: cookieColsTasks,
+	}
+	if overview {
+		out.BrowseHref = browserTasksBrowseHref(filter)
 	}
 	if !overview {
 		rewriteExplorerInfinite(&out.Load, explorerTypeTasks, 0)

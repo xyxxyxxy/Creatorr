@@ -203,6 +203,7 @@ CREATE TABLE IF NOT EXISTS notification_channels (
   name TEXT NOT NULL DEFAULT '',
   url TEXT NOT NULL,
   events TEXT NOT NULL,
+  mark_external_read INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

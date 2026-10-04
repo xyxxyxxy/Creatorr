@@ -125,6 +125,7 @@
   "URL" ""
   "Events" .DefaultEvents
   "EventGroups" $evGroups
+  "MarkExternalRead" true
 )}}
 {{range .NotifyChannels}}
 {{if not .InApp}}
@@ -136,6 +137,7 @@
   "URL" .URL
   "Events" .Events
   "EventGroups" $evGroups
+  "MarkExternalRead" .MarkExternalRead
 )}}
 <input type="checkbox" id="modal-delete-notify-{{.ID}}" class="modal-toggle" />
 <div class="modal">
