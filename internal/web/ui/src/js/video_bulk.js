@@ -152,7 +152,14 @@ function syncVideoBulkUI() {
     row.classList.toggle("cursor-pointer", videoBulkMode);
     const id = row.getAttribute("data-video-id");
     const selected = videoBulkMode && videoBulkSelected.has(id);
-    row.classList.toggle("bg-base-200", selected);
+    const isCard = row.classList.contains("card");
+    row.classList.toggle("bg-base-200", selected && !isCard);
+    // Cards: primary outline (image fills the face; bg fill is almost invisible).
+    //! pin: selected card outline outline-primary
+    row.classList.toggle("outline", selected && isCard);
+    row.classList.toggle("outline-2", selected && isCard);
+    row.classList.toggle("outline-offset-2", selected && isCard);
+    row.classList.toggle("outline-primary", selected && isCard);
     if (row.classList.contains("list-row")) {
       row.classList.toggle("rounded-none", selected);
       if (videoBulkMode) {

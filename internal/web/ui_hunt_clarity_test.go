@@ -246,6 +246,8 @@ func TestBulkThumbCardClickSelectsNotNavigates(t *testing.T) {
 		`SERIES_BULK_CONFIRM_AFTER = 5`,
 		// HTMX settle rewrites id'd bulk bar `hidden`; restore again after settle.
 		`htmx:afterSettle`,
+		// Selected cards use primary outline (list/table keep bg-base-200 fill).
+		`selected card outline outline-primary`,
 	} {
 		if !strings.Contains(js, tip) {
 			t.Fatalf("app.js missing bulk contract %q", tip)
