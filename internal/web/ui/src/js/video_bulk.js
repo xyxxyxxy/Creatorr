@@ -477,11 +477,15 @@ export function bootVideoBulk() {
     syncVideoBulkUI();
   });
 
-  document.body.addEventListener("htmx:afterSwap", (ev) => {
+  // afterSwap restores immediately; afterSettle re-applies after HTMX class settle
+  // rewrites id'd bar nodes back to the response's `hidden` (table pager swaps).
+  const onVideoBulkLiveSwap = (ev) => {
     const target = ev.detail && ev.detail.target;
     if (!target || (target.id !== "series-videos-live" && target.id !== "videos-list-live")) return;
     restoreVideoBulkCheckboxes();
-  });
+  };
+  document.body.addEventListener("htmx:afterSwap", onVideoBulkLiveSwap);
+  document.body.addEventListener("htmx:afterSettle", onVideoBulkLiveSwap);
 
   if (onVideoBulkPage()) {
     restoreVideoBulkCheckboxes();

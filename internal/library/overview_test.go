@@ -13,7 +13,7 @@ func TestOverviewTotals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.SeriesCount != 0 || got.VideoCount != 0 || got.SizeBytes != 0 {
+	if got.SeriesCount != 0 || got.VideoCount != 0 || got.DownloadedCount != 0 || got.SizeBytes != 0 {
 		t.Fatalf("empty library totals=%+v", got)
 	}
 
@@ -26,13 +26,13 @@ func TestOverviewTotals(t *testing.T) {
 	}
 	_, err = s.DB.SQL.Exec(`
 		INSERT INTO videos (series_id, remote_id, title, status)
-		VALUES (?, 'v1', 'One', 'wanted')
-	`, ser.ID)
+		VALUES (?, 'v1', 'One', 'wanted'), (?, 'v2', 'Two', 'downloaded')
+	`, ser.ID, ser.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var videoID int64
-	if err := s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE series_id = ?`, ser.ID).Scan(&videoID); err != nil {
+	if err := s.DB.SQL.QueryRow(`SELECT id FROM videos WHERE series_id = ? AND remote_id = 'v2'`, ser.ID).Scan(&videoID); err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.DB.SQL.Exec(`
@@ -47,7 +47,7 @@ func TestOverviewTotals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.SeriesCount != 1 || got.VideoCount != 1 || got.SizeBytes != 1500 {
+	if got.SeriesCount != 1 || got.VideoCount != 2 || got.DownloadedCount != 1 || got.SizeBytes != 1500 {
 		t.Fatalf("totals=%+v", got)
 	}
 }

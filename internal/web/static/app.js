@@ -5208,11 +5208,13 @@
       seriesBulkSelected.clear();
       syncSeriesBulkUI();
     });
-    document.body.addEventListener("htmx:afterSwap", (ev) => {
+    const onSeriesBulkLiveSwap = (ev) => {
       const target = ev.detail && ev.detail.target;
       if (!target || target.id !== "series-list-live") return;
       restoreSeriesBulkCheckboxes();
-    });
+    };
+    document.body.addEventListener("htmx:afterSwap", onSeriesBulkLiveSwap);
+    document.body.addEventListener("htmx:afterSettle", onSeriesBulkLiveSwap);
     if (onSeriesListPage()) {
       restoreSeriesBulkCheckboxes();
     }
@@ -5646,11 +5648,13 @@
       videoBulkSelected.clear();
       syncVideoBulkUI();
     });
-    document.body.addEventListener("htmx:afterSwap", (ev) => {
+    const onVideoBulkLiveSwap = (ev) => {
       const target = ev.detail && ev.detail.target;
       if (!target || target.id !== "series-videos-live" && target.id !== "videos-list-live") return;
       restoreVideoBulkCheckboxes();
-    });
+    };
+    document.body.addEventListener("htmx:afterSwap", onVideoBulkLiveSwap);
+    document.body.addEventListener("htmx:afterSettle", onVideoBulkLiveSwap);
     if (onVideoBulkPage()) {
       restoreVideoBulkCheckboxes();
     }
@@ -5985,11 +5989,13 @@
       filesBulkSelected.clear();
       syncFilesBulkUI();
     });
-    document.body.addEventListener("htmx:afterSwap", (ev) => {
+    const onFilesBulkLiveSwap = (ev) => {
       const target = ev.detail && ev.detail.target;
       if (!target || target.id !== "files-list-live") return;
       syncFilesBulkUI();
-    });
+    };
+    document.body.addEventListener("htmx:afterSwap", onFilesBulkLiveSwap);
+    document.body.addEventListener("htmx:afterSettle", onFilesBulkLiveSwap);
     if (onFilesBulkPage()) {
       syncFilesBulkUI();
     }
@@ -6371,11 +6377,13 @@
       sourcesBulkSelected.clear();
       syncSourcesBulkUI();
     });
-    document.body.addEventListener("htmx:afterSwap", (ev) => {
+    const onSourcesBulkLiveSwap = (ev) => {
       const target = ev.detail && ev.detail.target;
       if (!target || target.id !== "sources-list-live") return;
       syncSourcesBulkUI();
-    });
+    };
+    document.body.addEventListener("htmx:afterSwap", onSourcesBulkLiveSwap);
+    document.body.addEventListener("htmx:afterSettle", onSourcesBulkLiveSwap);
     if (onSourcesBulkPage()) {
       syncSourcesBulkUI();
     }
@@ -6692,11 +6700,13 @@
       notificationsBulkSelected.clear();
       syncNotificationsBulkUI();
     });
-    document.body.addEventListener("htmx:afterSwap", (ev) => {
+    const onNotificationsBulkLiveSwap = (ev) => {
       const target = ev.detail && ev.detail.target;
       if (!target || target.id !== "notifications-list-live") return;
       syncNotificationsBulkUI();
-    });
+    };
+    document.body.addEventListener("htmx:afterSwap", onNotificationsBulkLiveSwap);
+    document.body.addEventListener("htmx:afterSettle", onNotificationsBulkLiveSwap);
     if (onNotificationsBulkPage()) {
       syncNotificationsBulkUI();
     }

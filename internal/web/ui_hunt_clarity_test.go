@@ -244,6 +244,8 @@ func TestBulkThumbCardClickSelectsNotNavigates(t *testing.T) {
 		`Use the multi-select bar`,
 		`VIDEO_BULK_CONFIRM_AFTER = 5`,
 		`SERIES_BULK_CONFIRM_AFTER = 5`,
+		// HTMX settle rewrites id'd bulk bar `hidden`; restore again after settle.
+		`htmx:afterSettle`,
 	} {
 		if !strings.Contains(js, tip) {
 			t.Fatalf("app.js missing bulk contract %q", tip)

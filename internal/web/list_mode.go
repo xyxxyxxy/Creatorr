@@ -17,11 +17,13 @@ const (
 
 const (
 	// VideoPageSize is the page length for paginated video lists (series detail, table).
-	VideoPageSize = 10
+	// Sized to fill a large viewport of dense list/table rows on first paint.
+	VideoPageSize = 50
 	// SeriesPageSize is the page length for paginated /series table view.
-	SeriesPageSize = 10
+	SeriesPageSize = 50
 	// InfiniteChunkSize is rows per infinite-scroll chunk (/series and /videos list|cards|gallery).
-	InfiniteChunkSize = 20
+	// Same budget as paginated pages so first paint fills large screens before the sentinel.
+	InfiniteChunkSize = 50
 	// FixedDefault is the one-shot size for fixed lists (Overview Recent additions).
 	FixedDefault = 10
 	// OverviewTasksFixed is the one-shot size for Overview Recent tasks.
@@ -30,6 +32,10 @@ const (
 	MaxInfiniteRows = 500
 	// MaxRefreshRows caps rows returned on a full live outerHTML refresh (Want/Ignore, etc.).
 	MaxRefreshRows = 100
+	// MaxSkeletonCount caps infinite-sentinel placeholders. Chunk size can be large
+	// enough to fill the viewport with real rows; painting that many card skeletons
+	// makes a multi-screen wall and keeps `revealed` firing in a cascade.
+	MaxSkeletonCount = 8
 )
 
 // ListLoad drives pager / infinite sentinel / neither and SQL limit/offset.
@@ -250,5 +256,5 @@ func skeletonCount(chunk, remaining int) int {
 	if chunk < 1 {
 		chunk = InfiniteChunkSize
 	}
-	return minInt(chunk, remaining)
+	return minInt(minInt(chunk, remaining), MaxSkeletonCount)
 }

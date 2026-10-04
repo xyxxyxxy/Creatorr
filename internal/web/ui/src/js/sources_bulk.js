@@ -417,11 +417,14 @@ export function bootSourcesBulk() {
     syncSourcesBulkUI();
   });
 
-  document.body.addEventListener("htmx:afterSwap", (ev) => {
+  // afterSettle: HTMX class settle restores response `hidden` on id'd bulk bar.
+  const onSourcesBulkLiveSwap = (ev) => {
     const target = ev.detail && ev.detail.target;
     if (!target || target.id !== "sources-list-live") return;
     syncSourcesBulkUI();
-  });
+  };
+  document.body.addEventListener("htmx:afterSwap", onSourcesBulkLiveSwap);
+  document.body.addEventListener("htmx:afterSettle", onSourcesBulkLiveSwap);
 
   if (onSourcesBulkPage()) {
     syncSourcesBulkUI();

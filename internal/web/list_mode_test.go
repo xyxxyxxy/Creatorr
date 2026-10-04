@@ -63,19 +63,20 @@ func TestParseThrough(t *testing.T) {
 
 func TestResolveInfiniteLoadFull(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/videos?view=list&through=2", nil)
-	load := resolveInfiniteLoad(r, 100, "videos-list-live", "videos-list-infinite", "page")
-	if load.Append || load.Through != 2 || load.LoadedCount != 40 {
-		t.Fatalf("load=%+v", load)
+	load := resolveInfiniteLoad(r, 200, "videos-list-live", "videos-list-infinite", "page")
+	wantLoaded := 2 * InfiniteChunkSize
+	if load.Append || load.Through != 2 || load.LoadedCount != wantLoaded {
+		t.Fatalf("load=%+v wantLoaded=%d", load, wantLoaded)
 	}
 	if !load.HasMore || load.NextHref == "" {
 		t.Fatalf("expected next: %+v", load)
 	}
-	if load.SkeletonCount != InfiniteChunkSize {
-		// 100 total, 40 loaded → 60 rem → capped at chunk
-		t.Fatalf("skeleton=%d want %d", load.SkeletonCount, InfiniteChunkSize)
+	if load.SkeletonCount != MaxSkeletonCount {
+		// 200 total, 100 loaded → 100 rem → capped at MaxSkeletonCount (not full chunk)
+		t.Fatalf("skeleton=%d want %d", load.SkeletonCount, MaxSkeletonCount)
 	}
 	limit, offset := infiniteLimitOffset(load)
-	if limit != 40 || offset != 0 {
+	if limit != wantLoaded || offset != 0 {
 		t.Fatalf("limit=%d offset=%d", limit, offset)
 	}
 }
@@ -94,7 +95,7 @@ func TestResolveInfiniteLoadRefreshClamp(t *testing.T) {
 func TestResolveInfiniteLoadAppend(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/videos?view=list&page=2", nil)
 	r.Header.Set("HX-Target", "videos-list-infinite")
-	load := resolveInfiniteLoad(r, 100, "videos-list-live", "videos-list-infinite", "page")
+	load := resolveInfiniteLoad(r, 200, "videos-list-live", "videos-list-infinite", "page")
 	if !load.Append || load.Through != 2 {
 		t.Fatalf("load=%+v", load)
 	}
@@ -105,28 +106,29 @@ func TestResolveInfiniteLoadAppend(t *testing.T) {
 	if !load.HasMore {
 		t.Fatalf("expected has more")
 	}
-	if load.SkeletonCount != InfiniteChunkSize {
-		// page 2 ends at 40 of 100 → 60 rem
-		t.Fatalf("skeleton=%d", load.SkeletonCount)
+	if load.SkeletonCount != MaxSkeletonCount {
+		// page 2 ends at 100 of 200 → 100 rem → capped at MaxSkeletonCount
+		t.Fatalf("skeleton=%d want %d", load.SkeletonCount, MaxSkeletonCount)
 	}
 }
 
 func TestSkeletonCountPartialRemainder(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/videos?view=list", nil)
-	load := resolveInfiniteLoad(r, 25, "videos-list-live", "videos-list-infinite", "page")
+	total := InfiniteChunkSize + 5
+	load := resolveInfiniteLoad(r, total, "videos-list-live", "videos-list-infinite", "page")
 	if load.SkeletonCount != 5 {
-		t.Fatalf("skeleton=%d want 5 (25-20)", load.SkeletonCount)
+		t.Fatalf("skeleton=%d want 5 (%d-%d)", load.SkeletonCount, total, InfiniteChunkSize)
 	}
 }
 
 func TestResolvePaginatedAndFixed(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/videos?view=table&page=2", nil)
-	pag := resolvePaginatedLoad(r, 45, VideoPageSize, "videos-list-live", "page")
-	if pag.Mode != ListModePaginated || pag.Page.PageSize != 10 || pag.Page.Page != 2 {
+	pag := resolvePaginatedLoad(r, VideoPageSize*2+5, VideoPageSize, "videos-list-live", "page")
+	if pag.Mode != ListModePaginated || pag.Page.PageSize != VideoPageSize || pag.Page.Page != 2 {
 		t.Fatalf("pag=%+v", pag)
 	}
 	fix := resolveFixedLoad(50, FixedDefault)
-	if fix.Mode != ListModeFixed || fix.LoadedCount != 10 || fix.HasMore {
+	if fix.Mode != ListModeFixed || fix.LoadedCount != FixedDefault || fix.HasMore {
 		t.Fatalf("fix=%+v", fix)
 	}
 }

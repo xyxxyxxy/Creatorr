@@ -325,6 +325,9 @@ func TestOverviewRenders(t *testing.T) {
 	if !strings.Contains(body, "stat-title") || !strings.Contains(body, "On disk") {
 		t.Fatalf("missing stat blocks: %s", truncate(body, 400))
 	}
+	if !strings.Contains(body, "Downloaded / indexed") {
+		t.Fatalf("videos stat must show downloaded / indexed: %s", truncate(body, 400))
+	}
 	if !strings.Contains(body, "Recent additions") {
 		t.Fatalf("missing recent additions section: %s", truncate(body, 400))
 	}
@@ -1728,7 +1731,8 @@ func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 25; i++ {
+	videoTotal := web.InfiniteChunkSize + 5
+	for i := 0; i < videoTotal; i++ {
 		if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
 			SeriesID:   ser.ID,
 			Title:      "Ep " + itoa(int64(i+1)),
@@ -1778,18 +1782,17 @@ func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
 		t.Fatalf("missing chunk wrapper: %s", truncate(chunk, 300))
 	}
 	if got := strings.Count(chunk, `data-video-id="`); got != 5 {
-		// 25 total, first 20, page 2 has 5
+		// videoTotal, first InfiniteChunkSize, page 2 has the remainder
 		t.Fatalf("append rows=%d want 5: %s", got, truncate(chunk, 300))
 	}
 
-	// through=2 full live returns 40 when enough exist.
+	// through=2 full live returns all when total fits in two chunks.
 	req = httptest.NewRequest(http.MethodGet, "/videos?view=list&through=2", nil)
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	body = rec.Body.String()
-	if got := strings.Count(body, `data-video-id="`); got != 25 {
-		// only 25 videos total
-		t.Fatalf("through=2 rows=%d want 25", got)
+	if got := strings.Count(body, `data-video-id="`); got != videoTotal {
+		t.Fatalf("through=2 rows=%d want %d", got, videoTotal)
 	}
 
 	// Refresh clamp: through=20 → max 100, but we only have 25.

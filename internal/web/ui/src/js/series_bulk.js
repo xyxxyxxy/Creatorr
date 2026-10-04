@@ -496,11 +496,14 @@ export function bootSeriesBulk() {
     syncSeriesBulkUI();
   });
 
-  document.body.addEventListener("htmx:afterSwap", (ev) => {
+  // afterSettle: HTMX class settle restores response `hidden` on id'd bulk bar.
+  const onSeriesBulkLiveSwap = (ev) => {
     const target = ev.detail && ev.detail.target;
     if (!target || target.id !== "series-list-live") return;
     restoreSeriesBulkCheckboxes();
-  });
+  };
+  document.body.addEventListener("htmx:afterSwap", onSeriesBulkLiveSwap);
+  document.body.addEventListener("htmx:afterSettle", onSeriesBulkLiveSwap);
 
   if (onSeriesListPage()) {
     restoreSeriesBulkCheckboxes();

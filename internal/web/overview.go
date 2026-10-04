@@ -40,6 +40,7 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		pageBase
 		SeriesCount         int
 		VideoCount          int
+		DownloadedCount     int
 		SizeHuman           string
 		TasksLive           tasksListLiveData
 		VideosBrowseHref    string
@@ -52,6 +53,7 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		pageBase:            newPage("Overview", "overview", flashFromQuery(r)),
 		SeriesCount:         totals.SeriesCount,
 		VideoCount:          totals.VideoCount,
+		DownloadedCount:     totals.DownloadedCount,
 		SizeHuman:           library.FormatBytes(totals.SizeBytes),
 		TasksLive:           tasksLive,
 		VideosBrowseHref:    overviewVideosBrowseHref,

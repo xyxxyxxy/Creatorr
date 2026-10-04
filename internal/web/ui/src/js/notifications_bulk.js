@@ -347,11 +347,14 @@ export function bootNotificationsBulk() {
     syncNotificationsBulkUI();
   });
 
-  document.body.addEventListener("htmx:afterSwap", (ev) => {
+  // afterSettle: HTMX class settle restores response `hidden` on id'd bulk bar.
+  const onNotificationsBulkLiveSwap = (ev) => {
     const target = ev.detail && ev.detail.target;
     if (!target || target.id !== "notifications-list-live") return;
     syncNotificationsBulkUI();
-  });
+  };
+  document.body.addEventListener("htmx:afterSwap", onNotificationsBulkLiveSwap);
+  document.body.addEventListener("htmx:afterSettle", onNotificationsBulkLiveSwap);
 
   if (onNotificationsBulkPage()) {
     syncNotificationsBulkUI();
