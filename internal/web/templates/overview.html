@@ -31,17 +31,12 @@
 </div>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Recent tasks" "icon" "list-ordered" "help" "Latest open tasks across all queues (running and queued), or the last finished tasks when idle. Locked list: up to 4 rows, no Cancel." "add_href" .TasksLive.BrowseHref "add_label" "Browse all" "add_class" "btn btn-secondary")}}
-{{template "tasks_list_live" .TasksLive}}
-{{template "list_panel_end"}}
-
-{{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Recent additions" "icon" "square-play" "help" "Latest downloaded videos across all series." "add_href" .VideosBrowseHref "add_label" "Browse all" "add_class" "btn btn-secondary")}}
 <div data-list-mode="fixed">
 {{if not .RecentVideos}}
 {{template "list_empty" "No downloaded videos yet."}}
 {{else}}
-<ul class="grid gap-3 grid-cols-2 sm:grid-cols-5" id="overview-recent-gallery">
+<ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" id="overview-recent-gallery">
   {{range .RecentVideos}}
   {{template "video_gallery_card" (dict
     "ID" .ID
@@ -56,6 +51,26 @@
 </ul>
 {{end}}
 </div>
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Most wanted" "icon" "tv" "help" "Series with the most open wanted videos." "add_href" .SeriesBrowseHref "add_label" "Browse all" "add_class" "btn btn-secondary")}}
+<div data-list-mode="fixed">
+{{if not .WantedSeries}}
+{{template "list_empty" "No series yet."}}
+{{else}}
+<ul class="grid gap-3 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7" id="overview-wanted-gallery">
+  {{range .WantedSeries}}
+  {{template "series_gallery_card" .}}
+  {{end}}
+</ul>
+{{end}}
+</div>
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Recent tasks" "icon" "list-ordered" "help" "Latest open tasks across all queues (running and queued), or the last finished tasks when idle. Locked list: up to 4 rows, no Cancel." "add_href" .TasksLive.BrowseHref "add_label" "Browse all" "add_class" "btn btn-secondary")}}
+{{template "tasks_list_live" .TasksLive}}
 {{template "list_panel_end"}}
 
 {{template "add_series_modal" .}}

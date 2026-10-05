@@ -46,6 +46,9 @@ type tasksListLiveData struct {
 // overviewVideosBrowseHref is Browser Videos with the Recent additions glance filter.
 const overviewVideosBrowseHref = "/browser?type=videos&status=downloaded&sort=acquired&view=gallery"
 
+// overviewSeriesBrowseHref is Browser Series with the Most wanted glance filter.
+const overviewSeriesBrowseHref = "/browser?type=series&sort=wanted&view=gallery"
+
 // browserTasksBrowseHref builds /browser?type=tasks with the overview glance filter.
 func browserTasksBrowseHref(f queue.TaskListFilter) string {
 	q := url.Values{}

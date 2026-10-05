@@ -52,6 +52,67 @@ func TestOverviewTotals(t *testing.T) {
 	}
 }
 
+func TestListMostWantedSeries(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	few, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Few Wanted", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	many, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Many Wanted", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	none, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "None Wanted", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	insert := func(sid int64, rid, status string) {
+		t.Helper()
+		if _, err := s.DB.SQL.Exec(`
+			INSERT INTO videos (series_id, remote_id, title, status)
+			VALUES (?, ?, ?, ?)
+		`, sid, rid, rid, status); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert(few.ID, "f1", "wanted")
+	insert(many.ID, "m1", "wanted")
+	insert(many.ID, "m2", "wanted_archive")
+	insert(many.ID, "m3", "downloaded")
+	insert(none.ID, "n1", "downloaded")
+
+	got, err := s.ListMostWantedSeries(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("len=%d want 3 (same order as Browser sort=wanted)", len(got))
+	}
+	if got[0].ID != many.ID || got[0].WantedCount != 2 {
+		t.Fatalf("first=%+v want Many Wanted count=2", got[0])
+	}
+	if got[1].ID != few.ID || got[1].WantedCount != 1 {
+		t.Fatalf("second=%+v want Few Wanted count=1", got[1])
+	}
+	if got[2].ID != none.ID || got[2].WantedCount != 0 {
+		t.Fatalf("third=%+v want None Wanted count=0", got[2])
+	}
+	got, err = s.ListMostWantedSeries(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != many.ID || got[1].ID != few.ID {
+		t.Fatalf("limit=2 got=%+v", got)
+	}
+}
+
 func TestListRecentVideos(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)

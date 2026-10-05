@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 
@@ -15,6 +16,20 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	}
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
+
+	wantedSeries, _ := h.Library.ListMostWantedSeries(OverviewGalleryRow)
+	wantedRows := make([]seriesListRow, 0, len(wantedSeries))
+	for _, s := range wantedSeries {
+		art := h.Library.SeriesArtFlagsFor(&s)
+		posterURL := ""
+		if art.Poster {
+			posterURL = fmt.Sprintf("/series/%d/art/poster", s.ID)
+		}
+		wantedRows = append(wantedRows, seriesListRow{
+			Series:    s,
+			PosterURL: posterURL,
+		})
+	}
 
 	recentVids, _ := h.Library.ListRecentVideos(FixedDefault)
 	recentRows := h.buildSeriesVideoRows(recentVids, nil, nil)
@@ -43,7 +58,9 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		DownloadedCount     int
 		SizeHuman           string
 		TasksLive           tasksListLiveData
+		SeriesBrowseHref    string
 		VideosBrowseHref    string
+		WantedSeries        []seriesListRow
 		RecentVideos        []seriesVideoRow
 		SeriesTitles        map[int64]string
 		Roots               []library.RootFolder
@@ -56,7 +73,9 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		DownloadedCount:     totals.DownloadedCount,
 		SizeHuman:           library.FormatBytes(totals.SizeBytes),
 		TasksLive:           tasksLive,
+		SeriesBrowseHref:    overviewSeriesBrowseHref,
 		VideosBrowseHref:    overviewVideosBrowseHref,
+		WantedSeries:        wantedRows,
 		RecentVideos:        recentRows,
 		SeriesTitles:        seriesTitles,
 		Roots:               roots,

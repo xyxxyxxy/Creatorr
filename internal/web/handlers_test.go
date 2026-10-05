@@ -348,6 +348,9 @@ func TestOverviewRenders(t *testing.T) {
 	if !strings.Contains(body, "Downloaded / indexed") {
 		t.Fatalf("videos stat must show downloaded / indexed: %s", truncate(body, 400))
 	}
+	if !strings.Contains(body, "Most wanted") {
+		t.Fatalf("missing most wanted section: %s", truncate(body, 400))
+	}
 	if !strings.Contains(body, "Recent additions") {
 		t.Fatalf("missing recent additions section: %s", truncate(body, 400))
 	}
@@ -356,6 +359,13 @@ func TestOverviewRenders(t *testing.T) {
 	}
 	if !strings.Contains(body, `id="tasks-list-live"`) || !strings.Contains(body, `data-list-mode="fixed"`) {
 		t.Fatalf("overview recent tasks must use locked tasks Explorer: %s", truncate(body, 600))
+	}
+	if !overviewBrowseHrefHas(body, map[string][]string{
+		"type": {"series"},
+		"sort": {"wanted"},
+		"view": {"gallery"},
+	}) {
+		t.Fatalf("most wanted Browse must open Browser Series wanted gallery: %s", truncate(body, 800))
 	}
 	if !overviewBrowseHrefHas(body, map[string][]string{
 		"type":   {"videos"},
@@ -375,8 +385,40 @@ func TestOverviewRenders(t *testing.T) {
 	if strings.Contains(body, `id="overview-recent-list"`) {
 		t.Fatalf("overview Recent must stay gallery, not list: %s", truncate(body, 400))
 	}
-	if strings.Contains(body, `id="overview-recent-gallery"`) && !strings.Contains(body, `sm:grid-cols-5`) {
-		t.Fatalf("overview Recent gallery must use sm:grid-cols-5: %s", truncate(body, 400))
+	if strings.Contains(body, `id="overview-recent-gallery"`) &&
+		!strings.Contains(body, `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`) {
+		t.Fatalf("overview Recent gallery must match Browser Videos gallery grid: %s", truncate(body, 400))
+	}
+	// Empty library: Most wanted stays empty (no gallery grid to assert).
+
+	idxRecent := strings.Index(body, "Recent additions")
+	idxWanted := strings.Index(body, "Most wanted")
+	idxTasks := strings.Index(body, "Recent tasks")
+	if idxRecent < 0 || idxWanted < 0 || idxTasks < 0 || idxRecent >= idxWanted || idxWanted >= idxTasks {
+		t.Fatalf("overview order must be Recent additions, Most wanted, Recent tasks")
+	}
+}
+
+func TestOverviewWantedGalleryMatchesSeriesGalleryGrid(t *testing.T) {
+	b, err := os.ReadFile("templates/overview.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(b)
+	start := strings.Index(body, `id="overview-wanted-gallery"`)
+	if start < 0 {
+		t.Fatal("overview-wanted-gallery missing")
+	}
+	tag := body[:start]
+	if i := strings.LastIndex(tag, "<ul"); i >= 0 {
+		tag = tag[i:]
+	}
+	want := `grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7`
+	if !strings.Contains(tag, want) {
+		t.Fatalf("Most wanted must use Browser Series gallery grid %q, got %q", want, tag)
+	}
+	if web.OverviewGalleryRow != 6 {
+		t.Fatalf("OverviewGalleryRow=%d want 6 (one lg series-gallery row)", web.OverviewGalleryRow)
 	}
 }
 
@@ -449,10 +491,11 @@ func TestOverviewShowsRecentTasks(t *testing.T) {
 	if strings.Contains(body, "list_view_toolbar") || strings.Contains(body, `aria-label="Task filters"`) {
 		t.Fatalf("overview recent tasks must omit Filter toolbar: %s", truncate(body, 600))
 	}
-	idxTasks := strings.Index(body, "Recent tasks")
 	idxRecent := strings.Index(body, "Recent additions")
-	if idxTasks < 0 || idxRecent < 0 || idxTasks > idxRecent {
-		t.Fatalf("recent tasks must appear above recent additions")
+	idxWanted := strings.Index(body, "Most wanted")
+	idxTasks := strings.Index(body, "Recent tasks")
+	if idxRecent < 0 || idxWanted < 0 || idxTasks < 0 || idxRecent >= idxWanted || idxWanted >= idxTasks {
+		t.Fatalf("overview order must be Recent additions, Most wanted, Recent tasks")
 	}
 
 	// Cap at 4 open tasks.

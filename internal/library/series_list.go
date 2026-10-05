@@ -231,6 +231,18 @@ func (s *Store) CountSeriesFiltered(filter SeriesListFilter) (int, error) {
 	return n, err
 }
 
+// ListMostWantedSeries returns series ordered like Browser Series sort=wanted
+// (wanted + wanted_archive count, highest first), limited to one gallery row.
+func (s *Store) ListMostWantedSeries(limit int) ([]Series, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	return s.ListSeriesFiltered(SeriesListFilter{
+		Sort:    SortWanted,
+		SortDir: SortDirDesc,
+	}, limit, 0)
+}
+
 // ListSeriesFiltered returns series matching filter, newest title order.
 // limit <= 0 means no LIMIT (all matches). offset ignored when limit <= 0.
 func (s *Store) ListSeriesFiltered(filter SeriesListFilter, limit, offset int) ([]Series, error) {

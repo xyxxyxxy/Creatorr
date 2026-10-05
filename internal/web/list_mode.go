@@ -24,8 +24,11 @@ const (
 	// InfiniteChunkSize is rows per infinite-scroll chunk (/series and /videos list|cards|gallery).
 	// Same budget as paginated pages so first paint fills large screens before the sentinel.
 	InfiniteChunkSize = 50
-	// FixedDefault is the one-shot size for fixed lists (Overview Recent additions).
-	FixedDefault = 10
+	// FixedDefault is the one-shot size for Overview Recent additions
+	// (two browser-video gallery rows at lg:grid-cols-4).
+	FixedDefault = 8
+	// OverviewGalleryRow is one Overview Most wanted row (Browser Series gallery at lg:grid-cols-6).
+	OverviewGalleryRow = 6
 	// OverviewTasksFixed is the one-shot size for Overview Recent tasks.
 	OverviewTasksFixed = 4
 	// MaxInfiniteRows caps auto-load append browsing.
