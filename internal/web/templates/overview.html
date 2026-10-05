@@ -31,7 +31,7 @@
 </div>
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Recent additions" "icon" "square-play" "help" "Latest downloaded videos across all series." "add_href" .VideosBrowseHref "add_label" "Browse all" "add_class" "btn btn-secondary")}}
+{{template "list_header" (dict "level" "section" "title" "Recent additions" "icon" "square-play" "help" "Latest downloaded videos." "add_href" .VideosBrowseHref "add_label" "Browse all" "add_class" "btn btn-secondary")}}
 <div data-list-mode="fixed">
 {{if not .RecentVideos}}
 {{template "list_empty" "No downloaded videos yet."}}
@@ -69,7 +69,7 @@
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Recent tasks" "icon" "list-ordered" "help" "Latest open tasks across all queues (running and queued), or the last finished tasks when idle. Locked list: up to 4 rows, no Cancel." "add_href" .TasksLive.BrowseHref "add_label" "Browse all" "add_class" "btn btn-secondary")}}
+{{template "list_header" (dict "level" "section" "title" "Recent tasks" "icon" "list-ordered" "help" "Open tasks first, or the last finished when idle." "add_href" .TasksLive.BrowseHref "add_label" "Browse all" "add_class" "btn btn-secondary")}}
 {{template "tasks_list_live" .TasksLive}}
 {{template "list_panel_end"}}
 
