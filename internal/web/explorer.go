@@ -173,7 +173,7 @@ func rewriteToExplorerBrowse(raw, typ string, seriesID int64) string {
 		case explorerTypeSeries:
 			at = explorerAtSeries
 		case explorerTypeVideos:
-			at = explorerAtVideos
+			at = explorerAtBrowser
 		case explorerTypeSources:
 			if seriesID > 0 {
 				at = explorerAtSeriesDetail
@@ -227,7 +227,9 @@ func explorerCanonicalURL(r *http.Request, typ string) string {
 		out.Set("type", typ)
 		path = "/browser"
 	case explorerAtVideos:
-		path = "/videos"
+		// Legacy at=videos: same host as Browser Videos.
+		out.Set("type", typ)
+		path = "/browser"
 	case explorerAtTasks:
 		path = "/tasks"
 		out.Del("type")
@@ -268,7 +270,7 @@ func redirectExplorerLive(typ string) http.HandlerFunc {
 		q.Set("type", typ)
 		if q.Get("at") == "" {
 			if typ == explorerTypeVideos {
-				q.Set("at", explorerAtVideos)
+				q.Set("at", explorerAtBrowser)
 			} else {
 				q.Set("at", explorerAtSeries)
 			}

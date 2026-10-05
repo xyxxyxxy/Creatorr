@@ -1822,8 +1822,8 @@ func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	// Infinite list: first chunk + sentinel.
-	req := httptest.NewRequest(http.MethodGet, "/videos?view=list", nil)
+	// Infinite list on Browser Videos: first chunk + sentinel.
+	req := httptest.NewRequest(http.MethodGet, "/browser?type=videos&view=list", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	if rec.Code != 200 {
@@ -1846,8 +1846,8 @@ func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
 		t.Fatalf("expected next-chunk skeletons in sentinel, got %d: %s", got, truncate(body, 400))
 	}
 
-	// Append chunk page=2.
-	req = httptest.NewRequest(http.MethodGet, "/videos?view=list&page=2", nil)
+	// Append chunk page=2 via Explorer browse.
+	req = httptest.NewRequest(http.MethodGet, "/explorer/browse?type=videos&at=browser&view=list&page=2", nil)
 	req.Header.Set("HX-Target", "videos-list-infinite")
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
@@ -1864,7 +1864,7 @@ func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
 	}
 
 	// through=2 full live returns all when total fits in two chunks.
-	req = httptest.NewRequest(http.MethodGet, "/videos?view=list&through=2", nil)
+	req = httptest.NewRequest(http.MethodGet, "/browser?type=videos&view=list&through=2", nil)
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	body = rec.Body.String()
@@ -1873,7 +1873,7 @@ func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
 	}
 
 	// Refresh clamp: through=20 → max 100, but we only have 25.
-	req = httptest.NewRequest(http.MethodGet, "/videos?view=list&through=20", nil)
+	req = httptest.NewRequest(http.MethodGet, "/browser?type=videos&view=list&through=20", nil)
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	body = rec.Body.String()
@@ -1882,7 +1882,7 @@ func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
 	}
 
 	// Table: paginated, pager when enough pages, no sentinel.
-	req = httptest.NewRequest(http.MethodGet, "/videos?view=table", nil)
+	req = httptest.NewRequest(http.MethodGet, "/browser?type=videos&view=table", nil)
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	body = rec.Body.String()
@@ -1973,7 +1973,7 @@ func TestSeriesAndVideosTableView(t *testing.T) {
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	for _, path := range []string{"/series?view=table", "/videos?view=table", "/series/" + itoa(ser.ID) + "?view=table"} {
+	for _, path := range []string{"/series?view=table", "/browser?type=videos&view=table", "/series/" + itoa(ser.ID) + "?view=table"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
@@ -1991,7 +1991,7 @@ func TestSeriesAndVideosTableView(t *testing.T) {
 		if !strings.Contains(body, wantSummary) {
 			t.Fatalf("%s missing table summary %q: %s", path, wantSummary, truncate(body, 400))
 		}
-		if strings.Contains(path, "/videos") || strings.Contains(path, "/series/") {
+		if strings.Contains(path, "type=videos") || strings.Contains(path, "/series/") {
 			if !strings.Contains(body, `list-table-sticky-end`) {
 				t.Fatalf("%s missing sticky Actions column: %s", path, truncate(body, 400))
 			}
@@ -2086,24 +2086,36 @@ func TestVideosPageHasBulkSelect(t *testing.T) {
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	req := httptest.NewRequest(http.MethodGet, "/videos", nil)
+	legacy := httptest.NewRecorder()
+	r.ServeHTTP(legacy, httptest.NewRequest(http.MethodGet, "/videos?view=gallery", nil))
+	if legacy.Code != http.StatusMovedPermanently {
+		t.Fatalf("/videos status %d want 301", legacy.Code)
+	}
+	if loc := legacy.Header().Get("Location"); loc != "/browser?type=videos&view=gallery" {
+		t.Fatalf("/videos Location=%q", loc)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/browser?type=videos", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	if rec.Code != 200 {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
+	if strings.Contains(body, `href="/videos"`) {
+		t.Fatalf("nav must not link to /videos: %s", truncate(body, 400))
+	}
 	if !strings.Contains(body, "data-video-bulk-mode") {
-		t.Fatalf("videos page missing video multi-select toggle: %s", truncate(body, 500))
+		t.Fatalf("Browser Videos missing video multi-select toggle: %s", truncate(body, 500))
 	}
 	if !strings.Contains(body, "data-video-bulk-refresh") || !strings.Contains(body, "data-video-bulk-metadata") {
-		t.Fatalf("videos page missing Refresh/Edit metadata (btn_labeled): %s", truncate(body, 500))
+		t.Fatalf("Browser Videos missing Refresh/Edit metadata (btn_labeled): %s", truncate(body, 500))
 	}
 	if !strings.Contains(body, "modal-bulk-edit-videos-metadata") || !strings.Contains(body, "modal-bulk-delete-videos") {
-		t.Fatalf("videos page missing video bulk modals: %s", truncate(body, 500))
+		t.Fatalf("Browser Videos missing video bulk modals: %s", truncate(body, 500))
 	}
 	if !strings.Contains(body, `action="/actions/bulk-want-videos"`) {
-		t.Fatalf("videos page missing bulk want form: %s", truncate(body, 400))
+		t.Fatalf("Browser Videos missing bulk want form: %s", truncate(body, 400))
 	}
 	if strings.Contains(body, `name="series_id"`) && strings.Contains(body, `id="form-bulk-want-videos"`) {
 		// Library-wide bulk forms omit series_id; series detail still includes it.
@@ -2112,7 +2124,7 @@ func TestVideosPageHasBulkSelect(t *testing.T) {
 		if wantFormStart >= 0 && wantFormEnd > 0 {
 			chunk := body[wantFormStart : wantFormStart+wantFormEnd]
 			if strings.Contains(chunk, `name="series_id"`) {
-				t.Fatalf("videos page bulk want form should omit series_id: %s", truncate(chunk, 300))
+				t.Fatalf("Browser Videos bulk want form should omit series_id: %s", truncate(chunk, 300))
 			}
 		}
 	}

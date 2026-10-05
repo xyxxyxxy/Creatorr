@@ -1,19 +1,3 @@
-{{define "videos"}}
-{{template "head" .}}
-{{template "list_panel"}}
-{{template "list_header" (dict "level" "page" "title" "Videos" "icon" .Icon "help" "All indexed videos across your library.")}}
-{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
-{{template "videos_live" .Live}}
-{{template "list_panel_end"}}
-{{template "video_bulk_modals" (dict
-  "SeriesID" 0
-  "ShowClearErrors" true
-  "Suggestions" .Suggestions
-  "PackRoleOptions" .PackRoleOptions
-)}}
-{{template "foot" .}}
-{{end}}
-
 {{define "videos_live"}}
 <div id="videos-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
      data-filter-total="{{.FilterTotal}}"

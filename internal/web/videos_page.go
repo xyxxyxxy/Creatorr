@@ -26,41 +26,15 @@ type videosPageLiveData struct {
 	OOB             bool
 }
 
+// videosPage redirects the legacy /videos host to Browser Videos.
 func (h *Handler) videosPage(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("HX-Target") == "videos-list-infinite" {
-		h.renderVideosInfiniteChunk(w, r)
-		return
+	q := r.URL.Query()
+	q.Set("type", explorerTypeVideos)
+	u := "/browser"
+	if enc := q.Encode(); enc != "" {
+		u += "?" + enc
 	}
-	data, err := h.loadVideosLive(w, r)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	suggestions, _ := h.Library.ListMetaSuggestions()
-	render(w, "videos", struct {
-		pageBase
-		Live            videosPageLiveData
-		Suggestions     library.MetaSuggestions
-		PackRoleOptions []struct{ Value, Label string }
-	}{
-		pageBase:        newPage("Videos", "videos", flashFromQuery(r)),
-		Live:            data,
-		Suggestions:     suggestions,
-		PackRoleOptions: library.PackRoleSelectOptions(),
-	})
-}
-
-func (h *Handler) renderVideosInfiniteChunk(w http.ResponseWriter, r *http.Request) {
-	data, err := h.loadVideosLive(w, r)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	if !data.Load.Append {
-		render(w, "videos_live", data)
-		return
-	}
-	render(w, "videos_infinite_chunk", data)
+	http.Redirect(w, r, u, http.StatusMovedPermanently)
 }
 
 func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videosPageLiveData, error) {
@@ -165,7 +139,11 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 	if filter.MenuActive() {
 		toolbar.ClearAllHref = clearOperatorFiltersURL(r)
 	}
-	at := explorerAtFrom(r, explorerAtVideos)
+	at := explorerAtFrom(r, explorerAtBrowser)
+	if at == explorerAtVideos {
+		// Legacy at=videos bookmarks push to Browser.
+		at = explorerAtBrowser
+	}
 	applyExplorerToolbar(&toolbar, explorerTypeVideos, at)
 
 	bulkBusy, _ := h.Library.BulkEditVideosBusy()
@@ -174,16 +152,16 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		showSelectAll = load.Page.Show
 	}
 	out := videosPageLiveData{
-		Videos:          rows,
-		Page:            load.Page,
-		Load:            load,
-		ListMode:        mode,
-		FilterTotal:     total,
-		VideoFilter:     toolbar,
-		FilterActive:    filter.Active(),
-		ViewMode:        viewMode,
-		SeriesTitles:    titles,
-		BulkEditBusy:    bulkBusy,
+		Videos:       rows,
+		Page:         load.Page,
+		Load:         load,
+		ListMode:     mode,
+		FilterTotal:  total,
+		VideoFilter:  toolbar,
+		FilterActive: filter.Active(),
+		ViewMode:     viewMode,
+		SeriesTitles: titles,
+		BulkEditBusy: bulkBusy,
 		TableCols: annotateTableColsSort(
 			parseTableColsCookie(r, cookieColsVideos, videoTableColDefs(true)),
 			toolbar.SortOpts, toolbar.SortDir),

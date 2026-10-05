@@ -44,7 +44,14 @@ func preferVideosList(r *http.Request) bool {
 	if err != nil || u == nil {
 		return false
 	}
-	return strings.TrimSuffix(u.Path, "/") == "/videos"
+	path := strings.TrimSuffix(u.Path, "/")
+	if path == "/videos" {
+		return true
+	}
+	if path == "/browser" && u.Query().Get("type") == explorerTypeVideos {
+		return true
+	}
+	return false
 }
 
 func videosListRedirect(r *http.Request, okKey, detail, errMsg string) string {
@@ -62,6 +69,7 @@ func videosListRedirect(r *http.Request, okKey, detail, errMsg string) string {
 			}
 		}
 	}
+	q.Set("type", explorerTypeVideos)
 	if okKey != "" {
 		q.Set("ok", okKey)
 	}
@@ -73,9 +81,9 @@ func videosListRedirect(r *http.Request, okKey, detail, errMsg string) string {
 	}
 	enc := q.Encode()
 	if enc == "" {
-		return "/videos"
+		return "/browser?type=videos"
 	}
-	return "/videos?" + enc
+	return "/browser?" + enc
 }
 
 func seriesVideosRedirect(seriesID int64, r *http.Request, okKey, detail, errMsg string) string {

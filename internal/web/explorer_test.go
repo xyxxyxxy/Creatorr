@@ -58,7 +58,7 @@ func TestExplorerBrowseAndBrowserShell(t *testing.T) {
 
 	for _, path := range []string{
 		"/explorer/browse?type=series&at=series",
-		"/explorer/browse?type=videos&at=videos",
+		"/explorer/browse?type=videos&at=browser",
 		"/explorer/browse?type=sources&at=browser",
 		"/explorer/browse?type=files&at=browser",
 	} {
