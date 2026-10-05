@@ -224,7 +224,7 @@ func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, s
 		ShowDatePresence: true,
 		DateRangeLabel:   "Upload date",
 		Selects:          videoFilterSelects(h, r, id, filter, ser.Sources, false),
-		FilterActive:     filter.Active(),
+		FilterActive:     filter.MenuActive(),
 		Badges:           videoListBadges(r, filter, false, nil),
 		ClearAllHref:     "",
 		LiveTarget:       "series-videos-live",
@@ -232,7 +232,7 @@ func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, s
 		VideoBulkMode:    true,
 	}
 	annotateUploadPresence(r, &videoFilter)
-	if filter.Active() {
+	if filter.MenuActive() {
 		videoFilter.ClearAllHref = clearOperatorFiltersURL(r)
 	}
 

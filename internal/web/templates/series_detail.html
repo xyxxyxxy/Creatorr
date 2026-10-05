@@ -19,14 +19,9 @@
     </div>
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
-    <label for="modal-edit-series" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>
-      <i data-lucide="pencil" class="size-4"></i>
-      Edit series
-    </label>
-    <label for="modal-edit-series-metadata" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>
-      <i data-lucide="file-pen" class="size-4"></i>
-      Edit metadata
-    </label>
+    {{template "btn_labeled" (dict "Type" "label" "For" "modal-edit-series" "Icon" "pencil" "Label" "Edit series" "Disabled" .Deleting)}}
+    {{template "btn_labeled" (dict "Type" "label" "For" "modal-edit-series-metadata" "Icon" "file-pen" "Label" "Edit metadata" "Disabled" .Deleting)}}
+
     {{template "monitor_toggle" (dict
       "Action" "/actions/set-series-monitored"
       "SeriesID" .Series.ID

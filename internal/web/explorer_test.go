@@ -161,7 +161,7 @@ func TestExplorerBrowseAndBrowserShell(t *testing.T) {
 	if !strings.Contains(body, `aria-label="Explorer type"`) {
 		t.Fatalf("browser missing type join: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, `href="/browser?type=series" class="btn join-item btn-primary"`) ||
+	if !strings.Contains(body, `href="/browser?type=series" class="btn join-item btn-accent"`) ||
 		!strings.Contains(body, `aria-current="page"`) {
 		t.Fatalf("browser should mark active type: %s", truncate(body, 400))
 	}
@@ -269,6 +269,9 @@ func TestFilesExplorerBulkModeAndIDs(t *testing.T) {
 	if !strings.Contains(body, `data-files-bulk-bar`) {
 		t.Fatalf("files explorer missing bulk bar: %s", truncate(body, 600))
 	}
+	if !strings.Contains(body, `data-files-bulk-check`) {
+		t.Fatalf("files explorer missing Check integrity (btn_labeled): %s", truncate(body, 600))
+	}
 	if !strings.Contains(body, ">Status</span>") || !strings.Contains(body, "status=failed") ||
 		!strings.Contains(body, "status=ok") || !strings.Contains(body, "status=unchecked") ||
 		!strings.Contains(body, "status=inactive") || !strings.Contains(body, "status=na") {
@@ -375,6 +378,9 @@ func TestSourcesExplorerBulkModeAndIDs(t *testing.T) {
 	if !strings.Contains(body, `data-sources-bulk-bar`) {
 		t.Fatalf("sources explorer missing bulk bar: %s", truncate(body, 600))
 	}
+	if !strings.Contains(body, `data-sources-bulk-scan`) {
+		t.Fatalf("sources explorer missing Scan (btn_labeled): %s", truncate(body, 600))
+	}
 	if !strings.Contains(body, `action="/actions/bulk-scan-sources"`) ||
 		!strings.Contains(body, `action="/actions/bulk-delete-sources"`) {
 		t.Fatalf("sources explorer missing bulk actions: %s", truncate(body, 600))
@@ -447,6 +453,10 @@ func TestNotificationsExplorerBulkModeAndIDs(t *testing.T) {
 	if !strings.Contains(body, `data-notifications-bulk-bar`) {
 		t.Fatalf("notifications missing bulk bar: %s", truncate(body, 600))
 	}
+	if !strings.Contains(body, `data-notifications-bulk-read`) ||
+		!strings.Contains(body, `data-notifications-bulk-unread`) {
+		t.Fatalf("notifications missing Mark read/unread (btn_labeled): %s", truncate(body, 600))
+	}
 	idsRec := httptest.NewRecorder()
 	r.ServeHTTP(idsRec, httptest.NewRequest(http.MethodGet, "/notifications/ids?type=notifications&at=browser", nil))
 	if idsRec.Code != 200 {
@@ -454,6 +464,56 @@ func TestNotificationsExplorerBulkModeAndIDs(t *testing.T) {
 	}
 	if !strings.Contains(idsRec.Body.String(), `"ids"`) {
 		t.Fatalf("ids json: %s", idsRec.Body.String())
+	}
+}
+
+func TestVideoSeriesFilterBadgesUseTitlesForFilterIDs(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	onPage, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "On Page Ser", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://www.example.com/@onpage",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	offPage, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Off Page Ser", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://www.example.com/@offpage",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only On Page has a matching video; Off Page is filter-only (no row on this page).
+	if _, err := d.SQL.Exec(`
+		INSERT INTO videos (series_id, remote_id, title, status)
+		VALUES (?, 'r1', 'Ep', 'wanted')
+	`, onPage.ID); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+	path := "/browser?type=videos&series=" + strconv.FormatInt(onPage.ID, 10) +
+		"&series=" + strconv.FormatInt(offPage.ID, 10) + "&status=wanted"
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 400))
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `aria-label="On Page Ser"`) || !strings.Contains(body, `aria-label="Off Page Ser"`) {
+		t.Fatalf("Series chips must use titles for filter IDs not on the page: %s", truncate(body, 1200))
+	}
+	if strings.Contains(body, `aria-label="#`+strconv.FormatInt(offPage.ID, 10)+`"`) {
+		t.Fatalf("Off Page Ser must not fall back to #id chip: %s", truncate(body, 800))
 	}
 }
 

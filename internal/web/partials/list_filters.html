@@ -8,7 +8,7 @@
           FormClass (optional extra classes on the form; default includes mb-3),
           SeriesBulkMode (bool - leading multi-select join-item for /series),
           VideoBulkMode (bool - leading multi-select join-item for series videos and /videos).
-     Active filters (non-empty q/date/select) use daisyUI input-primary / select-primary.
+     Active filters (non-empty q/date/select) use daisyUI input-accent / select-accent.
      JS: select/date/datetime-local change submits immediately; search debounces (~350ms) after typing stops and flushes on blur (js-list-filters). */}}
 {{$live := .LiveTarget}}
 {{$qName := .QueryName}}{{if not $qName}}{{$qName = "q"}}{{end}}
@@ -45,10 +45,10 @@
   </div>
   {{end}}
   {{if not .HideQuery}}
-  {{/* Full class strings (not {{if}}…input-primary) so Tailwind/daisyUI scan sees input-primary. */}}
+  {{/* Full class strings (not {{if}}…input-accent) so Tailwind/daisyUI scan sees input-accent. */}}
   {{if .Query}}
   <input type="search" name="{{$qName}}" value="{{.Query}}" placeholder="{{$qPh}}" aria-label="{{$qPh}}"
-         class="input join-item grow min-w-0 input-primary" autocomplete="off" />
+         class="input join-item grow min-w-0 input-accent" autocomplete="off" />
   {{else}}
   <input type="search" name="{{$qName}}" value="{{.Query}}" placeholder="{{$qPh}}" aria-label="{{$qPh}}"
          class="input join-item grow min-w-0" autocomplete="off" />
@@ -57,7 +57,7 @@
   {{if .DateName}}
   {{/* daisyUI label-for-date-input as one join-item (span.label + date). shrink-0 + min width so the join bar does not crush the native date field (calendar over text / nested chrome). */}}
   {{if .DateValue}}
-  <label class="input join-item shrink-0 min-w-60 input-primary">
+  <label class="input join-item shrink-0 min-w-60 input-accent">
     <span class="label">{{$dateAria}}</span>
     <input type="date" name="{{.DateName}}" value="{{.DateValue}}"{{if .DateMax}} max="{{.DateMax}}"{{else}} max="{{today}}"{{end}} />
   </label>
@@ -70,9 +70,9 @@
   {{end}}
   {{range .Selects}}
   {{$active := false}}{{range .Options}}{{if .Selected}}{{$active = true}}{{end}}{{end}}
-  {{/* Full class strings so Tailwind/daisyUI scan sees select-primary. */}}
+  {{/* Full class strings so Tailwind/daisyUI scan sees select-accent. */}}
   {{if $active}}
-  <select name="{{.Name}}" class="select join-item w-auto max-w-48 select-primary" aria-label="{{.AriaLabel}}">
+  <select name="{{.Name}}" class="select join-item w-auto max-w-48 select-accent" aria-label="{{.AriaLabel}}">
   {{else}}
   <select name="{{.Name}}" class="select join-item w-auto max-w-48" aria-label="{{.AriaLabel}}">
   {{end}}

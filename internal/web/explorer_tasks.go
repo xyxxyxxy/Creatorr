@@ -225,8 +225,10 @@ func (h *Handler) loadTasksListLive(w http.ResponseWriter, r *http.Request) (tas
 	}
 
 	fromDay, toDay := parseFilterDay(r.URL.Query().Get("from")), parseFilterDay(r.URL.Query().Get("to"))
+	menuActive := tasksFilterActive(filter, fromDay, toDay)
 	toolbar := listViewToolbar{
 		AriaLabel:          "Task filters",
+		Query:              filter.Q,
 		QueryPlaceholder:   "Search",
 		SortOpts:           tasksSortOpts(r, filter.Sort, filter.SortDir),
 		SortDir:            tasksSortDir(filter.Sort, filter.SortDir),
@@ -238,13 +240,13 @@ func (h *Handler) loadTasksListLive(w http.ResponseWriter, r *http.Request) (tas
 		ShowDatePresence:   false,
 		DateRangeLabel:     "Created",
 		Selects:            h.tasksFilterSelects(r, filter),
-		FilterActive:       tasksFilterActive(filter, fromDay, toDay),
+		FilterActive:       menuActive,
 		LiveTarget:         tasksListLiveTarget,
 		FormAction:         explorerFragmentPath(r),
 	}
 	if !overview {
 		applyExplorerToolbar(&toolbar, explorerTypeTasks, at)
-		if toolbar.FilterActive {
+		if menuActive {
 			toolbar.ClearAllHref = clearOperatorFiltersURL(r)
 			toolbar.Badges = h.tasksListBadges(r, filter, fromDay, toDay)
 		}
@@ -260,7 +262,7 @@ func (h *Handler) loadTasksListLive(w http.ResponseWriter, r *http.Request) (tas
 		ListMode:        listMode,
 		FilterTotal:     total,
 		Filter:          toolbar,
-		FilterActive:    !overview && toolbar.FilterActive,
+		FilterActive:    !overview && (menuActive || strings.TrimSpace(filter.Q) != ""),
 		ViewMode:        viewMode,
 		ShowToolbar:     !overview,
 		EmptyText:       emptyText,
@@ -409,21 +411,23 @@ func parseTasksExplorerFilter(r *http.Request) queue.TaskListFilter {
 	fromDay := parseFilterDay(r.URL.Query().Get("from"))
 	toDay := parseFilterDay(r.URL.Query().Get("to"))
 	fromBound, toBound := dayRangeBounds(fromDay, toDay)
-	origin := strings.TrimSpace(r.URL.Query().Get("origin"))
-	if !queue.ValidOrigin(origin) {
-		origin = ""
-	}
+	q := r.URL.Query()
 	f := queue.TaskListFilter{
-		Domain:  strings.TrimSpace(r.URL.Query().Get("domain")),
-		Kind:    strings.TrimSpace(r.URL.Query().Get("kind")),
-		Origin:  origin,
+		Domains: parseMultiQuery(q, "domain"),
+		Kinds:   parseMultiQuery(q, "kind"),
 		From:    fromBound,
 		To:      toBound,
-		Sort:    queue.NormalizeTaskSort(r.URL.Query().Get("sort")),
-		SortDir: parseSortDir(r.URL.Query().Get("dir")),
+		Q:       strings.TrimSpace(q.Get("q")),
+		Sort:    queue.NormalizeTaskSort(q.Get("sort")),
+		SortDir: parseSortDir(q.Get("dir")),
 	}
-	if _, ok := r.URL.Query()["status"]; ok {
-		f.Statuses = normalizeTaskStatusQuery(r.URL.Query()["status"])
+	for _, raw := range parseMultiQuery(q, "origin") {
+		if queue.ValidOrigin(raw) {
+			f.Origins = append(f.Origins, raw)
+		}
+	}
+	if _, ok := q["status"]; ok {
+		f.Statuses = normalizeTaskStatusQuery(q["status"])
 	}
 	return f
 }
@@ -467,7 +471,7 @@ func tasksSortDir(sort, dir string) string {
 }
 
 func tasksFilterActive(f queue.TaskListFilter, fromDay, toDay string) bool {
-	return len(f.Statuses) > 0 || f.Domain != "" || f.Kind != "" || f.Origin != "" || fromDay != "" || toDay != ""
+	return len(f.Statuses) > 0 || len(f.Domains) > 0 || len(f.Kinds) > 0 || len(f.Origins) > 0 || fromDay != "" || toDay != ""
 }
 
 func (h *Handler) tasksFilterSelects(r *http.Request, f queue.TaskListFilter) []listFilterSelect {
@@ -498,22 +502,25 @@ func (h *Handler) tasksFilterSelects(r *http.Request, f queue.TaskListFilter) []
 		}
 	}
 	domOpts := make([]listFilterOpt, 0, len(domainsList))
+	domainSel := selectedSet(f.Domains)
 	for _, d := range domainsList {
-		domOpts = append(domOpts, listFilterOpt{Value: d, Label: d, Selected: f.Domain == d})
+		domOpts = append(domOpts, listFilterOpt{Value: d, Label: d, Selected: domainSel[strings.ToLower(d)]})
 	}
 	kinds, _ := h.Queue.DistinctTaskKinds()
+	kindSel := selectedSet(f.Kinds)
 	kindOpts := make([]listFilterOpt, 0, len(kinds))
 	for _, k := range kinds {
-		kindOpts = append(kindOpts, listFilterOpt{Value: k, Label: k, Selected: f.Kind == k})
+		kindOpts = append(kindOpts, listFilterOpt{Value: k, Label: k, Selected: kindSel[strings.ToLower(k)]})
 	}
+	originSel := selectedSet(f.Origins)
 	originOpts := []listFilterOpt{
-		{Value: queue.OriginManual, Label: "manual", Selected: f.Origin == queue.OriginManual},
-		{Value: queue.OriginScheduled, Label: "scheduled", Selected: f.Origin == queue.OriginScheduled},
-		{Value: queue.OriginBoot, Label: "boot", Selected: f.Origin == queue.OriginBoot},
-		{Value: queue.OriginTask, Label: "task", Selected: f.Origin == queue.OriginTask},
+		{Value: queue.OriginManual, Label: "manual", Selected: originSel[queue.OriginManual]},
+		{Value: queue.OriginScheduled, Label: "scheduled", Selected: originSel[queue.OriginScheduled]},
+		{Value: queue.OriginBoot, Label: "boot", Selected: originSel[queue.OriginBoot]},
+		{Value: queue.OriginTask, Label: "task", Selected: originSel[queue.OriginTask]},
 	}
 	selects := []listFilterSelect{
-		{Name: "status", AriaLabel: "Status", Options: statusOpts, Multi: true},
+		{Name: "status", AriaLabel: "Status", Options: statusOpts},
 		{Name: "domain", AriaLabel: "Domain", Options: domOpts},
 		{Name: "kind", AriaLabel: "Kind", Options: kindOpts},
 		{Name: "origin", AriaLabel: "Origin", Options: originOpts},
@@ -546,25 +553,16 @@ func (h *Handler) tasksListBadges(r *http.Request, f queue.TaskListFilter, fromD
 			queue.StatusPending: "Queued", queue.StatusRunning: "Running",
 			queue.StatusDone: "Success", queue.StatusFailed: "Failure", queue.StatusCancelled: "Cancelled",
 		}
-		parts := make([]string, 0, len(f.Statuses))
-		for _, s := range f.Statuses {
+		badges = append(badges, orJoinBadges(r, "status", "Status", "status", f.Statuses, func(s string) string {
 			if l, ok := labels[s]; ok {
-				parts = append(parts, l)
-			} else {
-				parts = append(parts, s)
+				return l
 			}
-		}
-		badges = append(badges, listViewBadge{Label: "Status: " + strings.Join(parts, ", "), Href: clearQueryKey(r, "status")})
+			return s
+		})...)
 	}
-	if f.Domain != "" {
-		badges = append(badges, listViewBadge{Label: "Domain: " + f.Domain, Href: clearQueryKey(r, "domain")})
-	}
-	if f.Kind != "" {
-		badges = append(badges, listViewBadge{Label: "Kind: " + f.Kind, Href: clearQueryKey(r, "kind")})
-	}
-	if f.Origin != "" {
-		badges = append(badges, listViewBadge{Label: "Origin: " + f.Origin, Href: clearQueryKey(r, "origin")})
-	}
+	badges = append(badges, orJoinBadges(r, "domain", "Domain", "domain", f.Domains, nil)...)
+	badges = append(badges, orJoinBadges(r, "kind", "Kind", "kind", f.Kinds, nil)...)
+	badges = append(badges, orJoinBadges(r, "origin", "Origin", "origin", f.Origins, nil)...)
 	if fromDay != "" || toDay != "" {
 		var label string
 		if fromDay != "" && toDay != "" {
@@ -629,14 +627,20 @@ func writeTasksListPrefs(w http.ResponseWriter, r *http.Request, filter queue.Ta
 			v.Add("status", st)
 		}
 	}
-	if d := strings.TrimSpace(filter.Domain); d != "" {
-		v.Set("domain", d)
+	for _, d := range filter.Domains {
+		if d = strings.TrimSpace(d); d != "" {
+			v.Add("domain", d)
+		}
 	}
-	if k := strings.TrimSpace(filter.Kind); k != "" {
-		v.Set("kind", k)
+	for _, k := range filter.Kinds {
+		if k = strings.TrimSpace(k); k != "" {
+			v.Add("kind", k)
+		}
 	}
-	if o := strings.TrimSpace(filter.Origin); o != "" {
-		v.Set("origin", o)
+	for _, o := range filter.Origins {
+		if o = strings.TrimSpace(o); o != "" {
+			v.Add("origin", o)
+		}
 	}
 	if d := parseFilterDay(r.URL.Query().Get("from")); d != "" {
 		v.Set("from", d)

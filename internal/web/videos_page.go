@@ -109,8 +109,19 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		}
 	}
 	rows := h.buildSeriesVideoRows(list, byVideo, nil)
-	seriesIDs := make([]int64, 0, len(list))
+	// Badge/chip labels need titles for every filtered series, not only rows on this page.
+	seriesIDs := make([]int64, 0, len(filter.SeriesIDs)+len(list))
 	seen := map[int64]struct{}{}
+	for _, id := range filter.SeriesIDs {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		seriesIDs = append(seriesIDs, id)
+	}
 	for _, v := range list {
 		if _, ok := seen[v.SeriesID]; ok {
 			continue
@@ -121,8 +132,8 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 	titles, _ := h.Library.SeriesTitles(seriesIDs)
 
 	var sources []library.Source
-	if filter.SeriesID > 0 {
-		if ser, err := h.Library.GetSeries(filter.SeriesID, false); err == nil {
+	if len(filter.SeriesIDs) == 1 {
+		if ser, err := h.Library.GetSeries(filter.SeriesIDs[0], false); err == nil {
 			sources = ser.Sources
 		}
 	}
@@ -143,7 +154,7 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		ShowDatePresence: true,
 		DateRangeLabel:   "Upload date",
 		Selects:          videoFilterSelects(h, r, 0, filter, sources, true),
-		FilterActive:     filter.Active(),
+		FilterActive:     filter.MenuActive(),
 		Badges:           videoListBadges(r, filter, true, titles),
 		ClearAllHref:     "",
 		LiveTarget:       liveTarget,
@@ -151,7 +162,7 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		VideoBulkMode:    true,
 	}
 	annotateUploadPresence(r, &toolbar)
-	if filter.Active() {
+	if filter.MenuActive() {
 		toolbar.ClearAllHref = clearOperatorFiltersURL(r)
 	}
 	at := explorerAtFrom(r, explorerAtVideos)

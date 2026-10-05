@@ -5,6 +5,7 @@ import (
 
 	"github.com/xyxxyxxy/Creatorr/internal/health"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
@@ -28,6 +29,16 @@ func (h *Handler) Mount(r chi.Router) {
 		}
 		u, _ := settings.AuthUsername(h.Queue.DB)
 		return u
+	})
+	SetNotifyBadgeForPage(func() (int, bool) {
+		if h.Queue == nil || h.Queue.DB == nil {
+			return 0, false
+		}
+		n, hasAlert, err := notify.UnreadBadge(h.Queue.DB)
+		if err != nil {
+			return 0, false
+		}
+		return n, hasAlert
 	})
 
 	r.Get("/setup", h.setupGet)

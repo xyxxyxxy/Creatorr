@@ -91,6 +91,16 @@ func TestToggleMultiSelectURL(t *testing.T) {
 	if len(u2.Query()["genre"]) != 0 {
 		t.Fatalf("drop only A: genre=%v href=%q", u2.Query()["genre"], dropA)
 	}
+
+	st := httptest.NewRequest(http.MethodGet, "/videos?status=wanted", nil)
+	clearStatus := toggleMultiSelectURL(st, "status", "wanted", "")
+	su, err := url.Parse(clearStatus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := su.Query()["status"]; !ok || su.Query().Get("status") != "" {
+		t.Fatalf("toggle off last status must set status=, got %q vals=%v", clearStatus, su.Query()["status"])
+	}
 }
 
 func TestFilterValueChipLabel(t *testing.T) {
@@ -171,7 +181,7 @@ func TestSpecialKindFilterSelect(t *testing.T) {
 	t.Parallel()
 	opts := []listFilterOpt{{Value: library.PackRoleSpecialEpisode, Label: "Special episode"}}
 	req := httptest.NewRequest(http.MethodGet, "/videos", nil)
-	sel := specialKindFilterSelect(req, "", opts)
+	sel := specialKindFilterSelect(req, nil, opts)
 	if sel.AriaLabel != "Special kind" || sel.PresenceField != "" {
 		t.Fatalf("aria/presence: %#v", sel)
 	}
@@ -195,14 +205,14 @@ func TestSpecialKindFilterSelect(t *testing.T) {
 
 	selAny := specialKindFilterSelect(
 		httptest.NewRequest(http.MethodGet, "/videos?kind=special", nil),
-		library.VideoPackRoleAnySpecial, opts)
+		[]string{library.VideoPackRoleAnySpecial}, opts)
 	if !selAny.PresenceFilledSelected || selAny.PresenceEmptySelected {
 		t.Fatalf("any special flags: filled=%v empty=%v", selAny.PresenceFilledSelected, selAny.PresenceEmptySelected)
 	}
 
 	selEp := specialKindFilterSelect(
 		httptest.NewRequest(http.MethodGet, "/videos?kind=episode", nil),
-		library.PackRoleRegular, opts)
+		[]string{library.PackRoleRegular}, opts)
 	if selEp.PresenceFilledSelected || !selEp.PresenceEmptySelected {
 		t.Fatalf("regular flags: filled=%v empty=%v", selEp.PresenceFilledSelected, selEp.PresenceEmptySelected)
 	}
@@ -210,7 +220,7 @@ func TestSpecialKindFilterSelect(t *testing.T) {
 	trailers := []listFilterOpt{{Value: "trailers", Label: "Feature: trailers", Selected: true}}
 	selFeat := specialKindFilterSelect(
 		httptest.NewRequest(http.MethodGet, "/videos?kind=trailers", nil),
-		"trailers", trailers)
+		[]string{"trailers"}, trailers)
 	if !selFeat.PresenceFilledSelected {
 		t.Fatal("concrete special should mark Has selected")
 	}

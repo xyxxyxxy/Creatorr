@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
@@ -50,9 +49,9 @@ func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
 	f := library.SeriesListFilter{
 		Title:   strings.TrimSpace(q.Get("q")),
 		QField:  parseQField(r),
-		Studio:  strings.TrimSpace(q.Get("studio")),
-		Country: strings.TrimSpace(q.Get("country")),
-		MPAA:    strings.TrimSpace(q.Get("mpaa")),
+		Studios: parseMultiQuery(q, "studio"),
+		Countries: parseMultiQuery(q, "country"),
+		MPAAs:   parseMultiQuery(q, "mpaa"),
 		Genres:  parseMultiQuery(q, "genre"),
 		Tags:    parseMultiQuery(q, "tag"),
 		Actors:  parseMultiQuery(q, "actor"),
@@ -60,34 +59,30 @@ func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
 		SortDir: parseSortDir(q.Get("dir")),
 	}
 	f.Empty, f.NotEmpty = parsePresenceParams(q)
-	if v := strings.TrimSpace(q.Get("root")); v != "" {
-		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
-			f.RootID = id
+	f.RootIDs = parseMultiInt64(q, "root")
+	f.QualityProfileIDs = parseMultiInt64(q, "quality")
+	f.DeliveryModes = parseMultiQuery(q, "delivery")
+	f.PremieredYears = parseMultiYear(q, "year")
+	seen := map[string]struct{}{}
+	for _, raw := range q["status"] {
+		st := strings.TrimSpace(raw)
+		if st == "" {
+			continue
 		}
-	}
-	if v := strings.TrimSpace(q.Get("quality")); v != "" {
-		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
-			f.QualityProfileID = id
+		switch st {
+		case library.SeriesListStatusMonitored,
+			library.SeriesListStatusUnmonitored,
+			library.SeriesListStatusComplete,
+			library.SeriesListStatusIncomplete,
+			library.SeriesListStatusHasErrors:
+		default:
+			continue
 		}
-	}
-	switch strings.ToLower(strings.TrimSpace(q.Get("delivery"))) {
-	case library.DeliveryVideo:
-		f.DeliveryMode = library.DeliveryVideo
-	case library.DeliveryAudio:
-		f.DeliveryMode = library.DeliveryAudio
-	}
-	switch strings.TrimSpace(q.Get("status")) {
-	case library.SeriesListStatusMonitored,
-		library.SeriesListStatusUnmonitored,
-		library.SeriesListStatusComplete,
-		library.SeriesListStatusIncomplete,
-		library.SeriesListStatusHasErrors:
-		f.Status = strings.TrimSpace(q.Get("status"))
-	}
-	if raw := strings.TrimSpace(q.Get("year")); raw != "" {
-		if y, err := strconv.Atoi(raw); err == nil && y >= 1900 && y <= 2100 {
-			f.PremieredYear = y
+		if _, ok := seen[st]; ok {
+			continue
 		}
+		seen[st] = struct{}{}
+		f.Statuses = append(f.Statuses, st)
 	}
 	return f
 }
@@ -211,7 +206,7 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 	}
 
 	clearHref := ""
-	if filter.Active() {
+	if filter.MenuActive() {
 		clearHref = clearOperatorFiltersURL(r)
 	}
 	at := explorerAtFrom(r, explorerAtSeries)
@@ -226,7 +221,7 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 		ViewOpts:         viewOpts(r, viewMode),
 		ShowView:         true,
 		Selects:          seriesFilterSelects(h, r, filter, roots, profiles),
-		FilterActive:     filter.Active(),
+		FilterActive:     filter.MenuActive(),
 		Badges:           seriesListBadges(r, filter),
 		ClearAllHref:     clearHref,
 		LiveTarget:       liveTarget,

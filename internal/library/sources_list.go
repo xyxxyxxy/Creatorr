@@ -134,16 +134,17 @@ const (
 
 // SourceListFilter narrows library-wide or series-scoped source lists.
 type SourceListFilter struct {
-	SeriesID        int64  // 0 = all series (browser operator filter or series-detail lock)
-	Q               string // case-insensitive substring against QField
-	QField          string // url|name|series; empty = name; legacy label accepted
-	Kind            string // feed|single|""
-	Domain          string // hostname (facet); matched against URL
-	HasError        *bool  // nil = any; true = last event scan_error; false = not
-	FullScanDone    *bool  // nil = any; true = done; false = incomplete
-	ScheduleOn      *bool  // nil = any; true = feed with cron; false = off/never/single
-	IndexAsIgnored  *bool  // nil = any; discovered video status (feeds); singles count as wanted
-	SeriesMonitored *bool  // nil = any
+	SeriesID        int64    // series-detail lock (series_id); browser multi uses SeriesIDs
+	SeriesIDs       []int64  // browser series= multi when SeriesID==0
+	Q               string   // case-insensitive substring against QField
+	QField          string   // url|name|series; empty = name; legacy label accepted
+	Kinds           []string // feed|single; IN
+	Domains         []string // hostname facets; OR of url LIKE
+	HasError        *bool    // nil = any; true = last event scan_error; false = not
+	FullScanDone    *bool    // nil = any; true = done; false = incomplete
+	ScheduleOn      *bool    // nil = any; true = feed with cron; false = off/never/single
+	IndexAsIgnored  *bool    // nil = any; discovered video status (feeds); singles count as wanted
+	SeriesMonitored *bool    // nil = any
 	Sort            string
 	SortDir         string
 }
@@ -156,18 +157,36 @@ type SourceListRow struct {
 	LastScannedAt   string // sticky last scanned/scan_error time; empty = never
 }
 
-// Active reports whether any operator filter is set.
+// MenuActive reports whether any Filter-menu constraint is set (not search, not sort).
 // SeriesID counts when used as a browser Series filter (series-detail lock is gated in the UI).
-func (f SourceListFilter) Active() bool {
-	return strings.TrimSpace(f.Q) != "" ||
-		f.SeriesID > 0 ||
-		f.Kind != "" ||
-		strings.TrimSpace(f.Domain) != "" ||
+func (f SourceListFilter) MenuActive() bool {
+	return f.SeriesID > 0 ||
+		len(uniqPositiveInt64s(f.SeriesIDs)) > 0 ||
+		len(sourceListKinds(f.Kinds)) > 0 ||
+		len(trimNonEmptyStrings(f.Domains)) > 0 ||
 		f.HasError != nil ||
 		f.FullScanDone != nil ||
 		f.ScheduleOn != nil ||
 		f.IndexAsIgnored != nil ||
 		f.SeriesMonitored != nil
+}
+
+// Active reports whether search or any Filter-menu constraint is set.
+func (f SourceListFilter) Active() bool {
+	return strings.TrimSpace(f.Q) != "" || f.MenuActive()
+}
+
+func sourceListKinds(raw []string) []string {
+	var out []string
+	for _, k := range raw {
+		k = strings.TrimSpace(k)
+		if strings.EqualFold(k, SourceKindSingle) {
+			out = append(out, SourceKindSingle)
+		} else if strings.EqualFold(k, SourceKindFeed) {
+			out = append(out, SourceKindFeed)
+		}
+	}
+	return out
 }
 
 // NormalizeSourceQField returns a known Sources text field id or name.
@@ -191,6 +210,8 @@ func (f SourceListFilter) where() (string, []any) {
 	if f.SeriesID > 0 {
 		b.WriteString(` AND src.series_id = ?`)
 		args = append(args, f.SeriesID)
+	} else {
+		appendInt64In(&b, &args, "src.series_id", f.SeriesIDs)
 	}
 	if q := strings.TrimSpace(f.Q); q != "" {
 		like := "%" + q + "%"
@@ -206,18 +227,17 @@ func (f SourceListFilter) where() (string, []any) {
 			args = append(args, like)
 		}
 	}
-	k := strings.TrimSpace(f.Kind)
-	if strings.EqualFold(k, SourceKindSingle) {
-		b.WriteString(` AND src.kind = ?`)
-		args = append(args, SourceKindSingle)
-	} else if strings.EqualFold(k, SourceKindFeed) {
-		b.WriteString(` AND src.kind = ?`)
-		args = append(args, SourceKindFeed)
-	}
-	if d := strings.TrimSpace(f.Domain); d != "" {
-		// Facet hosts from ListSourceDomains; URL LIKE covers http(s) and optional www.
-		b.WriteString(` AND src.url LIKE ?`)
-		args = append(args, "%"+d+"%")
+	appendStringsIn(&b, &args, "src.kind", sourceListKinds(f.Kinds), false)
+	domains := trimNonEmptyStrings(f.Domains)
+	if len(domains) > 0 {
+		var parts []string
+		for range domains {
+			parts = append(parts, `src.url LIKE ?`)
+		}
+		appendAndOrGroup(&b, parts)
+		for _, d := range domains {
+			args = append(args, "%"+d+"%")
+		}
 	}
 	if f.HasError != nil {
 		sub := `(

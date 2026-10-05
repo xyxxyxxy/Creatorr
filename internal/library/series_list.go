@@ -15,33 +15,49 @@ const (
 
 // SeriesListFilter scopes the series admin list (text, catalog metadata, root, quality, delivery, status).
 type SeriesListFilter struct {
-	Title            string // case-insensitive substring against QField
-	QField           string
-	RootID           int64  // 0 = any
-	QualityProfileID int64  // 0 = any
-	DeliveryMode     string // video|audio; empty = any
-	Status           string // SeriesListStatus*; empty = any
-	Studio           string
-	Country          string
-	MPAA             string
-	PremieredYear    int // 0 = any; positive = premiered UTC calendar year
-	Genres           []string
-	Tags             []string
-	Actors           []string
-	Empty            []string
-	NotEmpty         []string
-	Sort             string // title|added; empty = title
-	SortDir          string // asc|desc; empty = DefaultSortDir(Sort)
+	Title              string // case-insensitive substring against QField
+	QField             string
+	RootIDs            []int64
+	QualityProfileIDs  []int64
+	DeliveryModes      []string // video|audio; OR match
+	Statuses           []string // SeriesListStatus*; OR of status predicates
+	Studios            []string
+	Countries          []string
+	MPAAs              []string
+	PremieredYears     []int // UTC calendar years; 0 entries ignored
+	Genres             []string
+	Tags               []string
+	Actors             []string
+	Empty              []string
+	NotEmpty           []string
+	Sort               string // title|added; empty = title
+	SortDir            string // asc|desc; empty = DefaultSortDir(Sort)
 }
 
-// Active reports whether any series list filter constraint is set (not sort).
-func (f SeriesListFilter) Active() bool {
-	return strings.TrimSpace(f.Title) != "" || f.RootID > 0 || f.QualityProfileID > 0 ||
-		f.DeliveryMode == DeliveryVideo || f.DeliveryMode == DeliveryAudio ||
-		seriesListStatusActive(f.Status) ||
-		strings.TrimSpace(f.Studio) != "" || strings.TrimSpace(f.Country) != "" || strings.TrimSpace(f.MPAA) != "" ||
-		f.PremieredYear != 0 || len(f.Genres) > 0 || len(f.Tags) > 0 || len(f.Actors) > 0 ||
+// MenuActive reports whether any Filter-menu constraint is set (not search, not sort).
+func (f SeriesListFilter) MenuActive() bool {
+	return len(uniqPositiveInt64s(f.RootIDs)) > 0 ||
+		len(uniqPositiveInt64s(f.QualityProfileIDs)) > 0 ||
+		len(seriesDeliveryModes(f.DeliveryModes)) > 0 ||
+		seriesListStatusesActive(f.Statuses) ||
+		len(trimNonEmptyStrings(f.Studios)) > 0 || len(trimNonEmptyStrings(f.Countries)) > 0 ||
+		len(trimNonEmptyStrings(f.MPAAs)) > 0 ||
+		len(uniqNonZeroInts(f.PremieredYears)) > 0 || len(f.Genres) > 0 || len(f.Tags) > 0 || len(f.Actors) > 0 ||
 		len(f.Empty) > 0 || len(f.NotEmpty) > 0
+}
+
+// Active reports whether search or any Filter-menu constraint is set (not sort).
+func (f SeriesListFilter) Active() bool {
+	return strings.TrimSpace(f.Title) != "" || f.MenuActive()
+}
+
+func seriesListStatusesActive(statuses []string) bool {
+	for _, st := range statuses {
+		if seriesListStatusActive(st) {
+			return true
+		}
+	}
+	return false
 }
 
 func seriesListStatusActive(status string) bool {
@@ -52,6 +68,17 @@ func seriesListStatusActive(status string) bool {
 	default:
 		return false
 	}
+}
+
+func seriesDeliveryModes(modes []string) []string {
+	var out []string
+	for _, m := range modes {
+		m = NormalizeDeliveryMode(strings.TrimSpace(m))
+		if m == DeliveryVideo || m == DeliveryAudio {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // seriesProgressOpenStatuses: still-open for list progress + Incomplete (wanted, archive wait, download error, verify fail).
@@ -101,59 +128,46 @@ func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilt
 		b.WriteString(` AND ` + col + ` LIKE ? ESCAPE '\' COLLATE NOCASE`)
 		*args = append(*args, likeContainsPattern(title))
 	}
-	if f.RootID > 0 {
-		b.WriteString(` AND s.root_id = ?`)
-		*args = append(*args, f.RootID)
-	}
-	if f.QualityProfileID > 0 {
-		b.WriteString(` AND s.quality_profile_id = ?`)
-		*args = append(*args, f.QualityProfileID)
-	}
-	if f.DeliveryMode == DeliveryVideo || f.DeliveryMode == DeliveryAudio {
-		b.WriteString(` AND s.delivery_mode = ?`)
-		*args = append(*args, f.DeliveryMode)
-	}
-	if studio := strings.TrimSpace(f.Studio); studio != "" {
-		b.WriteString(` AND s.studio = ? COLLATE NOCASE`)
-		*args = append(*args, studio)
-	}
-	if country := strings.TrimSpace(f.Country); country != "" {
-		b.WriteString(` AND s.country = ? COLLATE NOCASE`)
-		*args = append(*args, country)
-	}
-	if mpaa := strings.TrimSpace(f.MPAA); mpaa != "" {
-		b.WriteString(` AND s.mpaa = ? COLLATE NOCASE`)
-		*args = append(*args, mpaa)
-	}
-	switch {
-	case f.PremieredYear > 0:
+	appendInt64In(b, args, "s.root_id", f.RootIDs)
+	appendInt64In(b, args, "s.quality_profile_id", f.QualityProfileIDs)
+	appendStringsIn(b, args, "s.delivery_mode", seriesDeliveryModes(f.DeliveryModes), false)
+	appendStringsIn(b, args, "s.studio", f.Studios, true)
+	appendStringsIn(b, args, "s.country", f.Countries, true)
+	appendStringsIn(b, args, "s.mpaa", f.MPAAs, true)
+	years := uniqNonZeroInts(f.PremieredYears)
+	if len(years) > 0 {
 		b.WriteString(` AND s.premiered IS NOT NULL AND trim(s.premiered) != ''`)
-		b.WriteString(` AND CAST(strftime('%Y', s.premiered) AS INTEGER) = ?`)
-		*args = append(*args, f.PremieredYear)
+		appendIntsIn(b, args, `CAST(strftime('%Y', s.premiered) AS INTEGER)`, years)
 	}
 	appendJSONStringListMatch(b, args, "s.genres", f.Genres)
 	appendJSONStringListMatch(b, args, "s.tags", f.Tags)
 	appendJSONActorNameMatch(b, args, "s.actors", f.Actors)
 	appendSeriesPresenceSQL(b, f.Empty, f.NotEmpty)
-	switch f.Status {
-	case SeriesListStatusMonitored:
-		b.WriteString(` AND s.monitored = 1`)
-	case SeriesListStatusUnmonitored:
-		b.WriteString(` AND s.monitored = 0`)
-	case SeriesListStatusComplete:
-		// Match list progress: has downloaded or open work, and no open work left.
-		b.WriteString(` AND (SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('downloaded', ` + seriesProgressOpenStatuses + `)) > 0
+	appendSeriesListStatusesSQL(b, args, f.Statuses)
+}
+
+func appendSeriesListStatusesSQL(b *strings.Builder, args *[]any, statuses []string) {
+	var parts []string
+	for _, st := range statuses {
+		st = strings.TrimSpace(st)
+		switch st {
+		case SeriesListStatusMonitored:
+			parts = append(parts, `s.monitored = 1`)
+		case SeriesListStatusUnmonitored:
+			parts = append(parts, `s.monitored = 0`)
+		case SeriesListStatusComplete:
+			parts = append(parts, `(SELECT COUNT(*) FROM videos v WHERE v.series_id = s.id AND v.status IN ('downloaded', `+seriesProgressOpenStatuses+`)) > 0
 			AND NOT EXISTS (
 				SELECT 1 FROM videos v
-				WHERE v.series_id = s.id AND v.status IN (` + seriesProgressOpenStatuses + `)
+				WHERE v.series_id = s.id AND v.status IN (`+seriesProgressOpenStatuses+`)
 			)`)
-	case SeriesListStatusIncomplete:
-		b.WriteString(` AND EXISTS (
-			SELECT 1 FROM videos v
-			WHERE v.series_id = s.id AND v.status IN (` + seriesProgressOpenStatuses + `)
-		)`)
-	case SeriesListStatusHasErrors:
-		b.WriteString(` AND (
+		case SeriesListStatusIncomplete:
+			parts = append(parts, `EXISTS (
+				SELECT 1 FROM videos v
+				WHERE v.series_id = s.id AND v.status IN (`+seriesProgressOpenStatuses+`)
+			)`)
+		case SeriesListStatusHasErrors:
+			parts = append(parts, `(
 			EXISTS (
 				SELECT 1 FROM videos v
 				WHERE v.series_id = s.id AND v.status IN ('wanted_download_error', 'downloaded_integrity_failed')
@@ -168,8 +182,10 @@ func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilt
 				  ) = ?
 			)
 		)`)
-		*args = append(*args, SourceHistScanned, SourceHistScanError, SourceHistScanError)
+			*args = append(*args, SourceHistScanned, SourceHistScanError, SourceHistScanError)
+		}
 	}
+	appendAndOrGroup(b, parts)
 }
 
 func scanSeriesListRow(rows *sql.Rows) (Series, error) {

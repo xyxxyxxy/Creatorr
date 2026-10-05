@@ -200,7 +200,7 @@ func TestVideoSourceImportFilter(t *testing.T) {
 	if err != nil || n != 1 {
 		t.Fatalf("null count=%d err=%v", n, err)
 	}
-	list, err := s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{SourceID: library.VideoSourceImport}, 50, 0)
+	list, err := s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{SourceIDs: []int64{library.VideoSourceImport}}, 50, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

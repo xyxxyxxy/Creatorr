@@ -23,17 +23,10 @@
       </button>
       {{end}}
     </div>
-    <div class="self-center justify-self-end">
-      <div class="join">
-        <button type="button" class="btn join-item tooltip tooltip-top" data-notifications-bulk-read data-tip="Mark read" aria-label="Mark read" disabled>
-          <i data-lucide="mail-open" class="size-4"></i>
-          Mark read
-        </button>
-        <button type="button" class="btn join-item tooltip tooltip-top" data-notifications-bulk-unread data-tip="Mark unread" aria-label="Mark unread" disabled>
-          <i data-lucide="mail" class="size-4"></i>
-          Mark unread
-        </button>
-      </div>
+    <div class="self-center justify-self-end flex flex-wrap gap-2 items-center">
+      {{template "btn_labeled" (dict "Icon" "mail-open" "Label" "Mark read" "Data" "notifications-bulk-read" "Disabled" true)}}
+      {{template "btn_labeled" (dict "Icon" "mail" "Label" "Mark unread" "Data" "notifications-bulk-unread" "Disabled" true)}}
+
     </div>
   </li>
 </ul>

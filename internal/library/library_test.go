@@ -378,21 +378,21 @@ func TestListSeriesFiltered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.ListSeriesFiltered(library.SeriesListFilter{Title: "alpha", Status: library.SeriesListStatusMonitored}, 20, 0)
+	got, err := s.ListSeriesFiltered(library.SeriesListFilter{Title: "alpha", Statuses: []string{library.SeriesListStatusMonitored}}, 20, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].ID != alpha.ID {
 		t.Fatalf("title+monitored got %#v", got)
 	}
-	n, err := s.CountSeriesFiltered(library.SeriesListFilter{RootID: rootB.ID})
+	n, err := s.CountSeriesFiltered(library.SeriesListFilter{RootIDs: []int64{rootB.ID}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n != 1 {
 		t.Fatalf("root count=%d", n)
 	}
-	n, err = s.CountSeriesFiltered(library.SeriesListFilter{QualityProfileID: profileA})
+	n, err = s.CountSeriesFiltered(library.SeriesListFilter{QualityProfileIDs: []int64{profileA}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,14 +406,14 @@ func TestListSeriesFiltered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err = s.CountSeriesFiltered(library.SeriesListFilter{DeliveryMode: library.DeliveryAudio})
+	n, err = s.CountSeriesFiltered(library.SeriesListFilter{DeliveryModes: []string{library.DeliveryAudio}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n != 1 {
 		t.Fatalf("delivery audio count=%d", n)
 	}
-	n, err = s.CountSeriesFiltered(library.SeriesListFilter{DeliveryMode: library.DeliveryVideo})
+	n, err = s.CountSeriesFiltered(library.SeriesListFilter{DeliveryModes: []string{library.DeliveryVideo}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -515,11 +515,11 @@ func TestListSeriesFilteredStatus(t *testing.T) {
 		}
 	}
 
-	assertOne(t, library.SeriesListFilter{Status: library.SeriesListStatusHasErrors}, errShow.ID, "has_errors")
-	assertOne(t, library.SeriesListFilter{Status: library.SeriesListStatusComplete}, completeShow.ID, "complete")
-	assertNotIn(t, library.SeriesListFilter{Status: library.SeriesListStatusIncomplete}, completeShow.ID, "incomplete excludes complete+ignored")
+	assertOne(t, library.SeriesListFilter{Statuses: []string{library.SeriesListStatusHasErrors}}, errShow.ID, "has_errors")
+	assertOne(t, library.SeriesListFilter{Statuses: []string{library.SeriesListStatusComplete}}, completeShow.ID, "complete")
+	assertNotIn(t, library.SeriesListFilter{Statuses: []string{library.SeriesListStatusIncomplete}}, completeShow.ID, "incomplete excludes complete+ignored")
 
-	incomplete, err := s.ListSeriesFiltered(library.SeriesListFilter{Status: library.SeriesListStatusIncomplete}, 20, 0)
+	incomplete, err := s.ListSeriesFiltered(library.SeriesListFilter{Statuses: []string{library.SeriesListStatusIncomplete}}, 20, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -533,7 +533,7 @@ func TestListSeriesFilteredStatus(t *testing.T) {
 	if !gotIDs[incompleteShow.ID] || !gotIDs[errShow.ID] {
 		t.Fatalf("incomplete got %#v want ids %d and %d", incomplete, incompleteShow.ID, errShow.ID)
 	}
-	nInc, err := s.CountSeriesFiltered(library.SeriesListFilter{Status: library.SeriesListStatusIncomplete})
+	nInc, err := s.CountSeriesFiltered(library.SeriesListFilter{Statuses: []string{library.SeriesListStatusIncomplete}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -541,9 +541,9 @@ func TestListSeriesFilteredStatus(t *testing.T) {
 		t.Fatalf("incomplete count=%d want 2", nInc)
 	}
 
-	assertOne(t, library.SeriesListFilter{Status: library.SeriesListStatusUnmonitored}, incompleteShow.ID, "unmonitored")
+	assertOne(t, library.SeriesListFilter{Statuses: []string{library.SeriesListStatusUnmonitored}}, incompleteShow.ID, "unmonitored")
 
-	monitored, err := s.ListSeriesFiltered(library.SeriesListFilter{Status: library.SeriesListStatusMonitored}, 20, 0)
+	monitored, err := s.ListSeriesFiltered(library.SeriesListFilter{Statuses: []string{library.SeriesListStatusMonitored}}, 20, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -604,7 +604,7 @@ func TestSeriesProgressCountsErrorsAsPending(t *testing.T) {
 		t.Fatalf("ProgressTotal=%d want 8", got.ProgressTotal())
 	}
 
-	list, err := s.ListSeriesFiltered(library.SeriesListFilter{Status: library.SeriesListStatusIncomplete}, 20, 0)
+	list, err := s.ListSeriesFiltered(library.SeriesListFilter{Statuses: []string{library.SeriesListStatusIncomplete}}, 20, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -614,7 +614,7 @@ func TestSeriesProgressCountsErrorsAsPending(t *testing.T) {
 	if list[0].ProgressTotal() != 8 || list[0].DownloadedCount != 6 {
 		t.Fatalf("list progress %d/%d want 6/8", list[0].DownloadedCount, list[0].ProgressTotal())
 	}
-	complete, err := s.ListSeriesFiltered(library.SeriesListFilter{Status: library.SeriesListStatusComplete}, 20, 0)
+	complete, err := s.ListSeriesFiltered(library.SeriesListFilter{Statuses: []string{library.SeriesListStatusComplete}}, 20, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

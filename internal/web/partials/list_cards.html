@@ -6,9 +6,12 @@
 <li class="card bg-base-100 border border-base-300 relative rounded-box" {{if .Select}}data-video-id="{{.ID}}"{{end}}>
   {{if .Select}}
   <div class="absolute top-2 left-2 z-20 hidden" data-video-select-wrap>
-    <input type="checkbox" class="checkbox checkbox-sm js-video-select bg-base-100" value="{{.ID}}"
-           aria-label="Select video"
-           {{if .BulkEditBusy}}disabled{{end}} />
+    {{/* Plate under checkbox: bg on the input fights daisyUI :checked fill. */}}
+    <span class="inline-flex items-center justify-center rounded-box bg-base-100/90 shadow p-0.5">
+      <input type="checkbox" class="checkbox checkbox-sm js-video-select" value="{{.ID}}"
+             aria-label="Select video"
+             {{if .BulkEditBusy}}disabled{{end}} />
+    </span>
   </div>
   {{end}}
   {{if not .NoActions}}
@@ -65,9 +68,11 @@
   <a href="/series/{{.SeriesID}}/videos/{{.ID}}" class="absolute inset-0 z-10" aria-label="{{.Title}}"></a>
   {{if .Select}}
   <div class="absolute top-2 left-2 z-20 hidden" data-video-select-wrap onclick="event.stopPropagation()">
-    <input type="checkbox" class="checkbox checkbox-sm js-video-select bg-base-100" value="{{.ID}}"
-           aria-label="Select video"
-           {{if .BulkEditBusy}}disabled{{end}} />
+    <span class="inline-flex items-center justify-center rounded-box bg-base-100/90 shadow p-0.5">
+      <input type="checkbox" class="checkbox checkbox-sm js-video-select" value="{{.ID}}"
+             aria-label="Select video"
+             {{if .BulkEditBusy}}disabled{{end}} />
+    </span>
   </div>
   {{end}}
 </li>
@@ -78,9 +83,11 @@
      daisyUI image-full 1:1: title + Line2 + progress in overlay; monitor absolute. */}}
 <li class="card bg-base-100 border border-base-300 relative rounded-box" data-series-id="{{.ID}}">
   <div class="absolute top-2 left-2 z-20 hidden" data-series-select-wrap>
-    <input type="checkbox" class="checkbox checkbox-sm js-series-select bg-base-100" value="{{.ID}}"
-           aria-label="Select series"
-           {{if .BulkEditBusy}}disabled{{end}} />
+    <span class="inline-flex items-center justify-center rounded-box bg-base-100/90 shadow p-0.5">
+      <input type="checkbox" class="checkbox checkbox-sm js-series-select" value="{{.ID}}"
+             aria-label="Select series"
+             {{if .BulkEditBusy}}disabled{{end}} />
+    </span>
   </div>
   <div class="absolute top-1 right-1 z-30" data-series-monitor-wrap>
     {{template "monitor_toggle" (dict
@@ -133,9 +140,11 @@
   </div>
   <a href="/series/{{.ID}}" class="absolute inset-0 z-10" aria-label="{{.Title}}"></a>
   <div class="absolute top-2 left-2 z-20 hidden" data-series-select-wrap onclick="event.stopPropagation()">
-    <input type="checkbox" class="checkbox checkbox-sm js-series-select bg-base-100" value="{{.ID}}"
-           aria-label="Select series"
-           {{if .BulkEditBusy}}disabled{{end}} />
+    <span class="inline-flex items-center justify-center rounded-box bg-base-100/90 shadow p-0.5">
+      <input type="checkbox" class="checkbox checkbox-sm js-series-select" value="{{.ID}}"
+             aria-label="Select series"
+             {{if .BulkEditBusy}}disabled{{end}} />
+    </span>
   </div>
 </li>
 {{end}}

@@ -44,23 +44,23 @@ func TestVideoListFilterPackRole(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{PackRole: library.PackRoleRegular}, 50, 0)
+	got, err := s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{PackRoles: []string{library.PackRoleRegular}}, 50, 0)
 	if err != nil || len(got) != 1 || got[0].RemoteID != "ep" {
 		t.Fatalf("regular: %+v err=%v", got, err)
 	}
-	got, err = s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{PackRole: library.VideoPackRoleAnySpecial}, 50, 0)
+	got, err = s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{PackRoles: []string{library.VideoPackRoleAnySpecial}}, 50, 0)
 	if err != nil || len(got) != 2 {
 		t.Fatalf("any special: %+v err=%v", got, err)
 	}
-	got, err = s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{PackRole: library.PackRoleSpecialEpisode}, 50, 0)
+	got, err = s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{PackRoles: []string{library.PackRoleSpecialEpisode}}, 50, 0)
 	if err != nil || len(got) != 1 || got[0].RemoteID != "sp" {
 		t.Fatalf("special episode: %+v err=%v", got, err)
 	}
-	got, err = s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{PackRole: "trailers"}, 50, 0)
+	got, err = s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{PackRoles: []string{"trailers"}}, 50, 0)
 	if err != nil || len(got) != 1 || got[0].RemoteID != "tr" {
 		t.Fatalf("trailers: %+v err=%v", got, err)
 	}
-	n, err := s.CountVideosFiltered(ser.ID, library.VideoListFilter{PackRole: library.VideoPackRoleAnySpecial})
+	n, err := s.CountVideosFiltered(ser.ID, library.VideoListFilter{PackRoles: []string{library.VideoPackRoleAnySpecial}})
 	if err != nil || n != 2 {
 		t.Fatalf("count any special=%d err=%v", n, err)
 	}

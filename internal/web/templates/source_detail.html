@@ -26,12 +26,7 @@
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <span class="tooltip tooltip-top inline-flex" data-tip="{{$tipScan}}">
-        <button type="submit" class="btn btn-outline" {{if $scanOff}}disabled{{end}}>
-          <i data-lucide="scan-line" class="size-4"></i>
-          Scan
-        </button>
-      </span>
+      {{template "btn_labeled" (dict "Type" "submit" "Icon" "scan-line" "Label" "Scan" "Disabled" $scanOff "Tip" $tipScan)}}
     </form>
     {{$fullOff := or .ScanActive (not .DomainActive)}}
     {{$tipFull := "Start Full scan"}}
@@ -40,17 +35,10 @@
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <span class="tooltip tooltip-top inline-flex" data-tip="{{$tipFull}}">
-        <button type="submit" class="btn btn-outline" {{if $fullOff}}disabled{{end}}>
-          <i data-lucide="scan-text" class="size-4"></i>
-          Full scan
-        </button>
-      </span>
+      {{template "btn_labeled" (dict "Type" "submit" "Icon" "scan-text" "Label" "Full scan" "Disabled" $fullOff "Tip" $tipFull)}}
     </form>
-    <label for="modal-edit-source" class="btn btn-outline">
-      <i data-lucide="pencil" class="size-4"></i>
-      Edit
-    </label>
+    {{template "btn_labeled" (dict "Type" "label" "For" "modal-edit-source" "Icon" "pencil" "Label" "Edit")}}
+
     <label for="modal-delete-source" class="btn btn-soft btn-error btn-square tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
       <i data-lucide="trash-2" class="size-4"></i>
     </label>

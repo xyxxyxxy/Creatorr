@@ -45,11 +45,17 @@ function onSSE(ev) {
   refreshBadge();
   if (ev.type === "notification.created" || ev.type === "notification.read") {
     let uc;
+    let hasAlert;
     try {
       const data = JSON.parse(ev.data || "{}");
       if (typeof data.unread_count === "number") uc = data.unread_count;
+      if (typeof data.has_alert === "boolean") hasAlert = data.has_alert;
     } catch (_) {}
-    refreshNotifyBadge(uc);
+    if (typeof uc === "number" && typeof hasAlert === "boolean") {
+      refreshNotifyBadge(uc, hasAlert);
+    } else {
+      refreshNotifyBadge();
+    }
     refreshNotifyDropdown();
     refreshNotificationHistoryPanel();
     return;

@@ -18,14 +18,24 @@ type pageBase struct {
 	SettingsTab  string // set when Nav == "settings" (general|library|connect|queue|scheduler|maintenance)
 	Flash        *flash
 	AuthUsername string // operator account; for navbar account menu
+	NotifyCount  int    // unread notifications for nav bell badge
+	NotifyAlert  bool   // true when any unread alert (badge-error vs badge-info)
 }
 
 // usernameForPage returns the operator username for shell chrome (set from Handler.Mount).
 var usernameForPage func() string
 
+// notifyBadgeForPage returns unread badge count + has-alert (set from Handler.Mount).
+var notifyBadgeForPage func() (count int, hasAlert bool)
+
 // SetUsernameForPage wires the operator username lookup used by newPage.
 func SetUsernameForPage(fn func() string) {
 	usernameForPage = fn
+}
+
+// SetNotifyBadgeForPage wires unread notification badge lookup used by newPage.
+func SetNotifyBadgeForPage(fn func() (count int, hasAlert bool)) {
+	notifyBadgeForPage = fn
 }
 
 // EpisodeLucideIcon is the Lucide name for indexed episodes (library videos).
@@ -37,6 +47,9 @@ func newPage(title, nav string, flash *flash) pageBase {
 	p := pageBase{Title: title, Nav: nav, Icon: pageIcon(nav), Flash: flash}
 	if usernameForPage != nil {
 		p.AuthUsername = usernameForPage()
+	}
+	if notifyBadgeForPage != nil {
+		p.NotifyCount, p.NotifyAlert = notifyBadgeForPage()
 	}
 	return p
 }

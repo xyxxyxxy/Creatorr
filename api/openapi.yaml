@@ -293,10 +293,10 @@ paths:
     get:
       tags: [history]
       operationId: getNotificationUnreadCount
-      summary: Unread alert notification count
+      summary: Unread notification badge count
       responses:
         "200":
-          description: Count of unread alert notifications
+          description: Total unread count; has_alert is true when any unread alert is present
           content:
             application/json:
               schema:
@@ -2327,11 +2327,15 @@ components:
 
     NotificationUnreadCount:
       type: object
-      required: [count]
+      required: [count, has_alert]
       properties:
         count:
           type: integer
           minimum: 0
+          description: Total unread notifications (all levels)
+        has_alert:
+          type: boolean
+          description: True when at least one unread alert is present (nav badge uses error color)
 
     SettingEntry:
       type: object

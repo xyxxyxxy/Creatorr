@@ -101,12 +101,24 @@ func (h *Handler) explorerBrowseFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func parseFileListFilter(r *http.Request) library.FileListFilter {
+	q := r.URL.Query()
 	f := library.FileListFilter{
-		Q:       strings.TrimSpace(r.URL.Query().Get("q")),
-		Kind:    strings.TrimSpace(r.URL.Query().Get("kind")),
-		Status:  library.NormalizeFileStatus(r.URL.Query().Get("status")),
-		Sort:    parseFileSort(r.URL.Query().Get("sort")),
-		SortDir: parseSortDir(r.URL.Query().Get("dir")),
+		Q:       strings.TrimSpace(q.Get("q")),
+		Kinds:   parseMultiQuery(q, "kind"),
+		Sort:    parseFileSort(q.Get("sort")),
+		SortDir: parseSortDir(q.Get("dir")),
+	}
+	seen := map[string]struct{}{}
+	for _, raw := range q["status"] {
+		st := library.NormalizeFileStatus(raw)
+		if st == "" {
+			continue
+		}
+		if _, ok := seen[st]; ok {
+			continue
+		}
+		seen[st] = struct{}{}
+		f.Statuses = append(f.Statuses, st)
 	}
 	if sid, err := strconv.ParseInt(r.URL.Query().Get("series_id"), 10, 64); err == nil && sid > 0 {
 		f.SeriesID = sid
@@ -253,12 +265,12 @@ func (h *Handler) loadFilesListLive(w http.ResponseWriter, r *http.Request) (fil
 			ViewOpts:         sourcesViewOpts(r, viewMode),
 			ShowView:         true,
 			Selects:          filesFilterSelects(r, filter),
-			FilterActive:     filter.Active(),
+			FilterActive:     filter.MenuActive(),
 			LiveTarget:       filesLiveTarget,
 			FormAction:       "/explorer/browse",
 			FilesBulkMode:    true,
 		}
-		if filter.Active() {
+		if filter.MenuActive() {
 			toolbar.ClearAllHref = clearOperatorFiltersURL(r)
 			toolbar.Badges = filesListBadges(r, filter)
 		}
@@ -489,34 +501,34 @@ func filesSortOpts(r *http.Request, current, curDir string) []listFilterOpt {
 }
 
 func filesFilterSelects(r *http.Request, f library.FileListFilter) []listFilterSelect {
-	kindCur := f.Kind
-	statusCur := library.NormalizeFileStatus(f.Status)
+	kindSel := selectedSet(f.Kinds)
+	statusSel := selectedSet(f.Statuses)
 	selects := []listFilterSelect{
 		{
 			Name:      "kind",
 			AriaLabel: "Type",
 			Options: []listFilterOpt{
-				{Value: "video", Label: "Video", Selected: kindCur == "video"},
-				{Value: "nfo", Label: "NFO", Selected: kindCur == "nfo"},
-				{Value: "json", Label: "info.json", Selected: kindCur == "json"},
-				{Value: "thumb", Label: "Thumb", Selected: kindCur == "thumb"},
-				{Value: "sub", Label: "Subtitle", Selected: kindCur == "sub"},
-				{Value: "sponsorblock", Label: "SponsorBlock", Selected: kindCur == "sponsorblock"},
-				{Value: "poster", Label: "Poster", Selected: kindCur == "poster"},
-				{Value: "banner", Label: "Banner", Selected: kindCur == "banner"},
-				{Value: "fanart", Label: "Fanart", Selected: kindCur == "fanart"},
-				{Value: "clearlogo", Label: "Clearlogo", Selected: kindCur == "clearlogo"},
+				{Value: "video", Label: "Video", Selected: kindSel["video"]},
+				{Value: "nfo", Label: "NFO", Selected: kindSel["nfo"]},
+				{Value: "json", Label: "info.json", Selected: kindSel["json"]},
+				{Value: "thumb", Label: "Thumb", Selected: kindSel["thumb"]},
+				{Value: "sub", Label: "Subtitle", Selected: kindSel["sub"]},
+				{Value: "sponsorblock", Label: "SponsorBlock", Selected: kindSel["sponsorblock"]},
+				{Value: "poster", Label: "Poster", Selected: kindSel["poster"]},
+				{Value: "banner", Label: "Banner", Selected: kindSel["banner"]},
+				{Value: "fanart", Label: "Fanart", Selected: kindSel["fanart"]},
+				{Value: "clearlogo", Label: "Clearlogo", Selected: kindSel["clearlogo"]},
 			},
 		},
 		{
 			Name:      "status",
 			AriaLabel: "Status",
 			Options: []listFilterOpt{
-				{Value: library.FileStatusFailed, Label: "Failed", Selected: statusCur == library.FileStatusFailed},
-				{Value: library.FileStatusOK, Label: "OK", Selected: statusCur == library.FileStatusOK},
-				{Value: library.FileStatusUnchecked, Label: "Unchecked", Selected: statusCur == library.FileStatusUnchecked},
-				{Value: library.FileStatusInactive, Label: "Inactive", Selected: statusCur == library.FileStatusInactive},
-				{Value: library.FileStatusNA, Label: "N/A", Selected: statusCur == library.FileStatusNA},
+				{Value: library.FileStatusFailed, Label: "Failed", Selected: statusSel[library.FileStatusFailed]},
+				{Value: library.FileStatusOK, Label: "OK", Selected: statusSel[library.FileStatusOK]},
+				{Value: library.FileStatusUnchecked, Label: "Unchecked", Selected: statusSel[library.FileStatusUnchecked]},
+				{Value: library.FileStatusInactive, Label: "Inactive", Selected: statusSel[library.FileStatusInactive]},
+				{Value: library.FileStatusNA, Label: "N/A", Selected: statusSel[library.FileStatusNA]},
 			},
 		},
 	}
@@ -526,13 +538,8 @@ func filesFilterSelects(r *http.Request, f library.FileListFilter) []listFilterS
 
 func filesListBadges(r *http.Request, f library.FileListFilter) []listViewBadge {
 	var out []listViewBadge
-	if f.Kind != "" {
-		out = append(out, listViewBadge{Label: "Type: " + f.Kind, Href: clearQueryKeys(r, "kind")})
-	}
-	if st := library.NormalizeFileStatus(f.Status); st != "" {
-		label := "Status: " + fileStatusFilterLabel(st)
-		out = append(out, listViewBadge{Label: label, Href: clearQueryKeys(r, "status")})
-	}
+	out = append(out, orJoinBadges(r, "kind", "Type", "kind", f.Kinds, nil)...)
+	out = append(out, orJoinBadges(r, "status", "Status", "status", f.Statuses, fileStatusFilterLabel)...)
 	if f.Q != "" {
 		out = append(out, listViewBadge{Label: "Search", Href: clearQueryKeys(r, "q")})
 	}

@@ -69,9 +69,8 @@ function syncSourcesBulkUI() {
   const modeBtn = live.querySelector("[data-sources-bulk-mode]");
   if (modeBtn) {
     modeBtn.setAttribute("aria-pressed", sourcesBulkMode ? "true" : "false");
-    modeBtn.classList.remove("btn-primary", "btn-active");
     const wrap = modeBtn.closest(".js-list-toolbar-dd");
-    if (wrap) wrap.classList.toggle("input-primary", sourcesBulkMode);
+    if (wrap) wrap.classList.toggle("is-bulk-on", sourcesBulkMode);
     modeBtn.setAttribute("data-tip", sourcesBulkMode ? "Exit multi-select" : "Multi-select");
     modeBtn.setAttribute("aria-label", sourcesBulkMode ? "Exit multi-select" : "Multi-select");
   }

@@ -193,21 +193,28 @@ func parseNotificationsExplorerFilter(r *http.Request) notify.ListFilter {
 	fromDay := parseFilterDay(r.URL.Query().Get("from"))
 	toDay := parseFilterDay(r.URL.Query().Get("to"))
 	fromBound, toBound := dayRangeBounds(fromDay, toDay)
-	level := strings.TrimSpace(r.URL.Query().Get("level"))
-	if level == "" {
-		level = strings.TrimSpace(r.URL.Query().Get("nlevel"))
+	q := r.URL.Query()
+	var levels []string
+	for _, raw := range q["level"] {
+		switch strings.TrimSpace(raw) {
+		case notify.LevelInfo, notify.LevelWarning, notify.LevelAlert:
+			levels = append(levels, strings.TrimSpace(raw))
+		}
 	}
-	switch level {
-	case notify.LevelInfo, notify.LevelWarning, notify.LevelAlert:
-	default:
-		level = ""
+	if len(levels) == 0 {
+		if legacy := strings.TrimSpace(q.Get("nlevel")); legacy != "" {
+			switch legacy {
+			case notify.LevelInfo, notify.LevelWarning, notify.LevelAlert:
+				levels = append(levels, legacy)
+			}
+		}
 	}
 	f := notify.ListFilter{
-		Level:   level,
+		Levels:  uniqueQueryVals(levels),
 		From:    fromBound,
 		To:      toBound,
-		Sort:    parseNotifySort(r.URL.Query().Get("sort")),
-		SortDir: parseSortDir(r.URL.Query().Get("dir")),
+		Sort:    parseNotifySort(q.Get("sort")),
+		SortDir: parseSortDir(q.Get("dir")),
 	}
 	switch strings.TrimSpace(r.URL.Query().Get("unread")) {
 	case "1", "yes":
@@ -255,14 +262,15 @@ func dayRangeBounds(fromDay, toDay string) (fromBound, toBound string) {
 }
 
 func notificationsFilterActive(f notify.ListFilter, fromDay, toDay string) bool {
-	return f.Level != "" || f.UnreadOnly || f.ReadOnly || fromDay != "" || toDay != ""
+	return len(f.Levels) > 0 || f.UnreadOnly || f.ReadOnly || fromDay != "" || toDay != ""
 }
 
 func notificationsFilterSelects(r *http.Request, f notify.ListFilter) []listFilterSelect {
+	levelSel := selectedSet(f.Levels)
 	levelOpts := []listFilterOpt{
-		{Value: notify.LevelAlert, Label: "Alert", Selected: f.Level == notify.LevelAlert},
-		{Value: notify.LevelWarning, Label: "Warning", Selected: f.Level == notify.LevelWarning},
-		{Value: notify.LevelInfo, Label: "Info", Selected: f.Level == notify.LevelInfo},
+		{Value: notify.LevelAlert, Label: "Alert", Selected: levelSel[notify.LevelAlert]},
+		{Value: notify.LevelWarning, Label: "Warning", Selected: levelSel[notify.LevelWarning]},
+		{Value: notify.LevelInfo, Label: "Info", Selected: levelSel[notify.LevelInfo]},
 	}
 	selects := []listFilterSelect{
 		{Name: "level", AriaLabel: "Level", Options: levelOpts},
@@ -293,9 +301,7 @@ func notificationsSortOpts(r *http.Request, sort, dir string) []listFilterOpt {
 
 func notificationsListBadges(r *http.Request, f notify.ListFilter, fromDay, toDay string) []listViewBadge {
 	var badges []listViewBadge
-	if f.Level != "" {
-		badges = append(badges, listViewBadge{Label: "Level: " + f.Level, Href: clearQueryKey(r, "level", "nlevel")})
-	}
+	badges = append(badges, orJoinBadges(r, "level", "Level", "level", f.Levels, nil)...)
 	if f.UnreadOnly {
 		badges = append(badges, listViewBadge{Label: "Unread", Href: clearQueryKey(r, "unread")})
 	}
@@ -354,8 +360,10 @@ func writeNotificationsListPrefs(w http.ResponseWriter, r *http.Request, filter 
 	dir := notifySortDir(sort, filter.SortDir)
 	writeListPrefCookie(w, cookieSortNotifications, encodeSortCookie(sort, dir))
 	v := url.Values{}
-	if filter.Level != "" {
-		v.Set("level", filter.Level)
+	for _, lv := range filter.Levels {
+		if lv = strings.TrimSpace(lv); lv != "" {
+			v.Add("level", lv)
+		}
 	}
 	switch {
 	case filter.UnreadOnly:

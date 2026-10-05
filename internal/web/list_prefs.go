@@ -112,9 +112,14 @@ func mergeSeriesListPrefs(r *http.Request) *http.Request {
 	q := r.URL.Query()
 	changed := false
 	if _, ok := q["status"]; !ok && explorerAtFrom(r, "") != explorerAtBrowser {
-		if v := readListPrefCookie(r, cookieStatusSeries); v != "" {
-			q.Set("status", v)
-			changed = true
+		if raw := readListPrefCookie(r, cookieStatusSeries); raw != "" {
+			for _, part := range strings.Split(raw, ",") {
+				st := strings.TrimSpace(part)
+				if st != "" {
+					q.Add("status", st)
+					changed = true
+				}
+			}
 		}
 	}
 	if _, ok := q["sort"]; !ok {
@@ -137,7 +142,7 @@ func mergeSeriesListPrefs(r *http.Request) *http.Request {
 
 func writeSeriesListPrefs(w http.ResponseWriter, r *http.Request, filter library.SeriesListFilter) {
 	if explorerAtFrom(r, "") != explorerAtBrowser {
-		writeListPrefCookie(w, cookieStatusSeries, strings.TrimSpace(filter.Status))
+		writeListPrefCookie(w, cookieStatusSeries, strings.Join(filter.Statuses, ","))
 	}
 	sort := filter.Sort
 	if sort == "" {

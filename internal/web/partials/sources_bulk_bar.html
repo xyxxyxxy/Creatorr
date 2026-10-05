@@ -23,16 +23,12 @@
       </button>
       {{end}}
     </div>
-    <div class="self-center justify-self-end">
-      <div class="join">
-        <button type="button" class="btn join-item tooltip tooltip-top" data-sources-bulk-scan data-tip="Scan" aria-label="Scan" disabled>
-          <i data-lucide="scan-line" class="size-4"></i>
-          Scan
-        </button>
-        <button type="button" class="btn btn-soft btn-error btn-square join-item tooltip tooltip-top" data-sources-bulk-delete data-tip="Delete" aria-label="Delete" disabled>
-          <i data-lucide="trash-2" class="size-4"></i>
-        </button>
-      </div>
+    <div class="self-center justify-self-end flex flex-wrap gap-2 items-center">
+      {{template "btn_labeled" (dict "Icon" "scan-line" "Label" "Scan" "Data" "sources-bulk-scan" "Disabled" true)}}
+
+      <button type="button" class="btn btn-soft btn-error btn-square tooltip tooltip-top" data-sources-bulk-delete data-tip="Delete" aria-label="Delete" disabled>
+        <i data-lucide="trash-2" class="size-4"></i>
+      </button>
     </div>
   </li>
 </ul>

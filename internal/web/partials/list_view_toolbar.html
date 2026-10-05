@@ -81,7 +81,7 @@
   </label>
   {{end}}
   {{$qPh := .QueryPlaceholder}}{{if not $qPh}}{{$qPh = "Search"}}{{end}}
-  <label class="input join-item grow min-w-0{{if .Query}} input-primary{{end}}">
+  <label class="input join-item grow min-w-0">
     {{if not $hasQField}}
     <i data-lucide="search" class="size-4 shrink-0" aria-hidden="true"></i>
     {{end}}
@@ -90,7 +90,7 @@
   </label>
 
   {{if or .Selects .ShowDateRange}}
-  <div class="dropdown dropdown-bottom dropdown-end input join-item shrink-0 js-list-toolbar-dd{{if .FilterActive}} input-primary{{end}}">
+  <div class="dropdown dropdown-bottom dropdown-end input join-item shrink-0 js-list-toolbar-dd">
     <div tabindex="0" role="button" class="js-list-toolbar-dd-btn" aria-label="Filter">
       <i data-lucide="list-filter" class="size-4 shrink-0" aria-hidden="true"></i>
       Filter
@@ -103,15 +103,18 @@
         <li>
           <details>
             <summary>
-              <span class="grow truncate">{{if .DateRangeLabel}}{{.DateRangeLabel}}{{else}}Upload date{{end}}</span>
+              <span class="grow truncate{{if or .FromDay .ToDay}} text-accent{{end}}">{{if .DateRangeLabel}}{{.DateRangeLabel}}{{else}}Upload date{{end}}</span>
+              {{if or .FromDay .ToDay}}
+              <span class="badge badge-accent badge-sm tabular-nums shrink-0" aria-label="Date range set">1</span>
+              {{end}}
               {{if .ShowDatePresence}}
               <span class="join join-horizontal shrink-0 list-filter-presence"
                     onmousedown="event.preventDefault(); event.stopPropagation()"
                     onclick="event.stopPropagation()">
-                <a href="{{.UploadFilledHref}}" class="btn btn-xs join-item{{if .UploadFilledSelected}} btn-primary{{end}}"
+                <a href="{{.UploadFilledHref}}" class="btn btn-xs join-item{{if .UploadFilledSelected}} btn-accent{{end}}"
                    aria-label="Has upload date"{{if .UploadFilledSelected}} aria-pressed="true"{{end}}
                    {{if $live}} hx-get="{{.UploadFilledHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>Has</a>
-                <a href="{{.UploadEmptyHref}}" class="btn btn-xs join-item{{if .UploadEmptySelected}} btn-primary{{end}}"
+                <a href="{{.UploadEmptyHref}}" class="btn btn-xs join-item{{if .UploadEmptySelected}} btn-accent{{end}}"
                    aria-label="No upload date"{{if .UploadEmptySelected}} aria-pressed="true"{{end}}
                    {{if $live}} hx-get="{{.UploadEmptyHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>No</a>
               </span>
@@ -139,15 +142,18 @@
           {{if .Options}}
           <details>
             <summary>
-              <span class="grow truncate">{{.AriaLabel}}</span>
+              <span class="grow truncate{{if gt .SelectedCount 0}} text-accent{{end}}">{{.AriaLabel}}</span>
+              {{if gt .SelectedCount 0}}
+              <span class="badge badge-accent badge-sm tabular-nums shrink-0" aria-label="{{.SelectedCount}} selected">{{.SelectedCount}}</span>
+              {{end}}
               {{if .PresenceFilledHref}}
               <span class="join join-horizontal shrink-0 list-filter-presence"
                     onmousedown="event.preventDefault(); event.stopPropagation()"
                     onclick="event.stopPropagation()">
-                <a href="{{.PresenceFilledHref}}" class="btn btn-xs join-item{{if .PresenceFilledSelected}} btn-primary{{end}}"
+                <a href="{{.PresenceFilledHref}}" class="btn btn-xs join-item{{if .PresenceFilledSelected}} btn-accent{{end}}"
                    aria-label="{{.PresenceFilledLabel}}"{{if .PresenceFilledSelected}} aria-pressed="true"{{end}}
                    {{if $.LiveTarget}} hx-get="{{.PresenceFilledHref}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>Has</a>
-                <a href="{{.PresenceEmptyHref}}" class="btn btn-xs join-item{{if .PresenceEmptySelected}} btn-primary{{end}}"
+                <a href="{{.PresenceEmptyHref}}" class="btn btn-xs join-item{{if .PresenceEmptySelected}} btn-accent{{end}}"
                    aria-label="{{.PresenceEmptyLabel}}"{{if .PresenceEmptySelected}} aria-pressed="true"{{end}}
                    {{if $.LiveTarget}} hx-get="{{.PresenceEmptyHref}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>No</a>
               </span>
@@ -156,7 +162,7 @@
             <ul class="p-1">
               {{range .Options}}
               <li>
-                <a href="{{.Href}}"{{if $.LiveTarget}} hx-get="{{.Href}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}{{if .Selected}} class="active"{{end}}>{{.Label}}</a>
+                <a href="{{.Href}}"{{if $.LiveTarget}} hx-get="{{.Href}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}{{if .Selected}} class="text-accent"{{end}}>{{.Label}}</a>
               </li>
               {{end}}
             </ul>
@@ -165,10 +171,10 @@
           <div class="pointer-events-auto flex items-center gap-2 min-h-8 px-3 py-1.5">
             <span class="grow truncate">{{.AriaLabel}}</span>
             <span class="join join-horizontal shrink-0 list-filter-presence list-filter-presence--solo">
-              <a href="{{.PresenceFilledHref}}" class="btn btn-xs join-item{{if .PresenceFilledSelected}} btn-primary{{end}}"
+              <a href="{{.PresenceFilledHref}}" class="btn btn-xs join-item{{if .PresenceFilledSelected}} btn-accent{{end}}"
                  aria-label="{{.PresenceFilledLabel}}"{{if .PresenceFilledSelected}} aria-pressed="true"{{end}}
                  {{if $.LiveTarget}} hx-get="{{.PresenceFilledHref}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>Has</a>
-              <a href="{{.PresenceEmptyHref}}" class="btn btn-xs join-item{{if .PresenceEmptySelected}} btn-primary{{end}}"
+              <a href="{{.PresenceEmptyHref}}" class="btn btn-xs join-item{{if .PresenceEmptySelected}} btn-accent{{end}}"
                  aria-label="{{.PresenceEmptyLabel}}"{{if .PresenceEmptySelected}} aria-pressed="true"{{end}}
                  {{if $.LiveTarget}} hx-get="{{.PresenceEmptyHref}}" hx-target="#{{$.LiveTarget}}" hx-select="#{{$.LiveTarget}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>No</a>
             </span>
@@ -195,7 +201,7 @@
     <ul tabindex="0" class="dropdown-content menu z-[60] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-64">
       {{range .SortOpts}}
       <li>
-        <a href="{{.Href}}"{{if $live}} hx-get="{{.Href}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}{{if .Selected}} class="active"{{end}}>
+        <a href="{{.Href}}"{{if $live}} hx-get="{{.Href}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}{{if .Selected}} class="text-accent"{{end}}>
           {{if .Icon}}<i data-lucide="{{.Icon}}" class="size-4" aria-hidden="true"></i>{{end}}
           {{.Label}}
           {{if .Selected}}<i data-lucide="{{$dirIcon}}" class="size-4 ms-auto opacity-70" aria-hidden="true"></i>{{end}}
@@ -216,7 +222,7 @@
     <ul tabindex="0" class="dropdown-content menu z-[60] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-52">
       {{range .ViewOpts}}
       <li>
-        <a href="{{.Href}}"{{if $live}} hx-get="{{.Href}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}{{if .Selected}} class="active"{{end}}>
+        <a href="{{.Href}}"{{if $live}} hx-get="{{.Href}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}{{if .Selected}} class="text-accent"{{end}}>
           {{if eq .Value "cards"}}<i data-lucide="layout-grid" class="size-4" aria-hidden="true"></i>{{else if eq .Value "gallery"}}<i data-lucide="images" class="size-4" aria-hidden="true"></i>{{else if eq .Value "table"}}<i data-lucide="table" class="size-4" aria-hidden="true"></i>{{else}}<i data-lucide="layout-list" class="size-4" aria-hidden="true"></i>{{end}}
           {{.Label}}
         </a>
@@ -227,18 +233,39 @@
   {{end}}
 </form>
 {{if .Badges}}
-{{/* daisyUI filter chips (checkbox form style): clear × last / on the right.
+{{/* Active filters row: OR-within-field joins are siblings (never nested inside
+     daisyUI .filter - nesting breaks join chip labels / clicks). Flat chips use
+     .filter for stock checkbox-btn chrome. Clear all sits at the end.
      https://daisyui.com/components/filter/#filter-using-html-form-checkboxes-and-a-reset-button
-     Search text is not a chip (stays in the search field). Show this row only when
-     there is at least one chip; Clear all sits on the right of that row. */}}
-<div class="filter mb-3" aria-label="Active filters">
-  {{range .Badges}}
-  <input class="btn" type="checkbox" checked aria-label="{{.Label}}"
-         {{if $live}}hx-get="{{.Href}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true" hx-trigger="change"
-         {{else}}data-href="{{.Href}}" onchange="location.href=this.getAttribute('data-href')"{{end}} />
+     Search text is not a chip (stays in the search field). */}}
+<div class="flex flex-wrap items-center gap-2 mb-3" aria-label="Active filters">
+  {{range badgeClusters .Badges}}
+  {{if .Title}}
+  <div class="join" role="group" aria-label="{{.Title}}">
+    {{if .ClearHref}}
+    <a href="{{.ClearHref}}" class="btn btn-accent join-item" aria-label="Clear {{.Title}}"
+       {{if $live}}hx-get="{{.ClearHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>{{.Title}}</a>
+    {{else}}
+    <span class="btn btn-accent join-item no-animation pointer-events-none" aria-hidden="true">{{.Title}}</span>
+    {{end}}
+    {{range .Items}}
+    <input class="btn btn-soft btn-accent join-item" type="checkbox" checked aria-label="{{if .AriaLabel}}{{.AriaLabel}}{{else}}{{.Label}}{{end}}"
+           {{if $live}}hx-get="{{.Href}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true" hx-trigger="change"
+           {{else}}data-href="{{.Href}}" onchange="location.href=this.getAttribute('data-href')"{{end}} />
+    {{end}}
+  </div>
+  {{else}}
+  <div class="filter">
+    {{range .Items}}
+    <input class="btn btn-soft btn-accent" type="checkbox" checked aria-label="{{.Label}}"
+           {{if $live}}hx-get="{{.Href}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true" hx-trigger="change"
+           {{else}}data-href="{{.Href}}" onchange="location.href=this.getAttribute('data-href')"{{end}} />
+    {{end}}
+  </div>
+  {{end}}
   {{end}}
   {{if .ClearAllHref}}
-  <a href="{{.ClearAllHref}}" class="btn btn-square" aria-label="Clear all"
+  <a href="{{.ClearAllHref}}" class="btn btn-accent btn-square" aria-label="Clear all"
      {{if $live}}hx-get="{{.ClearAllHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>×</a>
   {{end}}
 </div>

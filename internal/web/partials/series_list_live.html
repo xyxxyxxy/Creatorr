@@ -55,16 +55,12 @@
       {{end}}
     </div>
     {{if not .BulkEditBusy}}
-    <div class="self-center justify-self-end">
+    <div class="self-center justify-self-end flex flex-wrap gap-2 items-center">
+      {{/* Labeled actions match page-navbar default btn; icon-only stay joined. */}}
+      {{template "btn_labeled" (dict "Icon" "pencil" "Label" "Edit" "Data" "series-bulk-edit" "Disabled" true)}}
+      {{template "btn_labeled" (dict "Icon" "file-pen" "Label" "Edit metadata" "Data" "series-bulk-metadata" "Disabled" true)}}
+
       <div class="join">
-        <button type="button" class="btn join-item" data-series-bulk-edit disabled>
-          <i data-lucide="pencil" class="size-4"></i>
-          Edit
-        </button>
-        <button type="button" class="btn join-item" data-series-bulk-metadata disabled>
-          <i data-lucide="file-pen" class="size-4"></i>
-          Edit metadata
-        </button>
         <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-series-bulk-monitor data-tip="Monitor" aria-label="Monitor" disabled>
           <i data-lucide="bookmark" class="size-4"></i>
         </button>

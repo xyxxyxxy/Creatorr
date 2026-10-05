@@ -7,7 +7,7 @@
     data-series-id="{{.ID}}"
     style="--list-grid-cols: minmax(0, auto) 1fr max-content">
   <div class="self-center hidden z-10" data-series-select-wrap>
-    <input type="checkbox" class="checkbox checkbox-sm js-series-select bg-base-100" value="{{.ID}}"
+    <input type="checkbox" class="checkbox checkbox-sm js-series-select" value="{{.ID}}"
            aria-label="Select series"
            {{if .BulkEditBusy}}disabled{{end}} />
   </div>

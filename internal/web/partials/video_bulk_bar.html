@@ -30,16 +30,11 @@
       {{end}}
     </div>
     {{if not .BulkEditBusy}}
-    <div class="self-center justify-self-end">
+    <div class="self-center justify-self-end flex flex-wrap gap-2 items-center">
+      {{template "btn_labeled" (dict "Icon" "refresh-cw" "Label" "Refresh sidecars" "Data" "video-bulk-refresh" "Disabled" true)}}
+      {{template "btn_labeled" (dict "Icon" "file-pen" "Label" "Edit metadata" "Data" "video-bulk-metadata" "Disabled" true)}}
+
       <div class="join">
-        <button type="button" class="btn join-item" data-video-bulk-refresh disabled>
-          <i data-lucide="refresh-cw" class="size-4"></i>
-          Refresh sidecars
-        </button>
-        <button type="button" class="btn join-item" data-video-bulk-metadata disabled>
-          <i data-lucide="file-pen" class="size-4"></i>
-          Edit metadata
-        </button>
         <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-video-bulk-want data-tip="Want" aria-label="Want" disabled>
           <i data-lucide="eye" class="size-4"></i>
         </button>

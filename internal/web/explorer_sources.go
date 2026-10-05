@@ -93,28 +93,31 @@ func (h *Handler) explorerBrowseSources(w http.ResponseWriter, r *http.Request) 
 }
 
 func parseSourceListFilter(r *http.Request) library.SourceListFilter {
+	q := r.URL.Query()
 	f := library.SourceListFilter{
-		Q:       strings.TrimSpace(r.URL.Query().Get("q")),
-		QField:  library.NormalizeSourceQField(r.URL.Query().Get("q_field")),
-		Kind:    strings.TrimSpace(r.URL.Query().Get("kind")),
-		Domain:  strings.TrimSpace(r.URL.Query().Get("domain")),
-		Sort:    parseSourceSort(r.URL.Query().Get("sort")),
-		SortDir: parseSortDir(r.URL.Query().Get("dir"))}
+		Q:         strings.TrimSpace(q.Get("q")),
+		QField:    library.NormalizeSourceQField(q.Get("q_field")),
+		Kinds:     parseMultiQuery(q, "kind"),
+		Domains:   parseMultiQuery(q, "domain"),
+		SeriesIDs: parseMultiInt64(q, "series"),
+		Sort:      parseSourceSort(q.Get("sort")),
+		SortDir:   parseSortDir(q.Get("dir")),
+	}
 	// series_id = series-detail lock; series = browser operator filter (like Videos).
-	if sid, err := strconv.ParseInt(r.URL.Query().Get("series_id"), 10, 64); err == nil && sid > 0 {
-		f.SeriesID = sid
-	} else if sid, err := strconv.ParseInt(r.URL.Query().Get("series"), 10, 64); err == nil && sid > 0 {
+	if sid, err := strconv.ParseInt(q.Get("series_id"), 10, 64); err == nil && sid > 0 {
 		f.SeriesID = sid
 	}
-	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("full_scan"))) {
-	case library.SourceFullScanDone:
-		v := true
-		f.FullScanDone = &v
-	case library.SourceFullScanIncomplete:
-		v := false
-		f.FullScanDone = &v
-	}
-	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("schedule"))) {
+	f.FullScanDone = parseExclusiveBoolFilter(q, "full_scan", func(raw string) (bool, bool) {
+		switch strings.ToLower(raw) {
+		case library.SourceFullScanDone:
+			return true, true
+		case library.SourceFullScanIncomplete:
+			return false, true
+		default:
+			return false, false
+		}
+	})
+	switch strings.ToLower(strings.TrimSpace(q.Get("schedule"))) {
 	case library.SourceScheduleOn:
 		v := true
 		f.ScheduleOn = &v
@@ -122,14 +125,16 @@ func parseSourceListFilter(r *http.Request) library.SourceListFilter {
 		v := false
 		f.ScheduleOn = &v
 	}
-	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("discovered"))) {
-	case library.SourceDiscoveredIgnored:
-		v := true
-		f.IndexAsIgnored = &v
-	case library.SourceDiscoveredWanted:
-		v := false
-		f.IndexAsIgnored = &v
-	}
+	f.IndexAsIgnored = parseExclusiveBoolFilter(q, "discovered", func(raw string) (bool, bool) {
+		switch strings.ToLower(raw) {
+		case library.SourceDiscoveredIgnored:
+			return true, true
+		case library.SourceDiscoveredWanted:
+			return false, true
+		default:
+			return false, false
+		}
+	})
 	switch strings.TrimSpace(r.URL.Query().Get("monitored")) {
 	case "1":
 		v := true
@@ -346,10 +351,11 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 
 	var toolbar listViewToolbar
 	if !seriesDetail {
-		var seriesTitles map[int64]string
+		titleIDs := append([]int64{}, filter.SeriesIDs...)
 		if filter.SeriesID > 0 {
-			seriesTitles, _ = h.Library.SeriesTitles([]int64{filter.SeriesID})
+			titleIDs = append(titleIDs, filter.SeriesID)
 		}
+		seriesTitles, _ := h.Library.SeriesTitles(titleIDs)
 		qfOpts := sourceQFieldOpts(filter.QField, showSeries)
 		toolbar = listViewToolbar{
 			Query:            filter.Q,
@@ -361,13 +367,13 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 			ViewOpts:         sourcesViewOpts(r, viewMode),
 			ShowView:         true,
 			Selects:          sourcesFilterSelects(h, r, filter, showSeries),
-			FilterActive:     filter.Active(),
+			FilterActive:     filter.MenuActive(),
 			Badges:           sourcesListBadges(r, filter, seriesTitles),
 			LiveTarget:       sourcesLiveTarget,
 			FormAction:       "/explorer/browse",
 			SourcesBulkMode:  true,
 		}
-		if filter.Active() {
+		if filter.MenuActive() {
 			toolbar.ClearAllHref = clearOperatorFiltersURL(r)
 		}
 		applyExplorerToolbar(&toolbar, explorerTypeSources, at)
@@ -448,25 +454,29 @@ func sourcesFilterSelects(h *Handler, r *http.Request, filter library.SourceList
 	if showSeries {
 		list, _ := h.Library.ListSeriesFiltered(library.SeriesListFilter{}, 0, 0)
 		opts := make([]listFilterOpt, 0, len(list))
+		seriesSel := selectedInt64Set(filter.SeriesIDs)
 		for _, ser := range list {
 			opts = append(opts, listFilterOpt{
 				Value:    strconv.FormatInt(ser.ID, 10),
 				Label:    ser.Title,
-				Selected: filter.SeriesID == ser.ID})
+				Selected: seriesSel[ser.ID],
+			})
 		}
 		if len(opts) > 0 {
 			selects = append(selects, listFilterSelect{Name: "series", AriaLabel: "Series", Options: opts})
 		}
 	}
-	kind := filter.Kind
+	kindSel := selectedSet(filter.Kinds)
 	showKind := !scoped || len(facets.Kinds) >= 2
 	if showKind {
 		selects = append(selects, listFilterSelect{
 			Name:      "kind",
 			AriaLabel: "Kind",
 			Options: []listFilterOpt{
-				{Value: library.SourceKindFeed, Label: "Feed", Selected: kind == library.SourceKindFeed},
-				{Value: library.SourceKindSingle, Label: "Single", Selected: kind == library.SourceKindSingle}}})
+				{Value: library.SourceKindFeed, Label: "Feed", Selected: kindSel[library.SourceKindFeed]},
+				{Value: library.SourceKindSingle, Label: "Single", Selected: kindSel[library.SourceKindSingle]},
+			},
+		})
 	}
 
 	var domains []string
@@ -478,8 +488,9 @@ func sourcesFilterSelects(h *Handler, r *http.Request, filter library.SourceList
 	showDomain := len(domains) >= 2 || (!scoped && len(domains) > 0)
 	if showDomain {
 		domOpts := make([]listFilterOpt, 0, len(domains))
+		domainSel := selectedSet(filter.Domains)
 		for _, d := range domains {
-			domOpts = append(domOpts, listFilterOpt{Value: d, Label: d, Selected: filter.Domain == d})
+			domOpts = append(domOpts, listFilterOpt{Value: d, Label: d, Selected: domainSel[strings.ToLower(d)]})
 		}
 		selects = append(selects, listFilterSelect{
 			Name: "domain", AriaLabel: "Domain", Options: domOpts})
@@ -537,19 +548,15 @@ func sourcesFilterSelects(h *Handler, r *http.Request, filter library.SourceList
 
 func sourcesListBadges(r *http.Request, filter library.SourceListFilter, seriesTitles map[int64]string) []listViewBadge {
 	var out []listViewBadge
-	if filter.SeriesID > 0 && r.URL.Query().Get("series_id") == "" {
-		title := seriesTitles[filter.SeriesID]
-		if title == "" {
-			title = "#" + strconv.FormatInt(filter.SeriesID, 10)
+	out = append(out, orJoinBadges(r, "series", "Series", "series", int64QueryValues(filter.SeriesIDs), func(s string) string {
+		id, _ := strconv.ParseInt(s, 10, 64)
+		if title := seriesTitles[id]; title != "" {
+			return title
 		}
-		out = append(out, listViewBadge{Label: "Series: " + title, Href: dropQueryKeys(r, "series", "page", "through")})
-	}
-	if filter.Kind != "" {
-		out = append(out, listViewBadge{Label: "Kind: " + filter.Kind, Href: dropQueryKeys(r, "kind", "page", "through")})
-	}
-	if d := strings.TrimSpace(filter.Domain); d != "" {
-		out = append(out, listViewBadge{Label: "Domain: " + d, Href: dropQueryKeys(r, "domain", "page", "through")})
-	}
+		return "#" + s
+	})...)
+	out = append(out, orJoinBadges(r, "kind", "Kind", "kind", filter.Kinds, nil)...)
+	out = append(out, orJoinBadges(r, "domain", "Domain", "domain", filter.Domains, nil)...)
 	if filter.FullScanDone != nil {
 		label := "Full scan: Incomplete"
 		if *filter.FullScanDone {

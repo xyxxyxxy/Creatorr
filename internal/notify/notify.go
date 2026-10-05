@@ -33,16 +33,16 @@ func publishCreated(database *db.DB, id int64, event string) {
 	if eventsHub == nil || id <= 0 {
 		return
 	}
-	n, _ := CountUnread(database)
-	eventsHub.NotificationCreated(id, event, n)
+	n, hasAlert, _ := UnreadBadge(database)
+	eventsHub.NotificationCreated(id, event, n, hasAlert)
 }
 
 func publishRead(database *db.DB, id int64) {
 	if eventsHub == nil {
 		return
 	}
-	n, _ := CountUnread(database)
-	eventsHub.NotificationRead(id, n)
+	n, hasAlert, _ := UnreadBadge(database)
+	eventsHub.NotificationRead(id, n, hasAlert)
 }
 
 // SetSendFnForTest swaps the send implementation; returns the previous one.

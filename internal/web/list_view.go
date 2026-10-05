@@ -24,9 +24,68 @@ const (
 )
 
 // listViewBadge is one removable active-filter chip.
+// When Group is set, consecutive same-Group badges render as a daisyUI join
+// cluster (OR-within-field); Label is the visible value chip text.
 type listViewBadge struct {
-	Label string
-	Href  string // URL without this constraint
+	Group      string // clustering key (e.g. status); empty = standalone chip
+	GroupTitle string // join prefix (e.g. Status); falls back to Group
+	Label      string // visible chip text (value when grouped; "Field: value" when standalone)
+	AriaLabel  string // checkbox accessible name; empty falls back to Label
+	Href       string // URL without this constraint
+	ClearHref  string // grouped: URL clearing every value for the field (join prefix)
+}
+
+// listViewBadgeCluster is a standalone chip (Title empty) or a join group (Title set).
+type listViewBadgeCluster struct {
+	Title     string
+	ClearHref string // join prefix clears the whole field
+	Items     []listViewBadge
+}
+
+// orJoinBadges builds OR-within-field join chips (Group + value Label + dropQueryValue).
+func orJoinBadges(r *http.Request, group, title, queryKey string, values []string, labelFn func(string) string) []listViewBadge {
+	clearHref := clearQueryKey(r, queryKey)
+	out := make([]listViewBadge, 0, len(values))
+	for _, raw := range values {
+		v := strings.TrimSpace(raw)
+		if v == "" {
+			continue
+		}
+		label := v
+		if labelFn != nil {
+			label = labelFn(v)
+		}
+		out = append(out, listViewBadge{
+			Group:      group,
+			GroupTitle: title,
+			Label:      label,
+			Href:       dropQueryValue(r, queryKey, v),
+			ClearHref:  clearHref,
+		})
+	}
+	return out
+}
+
+// clusterListViewBadges groups consecutive badges that share Group into join clusters.
+func clusterListViewBadges(badges []listViewBadge) []listViewBadgeCluster {
+	var out []listViewBadgeCluster
+	for _, b := range badges {
+		if b.Group == "" {
+			out = append(out, listViewBadgeCluster{Items: []listViewBadge{b}})
+			continue
+		}
+		n := len(out)
+		if n > 0 && out[n-1].Title != "" && len(out[n-1].Items) > 0 && out[n-1].Items[0].Group == b.Group {
+			out[n-1].Items = append(out[n-1].Items, b)
+			continue
+		}
+		title := b.GroupTitle
+		if title == "" {
+			title = b.Group
+		}
+		out = append(out, listViewBadgeCluster{Title: title, ClearHref: b.ClearHref, Items: []listViewBadge{b}})
+	}
+	return out
 }
 
 // canonicalizeViewMode maps a raw view token to a first-class mode, or "" if unknown.
@@ -126,6 +185,104 @@ func uniqueQueryVals(raw []string) []string {
 
 func parseMultiQuery(q url.Values, name string) []string {
 	return uniqueQueryVals(q[name])
+}
+
+func parseMultiInt64(q url.Values, name string) []int64 {
+	var out []int64
+	seen := map[int64]struct{}{}
+	for _, raw := range q[name] {
+		n := parseIntQuery(raw)
+		if n <= 0 {
+			continue
+		}
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
+		out = append(out, n)
+	}
+	return out
+}
+
+func parseMultiYear(q url.Values, name string) []int {
+	var out []int
+	seen := map[int]struct{}{}
+	for _, raw := range q[name] {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		y, err := strconv.Atoi(raw)
+		if err != nil || y < 1900 || y > 2100 {
+			continue
+		}
+		if _, ok := seen[y]; ok {
+			continue
+		}
+		seen[y] = struct{}{}
+		out = append(out, y)
+	}
+	return out
+}
+
+func selectedSet(vals []string) map[string]bool {
+	m := make(map[string]bool, len(vals))
+	for _, v := range vals {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		m[strings.ToLower(v)] = true
+	}
+	return m
+}
+
+func selectedInt64Set(vals []int64) map[int64]bool {
+	m := make(map[int64]bool, len(vals))
+	for _, v := range vals {
+		if v != 0 {
+			m[v] = true
+		}
+	}
+	return m
+}
+
+func selectedIntSet(vals []int) map[int]bool {
+	m := make(map[int]bool, len(vals))
+	for _, v := range vals {
+		if v != 0 {
+			m[v] = true
+		}
+	}
+	return m
+}
+
+// parseExclusiveBoolFilter maps repeated query values to *bool when exactly one outcome is selected.
+func parseExclusiveBoolFilter(q url.Values, name string, mapFn func(string) (bool, bool)) *bool {
+	var seenTrue, seenFalse bool
+	for _, raw := range q[name] {
+		b, ok := mapFn(strings.TrimSpace(raw))
+		if !ok {
+			continue
+		}
+		if b {
+			seenTrue = true
+		} else {
+			seenFalse = true
+		}
+	}
+	if seenTrue && seenFalse {
+		return nil
+	}
+	if seenTrue {
+		v := true
+		return &v
+	}
+	if seenFalse {
+		v := false
+		return &v
+	}
+	return nil
 }
 
 func parseVideoSort(raw string) string {
@@ -272,6 +429,7 @@ func applySelectOptionURLClearingPresence(r *http.Request, name, value, presence
 
 // toggleMultiSelectURL adds value to a multi query key, or drops it when already selected.
 // Non-empty result clears the matching presence constraint (same as chip apply).
+// Clearing the last status value sets status= so list prefs cookies can clear.
 func toggleMultiSelectURL(r *http.Request, name, value, presenceField string) string {
 	q := r.URL.Query()
 	q.Del("page")
@@ -292,6 +450,8 @@ func toggleMultiSelectURL(r *http.Request, name, value, presenceField string) st
 	}
 	if len(q[name]) > 0 {
 		clearPresenceField(q, presenceField)
+	} else if name == "status" {
+		q.Set("status", "")
 	}
 	u := *r.URL
 	enc := q.Encode()
@@ -367,13 +527,14 @@ func clearPresenceField(q url.Values, field string) {
 }
 
 func annotateFilterSelect(r *http.Request, sel *listFilterSelect) {
+	n := 0
 	for i := range sel.Options {
-		if sel.Multi {
-			sel.Options[i].Href = toggleMultiSelectURL(r, sel.Name, sel.Options[i].Value, sel.PresenceField)
-		} else {
-			sel.Options[i].Href = applySelectOptionURLClearingPresence(r, sel.Name, sel.Options[i].Value, sel.PresenceField)
+		sel.Options[i].Href = toggleMultiSelectURL(r, sel.Name, sel.Options[i].Value, sel.PresenceField)
+		if sel.Options[i].Selected {
+			n++
 		}
 	}
+	sel.SelectedCount = n
 	if sel.PresenceField != "" {
 		sel.PresenceEmptyLabel = presenceBadgeLabel(sel.PresenceField, true)
 		sel.PresenceFilledLabel = presenceBadgeLabel(sel.PresenceField, false)
@@ -463,8 +624,37 @@ func boolOnlySelect(r *http.Request, name, aria, trueVal, falseVal string, selec
 	return sel
 }
 
+// packRoleFilterPresence reports all-regular / all-special-ish for Has/No chrome.
+func packRoleFilterPresence(roles []string) (allRegular, allSpecial bool) {
+	if len(roles) == 0 {
+		return false, false
+	}
+	allRegular = true
+	allSpecial = true
+	for _, role := range roles {
+		role = strings.TrimSpace(role)
+		if role == "" {
+			continue
+		}
+		switch role {
+		case library.PackRoleRegular:
+			allSpecial = false
+		case library.VideoPackRoleAnySpecial:
+			allRegular = false
+		default:
+			if library.IsSpecialPackRole(role) {
+				allRegular = false
+			} else {
+				allRegular = false
+				allSpecial = false
+			}
+		}
+	}
+	return allRegular, allSpecial
+}
+
 // specialKindFilterSelect is Has/No for any-special vs regular, plus accordion of concrete specials.
-func specialKindFilterSelect(r *http.Request, packRole string, concreteOpts []listFilterOpt) listFilterSelect {
+func specialKindFilterSelect(r *http.Request, packRoles []string, concreteOpts []listFilterOpt) listFilterSelect {
 	sel := listFilterSelect{
 		Name:                "kind",
 		AriaLabel:           "Special kind",
@@ -472,16 +662,16 @@ func specialKindFilterSelect(r *http.Request, packRole string, concreteOpts []li
 		PresenceFilledLabel: "Has special kind",
 		PresenceEmptyLabel:  "No special kind",
 	}
-	role := strings.TrimSpace(packRole)
+	allRegular, allSpecial := packRoleFilterPresence(packRoles)
 	clearHref := dropQueryKeys(r, "kind", "page", "through")
 	hasHref := applySelectOptionURLClearingPresence(r, "kind", library.VideoPackRoleAnySpecial, "")
 	noHref := applySelectOptionURLClearingPresence(r, "kind", library.PackRoleRegular, "")
 	switch {
-	case role == library.PackRoleRegular:
+	case allRegular && !allSpecial:
 		sel.PresenceEmptySelected = true
 		sel.PresenceEmptyHref = clearHref
 		sel.PresenceFilledHref = hasHref
-	case role == library.VideoPackRoleAnySpecial || library.IsSpecialPackRole(role):
+	case allSpecial && !allRegular:
 		sel.PresenceFilledSelected = true
 		sel.PresenceFilledHref = clearHref
 		sel.PresenceEmptyHref = noHref

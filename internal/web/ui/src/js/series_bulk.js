@@ -62,9 +62,8 @@ function syncSeriesBulkUI() {
   const modeBtn = live.querySelector("[data-series-bulk-mode]");
   if (modeBtn) {
     modeBtn.setAttribute("aria-pressed", seriesBulkMode ? "true" : "false");
-    modeBtn.classList.remove("btn-primary", "btn-active");
     const wrap = modeBtn.closest(".js-list-toolbar-dd");
-    if (wrap) wrap.classList.toggle("input-primary", seriesBulkMode);
+    if (wrap) wrap.classList.toggle("is-bulk-on", seriesBulkMode);
     modeBtn.setAttribute("data-tip", seriesBulkMode ? "Exit multi-select" : "Multi-select");
     modeBtn.setAttribute("aria-label", seriesBulkMode ? "Exit multi-select" : "Multi-select");
   }
@@ -91,12 +90,12 @@ function syncSeriesBulkUI() {
     const selected = seriesBulkMode && seriesBulkSelected.has(id);
     const isCard = row.classList.contains("card");
     row.classList.toggle("bg-base-200", selected && !isCard);
-    // Cards: primary outline (poster fills the face; bg fill is almost invisible).
-    //! pin: selected card outline outline-primary
+    // Cards: accent outline (poster fills the face; bg fill is almost invisible).
+    //! pin: selected card outline outline-accent
     row.classList.toggle("outline", selected && isCard);
     row.classList.toggle("outline-2", selected && isCard);
     row.classList.toggle("outline-offset-2", selected && isCard);
-    row.classList.toggle("outline-primary", selected && isCard);
+    row.classList.toggle("outline-accent", selected && isCard);
     if (row.classList.contains("list-row")) {
       row.classList.toggle("rounded-none", selected);
       // Bulk: checkbox|media|grow|monitor. Normal: media|grow|monitor.

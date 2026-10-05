@@ -20,32 +20,38 @@ func (s *Server) ListSeriesIds(w http.ResponseWriter, r *http.Request, params ge
 		filter.QField = library.NormalizeQField(string(*params.QField))
 	}
 	if params.Root != nil {
-		filter.RootID = *params.Root
+		filter.RootIDs = []int64{*params.Root}
 	}
 	if params.Quality != nil {
-		filter.QualityProfileID = *params.Quality
+		filter.QualityProfileIDs = []int64{*params.Quality}
 	}
 	if params.Delivery != nil {
-		filter.DeliveryMode = string(*params.Delivery)
+		filter.DeliveryModes = []string{string(*params.Delivery)}
 	}
 	if params.Status != nil {
-		filter.Status = string(*params.Status)
+		filter.Statuses = []string{string(*params.Status)}
 	}
 	if params.Studio != nil {
-		filter.Studio = strings.TrimSpace(*params.Studio)
+		if s := strings.TrimSpace(*params.Studio); s != "" {
+			filter.Studios = []string{s}
+		}
 	}
 	if params.Country != nil {
-		filter.Country = strings.TrimSpace(*params.Country)
+		if s := strings.TrimSpace(*params.Country); s != "" {
+			filter.Countries = []string{s}
+		}
 	}
 	if params.Mpaa != nil {
-		filter.MPAA = strings.TrimSpace(*params.Mpaa)
+		if s := strings.TrimSpace(*params.Mpaa); s != "" {
+			filter.MPAAs = []string{s}
+		}
 	}
 	if params.Year != nil {
 		y := strings.TrimSpace(*params.Year)
 		if y != "" {
 			n, err := strconv.Atoi(y)
 			if err == nil && n > 0 {
-				filter.PremieredYear = n
+				filter.PremieredYears = []int{n}
 			}
 		}
 	}

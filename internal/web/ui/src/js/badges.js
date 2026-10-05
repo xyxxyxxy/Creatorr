@@ -42,24 +42,30 @@ export async function refreshBadge() {
   } catch (_) {}
 }
 
-function setNotifyBadge(n) {
+function setNotifyBadge(n, hasAlert) {
   const b = notifyBadge();
   if (!b) return;
   const count = Math.max(0, Math.floor(Number(n) || 0));
   b.textContent = count > 99 ? "99+" : String(count);
   b.classList.toggle("hidden", count === 0);
+  const alert = Boolean(hasAlert) && count > 0;
+  // Replace color classes (toggle can leave both if SSR/HTML drifted).
+  b.classList.remove("badge-info", "badge-error", "badge-warning");
+  b.classList.add(alert ? "badge-error" : "badge-info");
 }
 
-export async function refreshNotifyBadge(count) {
-  if (typeof count === "number") {
-    setNotifyBadge(count);
+export async function refreshNotifyBadge(count, hasAlert) {
+  // Only skip the fetch when both values are known; a bare count must not
+  // force info color when alerts may still be unread.
+  if (typeof count === "number" && typeof hasAlert === "boolean") {
+    setNotifyBadge(count, hasAlert);
     return;
   }
   try {
     const res = await fetch("/api/notifications/unread-count");
     if (!res.ok) return;
     const data = await res.json();
-    setNotifyBadge(data && data.count);
+    setNotifyBadge(Number(data && data.count) || 0, Boolean(data && data.has_alert));
   } catch (_) {}
 }
 
@@ -136,7 +142,7 @@ export async function refreshNotifyDropdown() {
   const viewAll = document.getElementById("notify-menu-view-all");
   if (!menu || !empty || !viewAll) return;
   try {
-    const res = await fetch("/api/notifications?limit=4");
+    const res = await fetch("/api/notifications?unread_only=true&limit=4");
     if (!res.ok) return;
     const items = await res.json();
     // Drop previous notification rows (keep mark-all, empty, view-all).
@@ -197,7 +203,7 @@ export async function markAllNotificationsRead() {
     const res = await fetch("/api/notifications/read-all", { method: "POST" });
     if (!res.ok) return;
     const data = await res.json();
-    refreshNotifyBadge(data && data.count);
+    refreshNotifyBadge(data && data.count, data && data.has_alert);
     await refreshNotifyDropdown();
   } catch (_) {}
 }

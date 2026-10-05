@@ -437,6 +437,9 @@ func TestSendEventNoChannelsStillRecords(t *testing.T) {
 	if err != nil || uc != 1 {
 		t.Fatalf("unread=%d err=%v", uc, err)
 	}
+	if _, hasAlert, err := notify.UnreadBadge(d); err != nil || !hasAlert {
+		t.Fatalf("alert unread must set hasAlert: hasAlert=%v err=%v", hasAlert, err)
+	}
 }
 
 func TestSendEventErrorRequiresTaskID(t *testing.T) {
@@ -617,15 +620,15 @@ func TestListNotificationsByLevel(t *testing.T) {
 	if err := notify.YtDlpFailed(context.Background(), d, taskID, "example.com", "boom"); err != nil {
 		t.Fatal(err)
 	}
-	info, err := notify.ListNotifications(d, notify.ListFilter{Level: notify.LevelInfo}, 10, 0)
+	info, err := notify.ListNotifications(d, notify.ListFilter{Levels: []string{notify.LevelInfo}}, 10, 0)
 	if err != nil || len(info) != 1 || info[0].Event != notify.EventDownloadDigest {
 		t.Fatalf("info=%v err=%v", info, err)
 	}
-	warn, err := notify.ListNotifications(d, notify.ListFilter{Level: notify.LevelWarning}, 10, 0)
+	warn, err := notify.ListNotifications(d, notify.ListFilter{Levels: []string{notify.LevelWarning}}, 10, 0)
 	if err != nil || len(warn) != 1 || warn[0].Event != notify.EventPOTProvider {
 		t.Fatalf("warn=%v err=%v", warn, err)
 	}
-	alert, err := notify.ListNotifications(d, notify.ListFilter{Level: notify.LevelAlert}, 10, 0)
+	alert, err := notify.ListNotifications(d, notify.ListFilter{Levels: []string{notify.LevelAlert}}, 10, 0)
 	if err != nil || len(alert) != 1 || alert[0].Event != notify.EventYtDlpFailed {
 		t.Fatalf("alert=%v err=%v", alert, err)
 	}
@@ -661,6 +664,9 @@ func TestPOTProviderWarningUnread(t *testing.T) {
 	}
 	if !items[0].Unread() {
 		t.Fatal("want unread")
+	}
+	if n, hasAlert, err := notify.UnreadBadge(d); err != nil || n != 1 || hasAlert {
+		t.Fatalf("warning unread must bump badge without alert color: count=%d hasAlert=%v err=%v", n, hasAlert, err)
 	}
 	if _, err := notify.MarkAllRead(d); err != nil {
 		t.Fatal(err)
@@ -735,8 +741,8 @@ func TestMarkInfoUnread(t *testing.T) {
 	if err != nil || !n.Unread() {
 		t.Fatalf("want unread after MarkUnread: %#v err=%v", n, err)
 	}
-	if badge, _ := notify.CountUnread(d); badge != 0 {
-		t.Fatalf("info unread must not bump badge, got %d", badge)
+	if badge, hasAlert, err := notify.UnreadBadge(d); err != nil || badge != 1 || hasAlert {
+		t.Fatalf("info unread must bump badge without alert color: count=%d hasAlert=%v err=%v", badge, hasAlert, err)
 	}
 	unread, err := notify.ListNotifications(d, notify.ListFilter{UnreadOnly: true}, 10, 0)
 	if err != nil || len(unread) != 1 || unread[0].ID != id {

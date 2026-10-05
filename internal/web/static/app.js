@@ -581,8 +581,73 @@
 
   // src/js/list_filter.js
   var listFilterQFocus = null;
+  var listFilterMenuKeep = null;
   var listFilterSearchTimer = null;
   var LIST_FILTER_SEARCH_MS = 350;
+  function filterMenuFrom(el) {
+    return el && el.closest ? el.closest("[data-list-filter-menu]") : null;
+  }
+  function snapshotListFilterMenu(menu) {
+    if (!menu) return null;
+    const openDetails = [];
+    menu.querySelectorAll("details[open]").forEach((d) => {
+      const labelEl = d.querySelector(":scope > summary .grow");
+      const label = labelEl && labelEl.textContent ? labelEl.textContent.trim() : "";
+      if (label) openDetails.push(label);
+    });
+    return { openDetails, scrollTop: Number(menu.scrollTop) || 0 };
+  }
+  function markListFilterMenuKeep(fromEl) {
+    const menu = filterMenuFrom(fromEl) || document.querySelector("form.js-list-filters [data-list-filter-menu]");
+    if (!menu) return;
+    listFilterMenuKeep = snapshotListFilterMenu(menu);
+  }
+  function captureListFilterMenuKeep() {
+    const menu = document.querySelector("form.js-list-filters [data-list-filter-menu]");
+    if (!menu) return;
+    const dd = menu.closest(".dropdown");
+    const focused = !!(dd && (dd.contains(document.activeElement) || menu.contains(document.activeElement)));
+    if (listFilterMenuKeep || focused || dd && dd.classList.contains("dropdown-open")) {
+      listFilterMenuKeep = snapshotListFilterMenu(menu);
+    }
+  }
+  function closeForcedFilterMenus(except) {
+    document.querySelectorAll("form.js-list-filters .dropdown.dropdown-open").forEach((dd) => {
+      if (except && (dd === except || dd.contains(except))) return;
+      dd.classList.remove("dropdown-open");
+    });
+  }
+  function restoreListFilterMenuScroll(menu, scrollTop) {
+    if (!menu || scrollTop == null) return;
+    const max = Math.max(0, menu.scrollHeight - menu.clientHeight);
+    menu.scrollTop = Math.min(Math.max(0, Number(scrollTop) || 0), max);
+  }
+  function restoreListFilterMenuKeep(root) {
+    const saved = listFilterMenuKeep;
+    listFilterMenuKeep = null;
+    if (!saved || !root || !root.querySelector) return;
+    const menu = root.querySelector("[data-list-filter-menu]");
+    if (!menu) return;
+    const dd = menu.closest(".dropdown");
+    if (!dd) return;
+    dd.classList.add("dropdown-open");
+    saved.openDetails.forEach((label) => {
+      menu.querySelectorAll("details").forEach((d) => {
+        const labelEl = d.querySelector(":scope > summary .grow");
+        const t = labelEl && labelEl.textContent ? labelEl.textContent.trim() : "";
+        if (t === label) d.open = true;
+      });
+    });
+    restoreListFilterMenuScroll(menu, saved.scrollTop);
+    requestAnimationFrame(() => {
+      if (!dd.isConnected) return;
+      dd.classList.add("dropdown-open");
+      restoreListFilterMenuScroll(menu, saved.scrollTop);
+      if (typeof menu.focus === "function") {
+        menu.focus({ preventScroll: true });
+      }
+    });
+  }
   function captureListFilterQFocus() {
     const el = document.activeElement;
     if (!el || el.tagName !== "INPUT" || el.type !== "search") {
@@ -634,6 +699,23 @@
     }, LIST_FILTER_SEARCH_MS);
   }
   function bootListFilter() {
+    document.body.addEventListener(
+      "click",
+      (ev) => {
+        const t = ev.target;
+        if (!t || !t.closest) return;
+        if (t.closest("[data-list-filter-menu] a") || t.closest("[data-list-filter-menu] [data-filter-date]")) {
+          markListFilterMenuKeep(t);
+          return;
+        }
+        closeForcedFilterMenus(t);
+      },
+      true
+    );
+    document.body.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Escape") return;
+      closeForcedFilterMenus(null);
+    });
     document.body.addEventListener("change", (ev) => {
       const el = ev.target;
       if (!el) return;
@@ -641,7 +723,10 @@
       if (menu) {
         if (el.type === "date") {
           const wrap = el.closest("[data-list-filter-date]");
-          if (wrap) applyDateFilter(wrap);
+          if (wrap) {
+            markListFilterMenuKeep(wrap);
+            applyDateFilter(wrap);
+          }
         }
         return;
       }
@@ -4109,23 +4194,26 @@
     } catch (_) {
     }
   }
-  function setNotifyBadge(n) {
+  function setNotifyBadge(n, hasAlert) {
     const b = notifyBadge();
     if (!b) return;
     const count = Math.max(0, Math.floor(Number(n) || 0));
     b.textContent = count > 99 ? "99+" : String(count);
     b.classList.toggle("hidden", count === 0);
+    const alert = Boolean(hasAlert) && count > 0;
+    b.classList.remove("badge-info", "badge-error", "badge-warning");
+    b.classList.add(alert ? "badge-error" : "badge-info");
   }
-  async function refreshNotifyBadge(count) {
-    if (typeof count === "number") {
-      setNotifyBadge(count);
+  async function refreshNotifyBadge(count, hasAlert) {
+    if (typeof count === "number" && typeof hasAlert === "boolean") {
+      setNotifyBadge(count, hasAlert);
       return;
     }
     try {
       const res = await fetch("/api/notifications/unread-count");
       if (!res.ok) return;
       const data = await res.json();
-      setNotifyBadge(data && data.count);
+      setNotifyBadge(Number(data && data.count) || 0, Boolean(data && data.has_alert));
     } catch (_) {
     }
   }
@@ -4199,7 +4287,7 @@
     const viewAll = document.getElementById("notify-menu-view-all");
     if (!menu || !empty || !viewAll) return;
     try {
-      const res = await fetch("/api/notifications?limit=4");
+      const res = await fetch("/api/notifications?unread_only=true&limit=4");
       if (!res.ok) return;
       const items = await res.json();
       menu.querySelectorAll("[data-notify-item]").forEach((el) => el.remove());
@@ -4259,7 +4347,7 @@
       const res = await fetch("/api/notifications/read-all", { method: "POST" });
       if (!res.ok) return;
       const data = await res.json();
-      refreshNotifyBadge(data && data.count);
+      refreshNotifyBadge(data && data.count, data && data.has_alert);
       await refreshNotifyDropdown();
     } catch (_) {
     }
@@ -4566,12 +4654,18 @@
     refreshBadge();
     if (ev.type === "notification.created" || ev.type === "notification.read") {
       let uc;
+      let hasAlert;
       try {
         const data = JSON.parse(ev.data || "{}");
         if (typeof data.unread_count === "number") uc = data.unread_count;
+        if (typeof data.has_alert === "boolean") hasAlert = data.has_alert;
       } catch (_) {
       }
-      refreshNotifyBadge(uc);
+      if (typeof uc === "number" && typeof hasAlert === "boolean") {
+        refreshNotifyBadge(uc, hasAlert);
+      } else {
+        refreshNotifyBadge();
+      }
       refreshNotifyDropdown();
       refreshNotificationHistoryPanel();
       return;
@@ -4632,6 +4726,7 @@
     document.body.dataset.listLiveScrollY = String(window.scrollY);
     document.body.dataset.listLiveAnchorTop = String(target.getBoundingClientRect().top);
     captureListFilterQFocus();
+    captureListFilterMenuKeep();
   }
   function restoreListLiveScroll(root) {
     if (!isListLiveEl(root)) return;
@@ -4706,9 +4801,12 @@
     document.body.addEventListener("htmx:beforeRequest", (ev) => {
       const cfg = ev.detail && ev.detail.requestConfig;
       const target = cfg && cfg.target || ev.detail && ev.detail.target;
+      const elt = cfg && cfg.elt || ev.detail && ev.detail.elt;
+      if (elt && elt.closest && elt.closest("[data-list-filter-menu]")) {
+        markListFilterMenuKeep(elt);
+      }
       if (!isListLiveEl(target)) return;
       pinListLiveScroll(target);
-      const elt = cfg && cfg.elt || ev.detail && ev.detail.elt;
       const scrollTo = elt && elt.getAttribute && elt.getAttribute("data-scroll-after-swap");
       if (scrollTo) document.body.dataset.listLiveScrollTarget = scrollTo;
       else delete document.body.dataset.listLiveScrollTarget;
@@ -4741,6 +4839,7 @@
       if (document.body.dataset.listLiveScrollY != null || document.body.dataset.listLiveAnchorTop != null) {
         restoreListLiveScroll(root);
       }
+      restoreListFilterMenuKeep(root);
     });
     document.body.addEventListener("htmx:oobAfterSwap", (ev) => {
       const root = htmxSwapRoot(ev);
@@ -4813,9 +4912,8 @@
     const modeBtn = live.querySelector("[data-series-bulk-mode]");
     if (modeBtn) {
       modeBtn.setAttribute("aria-pressed", seriesBulkMode ? "true" : "false");
-      modeBtn.classList.remove("btn-primary", "btn-active");
       const wrap = modeBtn.closest(".js-list-toolbar-dd");
-      if (wrap) wrap.classList.toggle("input-primary", seriesBulkMode);
+      if (wrap) wrap.classList.toggle("is-bulk-on", seriesBulkMode);
       modeBtn.setAttribute("data-tip", seriesBulkMode ? "Exit multi-select" : "Multi-select");
       modeBtn.setAttribute("aria-label", seriesBulkMode ? "Exit multi-select" : "Multi-select");
     }
@@ -4842,11 +4940,11 @@
       const selected = seriesBulkMode && seriesBulkSelected.has(id);
       const isCard = row.classList.contains("card");
       row.classList.toggle("bg-base-200", selected && !isCard);
-      //! pin: selected card outline outline-primary
+      //! pin: selected card outline outline-accent
       row.classList.toggle("outline", selected && isCard);
       row.classList.toggle("outline-2", selected && isCard);
       row.classList.toggle("outline-offset-2", selected && isCard);
-      row.classList.toggle("outline-primary", selected && isCard);
+      row.classList.toggle("outline-accent", selected && isCard);
       if (row.classList.contains("list-row")) {
         row.classList.toggle("rounded-none", selected);
         if (seriesBulkMode) {
@@ -5286,9 +5384,8 @@
     const modeBtn = live.querySelector("[data-video-bulk-mode]");
     if (modeBtn) {
       modeBtn.setAttribute("aria-pressed", videoBulkMode ? "true" : "false");
-      modeBtn.classList.remove("btn-primary", "btn-active");
       const wrap = modeBtn.closest(".js-list-toolbar-dd");
-      if (wrap) wrap.classList.toggle("input-primary", videoBulkMode);
+      if (wrap) wrap.classList.toggle("is-bulk-on", videoBulkMode);
       modeBtn.setAttribute("data-tip", videoBulkMode ? "Exit multi-select" : "Multi-select");
       modeBtn.setAttribute("aria-label", videoBulkMode ? "Exit multi-select" : "Multi-select");
     }
@@ -5361,11 +5458,11 @@
       const selected = videoBulkMode && videoBulkSelected.has(id);
       const isCard = row.classList.contains("card");
       row.classList.toggle("bg-base-200", selected && !isCard);
-      //! pin: selected card outline outline-primary
+      //! pin: selected card outline outline-accent
       row.classList.toggle("outline", selected && isCard);
       row.classList.toggle("outline-2", selected && isCard);
       row.classList.toggle("outline-offset-2", selected && isCard);
-      row.classList.toggle("outline-primary", selected && isCard);
+      row.classList.toggle("outline-accent", selected && isCard);
       if (row.classList.contains("list-row")) {
         row.classList.toggle("rounded-none", selected);
         if (videoBulkMode) {
@@ -5731,9 +5828,8 @@
     const modeBtn = live.querySelector("[data-files-bulk-mode]");
     if (modeBtn) {
       modeBtn.setAttribute("aria-pressed", filesBulkMode ? "true" : "false");
-      modeBtn.classList.remove("btn-primary", "btn-active");
       const wrap = modeBtn.closest(".js-list-toolbar-dd");
-      if (wrap) wrap.classList.toggle("input-primary", filesBulkMode);
+      if (wrap) wrap.classList.toggle("is-bulk-on", filesBulkMode);
       modeBtn.setAttribute("data-tip", filesBulkMode ? "Exit multi-select" : "Multi-select");
       modeBtn.setAttribute("aria-label", filesBulkMode ? "Exit multi-select" : "Multi-select");
     }
@@ -6072,9 +6168,8 @@
     const modeBtn = live.querySelector("[data-sources-bulk-mode]");
     if (modeBtn) {
       modeBtn.setAttribute("aria-pressed", sourcesBulkMode ? "true" : "false");
-      modeBtn.classList.remove("btn-primary", "btn-active");
       const wrap = modeBtn.closest(".js-list-toolbar-dd");
-      if (wrap) wrap.classList.toggle("input-primary", sourcesBulkMode);
+      if (wrap) wrap.classList.toggle("is-bulk-on", sourcesBulkMode);
       modeBtn.setAttribute("data-tip", sourcesBulkMode ? "Exit multi-select" : "Multi-select");
       modeBtn.setAttribute("aria-label", sourcesBulkMode ? "Exit multi-select" : "Multi-select");
     }
@@ -6455,7 +6550,7 @@
     if (modeBtn) {
       modeBtn.setAttribute("aria-pressed", notificationsBulkMode ? "true" : "false");
       const wrap = modeBtn.closest(".js-list-toolbar-dd");
-      if (wrap) wrap.classList.toggle("input-primary", notificationsBulkMode);
+      if (wrap) wrap.classList.toggle("is-bulk-on", notificationsBulkMode);
       modeBtn.setAttribute(
         "data-tip",
         notificationsBulkMode ? "Exit multi-select" : "Multi-select"

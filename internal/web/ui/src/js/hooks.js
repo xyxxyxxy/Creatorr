@@ -7,7 +7,13 @@ import { snapshotStringListEditors } from "./form_reset.js";
 import { syncAllMaturityJoins, syncAllPackRoleJoins, syncAllRateLimitJoins, syncAllScanCronJoins } from "./joins.js";
 import { currentKeepScrollRedirect, restoreSeriesScroll, saveKeepScroll, scrollSeriesVideosAnchor, shouldKeepScrollForm, syncKeepScrollRedirect } from "./keep_scroll.js";
 import { refreshTasksPanel, restoreTasksLiveAfterSwap, stashTasksLiveBeforeSwap } from "./lanes.js";
-import { captureListFilterQFocus, restoreListFilterQFocus } from "./list_filter.js";
+import {
+  captureListFilterMenuKeep,
+  captureListFilterQFocus,
+  markListFilterMenuKeep,
+  restoreListFilterMenuKeep,
+  restoreListFilterQFocus,
+} from "./list_filter.js";
 import { wireMaintenanceScope } from "./maintenance.js";
 import { connectEvents } from "./sse.js";
 import { openAddSeriesModal, openSeriesMetadataModal } from "./validity.js";
@@ -38,6 +44,7 @@ function pinListLiveScroll(target) {
   document.body.dataset.listLiveScrollY = String(window.scrollY);
   document.body.dataset.listLiveAnchorTop = String(target.getBoundingClientRect().top);
   captureListFilterQFocus();
+  captureListFilterMenuKeep();
 }
 
 function restoreListLiveScroll(root) {
@@ -118,9 +125,13 @@ export function bootHooks() {
   document.body.addEventListener("htmx:beforeRequest", (ev) => {
     const cfg = ev.detail && ev.detail.requestConfig;
     const target = (cfg && cfg.target) || (ev.detail && ev.detail.target);
+    const elt = (cfg && cfg.elt) || (ev.detail && ev.detail.elt);
+    // Mark before pin/blur: Filter choice links live inside the swapped panel.
+    if (elt && elt.closest && elt.closest("[data-list-filter-menu]")) {
+      markListFilterMenuKeep(elt);
+    }
     if (!isListLiveEl(target)) return;
     pinListLiveScroll(target);
-    const elt = (cfg && cfg.elt) || (ev.detail && ev.detail.elt);
     const scrollTo = elt && elt.getAttribute && elt.getAttribute("data-scroll-after-swap");
     if (scrollTo) document.body.dataset.listLiveScrollTarget = scrollTo;
     else delete document.body.dataset.listLiveScrollTarget;
@@ -157,6 +168,8 @@ export function bootHooks() {
     if (document.body.dataset.listLiveScrollY != null || document.body.dataset.listLiveAnchorTop != null) {
       restoreListLiveScroll(root);
     }
+    // Always (not only via scroll restore): Filter menu keep uses dropdown-open.
+    restoreListFilterMenuKeep(root);
   });
 
   document.body.addEventListener("htmx:oobAfterSwap", (ev) => {

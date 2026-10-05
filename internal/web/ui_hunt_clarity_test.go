@@ -247,7 +247,7 @@ func TestBulkThumbCardClickSelectsNotNavigates(t *testing.T) {
 		// HTMX settle rewrites id'd bulk bar `hidden`; restore again after settle.
 		`htmx:afterSettle`,
 		// Selected cards use primary outline (list/table keep bg-base-200 fill).
-		`selected card outline outline-primary`,
+		`selected card outline outline-accent`,
 	} {
 		if !strings.Contains(js, tip) {
 			t.Fatalf("app.js missing bulk contract %q", tip)
@@ -318,6 +318,17 @@ func TestTasksBadgeContractOpenCountNotSoftPause(t *testing.T) {
 	if !strings.Contains(fn, "const n = list.length") {
 		t.Fatalf("refreshBadge must count all open tasks: %s", truncate(fn, 600))
 	}
+	setStart := strings.Index(js, "function setNotifyBadge")
+	if setStart < 0 {
+		t.Fatal("setNotifyBadge missing")
+	}
+	setFn := js[setStart:]
+	if end := strings.Index(setFn, "\n  async function refreshNotifyBadge"); end > 0 {
+		setFn = setFn[:end]
+	}
+	if !strings.Contains(setFn, `b.classList.add(alert ? "badge-error" : "badge-info")`) {
+		t.Fatalf("setNotifyBadge must use badge-error when hasAlert: %s", truncate(setFn, 500))
+	}
 }
 
 func TestVideoBulkMetadataCommonStillReportsSpecialFeature(t *testing.T) {
@@ -380,6 +391,30 @@ func TestListLiveSearchPinsViewportAnchor(t *testing.T) {
 	} {
 		if !strings.Contains(js, pin) {
 			t.Fatalf("app.js missing live-scroll pin %q", pin)
+		}
+	}
+}
+
+func TestListFilterMenuKeepOpenPins(t *testing.T) {
+	// Filter choice HTMX-swaps the live panel; menu must reopen for the next pick.
+	req := httptest.NewRequest(http.MethodGet, "/static/app.js", nil)
+	rec := httptest.NewRecorder()
+	web.StaticHandler().ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("app.js status %d", rec.Code)
+	}
+	js := rec.Body.String()
+	for _, pin := range []string{
+		"captureListFilterMenuKeep",
+		"restoreListFilterMenuKeep",
+		"data-list-filter-menu",
+		"listFilterMenuKeep",
+		"dropdown-open",
+		"scrollTop",
+		"restoreListFilterMenuScroll",
+	} {
+		if !strings.Contains(js, pin) {
+			t.Fatalf("app.js missing filter menu keep-open pin %q", pin)
 		}
 	}
 }

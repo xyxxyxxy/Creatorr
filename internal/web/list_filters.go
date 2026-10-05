@@ -12,7 +12,7 @@ type listFilterOpt struct {
 type listFilterSelect struct {
 	Name, AriaLabel        string
 	Options                []listFilterOpt
-	Multi                  bool   // multi query values; click toggles; clear via chips
+	SelectedCount          int    // selected option rows; accordion summary badge when > 0
 	PresenceField          string // library.Presence* id; empty = no Has/No
 	PresenceEmptyHref      string
 	PresenceFilledHref     string

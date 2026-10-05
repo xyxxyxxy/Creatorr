@@ -41,7 +41,7 @@
         <div class="dropdown dropdown-end">
           <div tabindex="0" role="button" class="btn btn-ghost btn-square relative" aria-label="Notifications" id="notify-bell-btn">
             <i data-lucide="bell" class="size-5"></i>
-            <span id="notify-badge" class="badge badge-error badge-xs absolute top-1 right-1 hidden">0</span>
+            <span id="notify-badge" class="badge badge-xs absolute top-1 right-1{{if not .NotifyCount}} hidden{{end}}{{if .NotifyAlert}} badge-error{{else}} badge-info{{end}}">{{if gt .NotifyCount 99}}99+{{else}}{{.NotifyCount}}{{end}}</span>
           </div>
           <ul tabindex="0" id="notify-menu"
               class="dropdown-content menu bg-base-100 rounded-box z-[1300] w-80 max-w-[calc(100vw-2rem)] p-2 border border-base-300 max-h-[min(24rem,70vh)] overflow-y-auto">
@@ -50,7 +50,7 @@
                 Mark all as read
               </button>
             </li>
-            <li id="notify-dropdown-empty" class="disabled"><a class="justify-center">No notifications</a></li>
+            <li id="notify-dropdown-empty" class="disabled"><a class="justify-center">No unread notifications</a></li>
             <li id="notify-menu-view-all">
               <a href="/browser?type=notifications" class="justify-center">
                 View all

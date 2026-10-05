@@ -87,6 +87,7 @@ func templateFuncs() template.FuncMap {
 		"list": func(items ...any) []any {
 			return items
 		},
+		"badgeClusters": clusterListViewBadges,
 		// seq returns n empty structs for {{range seq N}} loops (skeleton slots, etc.).
 		"seq": func(n int) []struct{} {
 			if n < 1 {
@@ -118,6 +119,10 @@ func templateFuncs() template.FuncMap {
 		"joinStrings": func(ss []string) string {
 			return strings.Join(ss, ", ")
 		},
+		// boolDataAttr builds a trusted data-* boolean attribute (html/template
+		// rejects dynamic attribute names like data-{{.X}} as data-ZgotmplZ).
+		"boolDataAttr": boolDataAttr,
+
 		"containsString": func(list any, want string) bool {
 			switch v := list.(type) {
 			case []string:
@@ -191,6 +196,20 @@ func parseTemplates(fsys fs.FS) (*template.Template, error) {
 func loadDisk() (*template.Template, error) {
 	root := WebDir()
 	return parseTemplates(os.DirFS(root))
+}
+
+// boolDataAttr returns a bare data-<suffix> attribute for trusted template keys.
+func boolDataAttr(suffix string) template.HTMLAttr {
+	if suffix == "" {
+		return ""
+	}
+	for _, r := range suffix {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			continue
+		}
+		return ""
+	}
+	return template.HTMLAttr("data-" + suffix)
 }
 
 func load() {

@@ -70,26 +70,26 @@ type Video struct {
 // VideoListFilter scopes video lists by text, catalog metadata, status, source,
 // dates, presence (empty/not_empty), and optional series (library-wide lists).
 type VideoListFilter struct {
-	Title     string   // case-insensitive substring against QField
-	QField    string   // title|sorttitle|originaltitle|plot|tagline|notes
-	Statuses  []string // empty = all statuses
-	SourceID  int64    // 0 = all sources; VideoSourceImport = source_id IS NULL
-	SeriesID  int64    // 0 = any; used when listing with seriesID==0 (library-wide)
-	MediaType string   // non-empty exact match; empty query = all
-	Year      int      // UTC calendar year of upload_date; 0 = any
-	PackRole  string   // empty = any; episode = regular; special = any special; else exact special_feature
-	FromDay   string   // YYYY-MM-DD inclusive; empty = no lower bound
-	ToDay     string   // YYYY-MM-DD inclusive; empty = no upper bound
-	Studio    string
-	Country   string
-	MPAA      string
-	Genres    []string
-	Tags      []string
-	Actors    []string
-	Empty     []string // presence field ids
-	NotEmpty  []string
-	Sort      string // upload|added|acquired|title; empty = upload
-	SortDir   string // asc|desc; empty = DefaultSortDir(Sort)
+	Title      string   // case-insensitive substring against QField
+	QField     string   // title|sorttitle|originaltitle|plot|tagline|notes
+	Statuses   []string // empty = all statuses
+	SourceIDs  []int64  // VideoSourceImport (-1) = source_id IS NULL; OR with positive ids
+	SeriesIDs  []int64  // library-wide lists when seriesID==0
+	MediaTypes []string // non-empty values; OR match; empty query = all
+	Years      []int    // UTC calendar years of upload_date; 0 entries ignored
+	PackRoles  []string // OR: regular | special | exact special_feature
+	FromDay    string   // YYYY-MM-DD inclusive; empty = no lower bound
+	ToDay      string   // YYYY-MM-DD inclusive; empty = no upper bound
+	Studios    []string
+	Countries  []string
+	MPAAs      []string
+	Genres     []string
+	Tags       []string
+	Actors     []string
+	Empty      []string // presence field ids
+	NotEmpty   []string
+	Sort       string // upload|added|acquired|title; empty = upload
+	SortDir    string // asc|desc; empty = DefaultSortDir(Sort)
 }
 
 // VideoSourceImport filters videos with source_id IS NULL (?source=import).
@@ -102,90 +102,21 @@ const VideoSourceImportQuery = "import"
 // VideoPackRoleAnySpecial is the list-filter value for every non-regular special_feature.
 const VideoPackRoleAnySpecial = "special"
 
-// Active reports whether any filter constraint is set (not sort).
-func (f VideoListFilter) Active() bool {
-	return strings.TrimSpace(f.Title) != "" || len(f.Statuses) > 0 || f.SourceID != 0 || f.SeriesID > 0 ||
-		strings.TrimSpace(f.MediaType) != "" || f.Year != 0 || strings.TrimSpace(f.PackRole) != "" ||
+// MenuActive reports whether any Filter-menu constraint is set (not search, not sort).
+func (f VideoListFilter) MenuActive() bool {
+	return len(f.Statuses) > 0 || len(f.SourceIDs) > 0 || len(f.SeriesIDs) > 0 ||
+		len(trimNonEmptyStrings(f.MediaTypes)) > 0 || len(uniqNonZeroInts(f.Years)) > 0 ||
+		len(trimNonEmptyStrings(f.PackRoles)) > 0 ||
 		f.FromDay != "" || f.ToDay != "" ||
-		strings.TrimSpace(f.Studio) != "" || strings.TrimSpace(f.Country) != "" || strings.TrimSpace(f.MPAA) != "" ||
+		len(trimNonEmptyStrings(f.Studios)) > 0 || len(trimNonEmptyStrings(f.Countries)) > 0 ||
+		len(trimNonEmptyStrings(f.MPAAs)) > 0 ||
 		len(f.Genres) > 0 || len(f.Tags) > 0 || len(f.Actors) > 0 ||
 		len(f.Empty) > 0 || len(f.NotEmpty) > 0
 }
 
-func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter) {
-	if title := strings.TrimSpace(f.Title); title != "" {
-		col := videoTextColumn(f.QField)
-		b.WriteString(` AND ` + col + ` LIKE ? ESCAPE '\' COLLATE NOCASE`)
-		*args = append(*args, likeContainsPattern(title))
-	}
-	if f.SeriesID > 0 {
-		b.WriteString(` AND series_id = ?`)
-		*args = append(*args, f.SeriesID)
-	}
-	if len(f.Statuses) > 0 {
-		b.WriteString(` AND status IN (` + sqlIntPlaceholders(len(f.Statuses)) + `)`)
-		for _, st := range f.Statuses {
-			*args = append(*args, st)
-		}
-	}
-	switch {
-	case f.SourceID == VideoSourceImport:
-		b.WriteString(` AND source_id IS NULL`)
-	case f.SourceID > 0:
-		b.WriteString(` AND source_id = ?`)
-		*args = append(*args, f.SourceID)
-	}
-	if mt := strings.TrimSpace(f.MediaType); mt != "" {
-		b.WriteString(` AND media_type = ? AND media_type != ''`)
-		*args = append(*args, mt)
-	}
-	if studio := strings.TrimSpace(f.Studio); studio != "" {
-		b.WriteString(` AND studio = ? COLLATE NOCASE`)
-		*args = append(*args, studio)
-	}
-	if country := strings.TrimSpace(f.Country); country != "" {
-		b.WriteString(` AND country = ? COLLATE NOCASE`)
-		*args = append(*args, country)
-	}
-	if mpaa := strings.TrimSpace(f.MPAA); mpaa != "" {
-		b.WriteString(` AND mpaa = ? COLLATE NOCASE`)
-		*args = append(*args, mpaa)
-	}
-	appendJSONStringListMatch(b, args, "genres", f.Genres)
-	appendJSONStringListMatch(b, args, "tags", f.Tags)
-	appendJSONActorNameMatch(b, args, "actors", f.Actors)
-	appendVideoPresenceSQL(b, f.Empty, f.NotEmpty)
-	switch {
-	case f.Year > 0:
-		// UTC calendar year of upload_date (same as year-season / {year}).
-		b.WriteString(` AND upload_date IS NOT NULL AND trim(upload_date) != ''`)
-		b.WriteString(` AND CAST(strftime('%Y', upload_date) AS INTEGER) = ?`)
-		*args = append(*args, f.Year)
-	}
-	switch role := strings.TrimSpace(f.PackRole); role {
-	case "":
-		// any kind
-	case PackRoleRegular:
-		b.WriteString(` AND ` + SQLPackRoleRegularPred)
-	case VideoPackRoleAnySpecial:
-		b.WriteString(` AND NOT (` + SQLPackRoleRegularPred + `)`)
-	default:
-		b.WriteString(` AND special_feature = ?`)
-		*args = append(*args, NormalizePackRole(role))
-	}
-	if f.FromDay == "" && f.ToDay == "" {
-		return
-	}
-	// Date range applies to videos with a real upload_date; undated rows are excluded.
-	b.WriteString(` AND upload_date IS NOT NULL AND upload_date != ''`)
-	if f.FromDay != "" {
-		b.WriteString(` AND date(upload_date) >= date(?)`)
-		*args = append(*args, f.FromDay)
-	}
-	if f.ToDay != "" {
-		b.WriteString(` AND date(upload_date) <= date(?)`)
-		*args = append(*args, f.ToDay)
-	}
+// Active reports whether search or any Filter-menu constraint is set (not sort).
+func (f VideoListFilter) Active() bool {
+	return strings.TrimSpace(f.Title) != "" || f.MenuActive()
 }
 
 // likeContainsPattern wraps s for SQL LIKE … ESCAPE '\' (substring match).
@@ -278,7 +209,7 @@ func (s *Store) ListVideosPage(seriesID int64, limit, offset int) ([]Video, erro
 
 // ListVideosPageFiltered returns one page of videos.
 // seriesID > 0 scopes to that series; seriesID == 0 lists the whole library
-// (optional filter.SeriesID still applies).
+// (optional filter.SeriesIDs still applies).
 func (s *Store) ListVideosPageFiltered(seriesID int64, filter VideoListFilter, limit, offset int) ([]Video, error) {
 	if limit <= 0 {
 		limit = 50

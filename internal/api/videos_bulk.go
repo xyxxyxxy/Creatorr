@@ -24,7 +24,7 @@ func (s *Server) ListSeriesVideoIds(w http.ResponseWriter, r *http.Request, id g
 		filter.QField = library.NormalizeQField(string(*params.QField))
 	}
 	if params.Source != nil {
-		filter.SourceID = *params.Source
+		filter.SourceIDs = []int64{*params.Source}
 	}
 	if params.Status != nil {
 		for _, part := range strings.Split(*params.Status, ",") {
@@ -39,7 +39,7 @@ func (s *Server) ListSeriesVideoIds(w http.ResponseWriter, r *http.Request, id g
 		if y != "" {
 			n, err := strconv.Atoi(y)
 			if err == nil && n > 0 {
-				filter.Year = n
+				filter.Years = []int{n}
 			}
 		}
 	}
@@ -47,12 +47,12 @@ func (s *Server) ListSeriesVideoIds(w http.ResponseWriter, r *http.Request, id g
 		raw := strings.TrimSpace(*params.Kind)
 		switch raw {
 		case library.PackRoleRegular:
-			filter.PackRole = library.PackRoleRegular
+			filter.PackRoles = []string{library.PackRoleRegular}
 		case library.VideoPackRoleAnySpecial:
-			filter.PackRole = library.VideoPackRoleAnySpecial
+			filter.PackRoles = []string{library.VideoPackRoleAnySpecial}
 		default:
 			if err := library.ValidatePackRole(raw); err == nil && library.IsSpecialPackRole(raw) {
-				filter.PackRole = library.NormalizePackRole(raw)
+				filter.PackRoles = []string{library.NormalizePackRole(raw)}
 			}
 		}
 	}
@@ -67,16 +67,24 @@ func (s *Server) ListSeriesVideoIds(w http.ResponseWriter, r *http.Request, id g
 		}
 	}
 	if params.Studio != nil {
-		filter.Studio = strings.TrimSpace(*params.Studio)
+		if s := strings.TrimSpace(*params.Studio); s != "" {
+			filter.Studios = []string{s}
+		}
 	}
 	if params.Country != nil {
-		filter.Country = strings.TrimSpace(*params.Country)
+		if s := strings.TrimSpace(*params.Country); s != "" {
+			filter.Countries = []string{s}
+		}
 	}
 	if params.Mpaa != nil {
-		filter.MPAA = strings.TrimSpace(*params.Mpaa)
+		if s := strings.TrimSpace(*params.Mpaa); s != "" {
+			filter.MPAAs = []string{s}
+		}
 	}
 	if params.MediaType != nil {
-		filter.MediaType = strings.TrimSpace(*params.MediaType)
+		if s := strings.TrimSpace(*params.MediaType); s != "" {
+			filter.MediaTypes = []string{s}
+		}
 	}
 	if params.Genre != nil {
 		filter.Genres = append([]string(nil), (*params.Genre)...)

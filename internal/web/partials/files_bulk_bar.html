@@ -23,16 +23,12 @@
       </button>
       {{end}}
     </div>
-    <div class="self-center justify-self-end">
-      <div class="join">
-        <button type="button" class="btn join-item tooltip tooltip-top" data-files-bulk-check data-tip="Check integrity" aria-label="Check integrity" disabled>
-          <i data-lucide="shield-check" class="size-4"></i>
-          Check integrity
-        </button>
-        <button type="button" class="btn btn-soft btn-error btn-square join-item tooltip tooltip-top" data-files-bulk-delete data-tip="Delete" aria-label="Delete" disabled>
-          <i data-lucide="trash-2" class="size-4"></i>
-        </button>
-      </div>
+    <div class="self-center justify-self-end flex flex-wrap gap-2 items-center">
+      {{template "btn_labeled" (dict "Icon" "shield-check" "Label" "Check integrity" "Data" "files-bulk-check" "Disabled" true)}}
+
+      <button type="button" class="btn btn-soft btn-error btn-square tooltip tooltip-top" data-files-bulk-delete data-tip="Delete" aria-label="Delete" disabled>
+        <i data-lucide="trash-2" class="size-4"></i>
+      </button>
     </div>
   </li>
 </ul>

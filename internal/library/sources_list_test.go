@@ -58,7 +58,7 @@ func TestListSourcesFiltered(t *testing.T) {
 	if err != nil || scoped != 2 {
 		t.Fatalf("series A count=%d want 2 err=%v", scoped, err)
 	}
-	feedOnly, err := s.ListSourcesFiltered(SourceListFilter{Kind: SourceKindFeed}, 50, 0)
+	feedOnly, err := s.ListSourcesFiltered(SourceListFilter{Kinds: []string{SourceKindFeed}}, 50, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestListSourcesFiltered(t *testing.T) {
 			t.Fatalf("missing series title")
 		}
 	}
-	singles, err := s.ListSourcesFiltered(SourceListFilter{Kind: SourceKindSingle, SeriesID: a.ID}, 50, 0)
+	singles, err := s.ListSourcesFiltered(SourceListFilter{Kinds: []string{SourceKindSingle}, SeriesID: a.ID}, 50, 0)
 	if err != nil || len(singles) != 1 {
 		t.Fatalf("single scoped len=%d err=%v", len(singles), err)
 	}
@@ -111,7 +111,7 @@ func TestListSourcesFiltered(t *testing.T) {
 		t.Fatalf("series B kinds=%v want [feed]", feedOnlyFacets.Kinds)
 	}
 
-	domEx, err := s.ListSourcesFiltered(SourceListFilter{Domain: "example.com"}, 50, 0)
+	domEx, err := s.ListSourcesFiltered(SourceListFilter{Domains: []string{"example.com"}}, 50, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestListSourcesFiltered(t *testing.T) {
 			t.Fatalf("domain filter leaked %q", row.URL)
 		}
 	}
-	domCDN, err := s.CountSourcesFiltered(SourceListFilter{Domain: "cdn.example.org"})
+	domCDN, err := s.CountSourcesFiltered(SourceListFilter{Domains: []string{"cdn.example.org"}})
 	if err != nil || domCDN != 1 {
 		t.Fatalf("cdn domain count=%d err=%v", domCDN, err)
 	}
@@ -218,10 +218,19 @@ func TestListSourcesFilteredActive(t *testing.T) {
 		t.Fatal("empty filter should be inactive")
 	}
 	v := true
-	if !(SourceListFilter{Domain: "x"}).Active() || !(SourceListFilter{FullScanDone: &v}).Active() ||
+	if !(SourceListFilter{Domains: []string{"x"}}).Active() || !(SourceListFilter{FullScanDone: &v}).Active() ||
 		!(SourceListFilter{ScheduleOn: &v}).Active() || !(SourceListFilter{SeriesMonitored: &v}).Active() ||
 		!(SourceListFilter{SeriesID: 1}).Active() || !(SourceListFilter{IndexAsIgnored: &v}).Active() {
 		t.Fatal("operator filters should be active")
+	}
+	if !(SourceListFilter{Q: "hi"}).Active() {
+		t.Fatal("search should be active")
+	}
+	if (SourceListFilter{Q: "hi"}).MenuActive() {
+		t.Fatal("search alone should not be menu-active")
+	}
+	if !(SourceListFilter{Domains: []string{"x"}}).MenuActive() {
+		t.Fatal("domain should be menu-active")
 	}
 }
 

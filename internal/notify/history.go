@@ -29,13 +29,13 @@ func (n Notification) Unread() bool {
 // ListFilter selects notification rows.
 type ListFilter struct {
 	Event      string
-	Level      string // info | warning | alert; empty = all
-	From       string // inclusive UTC RFC3339Nano on created_at
-	To         string // inclusive UTC RFC3339Nano on created_at
-	UnreadOnly bool   // read_at IS NULL (any event)
-	ReadOnly   bool   // read_at IS NOT NULL; mutually exclusive with UnreadOnly
-	Sort       string // created | level; empty = created; legacy when accepted
-	SortDir    string // asc|desc
+	Levels     []string // info | warning | alert; OR via event IN union
+	From       string   // inclusive UTC RFC3339Nano on created_at
+	To         string   // inclusive UTC RFC3339Nano on created_at
+	UnreadOnly bool     // read_at IS NULL (any event)
+	ReadOnly   bool     // read_at IS NOT NULL; mutually exclusive with UnreadOnly
+	Sort       string   // created | level; empty = created; legacy when accepted
+	SortDir    string   // asc|desc
 }
 
 // InsertNotification writes a notification row. taskID <= 0 stores NULL.
@@ -168,24 +168,33 @@ func ListNotificationIDs(database *db.DB, f ListFilter, toggleableOnly bool) ([]
 	return out, rows.Err()
 }
 
-// CountUnread returns unread alert/warning count for the nav badge (info ignored).
+// CountUnread returns total unread notification count for the nav badge (all levels).
 func CountUnread(database *db.DB) (int, error) {
+	n, _, err := UnreadBadge(database)
+	return n, err
+}
+
+// UnreadBadge returns total unread count and whether any unread alert is present.
+// Nav badge is error-red when hasAlert; otherwise info (warnings and info unread).
+func UnreadBadge(database *db.DB) (count int, hasAlert bool, err error) {
 	if database == nil {
-		return 0, nil
+		return 0, false, nil
 	}
-	evs := UnreadEvents()
+	// Include legacy download_failed rows (aliased to ytdlp_failed on write/read).
+	evs := append(append([]string{}, AlertEvents...), legacyEventDownloadFailed)
 	ph := strings.Repeat("?,", len(evs))
 	ph = ph[:len(ph)-1]
 	args := make([]any, 0, len(evs))
 	for _, e := range evs {
 		args = append(args, e)
 	}
-	var n int
-	err := database.SQL.QueryRow(
-		`SELECT COUNT(*) FROM notifications WHERE read_at IS NULL AND event IN (`+ph+`)`,
+	var alertN int
+	err = database.SQL.QueryRow(
+		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN event IN (`+ph+`) THEN 1 ELSE 0 END), 0)
+		 FROM notifications WHERE read_at IS NULL`,
 		args...,
-	).Scan(&n)
-	return n, err
+	).Scan(&count, &alertN)
+	return count, alertN > 0, err
 }
 
 // MarkRead sets read_at on one notification (no-op if already read).
@@ -298,7 +307,7 @@ func notificationWhere(f ListFilter) (string, []any) {
 		parts = append(parts, `event = ?`)
 		args = append(args, AliasEvent(ev))
 	}
-	if evs := EventsForLevel(f.Level); len(evs) > 0 {
+	if evs := EventsForLevels(f.Levels); len(evs) > 0 {
 		ph := strings.Repeat("?,", len(evs))
 		ph = ph[:len(ph)-1]
 		parts = append(parts, `event IN (`+ph+`)`)

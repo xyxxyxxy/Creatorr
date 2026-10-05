@@ -5,12 +5,12 @@
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
   <div class="join" role="group" aria-label="Explorer type">
-    <a href="/browser?type=series" class="btn join-item{{if eq .Type "series"}} btn-primary{{end}}"{{if eq .Type "series"}} aria-current="page"{{end}}>Series</a>
-    <a href="/browser?type=sources" class="btn join-item{{if eq .Type "sources"}} btn-primary{{end}}"{{if eq .Type "sources"}} aria-current="page"{{end}}>Sources</a>
-    <a href="/browser?type=videos" class="btn join-item{{if eq .Type "videos"}} btn-primary{{end}}"{{if eq .Type "videos"}} aria-current="page"{{end}}>Videos</a>
-    <a href="/browser?type=files" class="btn join-item{{if eq .Type "files"}} btn-primary{{end}}"{{if eq .Type "files"}} aria-current="page"{{end}}>Files</a>
-    <a href="/browser?type=tasks" class="btn join-item{{if eq .Type "tasks"}} btn-primary{{end}}"{{if eq .Type "tasks"}} aria-current="page"{{end}}>Tasks</a>
-    <a href="/browser?type=notifications" class="btn join-item{{if eq .Type "notifications"}} btn-primary{{end}}"{{if eq .Type "notifications"}} aria-current="page"{{end}}>Notifications</a>
+    <a href="/browser?type=series" class="btn join-item{{if eq .Type "series"}} btn-accent{{end}}"{{if eq .Type "series"}} aria-current="page"{{end}}>Series</a>
+    <a href="/browser?type=sources" class="btn join-item{{if eq .Type "sources"}} btn-accent{{end}}"{{if eq .Type "sources"}} aria-current="page"{{end}}>Sources</a>
+    <a href="/browser?type=videos" class="btn join-item{{if eq .Type "videos"}} btn-accent{{end}}"{{if eq .Type "videos"}} aria-current="page"{{end}}>Videos</a>
+    <a href="/browser?type=files" class="btn join-item{{if eq .Type "files"}} btn-accent{{end}}"{{if eq .Type "files"}} aria-current="page"{{end}}>Files</a>
+    <a href="/browser?type=tasks" class="btn join-item{{if eq .Type "tasks"}} btn-accent{{end}}"{{if eq .Type "tasks"}} aria-current="page"{{end}}>Tasks</a>
+    <a href="/browser?type=notifications" class="btn join-item{{if eq .Type "notifications"}} btn-accent{{end}}"{{if eq .Type "notifications"}} aria-current="page"{{end}}>Notifications</a>
   </div>
   <a href="{{.WideHref}}" class="btn btn-ghost btn-square tooltip tooltip-left"
      data-tip="{{if .Wide}}Exit full width{{else}}Full width{{end}}"

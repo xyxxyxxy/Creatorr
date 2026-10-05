@@ -69,9 +69,8 @@ function syncFilesBulkUI() {
   const modeBtn = live.querySelector("[data-files-bulk-mode]");
   if (modeBtn) {
     modeBtn.setAttribute("aria-pressed", filesBulkMode ? "true" : "false");
-    modeBtn.classList.remove("btn-primary", "btn-active");
     const wrap = modeBtn.closest(".js-list-toolbar-dd");
-    if (wrap) wrap.classList.toggle("input-primary", filesBulkMode);
+    if (wrap) wrap.classList.toggle("is-bulk-on", filesBulkMode);
     modeBtn.setAttribute("data-tip", filesBulkMode ? "Exit multi-select" : "Multi-select");
     modeBtn.setAttribute("aria-label", filesBulkMode ? "Exit multi-select" : "Multi-select");
   }

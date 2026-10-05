@@ -37,14 +37,14 @@ func TestVideoListFilterYear(t *testing.T) {
 	if len(years) != 2 || years[0] != 2025 || years[1] != 2024 {
 		t.Fatalf("years=%v want [2025 2024]", years)
 	}
-	got, err := s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{Year: 2025}, 50, 0)
+	got, err := s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{Years: []int{2025}}, 50, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 2 {
 		t.Fatalf("2025 filter: %d videos", len(got))
 	}
-	got24, err := s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{Year: 2024}, 50, 0)
+	got24, err := s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{Years: []int{2024}}, 50, 0)
 	if err != nil || len(got24) != 1 || got24[0].RemoteID != "y24" {
 		t.Fatalf("2024 filter: %+v err=%v", got24, err)
 	}
@@ -54,7 +54,7 @@ func TestVideoListFilterYear(t *testing.T) {
 	if err != nil || len(gotNone) != 1 || gotNone[0].RemoteID != "none" {
 		t.Fatalf("empty upload_date filter: %+v err=%v", gotNone, err)
 	}
-	n, err := s.CountVideosFiltered(ser.ID, library.VideoListFilter{Year: 2025})
+	n, err := s.CountVideosFiltered(ser.ID, library.VideoListFilter{Years: []int{2025}})
 	if err != nil || n != 2 {
 		t.Fatalf("count 2025=%d err=%v", n, err)
 	}

@@ -15,37 +15,23 @@ import (
 func parseVideoListFilter(r *http.Request, sources []library.Source, allowSeries bool) library.VideoListFilter {
 	q := r.URL.Query()
 	f := library.VideoListFilter{
-		Title:     strings.TrimSpace(q.Get("q")),
-		QField:    parseQField(r),
-		FromDay:   parseFilterDay(q.Get("from")),
-		ToDay:     parseFilterDay(q.Get("to")),
-		Studio:    strings.TrimSpace(q.Get("studio")),
-		Country:   strings.TrimSpace(q.Get("country")),
-		MPAA:      strings.TrimSpace(q.Get("mpaa")),
-		Genres:    parseMultiQuery(q, "genre"),
-		Tags:      parseMultiQuery(q, "tag"),
-		Actors:    parseMultiQuery(q, "actor"),
-		Sort:      parseVideoSort(q.Get("sort")),
-		SortDir:   parseSortDir(q.Get("dir")),
-		MediaType: strings.TrimSpace(q.Get("media_type"))}
+		Title:      strings.TrimSpace(q.Get("q")),
+		QField:     parseQField(r),
+		FromDay:    parseFilterDay(q.Get("from")),
+		ToDay:      parseFilterDay(q.Get("to")),
+		Studios:    parseMultiQuery(q, "studio"),
+		Countries:  parseMultiQuery(q, "country"),
+		MPAAs:      parseMultiQuery(q, "mpaa"),
+		MediaTypes: parseMultiQuery(q, "media_type"),
+		Genres:     parseMultiQuery(q, "genre"),
+		Tags:       parseMultiQuery(q, "tag"),
+		Actors:     parseMultiQuery(q, "actor"),
+		Sort:       parseVideoSort(q.Get("sort")),
+		SortDir:    parseSortDir(q.Get("dir")),
+	}
 	f.Empty, f.NotEmpty = parsePresenceParams(q)
-	if raw := strings.TrimSpace(q.Get("year")); raw != "" {
-		if y, err := strconv.Atoi(raw); err == nil && y >= 1900 && y <= 2100 {
-			f.Year = y
-		}
-	}
-	if raw := strings.TrimSpace(q.Get("kind")); raw != "" {
-		switch raw {
-		case library.PackRoleRegular:
-			f.PackRole = library.PackRoleRegular
-		case library.VideoPackRoleAnySpecial:
-			f.PackRole = library.VideoPackRoleAnySpecial
-		default:
-			if err := library.ValidatePackRole(raw); err == nil && library.IsSpecialPackRole(raw) {
-				f.PackRole = library.NormalizePackRole(raw)
-			}
-		}
-	}
+	f.Years = parseMultiYear(q, "year")
+	f.PackRoles = parseVideoPackRoles(q)
 	seen := map[string]struct{}{}
 	for _, raw := range q["status"] {
 		st := strings.TrimSpace(raw)
@@ -58,29 +44,113 @@ func parseVideoListFilter(r *http.Request, sources []library.Source, allowSeries
 		seen[st] = struct{}{}
 		f.Statuses = append(f.Statuses, st)
 	}
-	if raw := strings.TrimSpace(q.Get("source")); raw != "" {
-		if strings.EqualFold(raw, library.VideoSourceImportQuery) {
-			f.SourceID = library.VideoSourceImport
-		} else if sid, err := strconv.ParseInt(raw, 10, 64); err == nil && sid > 0 {
-			if len(sources) == 0 {
-				f.SourceID = sid
-			} else {
-				for _, src := range sources {
-					if src.ID == sid {
-						f.SourceID = sid
-						break
-					}
-				}
-			}
-		}
-	}
+	f.SourceIDs = parseVideoSourceIDs(q, sources)
 	if allowSeries {
-		f.SeriesID = parseIntQuery(q.Get("series"))
+		f.SeriesIDs = parseMultiInt64(q, "series")
 	}
 	if f.FromDay != "" && f.ToDay != "" && f.FromDay > f.ToDay {
 		f.FromDay, f.ToDay = f.ToDay, f.FromDay
 	}
 	return f
+}
+
+func parseVideoPackRoles(q url.Values) []string {
+	var out []string
+	seen := map[string]struct{}{}
+	for _, raw := range q["kind"] {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		var role string
+		switch raw {
+		case library.PackRoleRegular:
+			role = library.PackRoleRegular
+		case library.VideoPackRoleAnySpecial:
+			role = library.VideoPackRoleAnySpecial
+		default:
+			if err := library.ValidatePackRole(raw); err == nil && library.IsSpecialPackRole(raw) {
+				role = library.NormalizePackRole(raw)
+			} else {
+				continue
+			}
+		}
+		if _, ok := seen[role]; ok {
+			continue
+		}
+		seen[role] = struct{}{}
+		out = append(out, role)
+	}
+	return out
+}
+
+func parseVideoSourceIDs(q url.Values, sources []library.Source) []int64 {
+	var out []int64
+	seen := map[int64]struct{}{}
+	for _, raw := range q["source"] {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		var id int64
+		if strings.EqualFold(raw, library.VideoSourceImportQuery) {
+			id = library.VideoSourceImport
+		} else if sid, err := strconv.ParseInt(raw, 10, 64); err == nil && sid > 0 {
+			if len(sources) > 0 {
+				found := false
+				for _, src := range sources {
+					if src.ID == sid {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
+			}
+			id = sid
+		} else {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+func videoSourceQueryValues(ids []int64) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == library.VideoSourceImport {
+			out = append(out, library.VideoSourceImportQuery)
+		} else if id > 0 {
+			out = append(out, strconv.FormatInt(id, 10))
+		}
+	}
+	return out
+}
+
+func int64QueryValues(ids []int64) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id > 0 {
+			out = append(out, strconv.FormatInt(id, 10))
+		}
+	}
+	return out
+}
+
+func intQueryValues(vals []int) []string {
+	out := make([]string, 0, len(vals))
+	for _, v := range vals {
+		if v != 0 {
+			out = append(out, strconv.Itoa(v))
+		}
+	}
+	return out
 }
 
 func encodeVideoListFilter(filter library.VideoListFilter, page int, view string) string {
@@ -91,22 +161,26 @@ func encodeVideoListFilter(filter library.VideoListFilter, page int, view string
 	if qf := library.NormalizeQField(filter.QField); qf != library.QFieldTitle {
 		q.Set("q_field", qf)
 	}
-	if filter.Year > 0 {
-		q.Set("year", strconv.Itoa(filter.Year))
+	for _, y := range filter.Years {
+		if y >= 1900 && y <= 2100 {
+			q.Add("year", strconv.Itoa(y))
+		}
 	}
 	for _, st := range filter.Statuses {
 		q.Add("status", st)
 	}
-	if filter.SourceID == library.VideoSourceImport {
-		q.Set("source", library.VideoSourceImportQuery)
-	} else if filter.SourceID > 0 {
-		q.Set("source", strconv.FormatInt(filter.SourceID, 10))
+	for _, sv := range videoSourceQueryValues(filter.SourceIDs) {
+		q.Add("source", sv)
 	}
-	if filter.SeriesID > 0 {
-		q.Set("series", strconv.FormatInt(filter.SeriesID, 10))
+	for _, sid := range filter.SeriesIDs {
+		if sid > 0 {
+			q.Add("series", strconv.FormatInt(sid, 10))
+		}
 	}
-	if role := strings.TrimSpace(filter.PackRole); role != "" {
-		q.Set("kind", role)
+	for _, role := range filter.PackRoles {
+		if role = strings.TrimSpace(role); role != "" {
+			q.Add("kind", role)
+		}
 	}
 	if filter.FromDay != "" {
 		q.Set("from", filter.FromDay)
@@ -114,17 +188,25 @@ func encodeVideoListFilter(filter library.VideoListFilter, page int, view string
 	if filter.ToDay != "" {
 		q.Set("to", filter.ToDay)
 	}
-	if s := strings.TrimSpace(filter.Studio); s != "" {
-		q.Set("studio", s)
+	for _, s := range filter.Studios {
+		if s = strings.TrimSpace(s); s != "" {
+			q.Add("studio", s)
+		}
 	}
-	if s := strings.TrimSpace(filter.Country); s != "" {
-		q.Set("country", s)
+	for _, s := range filter.Countries {
+		if s = strings.TrimSpace(s); s != "" {
+			q.Add("country", s)
+		}
 	}
-	if s := strings.TrimSpace(filter.MPAA); s != "" {
-		q.Set("mpaa", s)
+	for _, s := range filter.MPAAs {
+		if s = strings.TrimSpace(s); s != "" {
+			q.Add("mpaa", s)
+		}
 	}
-	if s := strings.TrimSpace(filter.MediaType); s != "" {
-		q.Set("media_type", s)
+	for _, s := range filter.MediaTypes {
+		if s = strings.TrimSpace(s); s != "" {
+			q.Add("media_type", s)
+		}
 	}
 	for _, g := range filter.Genres {
 		q.Add("genre", g)
@@ -156,27 +238,26 @@ func encodeVideoListFilter(filter library.VideoListFilter, page int, view string
 func videoListBadges(r *http.Request, filter library.VideoListFilter, showSeries bool, seriesTitles map[int64]string) []listViewBadge {
 	var out []listViewBadge
 	// Search (q) stays in the toolbar field only - not a chip.
-	for _, st := range filter.Statuses {
-		out = append(out, listViewBadge{Label: "Status: " + videoStatusLabel(st), Href: dropQueryValue(r, "status", st)})
-	}
-	if filter.SourceID == library.VideoSourceImport {
-		out = append(out, listViewBadge{Label: "Source: Import", Href: dropQueryKeys(r, "source", "page")})
-	} else if filter.SourceID > 0 {
-		out = append(out, listViewBadge{Label: "Source: #" + strconv.FormatInt(filter.SourceID, 10), Href: dropQueryKeys(r, "source", "page")})
-	}
-	if showSeries && filter.SeriesID > 0 {
-		title := seriesTitles[filter.SeriesID]
-		if title == "" {
-			title = "#" + strconv.FormatInt(filter.SeriesID, 10)
+	out = append(out, orJoinBadges(r, "status", "Status", "status", filter.Statuses, videoStatusLabel)...)
+	out = append(out, orJoinBadges(r, "source", "Source", "source", videoSourceQueryValues(filter.SourceIDs), func(s string) string {
+		if strings.EqualFold(s, library.VideoSourceImportQuery) {
+			return "Import"
 		}
-		out = append(out, listViewBadge{Label: "Series: " + title, Href: dropQueryKeys(r, "series", "page")})
+		return "#" + s
+	})...)
+	if showSeries {
+		out = append(out, orJoinBadges(r, "series", "Series", "series", int64QueryValues(filter.SeriesIDs), func(s string) string {
+			id, _ := strconv.ParseInt(s, 10, 64)
+			if title := seriesTitles[id]; title != "" {
+				return title
+			}
+			return "#" + s
+		})...)
 	}
-	if filter.Year > 0 {
-		out = append(out, listViewBadge{Label: "Year: " + strconv.Itoa(filter.Year), Href: dropQueryKeys(r, "year", "page")})
-	}
-	if role := strings.TrimSpace(filter.PackRole); role != "" {
-		out = append(out, listViewBadge{Label: specialKindChipLabel(role), Href: dropQueryKeys(r, "kind", "page")})
-	}
+	out = append(out, orJoinBadges(r, "year", "Year", "year", intQueryValues(filter.Years), nil)...)
+	out = append(out, orJoinBadges(r, "kind", "Special kind", "kind", filter.PackRoles, func(role string) string {
+		return specialKindChipLabel(role)
+	})...)
 	if filter.FromDay != "" || filter.ToDay != "" {
 		var label string
 		if filter.FromDay != "" && filter.ToDay != "" {
@@ -188,27 +269,13 @@ func videoListBadges(r *http.Request, filter library.VideoListFilter, showSeries
 		}
 		out = append(out, listViewBadge{Label: label, Href: dropQueryKeys(r, "from", "to", "page")})
 	}
-	if s := strings.TrimSpace(filter.Studio); s != "" {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("studio", s), Href: dropQueryKeys(r, "studio", "page")})
-	}
-	if s := strings.TrimSpace(filter.Country); s != "" {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("country", s), Href: dropQueryKeys(r, "country", "page")})
-	}
-	if s := strings.TrimSpace(filter.MPAA); s != "" {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("mpaa", s), Href: dropQueryKeys(r, "mpaa", "page")})
-	}
-	if s := strings.TrimSpace(filter.MediaType); s != "" {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("media_type", s), Href: dropQueryKeys(r, "media_type", "page")})
-	}
-	for _, g := range filter.Genres {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("genre", g), Href: dropQueryValue(r, "genre", g)})
-	}
-	for _, t := range filter.Tags {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("tag", t), Href: dropQueryValue(r, "tag", t)})
-	}
-	for _, a := range filter.Actors {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("actor", a), Href: dropQueryValue(r, "actor", a)})
-	}
+	out = append(out, orJoinBadges(r, "studio", "Studio", "studio", filter.Studios, nil)...)
+	out = append(out, orJoinBadges(r, "country", "Country", "country", filter.Countries, nil)...)
+	out = append(out, orJoinBadges(r, "mpaa", "Rating", "mpaa", filter.MPAAs, nil)...)
+	out = append(out, orJoinBadges(r, "media_type", "Media", "media_type", filter.MediaTypes, nil)...)
+	out = append(out, orJoinBadges(r, "genre", "Genre", "genre", filter.Genres, nil)...)
+	out = append(out, orJoinBadges(r, "tag", "Tag", "tag", filter.Tags, nil)...)
+	out = append(out, orJoinBadges(r, "actor", "Actor", "actor", filter.Actors, nil)...)
 	for _, e := range filter.Empty {
 		out = append(out, listViewBadge{Label: presenceBadgeLabel(e, true), Href: dropQueryValue(r, "empty", e)})
 	}
@@ -220,6 +287,7 @@ func videoListBadges(r *http.Request, filter library.VideoListFilter, showSeries
 
 func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter library.VideoListFilter, sources []library.Source, includeSeries bool) []listFilterSelect {
 	var selects []listFilterSelect
+	seriesSel := selectedInt64Set(filter.SeriesIDs)
 	if includeSeries {
 		list, _ := h.Library.ListSeriesFiltered(library.SeriesListFilter{}, 0, 0)
 		opts := make([]listFilterOpt, 0, len(list))
@@ -227,72 +295,78 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 			opts = append(opts, listFilterOpt{
 				Value:    strconv.FormatInt(ser.ID, 10),
 				Label:    ser.Title,
-				Selected: filter.SeriesID == ser.ID})
+				Selected: seriesSel[ser.ID],
+			})
 		}
 		if len(opts) > 0 {
 			selects = append(selects, listFilterSelect{Name: "series", AriaLabel: "Series", Options: opts})
 		}
 	}
 	scope := seriesID
-	if scope == 0 && filter.SeriesID > 0 {
-		scope = filter.SeriesID
+	if scope == 0 && len(filter.SeriesIDs) == 1 {
+		scope = filter.SeriesIDs[0]
 	}
+	yearSel := selectedIntSet(filter.Years)
 	years, _ := h.Library.DistinctVideoYears(scope)
 	yearOpts := make([]listFilterOpt, 0, len(years))
 	for _, y := range years {
 		ys := strconv.Itoa(y)
-		yearOpts = append(yearOpts, listFilterOpt{Value: ys, Label: ys, Selected: filter.Year == y})
+		yearOpts = append(yearOpts, listFilterOpt{Value: ys, Label: ys, Selected: yearSel[y]})
 	}
 	if len(yearOpts) > 0 {
 		selects = append(selects, listFilterSelect{
 			Name: "year", AriaLabel: "Upload year", Options: yearOpts})
 	}
 	statuses, _ := h.Library.DistinctVideoStatuses(scope)
-	sel := ""
-	if len(filter.Statuses) == 1 {
-		sel = filter.Statuses[0]
+	statusSelected := map[string]bool{}
+	for _, s := range filter.Statuses {
+		statusSelected[s] = true
 	}
 	statusOpts := make([]listFilterOpt, 0, len(statuses))
 	for _, st := range statuses {
-		statusOpts = append(statusOpts, listFilterOpt{Value: st, Label: videoStatusLabel(st), Selected: st == sel})
+		statusOpts = append(statusOpts, listFilterOpt{Value: st, Label: videoStatusLabel(st), Selected: statusSelected[st]})
 	}
 	if len(statusOpts) > 0 {
 		selects = append(selects, listFilterSelect{Name: "status", AriaLabel: "Status", Options: statusOpts})
 	}
+	studioSel := selectedSet(filter.Studios)
 	studios, _ := h.Library.DistinctVideoScalar(scope, "studio")
 	studioOpts := make([]listFilterOpt, 0, len(studios))
 	for _, s := range studios {
-		studioOpts = append(studioOpts, listFilterOpt{Value: s, Label: s, Selected: strings.EqualFold(filter.Studio, s)})
+		studioOpts = append(studioOpts, listFilterOpt{Value: s, Label: s, Selected: studioSel[strings.ToLower(s)]})
 	}
 	if len(studioOpts) > 0 {
 		selects = append(selects, listFilterSelect{
 			Name: "studio", AriaLabel: "Studio", Options: studioOpts,
 			PresenceField: library.PresenceStudio})
 	}
+	countrySel := selectedSet(filter.Countries)
 	countries, _ := h.Library.DistinctVideoScalar(scope, "country")
 	countryOpts := make([]listFilterOpt, 0, len(countries))
 	for _, s := range countries {
-		countryOpts = append(countryOpts, listFilterOpt{Value: s, Label: s, Selected: strings.EqualFold(filter.Country, s)})
+		countryOpts = append(countryOpts, listFilterOpt{Value: s, Label: s, Selected: countrySel[strings.ToLower(s)]})
 	}
 	if len(countryOpts) > 0 {
 		selects = append(selects, listFilterSelect{
 			Name: "country", AriaLabel: "Country", Options: countryOpts,
 			PresenceField: library.PresenceCountry})
 	}
+	mpaaSel := selectedSet(filter.MPAAs)
 	mpaas, _ := h.Library.DistinctVideoScalar(scope, "mpaa")
 	mpaaOpts := make([]listFilterOpt, 0, len(mpaas))
 	for _, s := range mpaas {
-		mpaaOpts = append(mpaaOpts, listFilterOpt{Value: s, Label: s, Selected: strings.EqualFold(filter.MPAA, s)})
+		mpaaOpts = append(mpaaOpts, listFilterOpt{Value: s, Label: s, Selected: mpaaSel[strings.ToLower(s)]})
 	}
 	if len(mpaaOpts) > 0 {
 		selects = append(selects, listFilterSelect{
 			Name: "mpaa", AriaLabel: "Content rating", Options: mpaaOpts,
 			PresenceField: library.PresenceMPAA})
 	}
+	mediaSel := selectedSet(filter.MediaTypes)
 	mts, _ := h.Library.DistinctVideoScalar(scope, "media_type")
 	mtOpts := make([]listFilterOpt, 0, len(mts))
 	for _, s := range mts {
-		mtOpts = append(mtOpts, listFilterOpt{Value: s, Label: s, Selected: filter.MediaType == s})
+		mtOpts = append(mtOpts, listFilterOpt{Value: s, Label: s, Selected: mediaSel[strings.ToLower(s)]})
 	}
 	if len(mtOpts) > 0 {
 		selects = append(selects, listFilterSelect{
@@ -311,7 +385,7 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 	}
 	if len(genreOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "genre", AriaLabel: "Genre", Options: genreOpts, Multi: true,
+			Name: "genre", AriaLabel: "Genre", Options: genreOpts,
 			PresenceField: library.PresenceGenres})
 	}
 	tags, _ := h.Library.DistinctVideoJSONStrings(scope, "tags")
@@ -326,7 +400,7 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 	}
 	if len(tagOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "tag", AriaLabel: "Tag", Options: tagOpts, Multi: true,
+			Name: "tag", AriaLabel: "Tag", Options: tagOpts,
 			PresenceField: library.PresenceTags})
 	}
 	actors, _ := h.Library.DistinctVideoActorNames(scope)
@@ -341,35 +415,40 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 	}
 	if len(actorOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "actor", AriaLabel: "Actor", Options: actorOpts, Multi: true,
+			Name: "actor", AriaLabel: "Actor", Options: actorOpts,
 			PresenceField: library.PresenceActors})
 	}
 
 	if seriesID > 0 || len(sources) > 0 {
+		sourceSel := selectedInt64Set(filter.SourceIDs)
 		srcOpts := make([]listFilterOpt, 0, len(sources)+1)
 		if seriesID > 0 {
 			nullImportCount, _ := h.Library.CountVideosWithNullSource(seriesID)
 			if nullImportCount > 0 {
 				srcOpts = append(srcOpts, listFilterOpt{
 					Value: library.VideoSourceImportQuery, Label: "Import",
-					Selected: filter.SourceID == library.VideoSourceImport})
+					Selected: sourceSel[library.VideoSourceImport],
+				})
 			}
 		}
 		for _, src := range sources {
 			srcOpts = append(srcOpts, listFilterOpt{
 				Value: strconv.FormatInt(src.ID, 10), Label: sourceFilterLabel(src),
-				Selected: filter.SourceID == src.ID})
+				Selected: sourceSel[src.ID],
+			})
 		}
 		if len(srcOpts) > 0 {
 			selects = append(selects, listFilterSelect{Name: "source", AriaLabel: "Source", Options: srcOpts})
 		}
 	}
+	packRoleSel := selectedSet(filter.PackRoles)
 	kindOpts := make([]listFilterOpt, 0, len(library.PackRoleSelectOptions()))
 	for _, opt := range library.PackRoleSelectOptions() {
 		kindOpts = append(kindOpts, listFilterOpt{
-			Value: opt.Value, Label: opt.Label, Selected: filter.PackRole == opt.Value})
+			Value: opt.Value, Label: opt.Label, Selected: packRoleSel[strings.ToLower(opt.Value)],
+		})
 	}
-	selects = append(selects, specialKindFilterSelect(r, filter.PackRole, kindOpts))
+	selects = append(selects, specialKindFilterSelect(r, filter.PackRoles, kindOpts))
 
 	selects = append(selects,
 		presenceOnlySelect(r, library.PresencePlot, "Plot"),
@@ -528,42 +607,41 @@ func applyViewURL(r *http.Request, view string) string {
 	return u.RequestURI()
 }
 
+func seriesStatusFilterLabel(status string) string {
+	switch status {
+	case library.SeriesListStatusMonitored:
+		return "Monitored"
+	case library.SeriesListStatusUnmonitored:
+		return "Unmonitored"
+	case library.SeriesListStatusComplete:
+		return "Complete"
+	case library.SeriesListStatusIncomplete:
+		return "Incomplete"
+	case library.SeriesListStatusHasErrors:
+		return "Has errors"
+	default:
+		return status
+	}
+}
+
 func seriesListBadges(r *http.Request, filter library.SeriesListFilter) []listViewBadge {
 	var out []listViewBadge
 	// Search (q) stays in the toolbar field only - not a chip.
-	if filter.RootID > 0 {
-		out = append(out, listViewBadge{Label: "Root: #" + strconv.FormatInt(filter.RootID, 10), Href: dropQueryKeys(r, "root", "page")})
-	}
-	if filter.QualityProfileID > 0 {
-		out = append(out, listViewBadge{Label: "Quality: #" + strconv.FormatInt(filter.QualityProfileID, 10), Href: dropQueryKeys(r, "quality", "page")})
-	}
-	if filter.DeliveryMode == library.DeliveryVideo || filter.DeliveryMode == library.DeliveryAudio {
-		out = append(out, listViewBadge{Label: "Delivery: " + filter.DeliveryMode, Href: dropQueryKeys(r, "delivery", "page")})
-	}
-	if filter.Status != "" {
-		out = append(out, listViewBadge{Label: "Status: " + filter.Status, Href: clearQueryKey(r, "status")})
-	}
-	if filter.PremieredYear > 0 {
-		out = append(out, listViewBadge{Label: "Premiered: " + strconv.Itoa(filter.PremieredYear), Href: dropQueryKeys(r, "year", "page")})
-	}
-	if s := strings.TrimSpace(filter.Studio); s != "" {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("studio", s), Href: dropQueryKeys(r, "studio", "page")})
-	}
-	if s := strings.TrimSpace(filter.Country); s != "" {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("country", s), Href: dropQueryKeys(r, "country", "page")})
-	}
-	if s := strings.TrimSpace(filter.MPAA); s != "" {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("mpaa", s), Href: dropQueryKeys(r, "mpaa", "page")})
-	}
-	for _, g := range filter.Genres {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("genre", g), Href: dropQueryValue(r, "genre", g)})
-	}
-	for _, t := range filter.Tags {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("tag", t), Href: dropQueryValue(r, "tag", t)})
-	}
-	for _, a := range filter.Actors {
-		out = append(out, listViewBadge{Label: filterValueChipLabel("actor", a), Href: dropQueryValue(r, "actor", a)})
-	}
+	out = append(out, orJoinBadges(r, "root", "Root", "root", int64QueryValues(filter.RootIDs), func(s string) string {
+		return "#" + s
+	})...)
+	out = append(out, orJoinBadges(r, "quality", "Quality", "quality", int64QueryValues(filter.QualityProfileIDs), func(s string) string {
+		return "#" + s
+	})...)
+	out = append(out, orJoinBadges(r, "delivery", "Delivery", "delivery", filter.DeliveryModes, nil)...)
+	out = append(out, orJoinBadges(r, "status", "Status", "status", filter.Statuses, seriesStatusFilterLabel)...)
+	out = append(out, orJoinBadges(r, "year", "Premiered", "year", intQueryValues(filter.PremieredYears), nil)...)
+	out = append(out, orJoinBadges(r, "studio", "Studio", "studio", filter.Studios, nil)...)
+	out = append(out, orJoinBadges(r, "country", "Country", "country", filter.Countries, nil)...)
+	out = append(out, orJoinBadges(r, "mpaa", "Rating", "mpaa", filter.MPAAs, nil)...)
+	out = append(out, orJoinBadges(r, "genre", "Genre", "genre", filter.Genres, nil)...)
+	out = append(out, orJoinBadges(r, "tag", "Tag", "tag", filter.Tags, nil)...)
+	out = append(out, orJoinBadges(r, "actor", "Actor", "actor", filter.Actors, nil)...)
 	for _, e := range filter.Empty {
 		out = append(out, listViewBadge{Label: presenceBadgeLabel(e, true), Href: dropQueryValue(r, "empty", e)})
 	}
@@ -575,6 +653,7 @@ func seriesListBadges(r *http.Request, filter library.SeriesListFilter) []listVi
 
 func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListFilter, roots []library.RootFolder, profiles []library.QualityProfile) []listFilterSelect {
 	var selects []listFilterSelect
+	rootSel := selectedInt64Set(filter.RootIDs)
 	if len(roots) > 1 {
 		opts := make([]listFilterOpt, 0, len(roots))
 		for _, root := range roots {
@@ -583,34 +662,44 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 				label = root.Path
 			}
 			opts = append(opts, listFilterOpt{
-				Value: strconv.FormatInt(root.ID, 10), Label: label, Selected: filter.RootID == root.ID})
+				Value: strconv.FormatInt(root.ID, 10), Label: label, Selected: rootSel[root.ID],
+			})
 		}
 		selects = append(selects, listFilterSelect{Name: "root", AriaLabel: "Root folder", Options: opts})
 	}
+	qualitySel := selectedInt64Set(filter.QualityProfileIDs)
 	if len(profiles) > 0 {
 		opts := make([]listFilterOpt, 0, len(profiles))
 		for _, p := range profiles {
 			opts = append(opts, listFilterOpt{
-				Value: strconv.FormatInt(p.ID, 10), Label: p.Name, Selected: filter.QualityProfileID == p.ID})
+				Value: strconv.FormatInt(p.ID, 10), Label: p.Name, Selected: qualitySel[p.ID],
+			})
 		}
 		selects = append(selects, listFilterSelect{Name: "quality", AriaLabel: "Quality profile", Options: opts})
 	}
+	deliverySel := selectedSet(filter.DeliveryModes)
+	statusSel := selectedSet(filter.Statuses)
 	selects = append(selects, listFilterSelect{
 		Name: "delivery", AriaLabel: "Delivery mode", Options: []listFilterOpt{
-			{Value: library.DeliveryVideo, Label: "Video", Selected: filter.DeliveryMode == library.DeliveryVideo},
-			{Value: library.DeliveryAudio, Label: "Audio", Selected: filter.DeliveryMode == library.DeliveryAudio}}})
+			{Value: library.DeliveryVideo, Label: "Video", Selected: deliverySel[strings.ToLower(library.DeliveryVideo)]},
+			{Value: library.DeliveryAudio, Label: "Audio", Selected: deliverySel[strings.ToLower(library.DeliveryAudio)]},
+		},
+	})
 	selects = append(selects, listFilterSelect{
 		Name: "status", AriaLabel: "Status", Options: []listFilterOpt{
-			{Value: library.SeriesListStatusMonitored, Label: "Monitored", Selected: filter.Status == library.SeriesListStatusMonitored},
-			{Value: library.SeriesListStatusUnmonitored, Label: "Unmonitored", Selected: filter.Status == library.SeriesListStatusUnmonitored},
-			{Value: library.SeriesListStatusComplete, Label: "Complete", Selected: filter.Status == library.SeriesListStatusComplete},
-			{Value: library.SeriesListStatusIncomplete, Label: "Incomplete", Selected: filter.Status == library.SeriesListStatusIncomplete},
-			{Value: library.SeriesListStatusHasErrors, Label: "Has errors", Selected: filter.Status == library.SeriesListStatusHasErrors}}})
+			{Value: library.SeriesListStatusMonitored, Label: "Monitored", Selected: statusSel[library.SeriesListStatusMonitored]},
+			{Value: library.SeriesListStatusUnmonitored, Label: "Unmonitored", Selected: statusSel[library.SeriesListStatusUnmonitored]},
+			{Value: library.SeriesListStatusComplete, Label: "Complete", Selected: statusSel[library.SeriesListStatusComplete]},
+			{Value: library.SeriesListStatusIncomplete, Label: "Incomplete", Selected: statusSel[library.SeriesListStatusIncomplete]},
+			{Value: library.SeriesListStatusHasErrors, Label: "Has errors", Selected: statusSel[library.SeriesListStatusHasErrors]},
+		},
+	})
+	yearSel := selectedIntSet(filter.PremieredYears)
 	years, _ := h.Library.DistinctSeriesPremieredYears()
 	yearOpts := make([]listFilterOpt, 0, len(years))
 	for _, y := range years {
 		ys := strconv.Itoa(y)
-		yearOpts = append(yearOpts, listFilterOpt{Value: ys, Label: ys, Selected: filter.PremieredYear == y})
+		yearOpts = append(yearOpts, listFilterOpt{Value: ys, Label: ys, Selected: yearSel[y]})
 	}
 	if len(yearOpts) > 0 {
 		selects = append(selects, listFilterSelect{
@@ -619,30 +708,33 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 	} else {
 		selects = append(selects, presenceOnlySelect(r, library.PresencePremiered, "Premiered"))
 	}
+	studioSel := selectedSet(filter.Studios)
 	studios, _ := h.Library.DistinctSeriesScalar("studio")
 	studioOpts := make([]listFilterOpt, 0, len(studios))
 	for _, s := range studios {
-		studioOpts = append(studioOpts, listFilterOpt{Value: s, Label: s, Selected: strings.EqualFold(filter.Studio, s)})
+		studioOpts = append(studioOpts, listFilterOpt{Value: s, Label: s, Selected: studioSel[strings.ToLower(s)]})
 	}
 	if len(studioOpts) > 0 {
 		selects = append(selects, listFilterSelect{
 			Name: "studio", AriaLabel: "Studio", Options: studioOpts,
 			PresenceField: library.PresenceStudio})
 	}
+	countrySel := selectedSet(filter.Countries)
 	countries, _ := h.Library.DistinctSeriesScalar("country")
 	countryOpts := make([]listFilterOpt, 0, len(countries))
 	for _, s := range countries {
-		countryOpts = append(countryOpts, listFilterOpt{Value: s, Label: s, Selected: strings.EqualFold(filter.Country, s)})
+		countryOpts = append(countryOpts, listFilterOpt{Value: s, Label: s, Selected: countrySel[strings.ToLower(s)]})
 	}
 	if len(countryOpts) > 0 {
 		selects = append(selects, listFilterSelect{
 			Name: "country", AriaLabel: "Country", Options: countryOpts,
 			PresenceField: library.PresenceCountry})
 	}
+	mpaaSel := selectedSet(filter.MPAAs)
 	mpaas, _ := h.Library.DistinctSeriesScalar("mpaa")
 	mpaaOpts := make([]listFilterOpt, 0, len(mpaas))
 	for _, s := range mpaas {
-		mpaaOpts = append(mpaaOpts, listFilterOpt{Value: s, Label: s, Selected: strings.EqualFold(filter.MPAA, s)})
+		mpaaOpts = append(mpaaOpts, listFilterOpt{Value: s, Label: s, Selected: mpaaSel[strings.ToLower(s)]})
 	}
 	if len(mpaaOpts) > 0 {
 		selects = append(selects, listFilterSelect{
@@ -661,7 +753,7 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 	}
 	if len(genreOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "genre", AriaLabel: "Genre", Options: genreOpts, Multi: true,
+			Name: "genre", AriaLabel: "Genre", Options: genreOpts,
 			PresenceField: library.PresenceGenres})
 	}
 	tags, _ := h.Library.DistinctSeriesJSONStrings("tags")
@@ -676,7 +768,7 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 	}
 	if len(tagOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "tag", AriaLabel: "Tag", Options: tagOpts, Multi: true,
+			Name: "tag", AriaLabel: "Tag", Options: tagOpts,
 			PresenceField: library.PresenceTags})
 	}
 	actors, _ := h.Library.DistinctSeriesActorNames()
@@ -691,7 +783,7 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 	}
 	if len(actorOpts) > 0 {
 		selects = append(selects, listFilterSelect{
-			Name: "actor", AriaLabel: "Actor", Options: actorOpts, Multi: true,
+			Name: "actor", AriaLabel: "Actor", Options: actorOpts,
 			PresenceField: library.PresenceActors})
 	}
 	selects = append(selects,

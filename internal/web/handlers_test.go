@@ -19,6 +19,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/web"
@@ -176,6 +177,9 @@ func TestSeriesListAudioQualityShowsBest(t *testing.T) {
 	if !strings.Contains(body, "modal-bulk-edit-series") || !strings.Contains(body, "modal-bulk-edit-series-metadata") {
 		t.Fatalf("missing bulk edit modals: %s", truncate(body, 500))
 	}
+	if !strings.Contains(body, "data-series-bulk-edit") || !strings.Contains(body, "data-series-bulk-metadata") {
+		t.Fatalf("missing series bulk Edit / Edit metadata (btn_labeled): %s", truncate(body, 500))
+	}
 	if !strings.Contains(body, "data-series-bulk-monitor") || !strings.Contains(body, "data-series-bulk-unmonitor") {
 		t.Fatalf("missing series bulk Monitor/Unmonitor actions: %s", truncate(body, 500))
 	}
@@ -307,8 +311,24 @@ func TestOverviewRenders(t *testing.T) {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `href="/"`) || !strings.Contains(body, "Creatorr") {
-		t.Fatalf("missing brand link to overview: %s", truncate(body, 400))
+	if !strings.Contains(body, `id="notify-badge"`) || !strings.Contains(body, `badge-info`) {
+		t.Fatalf("empty notify badge should render info chrome: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, `id="notify-badge" class="badge badge-xs absolute top-1 right-1 hidden badge-info"`) {
+		t.Fatalf("zero unread notify badge must stay hidden info: %s", truncate(body, 400))
+	}
+	if _, err := notify.InsertNotification(d, notify.EventCookieInvalid, "cookie", "bad", 0, false, ""); err != nil {
+		t.Fatal(err)
+	}
+	rec2 := httptest.NewRecorder()
+	r.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec2.Code != 200 {
+		t.Fatalf("status %d: %s", rec2.Code, rec2.Body.String())
+	}
+	body2 := rec2.Body.String()
+	if !strings.Contains(body2, `id="notify-badge" class="badge badge-xs absolute top-1 right-1 badge-error"`) ||
+		!strings.Contains(body2, `>1</span>`) {
+		t.Fatalf("unread alert must SSR badge-error count: %s", truncate(body2, 500))
 	}
 	if strings.Contains(body, ">Overview</a>") {
 		t.Fatalf("overview should not be a nav menu item: %s", truncate(body, 400))
@@ -1468,8 +1488,22 @@ func TestStaticCSS(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("status %d", rec.Code)
 	}
-	if !bytes.Contains(rec.Body.Bytes(), []byte("--p")) && rec.Body.Len() < 1000 {
-		t.Fatalf("css too small: %d", rec.Body.Len())
+	css := rec.Body.Bytes()
+	if !bytes.Contains(css, []byte("--p")) && len(css) < 1000 {
+		t.Fatalf("css too small: %d", len(css))
+	}
+	// Filter/Sort/View menus sit in .input.join-item; open state must overlay
+	// (not grow the join) when keep-open uses .dropdown-open after HTMX.
+	for _, pin := range []string{
+		"js-list-toolbar-dd.dropdown-open",
+		"position:absolute!important",
+		".btn.btn-soft.btn-accent:is([type=checkbox],[type=radio]):checked",
+		".btn.btn-accent:not(.btn-soft):is([type=checkbox],[type=radio]):checked",
+		".js-list-toolbar-dd.input.is-bulk-on",
+	} {
+		if !bytes.Contains(css, []byte(pin)) {
+			t.Fatalf("app.css missing toolbar dropdown overlay pin %q", pin)
+		}
 	}
 }
 
@@ -1650,8 +1684,8 @@ func TestSeriesDetailImportRowFiltersVideos(t *testing.T) {
 		t.Fatalf("filtered status %d: %s", rec.Code, truncate(rec.Body.String(), 400))
 	}
 	filtered := rec.Body.String()
-	if !strings.Contains(filtered, `Source: Import`) {
-		t.Fatalf("source=import missing Source: Import badge: %s", truncate(filtered, 600))
+	if !strings.Contains(filtered, `aria-label="Source"`) || !strings.Contains(filtered, `aria-label="Import"`) {
+		t.Fatalf("source=import missing Source join + Import chip: %s", truncate(filtered, 600))
 	}
 	if !strings.Contains(filtered, "Imported") {
 		t.Fatalf("source=import missing imported video: %s", truncate(filtered, 600))
@@ -2019,6 +2053,9 @@ func TestVideosPageHasBulkSelect(t *testing.T) {
 	if !strings.Contains(body, "data-video-bulk-mode") {
 		t.Fatalf("videos page missing video multi-select toggle: %s", truncate(body, 500))
 	}
+	if !strings.Contains(body, "data-video-bulk-refresh") || !strings.Contains(body, "data-video-bulk-metadata") {
+		t.Fatalf("videos page missing Refresh/Edit metadata (btn_labeled): %s", truncate(body, 500))
+	}
 	if !strings.Contains(body, "modal-bulk-edit-videos-metadata") || !strings.Contains(body, "modal-bulk-delete-videos") {
 		t.Fatalf("videos page missing video bulk modals: %s", truncate(body, 500))
 	}
@@ -2130,7 +2167,7 @@ func TestSeriesSourceScanButtons(t *testing.T) {
 		t.Fatalf("task-indicators OOB must render source_scan_actions: %s", truncate(oob, 600))
 	}
 	detail := get(seriesPath + "/sources/" + itoa(src.ID))
-	if strings.Count(detail, `class="btn btn-outline" disabled`) < 2 || !strings.Contains(detail, `for="modal-edit-source" class="btn btn-outline"`) {
+	if strings.Count(detail, `class="btn" disabled`) < 2 || !strings.Contains(detail, `for="modal-edit-source" class="btn"`) {
 		t.Fatalf("source detail should keep Scan and Full scan disabled: %s", truncate(detail, 800))
 	}
 	settingsAt := strings.Index(detail, ">Settings</span>")

@@ -65,7 +65,7 @@ func TestListFilesFilteredDBOnlyScopes(t *testing.T) {
 	if len(vidOnly) != 1 || vidOnly[0].Kind != "video" {
 		t.Fatalf("video scope=%+v", vidOnly)
 	}
-	art, err := s.ListFilesFiltered(library.FileListFilter{SeriesID: ser.ID, Kind: library.ArtPoster}, 50, 0)
+	art, err := s.ListFilesFiltered(library.FileListFilter{SeriesID: ser.ID, Kinds: []string{library.ArtPoster}}, 50, 0)
 	if err != nil || len(art) != 1 {
 		t.Fatalf("poster filter: %v %#v", err, art)
 	}
@@ -142,7 +142,7 @@ func TestListFilesFilteredStatusMatchesIntegrityColumn(t *testing.T) {
 
 	mustCount := func(status string, want int) {
 		t.Helper()
-		n, err := s.CountFilesFiltered(library.FileListFilter{VideoID: videoID, Status: status})
+		n, err := s.CountFilesFiltered(library.FileListFilter{VideoID: videoID, Statuses: []string{status}})
 		if err != nil || n != want {
 			t.Fatalf("status=%s count=%d err=%v want %d", status, n, err, want)
 		}

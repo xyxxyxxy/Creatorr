@@ -80,7 +80,8 @@
   dropdown. Raise the form that has a focused dropdown above sibling toolbars;
   stay below hovered tips (1000).
 */
-form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
+form.js-list-filters:has(.js-list-toolbar-dd:focus-within),
+form.js-list-filters:has(.js-list-toolbar-dd.dropdown-open) {
   z-index: 80;
 }
 
@@ -472,6 +473,15 @@ form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
   overflow: visible;
   flex-shrink: 0;
 }
+/* Bulk mode on: solid accent fill on the join slot (not outline input-accent). */
+.js-list-filters > .js-list-toolbar-dd.input.is-bulk-on {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-content);
+}
+.js-list-filters > .js-list-toolbar-dd.input.is-bulk-on > .js-list-toolbar-dd-btn {
+  color: inherit;
+}
 .js-list-filters > .js-list-toolbar-dd > .js-list-toolbar-dd-btn {
   display: inline-flex;
   align-items: center;
@@ -489,18 +499,30 @@ form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
   line-height: 1;
 }
 .js-list-filters > .js-list-toolbar-dd > .dropdown-content {
-  /* Undo .input>* (height/nowrap/flex/padding). daisyUI toggles open via :focus-within;
-     .input>* {display:flex} can keep menus painted when closed - re-assert hide.
-     Leave width to utility classes (w-52/w-64/w-80); force below the trigger. */
-  position: absolute;
+  /* Undo .input>* (height/nowrap/flex/padding/last-child margin). Keep menus
+     out of the join flex flow when open via :focus-within or .dropdown-open
+     (keep-open after HTMX); otherwise the toolbar grows to the menu height. */
+  position: absolute !important;
   top: 100%;
   bottom: auto;
-  height: auto;
+  left: auto;
+  right: 0;
+  z-index: 60;
+  height: auto !important;
   max-width: min(20rem, calc(100vw - 2rem));
-  white-space: normal;
-  padding-inline: 0;
+  white-space: normal !important;
+  padding-inline: 0 !important;
+  margin-inline: 0 !important;
+  border-inline: 0 !important;
   align-items: stretch;
   overflow-x: hidden;
+}
+.js-list-filters > .js-list-toolbar-dd.input:is(:focus-within, .dropdown-open) > .dropdown-content {
+  /* Beat .input>* {display:flex; height:calc(...)} so open menus overlay. */
+  display: block !important;
+  opacity: 1;
+  scale: 1;
+  pointer-events: auto;
 }
 /* Has/No presence join sits on the category summary, end-aligned before the chevron. */
 .js-list-filters [data-list-filter-menu] summary {
@@ -674,6 +696,26 @@ form.js-list-filters:has(.js-list-toolbar-dd:focus-within) {
   border-radius: 0;
   border-left: none;
   border-right: none;
+}
+
+/*
+  daisyUI forces .btn:checked to solid primary. Filter bar: solid accent field
+  prefix / Clear all; soft accent value chips. Keep accent over primary on checked.
+*/
+.btn.btn-soft.btn-accent:is([type="checkbox"], [type="radio"]):checked {
+  --btn-color: var(--color-accent);
+  --btn-fg: var(--color-accent);
+  --btn-bg: color-mix(in oklab, var(--color-accent) 8%, var(--color-base-100));
+  color: var(--color-accent);
+  --btn-border: color-mix(in oklab, var(--color-accent) 10%, var(--color-base-100));
+  --btn-border-style: solid;
+  --btn-inset: 0 0 0 0 oklch(0% 0 0 / 0);
+  --btn-shadow: 0 0 0 0 oklch(0% 0 0 / 0);
+  background-image: none;
+}
+.btn.btn-accent:not(.btn-soft):is([type="checkbox"], [type="radio"]):checked {
+  --btn-color: var(--color-accent);
+  --btn-fg: var(--color-accent-content);
 }
 
 /*

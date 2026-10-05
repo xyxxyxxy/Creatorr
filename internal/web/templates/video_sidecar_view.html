@@ -12,25 +12,16 @@
   <div class="flex-none flex flex-wrap gap-2 items-center">
     {{if not .Missing}}
     {{if .CheckHashDisabled}}
-    <span class="btn btn-outline btn-disabled tooltip tooltip-top" data-tip="{{.CheckHashDisabledTip}}" aria-disabled="true">
-      <i data-lucide="shield-check" class="size-4"></i>
-      Check hash
-    </span>
+    {{template "btn_labeled" (dict "Icon" "shield-check" "Label" "Check hash" "Disabled" true "Tip" .CheckHashDisabledTip)}}
     {{else if .CheckHashBusy}}
-    <span class="btn btn-outline btn-disabled tooltip tooltip-top" data-tip="{{.CheckHashBusyTip}}" aria-disabled="true">
-      <i data-lucide="shield-check" class="size-4"></i>
-      Check hash
-    </span>
+    {{template "btn_labeled" (dict "Icon" "shield-check" "Label" "Check hash" "Disabled" true "Tip" .CheckHashBusyTip)}}
     {{else}}
     <form method="post" action="/actions/check-file-hash" class="inline">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="video_id" value="{{.Video.ID}}" />
       <input type="hidden" name="file_id" value="{{.FileID}}" />
       <input type="hidden" name="redirect" value="/series/{{.Series.ID}}/videos/{{.Video.ID}}/files/{{.FileID}}" />
-      <button type="submit" class="btn btn-outline">
-        <i data-lucide="shield-check" class="size-4"></i>
-        Check hash
-      </button>
+      {{template "btn_labeled" (dict "Type" "submit" "Icon" "shield-check" "Label" "Check hash")}}
     </form>
     {{end}}
     <a class="btn btn-outline" href="{{.RawHref}}?download=1">

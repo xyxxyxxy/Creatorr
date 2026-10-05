@@ -24,11 +24,11 @@ const (
 
 // FileListFilter narrows DB-only files Explorer lists (no os.Stat).
 type FileListFilter struct {
-	SeriesID int64  // 0 = all; scope lock or browser filter
-	VideoID  int64  // 0 = all; video-detail embed
-	Kind     string // video|nfo|json|thumb|sub|sponsorblock|poster|…|""
-	Status   string // failed|ok|unchecked|inactive|na|""
-	Q        string // path substring
+	SeriesID int64    // 0 = all; scope lock or browser filter
+	VideoID  int64    // 0 = all; video-detail embed
+	Kinds    []string // OR via IN
+	Statuses []string // failed|ok|unchecked|inactive|na; OR of status predicates
+	Q        string   // path substring
 	Sort     string
 	SortDir  string
 }
@@ -40,13 +40,29 @@ type FileListRow struct {
 	VideoTitle  string // empty for series-meta
 }
 
-// Active reports whether any operator filter is set (scopes count for browser).
+// MenuActive reports whether any Filter-menu constraint is set (not search, not
+// series/video scope locks).
+func (f FileListFilter) MenuActive() bool {
+	return len(trimNonEmptyStrings(f.Kinds)) > 0 ||
+		len(normalizeFileStatuses(f.Statuses)) > 0
+}
+
+// Active reports whether search, Filter-menu, or a scope lock is set.
 func (f FileListFilter) Active() bool {
 	return f.SeriesID > 0 ||
 		f.VideoID > 0 ||
-		strings.TrimSpace(f.Kind) != "" ||
-		strings.TrimSpace(f.Status) != "" ||
-		strings.TrimSpace(f.Q) != ""
+		strings.TrimSpace(f.Q) != "" ||
+		f.MenuActive()
+}
+
+func normalizeFileStatuses(raw []string) []string {
+	var out []string
+	for _, s := range raw {
+		if n := NormalizeFileStatus(s); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // NormalizeFileStatus returns a known Status filter value or "".
@@ -85,28 +101,31 @@ func (f FileListFilter) where() (string, []any) {
 		b.WriteString(` AND f.video_id = ?`)
 		args = append(args, f.VideoID)
 	}
-	if k := strings.TrimSpace(f.Kind); k != "" {
-		b.WriteString(` AND f.kind = ?`)
-		args = append(args, k)
-	}
+	appendStringsIn(&b, &args, "f.kind", f.Kinds, false)
 	failedSQL := fileIntegrityFailedSQL()
 	missingSQL := `f.size_bytes = ?`
 	presentSQL := `(f.size_bytes IS NULL OR f.size_bytes != ?)`
 	hasOKSQL := `(f.content_hash_ok_at IS NOT NULL AND TRIM(f.content_hash_ok_at) != '')`
-	// Match fileIntegrityDisplay priority: Failed → OK → N/A → Inactive → Unchecked.
-	switch NormalizeFileStatus(f.Status) {
-	case FileStatusFailed:
-		b.WriteString(` AND ` + failedSQL)
-	case FileStatusOK:
-		b.WriteString(` AND ` + hasOKSQL + ` AND NOT ` + failedSQL)
-	case FileStatusNA:
-		b.WriteString(` AND f.kind = 'nfo' AND NOT ` + failedSQL + ` AND NOT ` + hasOKSQL)
-	case FileStatusInactive:
-		b.WriteString(` AND ` + missingSQL + ` AND f.kind != 'nfo' AND NOT ` + failedSQL + ` AND NOT ` + hasOKSQL)
-		args = append(args, sidecarMissingSizeSentinel)
-	case FileStatusUnchecked:
-		b.WriteString(` AND f.kind != 'nfo' AND ` + presentSQL + ` AND NOT ` + failedSQL + ` AND NOT ` + hasOKSQL)
-		args = append(args, sidecarMissingSizeSentinel)
+	statuses := normalizeFileStatuses(f.Statuses)
+	if len(statuses) > 0 {
+		var parts []string
+		for _, st := range statuses {
+			switch st {
+			case FileStatusFailed:
+				parts = append(parts, failedSQL)
+			case FileStatusOK:
+				parts = append(parts, hasOKSQL+` AND NOT `+failedSQL)
+			case FileStatusNA:
+				parts = append(parts, `f.kind = 'nfo' AND NOT `+failedSQL+` AND NOT `+hasOKSQL)
+			case FileStatusInactive:
+				parts = append(parts, missingSQL+` AND f.kind != 'nfo' AND NOT `+failedSQL+` AND NOT `+hasOKSQL)
+				args = append(args, sidecarMissingSizeSentinel)
+			case FileStatusUnchecked:
+				parts = append(parts, `f.kind != 'nfo' AND `+presentSQL+` AND NOT `+failedSQL+` AND NOT `+hasOKSQL)
+				args = append(args, sidecarMissingSizeSentinel)
+			}
+		}
+		appendAndOrGroup(&b, parts)
 	}
 	if q := strings.TrimSpace(f.Q); q != "" {
 		b.WriteString(` AND f.path LIKE ?`)

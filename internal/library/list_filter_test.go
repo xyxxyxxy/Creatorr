@@ -65,7 +65,7 @@ func TestVideoListFilterPresenceAndGenre(t *testing.T) {
 	}
 
 	got, err = s.ListVideosPageFiltered(0, library.VideoListFilter{
-		Title: "plot", QField: library.QFieldPlot, SeriesID: ser.ID,
+		Title: "plot", QField: library.QFieldPlot, SeriesIDs: []int64{ser.ID},
 	}, 50, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -325,7 +325,7 @@ func TestSeriesListFilterPresenceAndStudio(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := s.ListSeriesFiltered(library.SeriesListFilter{Studio: "Studio A"}, 20, 0)
+	got, err := s.ListSeriesFiltered(library.SeriesListFilter{Studios: []string{"Studio A"}}, 20, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,6 +353,12 @@ func TestSeriesListFilterPresenceAndStudio(t *testing.T) {
 
 	if !(library.SeriesListFilter{NotEmpty: []string{library.PresenceStudio}}).Active() {
 		t.Fatal("not_empty should be active")
+	}
+	if !(library.SeriesListFilter{NotEmpty: []string{library.PresenceStudio}}).MenuActive() {
+		t.Fatal("not_empty should be menu-active")
+	}
+	if (library.SeriesListFilter{Title: "x"}).MenuActive() {
+		t.Fatal("title alone should not be menu-active")
 	}
 	if (library.SeriesListFilter{Sort: library.SortAdded}).Active() {
 		t.Fatal("sort alone should not be active")

@@ -161,25 +161,46 @@ func EventLevel(event string) string {
 
 // EventsForLevel returns canonical event ids for a level filter (empty level → nil).
 func EventsForLevel(level string) []string {
-	switch strings.TrimSpace(level) {
-	case LevelAlert:
-		return append([]string(nil), AlertEvents...)
-	case LevelWarning:
-		return append([]string(nil), WarningEvents...)
-	case LevelInfo:
-		out := make([]string, 0, len(AllEvents))
-		for _, e := range AllEvents {
-			if EventLevel(e) == LevelInfo {
-				out = append(out, e)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
+	return EventsForLevels([]string{level})
 }
 
-// UnreadEvents returns alert + warning event ids (nav badge CountUnread).
+// EventsForLevels unions event ids for each level (unknown levels skipped).
+func EventsForLevels(levels []string) []string {
+	if len(levels) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var out []string
+	for _, level := range levels {
+		level = strings.TrimSpace(level)
+		var evs []string
+		switch level {
+		case LevelAlert:
+			evs = AlertEvents
+		case LevelWarning:
+			evs = WarningEvents
+		case LevelInfo:
+			evs = make([]string, 0, len(AllEvents))
+			for _, e := range AllEvents {
+				if EventLevel(e) == LevelInfo {
+					evs = append(evs, e)
+				}
+			}
+		default:
+			continue
+		}
+		for _, e := range evs {
+			if _, ok := seen[e]; ok {
+				continue
+			}
+			seen[e] = struct{}{}
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// UnreadEvents returns alert + warning event ids (events stored unread by default).
 func UnreadEvents() []string {
 	out := make([]string, 0, len(AlertEvents)+len(WarningEvents))
 	out = append(out, AlertEvents...)

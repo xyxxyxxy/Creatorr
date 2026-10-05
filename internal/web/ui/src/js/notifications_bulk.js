@@ -65,7 +65,7 @@ function syncNotificationsBulkUI() {
   if (modeBtn) {
     modeBtn.setAttribute("aria-pressed", notificationsBulkMode ? "true" : "false");
     const wrap = modeBtn.closest(".js-list-toolbar-dd");
-    if (wrap) wrap.classList.toggle("input-primary", notificationsBulkMode);
+    if (wrap) wrap.classList.toggle("is-bulk-on", notificationsBulkMode);
     modeBtn.setAttribute(
       "data-tip",
       notificationsBulkMode ? "Exit multi-select" : "Multi-select"

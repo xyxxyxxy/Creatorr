@@ -28,13 +28,15 @@ const taskListSelectCols = `id, kind, status, series_id, video_id, payload,
 
 // TaskListFilter selects open and/or finished tasks for the unified Tasks Explorer.
 // Empty Statuses = all AllTaskStatuses. From/To are inclusive UTC bounds on created_at.
+// Q is a free-text contains match on kind, domain, message, errors, detail, and id.
 type TaskListFilter struct {
 	Statuses []string
-	Domain   string
-	Kind     string
-	Origin   string
+	Domains  []string
+	Kinds    []string
+	Origins  []string
 	From     string
 	To       string
+	Q        string
 	Sort     string
 	SortDir  string // asc|desc; empty uses per-sort default
 }
@@ -200,17 +202,41 @@ func taskListFilterSQL(f TaskListFilter) (string, []any) {
 	for _, st := range statuses {
 		args = append(args, st)
 	}
-	if d := strings.TrimSpace(f.Domain); d != "" {
+	domains := trimNonEmptyStrings(f.Domains)
+	if len(domains) == 1 {
 		parts = append(parts, "domain = ?")
-		args = append(args, d)
+		args = append(args, domains[0])
+	} else if len(domains) > 1 {
+		parts = append(parts, "domain IN ("+sqlPlaceholders(len(domains))+")")
+		for _, d := range domains {
+			args = append(args, d)
+		}
 	}
-	if k := strings.TrimSpace(f.Kind); k != "" {
+	kinds := trimNonEmptyStrings(f.Kinds)
+	if len(kinds) == 1 {
 		parts = append(parts, "kind = ?")
-		args = append(args, k)
+		args = append(args, kinds[0])
+	} else if len(kinds) > 1 {
+		parts = append(parts, "kind IN ("+sqlPlaceholders(len(kinds))+")")
+		for _, k := range kinds {
+			args = append(args, k)
+		}
 	}
-	if o := strings.TrimSpace(f.Origin); o != "" && ValidOrigin(o) {
+	var origins []string
+	for _, o := range f.Origins {
+		o = strings.TrimSpace(o)
+		if o != "" && ValidOrigin(o) {
+			origins = append(origins, o)
+		}
+	}
+	if len(origins) == 1 {
 		parts = append(parts, "origin = ?")
-		args = append(args, o)
+		args = append(args, origins[0])
+	} else if len(origins) > 1 {
+		parts = append(parts, "origin IN ("+sqlPlaceholders(len(origins))+")")
+		for _, o := range origins {
+			args = append(args, o)
+		}
 	}
 	if from := strings.TrimSpace(f.From); from != "" {
 		parts = append(parts, "datetime(created_at) >= datetime(?)")
@@ -219,6 +245,19 @@ func taskListFilterSQL(f TaskListFilter) (string, []any) {
 	if to := strings.TrimSpace(f.To); to != "" {
 		parts = append(parts, "datetime(created_at) <= datetime(?)")
 		args = append(args, to)
+	}
+	if q := strings.TrimSpace(f.Q); q != "" {
+		pat := likeContainsPattern(q)
+		parts = append(parts, `(
+			kind LIKE ? ESCAPE '\' OR
+			domain LIKE ? ESCAPE '\' OR
+			COALESCE(message,'') LIKE ? ESCAPE '\' OR
+			COALESCE(error_code,'') LIKE ? ESCAPE '\' OR
+			COALESCE(error_message,'') LIKE ? ESCAPE '\' OR
+			COALESCE(detail,'') LIKE ? ESCAPE '\' OR
+			CAST(id AS TEXT) LIKE ? ESCAPE '\'
+		)`)
+		args = append(args, pat, pat, pat, pat, pat, pat, pat)
 	}
 	return strings.Join(parts, " AND "), args
 }
@@ -320,4 +359,24 @@ func normalizeTaskListStatuses(statuses []string) []string {
 		out = append(out, st)
 	}
 	return out
+}
+
+func trimNonEmptyStrings(vals []string) []string {
+	if len(vals) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(vals))
+	for _, v := range vals {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// likeContainsPattern wraps s for SQL LIKE … ESCAPE '\' (substring match).
+func likeContainsPattern(s string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return `%` + replacer.Replace(s) + `%`
 }

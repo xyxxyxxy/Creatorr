@@ -21,7 +21,7 @@
   <a href="/tasks"{{if eq .Nav "tasks"}} class="active"{{end}}>
     <i data-lucide="list-todo" class="{{$icon}}"></i>Tasks
     {{if .IncludeBadgeIDs}}
-    <span id="tasks-badge" class="badge badge-primary badge-sm hidden">0</span>
+    <span id="tasks-badge" class="badge badge-accent badge-sm hidden">0</span>
     <span id="tasks-paused-badge" class="badge badge-warning badge-sm hidden">0</span>
     {{end}}
   </a>
