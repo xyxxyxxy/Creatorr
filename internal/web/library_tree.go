@@ -264,7 +264,7 @@ func (h *Handler) treeChildrenSeries(seriesID int64, offset, limit int) (library
 			Kind:       treeKindNoSource,
 			ID:         seriesID, // parent series id (virtual)
 			SeriesID:   seriesID,
-			Name:       "No source",
+			Name:       "Imports",
 			Icon:       "inbox",
 			Expandable: true,
 			ChildCount: nullCount,

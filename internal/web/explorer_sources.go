@@ -64,6 +64,7 @@ type sourcesExplorerRow struct {
 	LiveTarget          string
 	ShowSeries          bool
 	ShowRowActions      bool
+	Selectable          bool // multi-select checkbox (Browser only)
 	OOB                 bool
 }
 
@@ -346,7 +347,8 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 			Redirect:            redir,
 			LiveTarget:          sourcesLiveTarget,
 			ShowSeries:          showSeries,
-			ShowRowActions:      showActions})
+			ShowRowActions:      showActions,
+			Selectable:          !seriesDetail})
 	}
 
 	var toolbar listViewToolbar
@@ -392,8 +394,8 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 			parseTableColsCookie(r, "creatorr_cols_sources", sourcesTableColDefs(showSeries)),
 			toolbar.SortOpts, toolbar.SortDir),
 		TableColsCookie: "creatorr_cols_sources",
-		ShowSelectAll:   total > len(rows),
-		SourcesBulkMode: true,
+		ShowSelectAll:   !seriesDetail && total > len(rows),
+		SourcesBulkMode: !seriesDetail,
 		InfiniteID:      sourcesInfiniteID,
 		RowsID:          sourcesRowsID,
 		SeriesID:        filter.SeriesID,

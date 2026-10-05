@@ -10,18 +10,6 @@
      data-bulk-mode="0">
 {{if and .ShowToolbar (or .Sources .FilterActive)}}
 {{template "list_view_toolbar" .SourceFilter}}
-{{else if and .SourcesBulkMode .Sources}}
-{{/* Series-detail embed: multi-select without the full Filter toolbar. */}}
-<div class="mb-2">
-  <button type="button"
-          class="btn btn-ghost btn-square tooltip tooltip-top"
-          data-sources-bulk-mode
-          aria-pressed="false"
-          aria-label="Multi-select"
-          data-tip="Multi-select">
-    <i data-lucide="list-checks" class="size-4" aria-hidden="true"></i>
-  </button>
-</div>
 {{end}}
 {{if not .Sources}}
 {{if .FilterActive}}
@@ -64,11 +52,13 @@
 {{end}}
 
 {{define "sources_list_row"}}
-<li class="list-row" data-source-id="{{.ID}}" style="--list-grid-cols: max-content 1fr 11rem{{if .ShowRowActions}} max-content{{end}}">
+<li class="list-row" data-source-id="{{.ID}}" style="--list-grid-cols: {{if .Selectable}}max-content {{end}}max-content 1fr 11rem{{if .ShowRowActions}} max-content{{end}}">
+  {{if .Selectable}}
   <div class="self-center shrink-0 hidden" data-source-select-wrap>
     <input type="checkbox" class="checkbox checkbox-sm js-source-select" value="{{.ID}}"
            aria-label="Select source" />
   </div>
+  {{end}}
   <div class="self-center shrink-0">
     {{template "source_kind_icon" .}}
   </div>

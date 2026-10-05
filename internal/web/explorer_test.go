@@ -133,6 +133,9 @@ func TestExplorerBrowseAndBrowserShell(t *testing.T) {
 	if !strings.Contains(scopedBody, `id="sources-list-rows"`) {
 		t.Fatalf("series-detail Sources missing list rows: %s", truncate(scopedBody, 400))
 	}
+	if strings.Contains(scopedBody, `data-sources-bulk-mode`) || strings.Contains(scopedBody, `js-source-select`) {
+		t.Fatalf("series-detail Sources must not offer multi-select: %s", truncate(scopedBody, 600))
+	}
 
 	tableForced := get("/explorer/browse?type=sources&at=series-detail&series_id=" + itoa(ser.ID) + "&view=table")
 	if tableForced.Code != 200 {
