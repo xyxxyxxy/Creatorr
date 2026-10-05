@@ -50,6 +50,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/", h.overview)
 	r.Get("/browser", h.browserPage)
 	r.Get("/explorer/browse", h.explorerBrowse)
+	r.Get("/explorer/tree-children", h.libraryTreeChildren)
 	r.Get("/videos", h.videosPage)
 	r.Get("/videos/live", redirectExplorerLive(explorerTypeVideos))
 	r.Get("/videos/ids", h.videosIDsJSON)

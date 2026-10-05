@@ -759,3 +759,29 @@ func TestMarkInfoUnread(t *testing.T) {
 		t.Fatalf("want read after MarkReadMany: %#v err=%v", n, err)
 	}
 }
+
+func TestListNotificationsQ(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "nq.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	keep, err := notify.InsertNotification(d, notify.EventCookieInvalid, "unique-alpha-title", "body-a", 0, false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := notify.InsertNotification(d, notify.EventRateLimited, "other", "beta-body", 0, false, ""); err != nil {
+		t.Fatal(err)
+	}
+	items, err := notify.ListNotifications(d, notify.ListFilter{Q: "unique-alpha"}, 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != keep {
+		t.Fatalf("want keep id %d, got %#v", keep, items)
+	}
+	n, err := notify.CountNotifications(d, notify.ListFilter{Q: "unique-alpha"})
+	if err != nil || n != 1 {
+		t.Fatalf("count=%d err=%v", n, err)
+	}
+}

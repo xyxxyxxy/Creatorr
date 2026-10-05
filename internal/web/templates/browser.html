@@ -4,13 +4,21 @@
 {{template "list_header" (dict "level" "page" "title" "Browser" "icon" .Icon)}}
 {{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
 <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-  <div class="join" role="group" aria-label="Explorer type">
-    <a href="/browser?type=series" class="btn join-item{{if eq .Type "series"}} btn-accent{{end}}"{{if eq .Type "series"}} aria-current="page"{{end}}>Series</a>
-    <a href="/browser?type=sources" class="btn join-item{{if eq .Type "sources"}} btn-accent{{end}}"{{if eq .Type "sources"}} aria-current="page"{{end}}>Sources</a>
-    <a href="/browser?type=videos" class="btn join-item{{if eq .Type "videos"}} btn-accent{{end}}"{{if eq .Type "videos"}} aria-current="page"{{end}}>Videos</a>
-    <a href="/browser?type=files" class="btn join-item{{if eq .Type "files"}} btn-accent{{end}}"{{if eq .Type "files"}} aria-current="page"{{end}}>Files</a>
-    <a href="/browser?type=tasks" class="btn join-item{{if eq .Type "tasks"}} btn-accent{{end}}"{{if eq .Type "tasks"}} aria-current="page"{{end}}>Tasks</a>
-    <a href="/browser?type=notifications" class="btn join-item{{if eq .Type "notifications"}} btn-accent{{end}}"{{if eq .Type "notifications"}} aria-current="page"{{end}}>Notifications</a>
+  <div class="flex items-center gap-2 min-w-0">
+    <div class="join min-w-0 overflow-x-auto" role="group" aria-label="Explorer type">
+      <a href="/browser?type=series{{if .Tree}}&tree=0{{end}}" class="btn join-item{{if and (not .Tree) (eq .Type "series")}} btn-accent{{end}}"{{if and (not .Tree) (eq .Type "series")}} aria-current="page"{{end}}>Series</a>
+      <a href="/browser?type=sources{{if .Tree}}&tree=0{{end}}" class="btn join-item{{if and (not .Tree) (eq .Type "sources")}} btn-accent{{end}}"{{if and (not .Tree) (eq .Type "sources")}} aria-current="page"{{end}}>Sources</a>
+      <a href="/browser?type=videos{{if .Tree}}&tree=0{{end}}" class="btn join-item{{if and (not .Tree) (eq .Type "videos")}} btn-accent{{end}}"{{if and (not .Tree) (eq .Type "videos")}} aria-current="page"{{end}}>Videos</a>
+      <a href="/browser?type=files{{if .Tree}}&tree=0{{end}}" class="btn join-item{{if and (not .Tree) (eq .Type "files")}} btn-accent{{end}}"{{if and (not .Tree) (eq .Type "files")}} aria-current="page"{{end}}>Files</a>
+      <a href="/browser?type=tasks{{if .Tree}}&tree=0{{end}}" class="btn join-item{{if and (not .Tree) (eq .Type "tasks")}} btn-accent{{end}}"{{if and (not .Tree) (eq .Type "tasks")}} aria-current="page"{{end}}>Tasks</a>
+      <a href="/browser?type=notifications{{if .Tree}}&tree=0{{end}}" class="btn join-item{{if and (not .Tree) (eq .Type "notifications")}} btn-accent{{end}}"{{if and (not .Tree) (eq .Type "notifications")}} aria-current="page"{{end}}>Notifications</a>
+    </div>
+    <a href="{{.TreeHref}}" class="btn btn-square shrink-0 tooltip{{if .Tree}} btn-accent{{end}}"
+       data-tip="{{if .Tree}}Exit tree{{else}}Tree browse{{end}}"
+       aria-label="{{if .Tree}}Exit tree{{else}}Tree browse{{end}}"
+       aria-pressed="{{if .Tree}}true{{else}}false{{end}}">
+      <i data-lucide="folder-tree" class="size-4"></i>
+    </a>
   </div>
   <a href="{{.WideHref}}" class="btn btn-ghost btn-square tooltip tooltip-left"
      data-tip="{{if .Wide}}Exit full width{{else}}Full width{{end}}"
@@ -18,7 +26,9 @@
     <i data-lucide="{{if .Wide}}minimize-2{{else}}maximize-2{{end}}" class="size-4"></i>
   </a>
 </div>
-{{if eq .Type "videos"}}
+{{if .Tree}}
+{{template "library_tree" .TreeLive}}
+{{else if eq .Type "videos"}}
 {{template "videos_live" .VideosLive}}
 {{else if eq .Type "sources"}}
 {{template "sources_list_live" .SourcesLive}}

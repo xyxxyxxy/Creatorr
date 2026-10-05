@@ -34,6 +34,7 @@ type ListFilter struct {
 	To         string   // inclusive UTC RFC3339Nano on created_at
 	UnreadOnly bool     // read_at IS NULL (any event)
 	ReadOnly   bool     // read_at IS NOT NULL; mutually exclusive with UnreadOnly
+	Q          string   // free-text contains match on title, body, event, id
 	Sort       string   // created | level; empty = created; legacy when accepted
 	SortDir    string   // asc|desc
 }
@@ -328,10 +329,26 @@ func notificationWhere(f ListFilter) (string, []any) {
 	} else if f.ReadOnly {
 		parts = append(parts, `read_at IS NOT NULL`)
 	}
+	if q := strings.TrimSpace(f.Q); q != "" {
+		pat := likeContainsPattern(q)
+		parts = append(parts, `(
+			COALESCE(title,'') LIKE ? ESCAPE '\' OR
+			COALESCE(body,'') LIKE ? ESCAPE '\' OR
+			COALESCE(event,'') LIKE ? ESCAPE '\' OR
+			CAST(id AS TEXT) LIKE ? ESCAPE '\'
+		)`)
+		args = append(args, pat, pat, pat, pat)
+	}
 	if len(parts) == 0 {
 		return "", args
 	}
 	return ` WHERE ` + strings.Join(parts, ` AND `), args
+}
+
+// likeContainsPattern wraps s for SQL LIKE … ESCAPE '\' (substring match).
+func likeContainsPattern(s string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return `%` + replacer.Replace(s) + `%`
 }
 
 func notificationOrderSQL(f ListFilter) string {

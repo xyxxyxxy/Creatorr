@@ -8,7 +8,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 )
 
-// browserPage is the Browser shell: type join + optional wide shell + Explorer body.
+// browserPage is the Browser shell: type join + Tree/Wide controls + Explorer or tree body.
 func (h *Handler) browserPage(w http.ResponseWriter, r *http.Request) {
 	if v := strings.TrimSpace(r.URL.Query().Get("wide")); v == "1" || v == "0" {
 		writeBrowserWideCookie(w, v == "1")
@@ -21,10 +21,22 @@ func (h *Handler) browserPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, u, http.StatusSeeOther)
 		return
 	}
+	if v := strings.TrimSpace(r.URL.Query().Get("tree")); v == "1" || v == "0" {
+		writeBrowserTreeCookie(w, v == "1")
+		q := r.URL.Query()
+		q.Del("tree")
+		u := "/browser"
+		if enc := q.Encode(); enc != "" {
+			u += "?" + enc
+		}
+		http.Redirect(w, r, u, http.StatusSeeOther)
+		return
+	}
 
 	typ := parseBrowserType(r)
 	writeBrowserTypeCookie(w, typ)
 	wide := browserWide(r)
+	tree := browserTree(r)
 
 	q := r.URL.Query()
 	q.Set("type", typ)
@@ -41,6 +53,9 @@ func (h *Handler) browserPage(w http.ResponseWriter, r *http.Request) {
 		Type                string
 		Wide                bool
 		WideHref            string
+		Tree                bool
+		TreeHref            string
+		TreeLive            libraryTreeLiveData
 		SeriesLive          seriesListLiveData
 		VideosLive          videosPageLiveData
 		SourcesLive         sourcesListLiveData
@@ -57,11 +72,24 @@ func (h *Handler) browserPage(w http.ResponseWriter, r *http.Request) {
 		Type:                typ,
 		Wide:                wide,
 		WideHref:            browserWideToggleHref(r, typ, !wide),
+		Tree:                tree,
+		TreeHref:            browserTreeToggleHref(r, typ, !tree),
 		Roots:               roots,
 		Profiles:            profiles,
 		Suggestions:         suggestions,
 		PackRoleOptions:     library.PackRoleSelectOptions(),
 		ScanCronDescriptors: scanCronDescriptors(),
+	}
+
+	if tree {
+		live, err := h.loadLibraryTree()
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		data.TreeLive = live
+		render(w, "browser", data)
+		return
 	}
 
 	switch typ {

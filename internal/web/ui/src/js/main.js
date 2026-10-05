@@ -23,6 +23,7 @@ import { bootNotificationsBulk } from "./notifications_bulk.js";
 import { bootConfirmNotify } from "./confirm_notify.js";
 import { bootListTable } from "./list_table.js";
 import { bootListInfinite } from "./list_infinite.js";
+import { bootLibraryTree } from "./library_tree.js";
 
 bootTheme();
 bootLanes();
@@ -48,3 +49,4 @@ bootNotificationsBulk();
 bootConfirmNotify();
 bootListTable();
 bootListInfinite();
+bootLibraryTree();

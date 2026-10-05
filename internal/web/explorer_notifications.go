@@ -127,8 +127,10 @@ func (h *Handler) loadNotificationsListLive(w http.ResponseWriter, r *http.Reque
 	rewriteExplorerPageInfo(&page, explorerTypeNotifications, 0)
 
 	fromDay, toDay := parseFilterDay(r.URL.Query().Get("from")), parseFilterDay(r.URL.Query().Get("to"))
+	menuActive := notificationsFilterActive(filter, fromDay, toDay)
 	toolbar := listViewToolbar{
 		AriaLabel:             "Notification filters",
+		Query:                 filter.Q,
 		QueryPlaceholder:      "Search",
 		SortOpts:              notificationsSortOpts(r, filter.Sort, filter.SortDir),
 		SortDir:               notifySortDir(filter.Sort, filter.SortDir),
@@ -140,13 +142,13 @@ func (h *Handler) loadNotificationsListLive(w http.ResponseWriter, r *http.Reque
 		ShowDatePresence:      false,
 		DateRangeLabel:        "Created",
 		Selects:               notificationsFilterSelects(r, filter),
-		FilterActive:          notificationsFilterActive(filter, fromDay, toDay),
+		FilterActive:          menuActive,
 		LiveTarget:            notificationsLiveTarget,
 		FormAction:            explorerFragmentPath(r),
 		NotificationsBulkMode: true,
 	}
 	applyExplorerToolbar(&toolbar, explorerTypeNotifications, at)
-	if toolbar.FilterActive {
+	if menuActive {
 		toolbar.ClearAllHref = clearOperatorFiltersURL(r)
 		toolbar.Badges = notificationsListBadges(r, filter, fromDay, toDay)
 	}
@@ -170,7 +172,7 @@ func (h *Handler) loadNotificationsListLive(w http.ResponseWriter, r *http.Reque
 		FilterTotal:     total,
 		SelectableTotal: selTotal,
 		Filter:          toolbar,
-		FilterActive:    toolbar.FilterActive,
+		FilterActive:    menuActive || strings.TrimSpace(filter.Q) != "",
 		ViewMode:        viewMode,
 		TableCols:       cols,
 		TableColsCookie: cookieColsNotifications,
@@ -213,6 +215,7 @@ func parseNotificationsExplorerFilter(r *http.Request) notify.ListFilter {
 		Levels:  uniqueQueryVals(levels),
 		From:    fromBound,
 		To:      toBound,
+		Q:       strings.TrimSpace(q.Get("q")),
 		Sort:    parseNotifySort(q.Get("sort")),
 		SortDir: parseSortDir(q.Get("dir")),
 	}

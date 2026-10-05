@@ -402,6 +402,25 @@ form.js-list-filters:has(.js-list-toolbar-dd.dropdown-open) {
 }
 
 /*
+  Browser library tree: depth indent (same visual budget as Import tree rail).
+  Lazy single-path expand; not the Explorer list.
+*/
+.library-tree {
+  --library-tree-col: 1rem;
+}
+.library-tree .library-tree-indent {
+  width: calc(var(--tree-depth, 0) * var(--library-tree-col));
+  min-width: calc(var(--tree-depth, 0) * var(--library-tree-col));
+  flex: 0 0 calc(var(--tree-depth, 0) * var(--library-tree-col));
+}
+.library-tree [data-tree-expand][aria-expanded="true"] .library-tree-chevron {
+  transform: rotate(90deg);
+}
+.library-tree .library-tree-chevron {
+  transition: transform 0.12s ease;
+}
+
+/*
   Radio button joins (delivery mode, discovered status): label.btn wrapping a
   radio - highlight when checked. Stock daisyUI join radios are input.btn
   (aria-label only); we need label text / Lucide icons inside.
