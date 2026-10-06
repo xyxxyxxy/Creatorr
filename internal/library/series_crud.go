@@ -17,7 +17,7 @@ type CreateSeriesParams struct {
 	Monitored          bool
 	DeliveryMode       string
 	FullScanLimit      int // first source full-scan playlist cap; 0 = unlimited
-	ScanCron           string // feed default weekly when SourceURL set and empty
+	ScanCron           string // empty / never = Never when SourceURL set (no Go inject)
 	IndexAsIgnored     bool
 	TitleRegexpInclude string
 	TitleRegexpExclude string

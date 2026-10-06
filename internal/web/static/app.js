@@ -2310,9 +2310,7 @@
       input.classList.remove("opacity-60");
       if (hidden) hidden.remove();
       if (!input.value.trim() || input.value.trim() === "never") {
-        let fill = (input.dataset.prevCron || input.dataset.cronDefault || "").trim();
-        if (!fill && cronName === "scan_cron") fill = "@weekly";
-        input.value = fill;
+        input.value = (input.dataset.prevCron || input.dataset.cronDefault || "").trim();
       }
     }
   }
@@ -6251,17 +6249,12 @@
       if (row.classList.contains("list-row")) {
         row.classList.toggle("rounded-none", selected);
         const hasActions = !!row.querySelector("[data-sources-row-actions]");
-        if (sourcesBulkMode) {
-          row.style.setProperty(
-            "--list-grid-cols",
-            hasActions ? "max-content max-content 1fr 11rem max-content" : "max-content max-content 1fr 11rem"
-          );
-        } else {
-          row.style.setProperty(
-            "--list-grid-cols",
-            hasActions ? "max-content 1fr 11rem max-content" : "max-content 1fr 11rem"
-          );
+        const hasSelect = !!row.querySelector("[data-source-select-wrap]");
+        let cols = hasActions ? "1fr max-content" : "1fr";
+        if (hasSelect) {
+          cols = hasActions ? "max-content 1fr max-content" : "max-content 1fr";
         }
+        row.style.setProperty("--list-grid-cols", cols);
         row.querySelectorAll(".list-col-grow a[href]").forEach((a) => {
           a.classList.toggle("link", !sourcesBulkMode);
           a.classList.toggle("link-hover", !sourcesBulkMode);

@@ -95,7 +95,8 @@ func templateFuncs() template.FuncMap {
 			}
 			return make([]struct{}, n)
 		},
-		"displayURL": DisplayURL,
+		"displayURL":      DisplayURL,
+		"sourceListMeta":  buildSourceListMeta,
 		"formatBytes": library.FormatBytes,
 		"retentionDays": func(n sql.NullInt64) int64 {
 			if !n.Valid {

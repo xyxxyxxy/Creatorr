@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
@@ -1434,13 +1433,13 @@ func TestSetSeriesMonitoredDoesNotTouchSources(t *testing.T) {
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
 		Title: "Flags", SourceURL: "https://www.example.com/@flags", RootID: rootID,
-		QualityProfileID: profileID, Monitored: true,
+		QualityProfileID: profileID, Monitored: true, ScanCron: "@weekly",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	srcID := ser.Sources[0].ID
-	wantCron := cronexpr.ScanCronWeekly
+	wantCron := "@weekly"
 	if err := s.SetSeriesMonitored(ser.ID, false); err != nil {
 		t.Fatal(err)
 	}

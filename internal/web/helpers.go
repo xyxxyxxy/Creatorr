@@ -435,7 +435,7 @@ func scanCronDescriptors() []string {
 	return cronexpr.ScanDescriptors()
 }
 
-// parseFeedScanCron reads scan_cron (or legacy scan_cron_schedule). emptyDefault used when both empty (add flows).
+// parseFeedScanCron reads scan_cron (or legacy scan_cron_schedule). emptyDefault used when both empty (add flows; "" = Never).
 func parseFeedScanCron(r *http.Request, emptyDefault string) (string, error) {
 	raw := strings.TrimSpace(r.FormValue("scan_cron"))
 	if raw == "" {

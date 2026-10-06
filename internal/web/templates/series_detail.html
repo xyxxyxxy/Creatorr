@@ -59,22 +59,15 @@
 <script type="application/json" id="series-source-urls">{{toJSON .SourceURLs}}</script>
 <div class="py-10 px-4 w-full">
   <div class="flex w-full max-w-2xl mx-auto flex-col items-center gap-4">
-    <p class="text-sm opacity-70 text-center max-w-md">No videos yet. Start by adding a single video or a channel/playlist.</p>
-    <div class="flex w-full flex-row items-stretch">
-      <label for="modal-add-single" class="btn btn-outline grow h-auto min-h-12 py-3 whitespace-normal">
-        <i data-lucide="film" class="size-4"></i>
-        Add single video
-      </label>
-      <div class="divider divider-horizontal">OR</div>
-      <label for="modal-add-source" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal">
-        <i data-lucide="list-video" class="size-4"></i>
-        Add channel/playlist
-      </label>
-    </div>
+    <p class="text-sm opacity-70 text-center max-w-md">No videos yet. Start by adding a source.</p>
+    <label for="modal-add-source" class="btn btn-primary h-auto min-h-12 py-3 whitespace-normal">
+      <i data-lucide="list-video" class="size-4"></i>
+      Add source
+    </label>
   </div>
 </div>
 {{else}}
-{{template "list_header" (dict "level" "section" "title" "Sources" "add_modal" "modal-add-source" "add_label" "Add channel/playlist" "add_icon" "list-video" "add_modal2" "modal-add-single" "add_label2" "Add single video" "add_icon2" "film")}}
+{{template "list_header" (dict "level" "section" "title" "Sources" "add_modal" "modal-add-source" "add_label" "Add source" "add_icon" "list-video")}}
 <script type="application/json" id="series-source-urls">{{toJSON .SourceURLs}}</script>
 {{template "sources_list_live" .SourcesLive}}
 {{if .ImportNullCount}}
@@ -90,7 +83,7 @@
    aria-label="Show imported videos">
   <div class="list-row" style="--list-grid-cols: 1fr max-content">
     <div class="list-col-grow min-w-0 flex items-center gap-2">
-      <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="imported or manually indexed videos with no feed source"><i data-lucide="folder-input" class="size-4 opacity-70"></i></span>
+      <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="imported or manually indexed videos with no source URL"><i data-lucide="folder-input" class="size-4 opacity-70"></i></span>
       <span class="link link-hover font-medium min-w-0 truncate">Import</span>
     </div>
     <div class="self-center text-sm opacity-80 tabular-nums">{{if eq .ImportNullCount 1}}1 video imported{{else}}{{.ImportNullCount}} videos imported{{end}}</div>
@@ -114,11 +107,10 @@
 
 <input type="checkbox" id="modal-add-source" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box max-w-xl">
-    <h3 class="font-bold text-lg mb-2">Add channel/playlist source</h3>
-        <form method="post" action="/actions/add-source" class="space-y-2 js-source-url-form">
+  <div class="modal-box modal-box-scroll max-w-xl flex flex-col gap-2">
+    <h3 class="font-bold text-lg shrink-0">Add source</h3>
+        <form method="post" action="/actions/add-source" class="space-y-2 js-source-url-form min-h-0 overflow-y-auto grow">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <input type="hidden" name="kind" value="feed" />
       <div class="w-full">
         {{template "field_input" (dict
           "Name" "url"
@@ -133,44 +125,21 @@
       </div>
       {{template "field_input" (dict "Name" "label" "Label" "Name (optional)" "Placeholder" "Source name")}}
       {{template "scan_cron_field" (dict
-        "Value" "@weekly"
+        "Value" ""
         "ID" "add-source-scan-cron"
         "CronDescriptors" .ScanCronDescriptors
       )}}
       {{template "source_filter_fields" (dict
         "FullScanLimitID" "add-source-full-scan-limit"
       )}}
-      <div class="modal-action">
+      {{template "source_default_metadata" (dict
+        "Source" .NewSource
+        "Suggestions" .MetaForm.Suggestions
+        "PackRoleOptions" .PackRoleOptions
+        "ListPrefix" "add-src"
+      )}}
+      <div class="modal-action shrink-0 mt-0">
         <label for="modal-add-source" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-
-<input type="checkbox" id="modal-add-single" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Add single video source</h3>
-        <form method="post" action="/actions/add-source" class="space-y-2 js-source-url-form">
-      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <input type="hidden" name="kind" value="single" />
-      <div class="w-full">
-        {{template "field_input" (dict
-          "Name" "url"
-          "Label" "URL"
-          "Placeholder" "https://…"
-          "Required" true
-          "InputClass" "js-source-url"
-          "Validator" true
-          "ValidatorHint" "Enter a valid http(s) URL with a host."
-          "SupportedSitesLink" "video"
-        )}}
-      </div>
-      {{template "field_input" (dict "Name" "label" "Label" "Name (optional)" "Placeholder" "Source name")}}
-      <div class="modal-action">
-        <label for="modal-add-single" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
       </div>
     </form>

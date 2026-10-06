@@ -129,6 +129,10 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo28(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 29:
+			if err := d.migrateTo29(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -884,6 +888,21 @@ func (d *DB) migrateTo28() error {
 	}
 	if _, err := d.SQL.Exec(`ALTER TABLE notification_channels ADD COLUMN mark_external_read INTEGER NOT NULL DEFAULT 1`); err != nil {
 		return fmt.Errorf("add notification_channels.mark_external_read: %w", err)
+	}
+	return nil
+}
+
+// migrateTo29: drop sources.kind (one source type; schedule via scan_cron only).
+func (d *DB) migrateTo29() error {
+	has, err := d.tableHasColumn("sources", "kind")
+	if err != nil {
+		return err
+	}
+	if !has {
+		return nil
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE sources DROP COLUMN kind`); err != nil {
+		return fmt.Errorf("drop sources.kind: %w", err)
 	}
 	return nil
 }

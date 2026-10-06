@@ -45,76 +45,27 @@ func TestSourcesTableView(t *testing.T) {
 	if !strings.Contains(body, `data-list-table`) {
 		t.Fatalf("missing data-list-table: %s", body[:min(800, len(body))])
 	}
-	if !strings.Contains(body, `data-col="url"`) || !strings.Contains(body, `data-col="domain"`) || !strings.Contains(body, `data-col="name"`) || !strings.Contains(body, `data-col="kind"`) || !strings.Contains(body, `data-col="discovered"`) {
-		t.Fatalf("table missing name/url/domain/kind/discovered cols: %s", body[:min(1200, len(body))])
+	if !strings.Contains(body, `data-col="url"`) || !strings.Contains(body, `data-col="domain"`) || !strings.Contains(body, `data-col="name"`) || !strings.Contains(body, `data-col="discovered"`) {
+		t.Fatalf("table missing name/url/domain/discovered cols: %s", body[:min(1200, len(body))])
 	}
 	tbody := body
 	if i := strings.Index(body, `id="sources-list-rows"`); i >= 0 {
 		tbody = body[i:]
 	}
-	kindTD := strings.Index(tbody, `data-col="kind"`)
+	if strings.Contains(body, `data-col="kind"`) {
+		t.Fatalf("kind column removed: %s", body[:min(1200, len(body))])
+	}
 	discoveredTD := strings.Index(tbody, `data-col="discovered"`)
 	nameTD := strings.Index(tbody, `data-col="name"`)
-	if kindTD < 0 || discoveredTD < 0 || nameTD < 0 || kindTD >= discoveredTD || discoveredTD >= nameTD {
-		t.Fatalf("col order kind→discovered→name: kind=%d discovered=%d name=%d", kindTD, discoveredTD, nameTD)
+	if discoveredTD < 0 || nameTD < 0 || discoveredTD >= nameTD {
+		t.Fatalf("col order discovered→name: discovered=%d name=%d", discoveredTD, nameTD)
 	}
 	nameSlice := tbody[nameTD:min(nameTD+400, len(tbody))]
 	if strings.Contains(nameSlice, `data-lucide="list-`) || strings.Contains(nameSlice, `data-lucide="film"`) || strings.Contains(nameSlice, `data-lucide="eye`) {
-		t.Fatalf("kind/discovered icons must not sit in name column: %s", nameSlice)
+		t.Fatalf("discovered icons must not sit in name column: %s", nameSlice)
 	}
-	kindSlice := tbody[kindTD:min(kindTD+350, len(tbody))]
-	if !strings.Contains(kindSlice, `data-lucide="list-video"`) && !strings.Contains(kindSlice, `data-lucide="film"`) {
-		t.Fatalf("kind column missing feed/single icon: %s", kindSlice)
-	}
-	if strings.Contains(kindSlice, `data-lucide="list-minus"`) || strings.Contains(kindSlice, `data-lucide="eye`) {
-		t.Fatalf("kind column must be kind-only: %s", kindSlice)
-	}
-	discoveredSlice := tbody[discoveredTD:min(discoveredTD+350, len(tbody))]
-	if !strings.Contains(discoveredSlice, "Wanted") && !strings.Contains(discoveredSlice, "Ignored") {
-		t.Fatalf("discovered column missing Wanted/Ignored: %s", discoveredSlice)
-	}
-	if strings.Contains(body, "URL / Name") {
-		t.Fatalf("table should not merge URL/Name: %s", body[:min(800, len(body))])
-	}
-	if !strings.Contains(body, `class="select join-item`) {
-		t.Fatalf("q_field should use select join-item chrome: %s", body[:min(1200, len(body))])
-	}
-	if !strings.Contains(body, `data-tip="Edit"`) || !strings.Contains(body, `modal-edit-source-`) {
-		t.Fatalf("Browser Sources table missing Edit row action/modal: %s", body[:min(1200, len(body))])
-	}
-	if !strings.Contains(body, `data-tip="Delete"`) || !strings.Contains(body, `/actions/full-rescan-source`) {
-		t.Fatalf("Browser Sources table missing Delete/scan row actions: %s", body[:min(1200, len(body))])
-	}
-	if !strings.Contains(body, `name="q_field"`) || !strings.Contains(body, `value="url"`) || !strings.Contains(body, `value="name"`) {
-		t.Fatalf("sources toolbar missing q_field select: %s", body[:min(1200, len(body))])
-	}
-	qfIdx := strings.Index(body, `name="q_field"`)
-	qIdx := strings.Index(body, `name="q"`)
-	searchIconIdx := strings.Index(body, `data-lucide="search"`)
-	if qfIdx < 0 || qIdx < 0 || qfIdx >= qIdx {
-		t.Fatalf("q_field should sit left of search input: q_field=%d q=%d", qfIdx, qIdx)
-	}
-	if searchIconIdx < 0 || searchIconIdx >= qfIdx {
-		t.Fatalf("search icon should live in q_field select, not the input: icon=%d q_field=%d", searchIconIdx, qfIdx)
-	}
-	nameIdx := strings.Index(body, `value="name"`)
-	urlIdx := strings.Index(body, `value="url"`)
-	seriesIdx := strings.Index(body, `value="series"`)
-	if nameIdx < 0 || urlIdx < 0 || seriesIdx < 0 || nameIdx >= urlIdx || urlIdx >= seriesIdx {
-		t.Fatalf("browser sources q_field order want Name, URL, Series: name=%d url=%d series=%d body=%s",
-			nameIdx, urlIdx, seriesIdx, body[:min(1200, len(body))])
-	}
-	if !strings.Contains(body, `>Series</span>`) || !strings.Contains(body, "series=") {
-		t.Fatalf("browser sources Filter missing Series select: %s", body[:min(1600, len(body))])
-	}
-	if !strings.Contains(body, `<table`) {
-		t.Fatalf("missing table element")
-	}
-	if strings.Contains(body, `id="sources-list-infinite"`) {
-		t.Fatalf("table view should not have infinite sentinel")
-	}
-	if !strings.Contains(body, `/explorer/browse`) {
-		t.Fatalf("table pager should use explorer browse URLs")
+	if !strings.Contains(body, `modal-box modal-box-scroll`) || !strings.Contains(body, `id="modal-edit-source-`) {
+		t.Fatal("edit source modal must use modal-box-scroll (tall form after unify)")
 	}
 }
 

@@ -52,16 +52,13 @@
 {{end}}
 
 {{define "sources_list_row"}}
-<li class="list-row" data-source-id="{{.ID}}" style="--list-grid-cols: {{if .Selectable}}max-content {{end}}max-content 1fr 11rem{{if .ShowRowActions}} max-content{{end}}">
+<li class="list-row" data-source-id="{{.ID}}" style="--list-grid-cols: {{if .Selectable}}max-content {{end}}1fr{{if .ShowRowActions}} max-content{{end}}">
   {{if .Selectable}}
   <div class="self-center shrink-0 hidden" data-source-select-wrap>
     <input type="checkbox" class="checkbox checkbox-sm js-source-select" value="{{.ID}}"
            aria-label="Select source" />
   </div>
   {{end}}
-  <div class="self-center shrink-0">
-    {{template "source_kind_icon" .}}
-  </div>
   <div class="list-col-grow min-w-0 self-center">
     <div class="flex items-center gap-2 min-w-0">
       {{if and .Label.Valid .Label.String}}
@@ -75,17 +72,12 @@
       <a class="link link-hover" href="/series/{{.SeriesID}}">{{.SeriesTitle}}</a>
     </div>
     {{end}}
-    {{if .IndexAsIgnored}}
-    <div class="mt-0.5">{{template "source_discovered_cell" .}}</div>
-    {{end}}
+    {{template "source_list_meta" .}}
     {{template "source_stalled" .}}
-  </div>
-  <div class="self-center min-w-0 w-full">
-    {{template "source_status_cell" .StatusInd}}
   </div>
   {{if .ShowRowActions}}
   <div class="self-center justify-self-end whitespace-nowrap" data-sources-row-actions>
-    <div class="join">
+    <div class="join shrink-0">
       {{template "source_scan_actions" .}}
       <label for="modal-edit-source-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="Edit" aria-label="Edit">
         <i data-lucide="pencil" class="size-3.5"></i>
@@ -133,8 +125,6 @@
           <td data-col="{{.Key}}" class="align-middle{{if not .Visible}} hidden{{end}}">
             {{if eq .Key "series"}}
             <a class="link link-hover" href="/series/{{$row.SeriesID}}">{{$row.SeriesTitle}}</a>
-            {{else if eq .Key "kind"}}
-            {{template "source_kind_icon" $row}}
             {{else if eq .Key "discovered"}}
             {{template "source_discovered_cell" $row}}
             {{else if eq .Key "name"}}
@@ -161,7 +151,7 @@
           {{end}}
           {{if $.ShowRowActions}}
           <td class="whitespace-nowrap text-end">
-            <div class="join" data-sources-row-actions>
+            <div class="join shrink-0" data-sources-row-actions>
               {{template "source_scan_actions" .}}
               <label for="modal-edit-source-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="Edit" aria-label="Edit">
                 <i data-lucide="pencil" class="size-3.5"></i>

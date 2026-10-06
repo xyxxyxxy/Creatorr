@@ -27,7 +27,7 @@ const (
 // DefaultSortDir is asc for title-like sorts, desc for date-like sorts (newest first).
 func DefaultSortDir(sort string) string {
 	switch strings.ToLower(strings.TrimSpace(sort)) {
-	case SortTitle, SortSourceSeries, SortSourceLabel, "label", "url", SortSourceKind, SortSourceDomain:
+	case SortTitle, SortSourceSeries, SortSourceLabel, "label", "url", SortSourceDomain:
 		return SortDirAsc
 	default:
 		return SortDirDesc

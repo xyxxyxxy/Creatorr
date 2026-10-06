@@ -42,7 +42,7 @@ func TestBuildSourceStatusScanErrorTipOmitsLongMessage(t *testing.T) {
 	t.Parallel()
 	long := "yt-dlp metadata failed: ERROR: [youtube] abc: This video is available to this channel's members on level: Gold"
 	v := buildSourceStatus(sourceStatusParams{
-		Src:        library.Source{ID: 19, Kind: library.SourceKindSingle, FullScanDone: true},
+		Src:        library.Source{ID: 19, FullScanDone: true},
 		HasError:   true,
 		ErrCode:    "ResolveFailed",
 		ErrMsg:     long,

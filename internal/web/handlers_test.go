@@ -2177,53 +2177,60 @@ func TestSeriesSourceScanButtons(t *testing.T) {
 		}
 		return rec.Body.String()
 	}
-	assertQueued := func(body string) {
+	assertScanQueued := func(body string) {
 		t.Helper()
 		if !strings.Contains(body, `aria-label="Scan for new videos" aria-disabled="true"`) {
 			t.Fatalf("scan button should stay disabled while a scan is queued: %s", truncate(body, 600))
 		}
-		if !strings.Contains(body, `aria-label="Start full scan" aria-disabled="true"`) {
-			t.Fatalf("full scan button should stay disabled while a scan is queued: %s", truncate(body, 600))
+		if strings.Contains(body, `aria-label="Start full scan"`) || strings.Contains(body, `/actions/full-rescan-source`) {
+			t.Fatalf("list quick actions must not offer Full scan: %s", truncate(body, 600))
 		}
 	}
-	assertQueued(get(seriesPath))
+	assertScanQueued(get(seriesPath))
 
 	if _, err := d.SQL.Exec(`DELETE FROM tasks WHERE kind = 'scan'`); err != nil {
 		t.Fatal(err)
 	}
 	incomplete := get(seriesPath)
 	// html/template escapes apostrophes in attributes (&#39;).
-	if !strings.Contains(incomplete, `data-tip="Finish Full scan first"`) ||
+	if !strings.Contains(incomplete, `data-tip="Finish Full scan on the source page first"`) ||
 		!strings.Contains(incomplete, `aria-label="Scan for new videos" aria-disabled="true"`) {
 		t.Fatalf("tip Scan should stay visible and disabled until full scan finishes: %s", truncate(incomplete, 600))
 	}
-	if strings.Contains(incomplete, `aria-label="Start full scan" aria-disabled="true"`) {
-		t.Fatalf("Full scan should be enabled while tip Scan waits on full_scan_done: %s", truncate(incomplete, 600))
+	if strings.Contains(incomplete, `aria-label="Start full scan"`) || strings.Contains(incomplete, `/actions/full-rescan-source`) {
+		t.Fatalf("list quick actions must not offer Full scan: %s", truncate(incomplete, 600))
 	}
 	if err := lib.MarkFullScanDone(src.ID); err != nil {
 		t.Fatal(err)
 	}
 	idle := get(seriesPath)
+	wantScan := `aria-label="Scan for new videos"`
 	wantBtn := `class="btn btn-xs btn-square join-item tooltip tooltip-left"`
-	if strings.Count(idle, wantBtn) < 2 || strings.Contains(idle, `aria-label="Scan for new videos" aria-disabled="true"`) {
-		t.Fatalf("idle scan buttons should be secondary and enabled: %s", truncate(idle, 600))
+	if !strings.Contains(idle, wantBtn) || strings.Contains(idle, `aria-label="Scan for new videos" aria-disabled="true"`) || !strings.Contains(idle, wantScan) {
+		t.Fatalf("idle tip Scan should be a joined tip host and enabled: %s", truncate(idle, 600))
 	}
 	wantEdit := `class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="Edit" aria-label="Edit"`
 	if !strings.Contains(idle, wantEdit) {
-		t.Fatalf("edit button should be a plain button: %s", truncate(idle, 800))
+		t.Fatalf("edit button should match Files join tip style: %s", truncate(idle, 800))
 	}
 
 	if _, err := lib.FullRescanSource(src.ID); err != nil {
 		t.Fatal(err)
 	}
-	assertQueued(get(seriesPath))
+	assertScanQueued(get(seriesPath))
 	oob := get(seriesPath + "/task-indicators")
 	if strings.Contains(oob, "can't evaluate field") || !strings.Contains(oob, "source-scan-actions-") {
 		t.Fatalf("task-indicators OOB must render source_scan_actions: %s", truncate(oob, 600))
 	}
+	if strings.Contains(oob, `aria-label="Start full scan"`) || strings.Contains(oob, `/actions/full-rescan-source`) {
+		t.Fatalf("OOB source_scan_actions must not offer Full scan: %s", truncate(oob, 600))
+	}
 	detail := get(seriesPath + "/sources/" + itoa(src.ID))
 	if strings.Count(detail, `class="btn" disabled`) < 2 || !strings.Contains(detail, `for="modal-edit-source" class="btn"`) {
 		t.Fatalf("source detail should keep Scan and Full scan disabled: %s", truncate(detail, 800))
+	}
+	if !strings.Contains(detail, `/actions/full-rescan-source`) {
+		t.Fatalf("source detail must keep Full scan action: %s", truncate(detail, 800))
 	}
 	settingsAt := strings.Index(detail, ">Settings</span>")
 	statusAt := strings.Index(detail, ">Status</span>")

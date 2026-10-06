@@ -360,6 +360,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		EditSettings        map[string]any
 		MetaForm            seriesMetadataView
 		PackRoleOptions     []struct{ Value, Label string }
+		NewSource           library.Source // empty defaults for the Add source modal
 		Deleting            bool
 		DownloadErrorCount  int
 	}{

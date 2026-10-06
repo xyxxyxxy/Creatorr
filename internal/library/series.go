@@ -11,11 +11,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
-// Source kinds: feed = channel/playlist (catch-up); single = one video URL (index once).
 const (
-	SourceKindFeed   = "feed"
-	SourceKindSingle = "single"
-
 	DeliveryVideo = "video"
 	DeliveryAudio = "audio"
 
@@ -32,22 +28,13 @@ func NormalizeDeliveryMode(m string) string {
 	return DeliveryVideo
 }
 
-// NormalizeSourceKind returns feed or single.
-func NormalizeSourceKind(k string) string {
-	if strings.EqualFold(strings.TrimSpace(k), SourceKindSingle) {
-		return SourceKindSingle
-	}
-	return SourceKindFeed
-}
-
-// Source is a feed or single URL on a series.
+// Source is a URL on a series (schedule via scan_cron; empty = Never).
 type Source struct {
 	ID                   int64
 	SeriesID             int64
 	URL                  string
 	Label                sql.NullString
-	Kind                 string
-	ScanCron             string // empty = never (Scan schedule); feed default weekly
+	ScanCron             string // empty = never (no recurring tip Scan)
 	IndexAsIgnored       bool   // new videos → ignored instead of wanted
 	TitleRegexpInclude   string // empty = no include filter; Go regexp must match to index
 	TitleRegexpExclude   string // empty = no exclude filter; matching titles are not indexed (wins over include)
@@ -61,11 +48,6 @@ type Source struct {
 	Tags           []string
 	Actors         []SeriesActor
 	SpecialFeature string // empty/NULL = no kind override; else pack role
-}
-
-// IsSingle reports kind=single (one-shot index; no tip Scan).
-func (src Source) IsSingle() bool {
-	return src.Kind == SourceKindSingle
 }
 
 // ScanCronNever reports scheduled tip Scan is off.
@@ -124,11 +106,10 @@ func scanSource(scanner interface {
 	var genresRaw, tagsRaw, actorsRaw string
 	var specialFeature sql.NullString
 	err := scanner.Scan(
-		&src.ID, &src.SeriesID, &src.URL, &src.Label, &src.Kind,
+		&src.ID, &src.SeriesID, &src.URL, &src.Label,
 		&src.ScanCron, &indexAsIgnored, &titleInclude, &titleExclude, &src.FullScanLimit, &fullScanDone,
 		&src.Studio, &src.Country, &src.MPAA, &genresRaw, &tagsRaw, &actorsRaw, &specialFeature,
 	)
-	src.Kind = NormalizeSourceKind(src.Kind)
 	src.IndexAsIgnored = indexAsIgnored != 0
 	if titleInclude.Valid {
 		src.TitleRegexpInclude = titleInclude.String
@@ -137,9 +118,6 @@ func scanSource(scanner interface {
 		src.TitleRegexpExclude = titleExclude.String
 	}
 	src.FullScanDone = fullScanDone != 0
-	if src.IsSingle() {
-		src.ScanCron = ""
-	}
 	src.Studio = strings.TrimSpace(src.Studio)
 	src.Country = strings.TrimSpace(src.Country)
 	src.MPAA = strings.TrimSpace(src.MPAA)
@@ -150,7 +128,7 @@ func scanSource(scanner interface {
 	return src, err
 }
 
-const sourceSelectCols = `id, series_id, url, label, kind, scan_cron, index_as_ignored,
+const sourceSelectCols = `id, series_id, url, label, scan_cron, index_as_ignored,
 		       title_regexp_include, title_regexp_exclude, full_scan_limit, full_scan_done,
 		       COALESCE(studio,''), COALESCE(country,''), COALESCE(mpaa,''),
 		       COALESCE(genres,'[]'), COALESCE(tags,'[]'), COALESCE(actors,'[]'), special_feature`
@@ -210,12 +188,11 @@ func (s *Store) ListSourceDomains() ([]string, error) {
 type AddSourceParams struct {
 	URL                  string
 	Label                string
-	Kind                 string // feed (default) or single
-	ScanCron             string // empty = never; feed default weekly if omitted
+	ScanCron             string // empty / never = Never (no Go weekly inject)
 	IndexAsIgnored       bool
 	TitleRegexpInclude   string
 	TitleRegexpExclude   string
-	FullScanLimit        int // 0 = unlimited; ignored for single
+	FullScanLimit        int // 0 = unlimited
 }
 
 func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
@@ -234,22 +211,19 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 	if err := ValidateTitleRegexp("title_regexp_exclude", titleExclude); err != nil {
 		return nil, err
 	}
-	kind := NormalizeSourceKind(p.Kind)
 	limit := p.FullScanLimit
 	if limit < 0 {
 		return nil, fmt.Errorf("%w: full_scan_limit must be >= 0", ErrInvalid)
 	}
 	scanCron := strings.TrimSpace(p.ScanCron)
-	if kind == SourceKindSingle {
+	if scanCron == "" || strings.EqualFold(scanCron, "never") {
 		scanCron = ""
-		limit = 0
-		titleInclude = ""
-		titleExclude = ""
-		p.IndexAsIgnored = false
-	} else if scanCron == "" {
-		scanCron = cronexpr.ScanCronWeekly
-	} else if strings.EqualFold(scanCron, "never") {
-		scanCron = ""
+	} else {
+		normalized, err := cronexpr.NormalizeScanCron(scanCron)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+		}
+		scanCron = normalized
 	}
 	var label any
 	if strings.TrimSpace(p.Label) != "" {
@@ -266,7 +240,7 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 	if p.IndexAsIgnored {
 		idx = 1
 	}
-	res, err := s.insertSource(seriesID, url, label, kind, scanCron, idx, titleIncludeVal, titleExcludeVal, limit, SeedDomainIntoTags(nil, url))
+	res, err := s.insertSource(seriesID, url, label, scanCron, idx, titleIncludeVal, titleExcludeVal, limit, SeedDomainIntoTags(nil, url))
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return nil, fmt.Errorf("%w: source URL already on this series", ErrConflict)
@@ -284,11 +258,11 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 }
 
 // insertSource writes a sources row (tags typically seeded with domain).
-func (s *Store) insertSource(seriesID int64, url string, label any, kind, scanCron string, indexAsIgnored int, titleInclude, titleExclude any, fullScanLimit int, tags []string) (sql.Result, error) {
+func (s *Store) insertSource(seriesID int64, url string, label any, scanCron string, indexAsIgnored int, titleInclude, titleExclude any, fullScanLimit int, tags []string) (sql.Result, error) {
 	return s.DB.SQL.Exec(`
-		INSERT INTO sources (series_id, url, label, kind, scan_cron, index_as_ignored, title_regexp_include, title_regexp_exclude, full_scan_limit, tags)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, seriesID, url, label, kind, scanCron, indexAsIgnored, titleInclude, titleExclude, fullScanLimit, encodeStringSlice(tags))
+		INSERT INTO sources (series_id, url, label, scan_cron, index_as_ignored, title_regexp_include, title_regexp_exclude, full_scan_limit, tags)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, seriesID, url, label, scanCron, indexAsIgnored, titleInclude, titleExclude, fullScanLimit, encodeStringSlice(tags))
 }
 
 func (s *Store) GetSource(seriesID, sourceID int64) (*Source, error) {
@@ -307,7 +281,7 @@ func (s *Store) GetSource(seriesID, sourceID int64) (*Source, error) {
 }
 
 // UpdateSourceParams patches a source; nil pointers mean unchanged.
-// Kind and URL are immutable after create. Single sources force scan_cron empty and clear limit/filters.
+// URL is immutable after create.
 type UpdateSourceParams struct {
 	Label                *string
 	ScanCron             *string
@@ -399,21 +373,16 @@ func (s *Store) UpdateSource(seriesID, sourceID int64, p UpdateSourceParams) (*S
 			specialFeature = NormalizePackRole(sf)
 		}
 	}
-	if cur.IsSingle() {
-		scanCron = ""
-		limit = 0
-		indexAsIgnored = false
-		titleInclude = ""
-		titleExclude = ""
-		tags = ensureSourceDomainTagLocked(cur.Kind, cur.URL, tags)
-	} else {
-		if p.ScanCron != nil {
-			c := strings.TrimSpace(*p.ScanCron)
-			if c == "" || strings.EqualFold(c, "never") {
-				scanCron = ""
-			} else {
-				scanCron = c
+	if p.ScanCron != nil {
+		c := strings.TrimSpace(*p.ScanCron)
+		if c == "" || strings.EqualFold(c, "never") {
+			scanCron = ""
+		} else {
+			normalized, err := cronexpr.NormalizeScanCron(c)
+			if err != nil {
+				return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 			}
+			scanCron = normalized
 		}
 	}
 	var labelVal, titleIncludeVal, titleExcludeVal any

@@ -12,7 +12,6 @@ import (
 const (
 	SortSourceSeries      = "series"
 	SortSourceLabel       = "name" // Explorer UI; DB column remains sources.label
-	SortSourceKind        = "kind"
 	SortSourceDomain      = "domain"
 	SortSourceLastScanned = "last_scanned"
 )
@@ -30,7 +29,6 @@ const (
 // SourceFilterFacets are distinct Source Filter values present in a series scope.
 // Used to hide Filter menu entries that cannot change the result (pre-filtered lists).
 type SourceFilterFacets struct {
-	Kinds                 []string // feed and/or single
 	Domains               []string
 	HasFullScanDone       bool
 	HasFullScanIncomplete bool
@@ -47,21 +45,18 @@ func (s *Store) SourceFilterFacetsForSeries(seriesID int64) (SourceFilterFacets,
 		return out, nil
 	}
 	rows, err := s.DB.SQL.Query(`
-		SELECT url, kind, scan_cron, full_scan_done, index_as_ignored FROM sources WHERE series_id = ?`, seriesID)
+		SELECT url, scan_cron, full_scan_done, index_as_ignored FROM sources WHERE series_id = ?`, seriesID)
 	if err != nil {
 		return out, err
 	}
 	defer func() { _ = rows.Close() }()
-	kinds := map[string]struct{}{}
 	domains := map[string]struct{}{}
 	for rows.Next() {
-		var rawURL, kind, cron string
+		var rawURL, cron string
 		var fullDone, indexAsIgnored int
-		if err := rows.Scan(&rawURL, &kind, &cron, &fullDone, &indexAsIgnored); err != nil {
+		if err := rows.Scan(&rawURL, &cron, &fullDone, &indexAsIgnored); err != nil {
 			return out, err
 		}
-		kind = NormalizeSourceKind(kind)
-		kinds[kind] = struct{}{}
 		if d := queue.DomainFromURL(rawURL); d != "" && d != "unknown" {
 			domains[d] = struct{}{}
 		}
@@ -70,14 +65,13 @@ func (s *Store) SourceFilterFacetsForSeries(seriesID int64) (SourceFilterFacets,
 		} else {
 			out.HasFullScanIncomplete = true
 		}
-		src := Source{Kind: kind, ScanCron: cron}
-		if src.IsSingle() || src.ScanCronNever() {
+		src := Source{ScanCron: cron}
+		if src.ScanCronNever() {
 			out.HasScheduleOff = true
 		} else {
 			out.HasScheduleOn = true
 		}
-		// Singles always index as wanted; flag only applies to feeds.
-		if !src.IsSingle() && indexAsIgnored != 0 {
+		if indexAsIgnored != 0 {
 			out.HasDiscoveredIgnored = true
 		} else {
 			out.HasDiscoveredWanted = true
@@ -86,10 +80,6 @@ func (s *Store) SourceFilterFacetsForSeries(seriesID int64) (SourceFilterFacets,
 	if err := rows.Err(); err != nil {
 		return out, err
 	}
-	for k := range kinds {
-		out.Kinds = append(out.Kinds, k)
-	}
-	sort.Strings(out.Kinds)
 	for d := range domains {
 		out.Domains = append(out.Domains, d)
 	}
@@ -138,12 +128,11 @@ type SourceListFilter struct {
 	SeriesIDs       []int64  // browser series= multi when SeriesID==0
 	Q               string   // case-insensitive substring against QField
 	QField          string   // url|name|series; empty = name; legacy label accepted
-	Kinds           []string // feed|single; IN
 	Domains         []string // hostname facets; OR of url LIKE
 	HasError        *bool    // nil = any; true = last event scan_error; false = not
 	FullScanDone    *bool    // nil = any; true = done; false = incomplete
-	ScheduleOn      *bool    // nil = any; true = feed with cron; false = off/never/single
-	IndexAsIgnored  *bool    // nil = any; discovered video status (feeds); singles count as wanted
+	ScheduleOn      *bool    // nil = any; true = non-empty cron; false = Never
+	IndexAsIgnored  *bool    // nil = any; discovered Wanted/Ignored flag
 	SeriesMonitored *bool    // nil = any
 	Sort            string
 	SortDir         string
@@ -162,7 +151,6 @@ type SourceListRow struct {
 func (f SourceListFilter) MenuActive() bool {
 	return f.SeriesID > 0 ||
 		len(uniqPositiveInt64s(f.SeriesIDs)) > 0 ||
-		len(sourceListKinds(f.Kinds)) > 0 ||
 		len(trimNonEmptyStrings(f.Domains)) > 0 ||
 		f.HasError != nil ||
 		f.FullScanDone != nil ||
@@ -174,19 +162,6 @@ func (f SourceListFilter) MenuActive() bool {
 // Active reports whether search or any Filter-menu constraint is set.
 func (f SourceListFilter) Active() bool {
 	return strings.TrimSpace(f.Q) != "" || f.MenuActive()
-}
-
-func sourceListKinds(raw []string) []string {
-	var out []string
-	for _, k := range raw {
-		k = strings.TrimSpace(k)
-		if strings.EqualFold(k, SourceKindSingle) {
-			out = append(out, SourceKindSingle)
-		} else if strings.EqualFold(k, SourceKindFeed) {
-			out = append(out, SourceKindFeed)
-		}
-	}
-	return out
 }
 
 // NormalizeSourceQField returns a known Sources text field id or name.
@@ -227,7 +202,6 @@ func (f SourceListFilter) where() (string, []any) {
 			args = append(args, like)
 		}
 	}
-	appendStringsIn(&b, &args, "src.kind", sourceListKinds(f.Kinds), false)
 	domains := trimNonEmptyStrings(f.Domains)
 	if len(domains) > 0 {
 		var parts []string
@@ -259,20 +233,16 @@ func (f SourceListFilter) where() (string, []any) {
 		}
 	}
 	if f.ScheduleOn != nil {
-		cronOff := `(src.kind = ? OR TRIM(IFNULL(src.scan_cron,'')) = '' OR LOWER(TRIM(src.scan_cron)) = 'never')`
+		cronOff := `(TRIM(IFNULL(src.scan_cron,'')) = '' OR LOWER(TRIM(src.scan_cron)) = 'never')`
 		if *f.ScheduleOn {
 			b.WriteString(` AND NOT ` + cronOff)
-			args = append(args, SourceKindSingle)
 		} else {
 			b.WriteString(` AND ` + cronOff)
-			args = append(args, SourceKindSingle)
 		}
 	}
 	if f.IndexAsIgnored != nil {
 		if *f.IndexAsIgnored {
-			// Feeds with mark-new-as-ignored only (singles never set the flag).
-			b.WriteString(` AND src.kind = ? AND src.index_as_ignored = 1`)
-			args = append(args, SourceKindFeed)
+			b.WriteString(` AND src.index_as_ignored = 1`)
 		} else {
 			b.WriteString(` AND src.index_as_ignored = 0`)
 		}
@@ -302,8 +272,6 @@ func (f SourceListFilter) orderBy() string {
 		return "s.title COLLATE NOCASE " + dir + ", src.id ASC"
 	case "url", SortSourceLabel, "label": // "label" = legacy sort query value
 		return "IFNULL(src.label, src.url) COLLATE NOCASE " + dir + ", src.id ASC"
-	case SortSourceKind:
-		return "src.kind " + dir + ", src.id ASC"
 	case SortSourceDomain:
 		return sourceDomainSortSQL + " " + dir + ", src.id ASC"
 	case SortSourceLastScanned, "scanned":
@@ -335,7 +303,7 @@ func scanSourceListRow(scanner interface {
 	var specialFeature sql.NullString
 	var lastScanned sql.NullString
 	err := scanner.Scan(
-		&row.ID, &row.SeriesID, &row.URL, &label, &row.Kind, &row.ScanCron, &indexAsIgnored,
+		&row.ID, &row.SeriesID, &row.URL, &label, &row.ScanCron, &indexAsIgnored,
 		&titleInclude, &titleExclude, &row.FullScanLimit, &fullScanDone,
 		&row.Studio, &row.Country, &row.MPAA,
 		&genresRaw, &tagsRaw, &actorsRaw, &specialFeature,
@@ -349,10 +317,6 @@ func scanSourceListRow(scanner interface {
 	row.FullScanDone = fullScanDone != 0
 	row.TitleRegexpInclude = titleInclude.String
 	row.TitleRegexpExclude = titleExclude.String
-	row.Kind = NormalizeSourceKind(row.Kind)
-	if row.IsSingle() {
-		row.ScanCron = ""
-	}
 	row.Studio = strings.TrimSpace(row.Studio)
 	row.Country = strings.TrimSpace(row.Country)
 	row.MPAA = strings.TrimSpace(row.MPAA)
@@ -395,7 +359,7 @@ func (s *Store) ListSourcesFiltered(filter SourceListFilter, limit, offset int) 
 		offset = 0
 	}
 	where, args := filter.where()
-	q := `SELECT src.id, src.series_id, src.url, src.label, src.kind, src.scan_cron, src.index_as_ignored,
+	q := `SELECT src.id, src.series_id, src.url, src.label, src.scan_cron, src.index_as_ignored,
 		src.title_regexp_include, src.title_regexp_exclude, src.full_scan_limit, src.full_scan_done,
 		COALESCE(src.studio,''), COALESCE(src.country,''), COALESCE(src.mpaa,''),
 		COALESCE(src.genres,'[]'), COALESCE(src.tags,'[]'), COALESCE(src.actors,'[]'), src.special_feature,

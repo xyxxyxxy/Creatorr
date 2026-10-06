@@ -13,15 +13,13 @@
     </h1>
     <p class="text-xs opacity-60 break-all">
       yt-dlp
-      · {{if eq .Source.Kind "single"}}single{{else}}feed{{end}}
       · {{.VideoCount}} video(s)
     </p>
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
-    {{$isSingle := eq .Source.Kind "single"}}
-    {{$scanOff := or $isSingle .ScanActive (not .DomainActive) (not .Source.FullScanDone)}}
+    {{$scanOff := or .ScanActive (not .DomainActive) (not .Source.FullScanDone)}}
     {{$tipScan := "Scan for new videos"}}
-    {{if $isSingle}}{{$tipScan = "Scan is for feeds only"}}{{else if .ScanActive}}{{$tipScan = "Scan already queued or running"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under Settings → Queue / Domains."}}{{end}}{{else if not .Source.FullScanDone}}{{$tipScan = "Finish Full scan first"}}{{end}}
+    {{if .ScanActive}}{{$tipScan = "Scan already queued or running"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under Settings → Queue / Domains."}}{{end}}{{else if not .Source.FullScanDone}}{{$tipScan = "Finish Full scan first"}}{{end}}
     <form method="post" action="/actions/scan-source">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
@@ -58,7 +56,6 @@
   {{else}}
   {{template "detail_row" (dict "Label" "Name" "EmptyText" "-")}}
   {{end}}
-  {{if ne .Source.Kind "single"}}
   <tr><th class="w-40">Scan</th><td class="text-sm">{{.ScanCronLabel}}</td></tr>
   {{if gt .Source.FullScanLimit 0}}
   <tr><th class="w-40">Full scan limit</th><td>{{.Source.FullScanLimit}}</td></tr>
@@ -76,7 +73,6 @@
   {{template "detail_row" (dict "Label" "Title exclude" "TdClass" "font-mono text-xs break-all")}}
   {{end}}
   <tr><th class="w-40">Discovered video status</th><td>{{if .Source.IndexAsIgnored}}Ignored - new videos stay ignored until manually set to wanted{{else}}Wanted{{end}}</td></tr>
-  {{end}}
 </tbody>
 {{template "list_table_end"}}
   </div>
@@ -87,7 +83,6 @@
 {{template "list_header" (dict "level" "section" "title" "Status")}}
 {{template "list_table"}}
 <tbody>
-  <tr><th class="w-40">Kind</th><td>{{if eq .Source.Kind "single"}}single{{else}}feed{{end}}</td></tr>
   <tr><th class="w-40">Tool</th><td class="font-mono text-xs">yt-dlp</td></tr>
   <tr><th class="w-40">Domain</th><td class="font-mono text-xs">{{.DomainHost}}{{if not .DomainActive}} <span class="badge badge-warning badge-sm">inactive</span>{{end}}</td></tr>
   {{if .HasScanned}}
@@ -139,9 +134,9 @@
 
 <input type="checkbox" id="modal-edit-source" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box max-w-xl">
-    <h3 class="font-bold text-lg mb-2">Edit {{if eq .Source.Kind "single"}}single{{else}}feed{{end}}</h3>
-        <form method="post" action="/actions/update-source" class="space-y-2">
+  <div class="modal-box modal-box-scroll max-w-xl flex flex-col gap-2">
+    <h3 class="font-bold text-lg shrink-0">Edit source</h3>
+        <form method="post" action="/actions/update-source" class="space-y-2 min-h-0 overflow-y-auto grow">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
@@ -156,14 +151,11 @@
         <legend class="fieldset-legend">Name (optional)</legend>
         <input name="label" class="input w-full" value="{{if .Source.Label.Valid}}{{.Source.Label.String}}{{end}}" />
       </fieldset>
-      {{if ne .Source.Kind "single"}}
       {{template "scan_cron_field" (dict
         "Value" .Source.ScanCron
         "ID" "edit-source-scan-cron"
         "CronDescriptors" .ScanCronDescriptors
       )}}
-      {{end}}
-      {{if ne .Source.Kind "single"}}
       {{template "source_filter_fields" (dict
         "FullScanLimit" .Source.FullScanLimit
         "FullScanLimitID" "edit-source-full-scan-limit"
@@ -173,14 +165,13 @@
         "TitleRegexpExclude" .Source.TitleRegexpExclude
         "TitleRegexpExcludeID" "edit-source-title-exclude"
       )}}
-      {{end}}
       {{template "source_default_metadata" (dict
         "Source" .Source
         "Suggestions" .MetaSuggestions
         "PackRoleOptions" .PackRoleOptions
         "ListPrefix" "edit-src"
       )}}
-      <div class="modal-action">
+      <div class="modal-action shrink-0 mt-0">
         <label for="modal-edit-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary">Save</button>
       </div>

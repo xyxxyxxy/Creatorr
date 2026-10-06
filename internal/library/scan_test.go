@@ -174,26 +174,23 @@ SourceID: srcID,
 	}
 }
 
-func TestSingleSourceSkipsCatchup(t *testing.T) {
+func TestNeverScanCronSkipsScheduledCatchup(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
-		Title: "Single", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+		Title: "Never", RootID: rootID, QualityProfileID: profileID, Monitored: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	src, err := s.AddSource(ser.ID, library.AddSourceParams{
-		URL: "https://www.example.com/watch?v=abc", Kind: library.SourceKindSingle,
+		URL: "https://www.example.com/watch?v=abc",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if src.Kind != library.SourceKindSingle {
-		t.Fatalf("want single: %+v", src)
-	}
-	if src.FullScanLimit != 0 {
-		t.Fatalf("single must clear full_scan_limit: %+v", src)
+	if !src.ScanCronNever() {
+		t.Fatalf("default scan_cron want Never, got %q", src.ScanCron)
 	}
 	// Initial scan enqueued on add.
 	var pending int
@@ -205,20 +202,20 @@ func TestSingleSourceSkipsCatchup(t *testing.T) {
 	if err := s.MarkFullScanDone(src.ID); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.EnqueueScanSource(src.ID, queue.OriginManual)
-	if err == nil {
-		t.Fatal("want catch-up rejected for single")
+	if _, err := s.EnqueueScanSource(src.ID, queue.OriginManual); err != nil {
+		t.Fatalf("manual tip Scan after index: %v", err)
 	}
+	_, _ = s.DB.SQL.Exec(`UPDATE tasks SET status = 'cancelled' WHERE kind = 'scan'`)
 	n, err := s.EnqueueScansDue(time.Now().UTC(), time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n != 0 {
-		t.Fatalf("catch-up cron must skip single, got %d", n)
+		t.Fatalf("scheduled catch-up must skip Never scan_cron, got %d", n)
 	}
 	_, _, err = s.EnqueueScansForSeries(ser.ID)
 	if err == nil {
-		t.Fatal("series tip Scan must reject when only indexed singles")
+		t.Fatal("series tip Scan must skip Never sources")
 	}
 	// Full re-scan still works.
 	tid, err := s.FullRescanSource(src.ID)
@@ -255,7 +252,7 @@ func TestEnqueueScansDue(t *testing.T) {
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
 		Title: "Catch", SourceURL: "https://www.example.com/@catch", RootID: rootID,
-		QualityProfileID: profileID, Monitored: true,
+		QualityProfileID: profileID, Monitored: true, ScanCron: "@weekly",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -272,7 +269,7 @@ func TestEnqueueScansDue(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n < 1 {
-		t.Fatalf("default weekly cron should be due with no tip scanned history, got %d", n)
+		t.Fatalf("@weekly cron should be due with no tip scanned history, got %d", n)
 	}
 
 	_, _ = s.Queue.CancelAll()
@@ -442,7 +439,7 @@ func TestManualTipScanAllowsUnmonitored(t *testing.T) {
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
 		Title: "UnmonTip", SourceURL: "https://www.example.com/@unmontip", RootID: rootID,
-		QualityProfileID: profileID, Monitored: false,
+		QualityProfileID: profileID, Monitored: false, ScanCron: "@weekly",
 	})
 	if err != nil {
 		t.Fatal(err)

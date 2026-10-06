@@ -199,6 +199,9 @@ func (s *Server) CreateSeries(w http.ResponseWriter, r *http.Request) {
 	if body.Monitored != nil {
 		p.Monitored = *body.Monitored
 	}
+	if body.ScanCron != nil {
+		p.ScanCron = *body.ScanCron
+	}
 	if body.FullScanLimit != nil {
 		p.FullScanLimit = *body.FullScanLimit
 	}
@@ -323,8 +326,8 @@ func (s *Server) AddSource(w http.ResponseWriter, r *http.Request, id gen.Series
 	if body.Label != nil {
 		p.Label = *body.Label
 	}
-	if body.Kind != nil {
-		p.Kind = string(*body.Kind)
+	if body.ScanCron != nil {
+		p.ScanCron = *body.ScanCron
 	}
 	if body.FullScanLimit != nil {
 		p.FullScanLimit = *body.FullScanLimit
@@ -351,6 +354,7 @@ func (s *Server) UpdateSource(w http.ResponseWriter, r *http.Request, id gen.Ser
 	}
 	p := library.UpdateSourceParams{
 		Label:              body.Label,
+		ScanCron:           body.ScanCron,
 		FullScanLimit:      body.FullScanLimit,
 		TitleRegexpInclude: body.TitleRegexpInclude,
 		TitleRegexpExclude: body.TitleRegexpExclude,
@@ -465,13 +469,11 @@ func mapProfile(p library.QualityProfile) gen.QualityProfile {
 }
 
 func mapSource(lib *library.Store, src library.Source) gen.Source {
-	kind := gen.SourceKind(library.NormalizeSourceKind(src.Kind))
 	out := gen.Source{
-		Id:        src.ID,
-		SeriesId:  src.SeriesID,
-		Url:       src.URL,
-		Kind:      kind,
-		Monitored: true, // deprecated API field; use series.monitored + domain.active
+		Id:       src.ID,
+		SeriesId: src.SeriesID,
+		Url:      src.URL,
+		ScanCron: src.ScanCron,
 	}
 	if src.Label.Valid {
 		s := src.Label.String

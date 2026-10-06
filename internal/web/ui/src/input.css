@@ -617,6 +617,21 @@ form.js-list-filters:has(.js-list-toolbar-dd.dropdown-open) {
 }
 
 /*
+  Tip bubble on .btn / join-item: daisyUI sets background-color, but .btn
+  `background` shorthand wins and fills the chip with --btn-fg (light on dark
+  themes). Reset with `background` so Scan/Edit/Delete match status tips.
+  https://daisyui.com/components/tooltip/
+*/
+.tooltip[data-tip]:before {
+  background: var(--tt-bg) !important;
+  color: var(--color-neutral-content) !important;
+}
+.tooltip:after,
+.tooltip > .tooltip-content {
+  background: var(--tt-bg) !important;
+}
+
+/*
   daisyUI tooltips wrap at max-width 20rem (white-space:normal). Long yt-dlp
   --format selectors on quality profile names must stay one line.
   https://daisyui.com/components/tooltip/

@@ -148,14 +148,6 @@ func sourcePresetHasValues(src *Source) bool {
 	return false
 }
 
-// ensureSourceDomainTagLocked forces NamingDomain into tags for single sources.
-func ensureSourceDomainTagLocked(kind, url string, tags []string) []string {
-	if NormalizeSourceKind(kind) != SourceKindSingle {
-		return ParseStringListFields(tags)
-	}
-	return SeedDomainIntoTags(tags, url)
-}
-
 func scanNullPackRole(ns sql.NullString) string {
 	if !ns.Valid {
 		return ""

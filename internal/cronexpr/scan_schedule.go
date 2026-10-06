@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Scan schedule presets (per feed source dropdown).
+// Scan schedule presets (per-source schedule dropdown).
 // Stored value remains a cron expression (or empty for never).
 const (
 	ScanScheduleHourly    = "hourly"

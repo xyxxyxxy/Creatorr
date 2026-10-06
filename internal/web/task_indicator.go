@@ -386,6 +386,64 @@ func truncateStatusLabel(s string, max int) string {
 	return s[:max-1] + "…"
 }
 
+// sourceListMetaView is the list-row second line: scan phrase + discovered phrase.
+type sourceListMetaView struct {
+	SourceID   int64
+	Scan       string
+	Discovered string
+	Href       string
+	Title      string // schedule / error tip (optional)
+	OOB        bool
+}
+
+// buildSourceListMeta joins scan state and discovered status for list second lines.
+// Examples: "scan queued, new videos added as ignored"; "last scan 2h ago (1 new), new videos added as wanted".
+func buildSourceListMeta(ind sourceStatusView, summary string, indexAsIgnored bool) sourceListMetaView {
+	v := sourceListMetaView{
+		SourceID: ind.SourceID,
+		Href:     ind.Href,
+		Title:    ind.Title,
+		OOB:      ind.OOB,
+	}
+	if indexAsIgnored {
+		v.Discovered = "new videos added as ignored"
+	} else {
+		v.Discovered = "new videos added as wanted"
+	}
+	switch ind.Kind {
+	case "pending":
+		v.Scan = "scan queued"
+	case "running":
+		v.Scan = "scanning"
+		if l := strings.TrimSpace(ind.Label); l != "" && l != "scanning" {
+			v.Scan = l
+		}
+	case "scan_error":
+		v.Scan = strings.TrimSpace(ind.Label)
+		if v.Scan == "" {
+			v.Scan = "scan error"
+		}
+	case "incomplete", "stalled":
+		v.Scan = "full scan incomplete"
+	default:
+		sum := strings.TrimSpace(summary)
+		if sum == "" {
+			sum = strings.TrimSpace(ind.Label)
+		}
+		switch {
+		case sum != "" && sum != "never" && sum != "indexed" && sum != "disabled" && sum != "scanning" && sum != "incomplete" && sum != "pending":
+			v.Scan = "last scan " + sum
+		case ind.Kind == "unscheduled" || sum == "disabled":
+			v.Scan = "scan schedule off"
+		case sum == "never":
+			v.Scan = "never scanned"
+		default:
+			v.Scan = "indexed"
+		}
+	}
+	return v
+}
+
 func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 	src := p.Src
 	v := sourceStatusView{SourceID: src.ID}
@@ -396,8 +454,6 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 	}
 	scheduleTip := ""
 	switch {
-	case src.IsSingle():
-		scheduleTip = "Single source - no scan schedule"
 	case src.ScanCronNever():
 		scheduleTip = "Scan schedule off"
 	default:
@@ -469,7 +525,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 	}
 
 	if p.Stalled {
-		hasSchedule := !src.IsSingle() && !src.ScanCronNever()
+		hasSchedule := !src.ScanCronNever()
 		if !hasSchedule {
 			v.Kind = "incomplete" // full scan incomplete, no tip schedule
 		} else {
@@ -481,7 +537,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 			v.Label = "pending"
 			line2 = p.DomainDisabledTitle
 			if line2 == "" {
-				line2 = "Domain is inactive - activate it under 'Settings → Queue / Domains', then use 'Full scan'"
+				line2 = "Domain is inactive - activate it under 'Settings → Queue / Domains', then open the source and use 'Full scan'"
 			}
 		} else {
 			v.Label = "incomplete"
@@ -500,20 +556,6 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 
 	// Idle: full scan done or not yet started without stall (active scan covered above).
 	if src.FullScanDone {
-		if src.IsSingle() {
-			// Single: success icon + "complete"; tip is only relative scanned time.
-			v.Kind = "indexed"
-			v.Label = "complete"
-			v.Title = "Indexed"
-			if p.HasScanned && p.Summary != "" && p.Summary != "never" {
-				ago := p.Summary
-				if i := strings.Index(ago, " ("); i >= 0 {
-					ago = ago[:i]
-				}
-				v.Title = "Scanned " + ago
-			}
-			return v
-		}
 		if src.ScanCronNever() {
 			v.Kind = "unscheduled"
 			v.Label = "disabled"
@@ -547,7 +589,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 	}
 
 	// Full scan not done, not stalled, no active task: treat as scanning edge (rare).
-	if src.IsSingle() || src.ScanCronNever() {
+	if src.ScanCronNever() {
 		v.Kind = "incomplete"
 		v.Label = "scanning"
 		v.Title = joinStatusTip("Full scan in progress", scheduleTip, limitTip, lastTip)
@@ -565,7 +607,7 @@ func buildSourceStatus(p sourceStatusParams) sourceStatusView {
 // idea as scheduler boot anchoring - not "due now".
 func nextScanTip(p sourceStatusParams) string {
 	src := p.Src
-	if src.IsSingle() || src.ScanCronNever() {
+	if src.ScanCronNever() {
 		return ""
 	}
 	if !p.SeriesMonitored {

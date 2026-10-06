@@ -25,6 +25,7 @@ func TestListSourcesFiltered(t *testing.T) {
 	a, err := s.CreateSeries(CreateSeriesParams{
 		Title: "Alpha", RootID: 1, QualityProfileID: 1, Monitored: true,
 		SourceURL: "https://www.example.com/@alpha",
+		ScanCron:  "@weekly",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -32,15 +33,19 @@ func TestListSourcesFiltered(t *testing.T) {
 	b, err := s.CreateSeries(CreateSeriesParams{
 		Title: "Beta", RootID: 1, QualityProfileID: 1, Monitored: false,
 		SourceURL: "https://cdn.example.org/@beta",
+		ScanCron:  "@weekly",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	single, err := s.AddSource(a.ID, AddSourceParams{
-		URL: "https://www.example.com/watch?v=single1", Kind: SourceKindSingle, Label: "Main single",
+	neverSrc, err := s.AddSource(a.ID, AddSourceParams{
+		URL: "https://www.example.com/watch?v=single1", Label: "Main never",
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !neverSrc.ScanCronNever() {
+		t.Fatalf("AddSource omit cron want Never, got %q", neverSrc.ScanCron)
 	}
 
 	n, err := s.CountSourcesFiltered(SourceListFilter{})
@@ -57,22 +62,6 @@ func TestListSourcesFiltered(t *testing.T) {
 	scoped, err := s.CountSourcesFiltered(SourceListFilter{SeriesID: a.ID})
 	if err != nil || scoped != 2 {
 		t.Fatalf("series A count=%d want 2 err=%v", scoped, err)
-	}
-	feedOnly, err := s.ListSourcesFiltered(SourceListFilter{Kinds: []string{SourceKindFeed}}, 50, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, row := range feedOnly {
-		if row.Kind != SourceKindFeed {
-			t.Fatalf("kind filter leaked %q", row.Kind)
-		}
-		if row.SeriesTitle == "" {
-			t.Fatalf("missing series title")
-		}
-	}
-	singles, err := s.ListSourcesFiltered(SourceListFilter{Kinds: []string{SourceKindSingle}, SeriesID: a.ID}, 50, 0)
-	if err != nil || len(singles) != 1 {
-		t.Fatalf("single scoped len=%d err=%v", len(singles), err)
 	}
 
 	byURL, err := s.ListSourcesFiltered(SourceListFilter{Q: "cdn.example", QField: QFieldSourceURL}, 50, 0)
@@ -100,15 +89,15 @@ func TestListSourcesFiltered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(facets.Kinds) != 2 {
-		t.Fatalf("series A kinds=%v want feed+single", facets.Kinds)
+	if !facets.HasScheduleOn || !facets.HasScheduleOff {
+		t.Fatalf("series A schedule facets on=%v off=%v", facets.HasScheduleOn, facets.HasScheduleOff)
 	}
 	feedOnlyFacets, err := s.SourceFilterFacetsForSeries(b.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(feedOnlyFacets.Kinds) != 1 || feedOnlyFacets.Kinds[0] != SourceKindFeed {
-		t.Fatalf("series B kinds=%v want [feed]", feedOnlyFacets.Kinds)
+	if !feedOnlyFacets.HasScheduleOn || feedOnlyFacets.HasScheduleOff {
+		t.Fatalf("series B schedule facets on=%v off=%v", feedOnlyFacets.HasScheduleOn, feedOnlyFacets.HasScheduleOff)
 	}
 
 	domEx, err := s.ListSourcesFiltered(SourceListFilter{Domains: []string{"example.com"}}, 50, 0)
@@ -132,27 +121,26 @@ func TestListSourcesFiltered(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, row := range schedOn {
-		if row.IsSingle() || row.ScanCronNever() {
-			t.Fatalf("schedule on leaked id=%d kind=%s cron=%q", row.ID, row.Kind, row.ScanCron)
+		if row.ScanCronNever() {
+			t.Fatalf("schedule on leaked id=%d cron=%q", row.ID, row.ScanCron)
 		}
 	}
 	schedOff, err := s.ListSourcesFiltered(SourceListFilter{ScheduleOn: &off}, 50, 0)
 	if err != nil || len(schedOff) < 1 {
 		t.Fatalf("schedule off len=%d err=%v", len(schedOff), err)
 	}
-	foundSingle := false
+	foundNever := false
 	for _, row := range schedOff {
-		if row.ID == single.ID {
-			foundSingle = true
+		if row.ID == neverSrc.ID {
+			foundNever = true
 		}
 	}
-	if !foundSingle {
-		t.Fatal("schedule off should include single source")
+	if !foundNever {
+		t.Fatal("schedule off should include Never source")
 	}
 
 	ignOn := true
 	ignOff := false
-	// Default feeds are wanted; flip one feed to ignored.
 	feedID := a.Sources[0].ID
 	if _, err := s.UpdateSource(a.ID, feedID, UpdateSourceParams{IndexAsIgnored: &ignOn}); err != nil {
 		t.Fatal(err)
@@ -205,7 +193,6 @@ func TestListSourcesFiltered(t *testing.T) {
 	if err != nil || len(byScan) < 1 {
 		t.Fatalf("last_scanned sort len=%d err=%v", len(byScan), err)
 	}
-	// Empty dir must use DefaultSortDir (desc), same as series/videos orderBy.
 	byScanDefault, err := s.ListSourcesFiltered(SourceListFilter{Sort: SortSourceLastScanned}, 50, 0)
 	if err != nil || len(byScanDefault) < 1 {
 		t.Fatalf("last_scanned default dir len=%d err=%v", len(byScanDefault), err)

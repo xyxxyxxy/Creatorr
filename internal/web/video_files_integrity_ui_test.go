@@ -159,3 +159,25 @@ func TestBrowserHasFilesTypeJoin(t *testing.T) {
 		t.Fatal("browser missing files_list_live embed")
 	}
 }
+
+func TestVideoRowIconActionsMatchSourceSize(t *testing.T) {
+	// Trailing video Want/Ignore/Delete Icons mode must use size-3.5 like source/file btn-xs joins.
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller")
+	}
+	dir := filepath.Join(filepath.Dir(thisFile), "partials")
+	for _, name := range []string{"want_ignore_button.html", "clear_download_error_button.html"} {
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(b)
+		if strings.Contains(s, `{{$icon = "size-5"}}`) {
+			t.Fatalf("%s Icons mode must not use size-5 (oversized vs source list)", name)
+		}
+		if !strings.Contains(s, `{{$icon = "size-3.5"}}`) {
+			t.Fatalf("%s Icons mode must use size-3.5", name)
+		}
+	}
+}

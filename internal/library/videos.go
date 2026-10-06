@@ -93,7 +93,7 @@ type VideoListFilter struct {
 }
 
 // VideoSourceImport filters videos with source_id IS NULL (?source=import).
-// Covers Import-created rows and Add-video indexed rows until they gain a feed source_id.
+// Covers Import-created rows and Add-video indexed rows until they gain a source_id.
 const VideoSourceImport int64 = -1
 
 // VideoSourceImportQuery is the HTTP/query sentinel for VideoSourceImport.

@@ -152,19 +152,14 @@ function syncSourcesBulkUI() {
     if (row.classList.contains("list-row")) {
       row.classList.toggle("rounded-none", selected);
       const hasActions = !!row.querySelector("[data-sources-row-actions]");
-      if (sourcesBulkMode) {
-        row.style.setProperty(
-          "--list-grid-cols",
-          hasActions
-            ? "max-content max-content 1fr 11rem max-content"
-            : "max-content max-content 1fr 11rem"
-        );
-      } else {
-        row.style.setProperty(
-          "--list-grid-cols",
-          hasActions ? "max-content 1fr 11rem max-content" : "max-content 1fr 11rem"
-        );
+      const hasSelect = !!row.querySelector("[data-source-select-wrap]");
+      // Match sources_list_row: no Status track. Browser keeps a select column;
+      // series-detail is grow + actions only.
+      let cols = hasActions ? "1fr max-content" : "1fr";
+      if (hasSelect) {
+        cols = hasActions ? "max-content 1fr max-content" : "max-content 1fr";
       }
+      row.style.setProperty("--list-grid-cols", cols);
       row.querySelectorAll(".list-col-grow a[href]").forEach((a) => {
         a.classList.toggle("link", !sourcesBulkMode);
         a.classList.toggle("link-hover", !sourcesBulkMode);

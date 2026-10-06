@@ -40,7 +40,7 @@ func (s *Store) SeriesWarnLevels(seriesIDs []int64) (map[int64]SeriesWarnLevel, 
 	ph := sqlIntPlaceholders(len(args))
 
 	rows, err := s.DB.SQL.Query(`
-		SELECT id, series_id, full_scan_done, kind, COALESCE(scan_cron, '')
+		SELECT id, series_id, full_scan_done, COALESCE(scan_cron, '')
 		FROM sources
 		WHERE series_id IN (`+ph+`)
 	`, args...)
@@ -51,8 +51,8 @@ func (s *Store) SeriesWarnLevels(seriesIDs []int64) (map[int64]SeriesWarnLevel, 
 	for rows.Next() {
 		var srcID, seriesID int64
 		var done int
-		var kind, scanCron string
-		if err := rows.Scan(&srcID, &seriesID, &done, &kind, &scanCron); err != nil {
+		var scanCron string
+		if err := rows.Scan(&srcID, &seriesID, &done, &scanCron); err != nil {
 			return nil, err
 		}
 		if done != 0 {
@@ -61,8 +61,9 @@ func (s *Store) SeriesWarnLevels(seriesIDs []int64) (map[int64]SeriesWarnLevel, 
 		if activeScanSources[srcID] {
 			continue
 		}
-		// Scheduled feeds resume via tip cron; do not escalate to series status.
-		if kind != SourceKindSingle && strings.TrimSpace(scanCron) != "" {
+		// Sources with a Scan schedule resume via tip cron; do not escalate.
+		cron := strings.TrimSpace(scanCron)
+		if cron != "" && !strings.EqualFold(cron, "never") {
 			continue
 		}
 		if out[seriesID] == SeriesWarnNone {

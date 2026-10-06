@@ -63,7 +63,7 @@ Settings channel event checkboxes: **All** first, then grouped fieldsets **Alert
 
 **Stats sampling** lives in `internal/stats` only - fixed every-minute poll (change-only writes) plus daily library-size sample; do not fold into the main scheduler. Chart JSON forward-fills across change timestamps and appends a synthetic tip at request time (current minute for queue/library charts, current UTC day for storage) so the series reaches "now" without writing an unchanged sample. Live library size pies (`GET /stats/library-size.json?group=root|series`) are not sampled; series group keeps the 10 largest slices and rolls the rest into `Other`. Storage development chart uses daily samples (display capped at 1 month).
 
-Scan interval lives on each **feed source** (`sources.scan_cron`), not in Settings.
+Recurring source **Scan schedule** lives on each source (`sources.scan_cron`), not in Settings. Empty / Never = no recurring tip; manual **Scan** after `full_scan_done` still works per source.
 
 Every settings UI control has help text. See [ui.md](ui.md) § Setting descriptions.
 

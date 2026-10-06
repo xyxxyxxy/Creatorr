@@ -4,7 +4,7 @@
      Icons (list/table trailing actions): tooltip-left so tips clear .list-table-wrap overflow. */}}
 {{$formClass := ""}}{{if .LiveSwap}}{{$formClass = "inline"}}{{else if .KeepScroll}}{{$formClass = "inline js-keep-scroll"}}{{end}}
 {{if .FormClass}}{{$formClass = .FormClass}}{{end}}
-{{$icon := "size-4"}}{{if .Icons}}{{$icon = "size-5"}}{{end}}
+{{$icon := "size-4"}}{{if .Icons}}{{$icon = "size-3.5"}}{{end}}
 {{$tipDir := "tooltip-top"}}{{if .Icons}}{{$tipDir = "tooltip-left"}}{{end}}
 {{$live := .LiveSwap}}
 {{$target := "series-videos-live"}}{{if .LiveTarget}}{{$target = .LiveTarget}}{{end}}

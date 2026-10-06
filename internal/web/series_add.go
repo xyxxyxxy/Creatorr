@@ -290,7 +290,7 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		sched, err := parseFeedScanCron(r, "@weekly")
+		sched, err := parseFeedScanCron(r, "")
 		if err != nil {
 			redirErr(err.Error())
 			return

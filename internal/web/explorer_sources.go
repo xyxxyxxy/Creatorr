@@ -58,6 +58,7 @@ type sourcesExplorerRow struct {
 	ScanCronLabel       string
 	LastScannedAgo      string
 	LastScannedTip      string
+	StatusSummary       string // last-scan phrase for list second line
 	StatusInd           sourceStatusView
 	VideoCount          int
 	Redirect            string
@@ -98,7 +99,6 @@ func parseSourceListFilter(r *http.Request) library.SourceListFilter {
 	f := library.SourceListFilter{
 		Q:         strings.TrimSpace(q.Get("q")),
 		QField:    library.NormalizeSourceQField(q.Get("q_field")),
-		Kinds:     parseMultiQuery(q, "kind"),
 		Domains:   parseMultiQuery(q, "domain"),
 		SeriesIDs: parseMultiInt64(q, "series"),
 		Sort:      parseSourceSort(q.Get("sort")),
@@ -166,8 +166,6 @@ func parseSourceSort(raw string) string {
 		return library.SortSourceSeries
 	case library.SortSourceLabel, "label", "url":
 		return library.SortSourceLabel
-	case library.SortSourceKind:
-		return library.SortSourceKind
 	case library.SortSourceDomain:
 		return library.SortSourceDomain
 	case library.SortSourceLastScanned, "scanned":
@@ -309,6 +307,16 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 			vcounts[k] = v
 		}
 	}
+	bySource := map[int64][]queue.Task{}
+	if h.Queue != nil {
+		var activeTasks []queue.Task
+		if seriesDetail && filter.SeriesID > 0 {
+			activeTasks, _ = h.Queue.ListActiveForSeries(filter.SeriesID)
+		} else {
+			activeTasks, _ = h.Queue.ListActive()
+		}
+		_, bySource, _ = seriesActivityMaps(activeTasks)
+	}
 	for _, src := range list {
 		active, _ := h.Library.HasActiveScanForSource(src.ID)
 		stalled := !src.FullScanDone && !active
@@ -321,8 +329,9 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 		summary, _, errMsg, errCode, taskID, hasScanned, hasError := sourceStatusFields(h.Library, src.ID, now)
 		tipAt, _ := h.Library.LatestTipScannedAt(src.ID)
 		cronLabel := cronexpr.DescribeScan(src.ScanCron)
+		best := pickBestTask(bySource[src.ID])
 		statusInd := buildSourceStatus(sourceStatusParams{
-			Src: src.Source, Best: nil, HasError: hasError, ErrMsg: errMsg, ErrCode: errCode, Stalled: stalled,
+			Src: src.Source, Best: best, HasError: hasError, ErrMsg: errMsg, ErrCode: errCode, Stalled: stalled,
 			SeriesMonitored: src.SeriesMonitored, DomainActive: dAct, DomainDisabledTitle: disTitle,
 			ScanCronLabel: cronLabel, Summary: summary, HasScanned: hasScanned, HistoryID: taskID,
 			Now: now, LastTipScannedAt: tipAt})
@@ -342,8 +351,9 @@ func (h *Handler) loadSourcesListLive(w http.ResponseWriter, r *http.Request) (s
 			ScanCronLabel:       cronLabel,
 			LastScannedAgo:      lastAgo,
 			LastScannedTip:      lastTip,
-			StatusInd:  statusInd,
-			VideoCount: vc,
+			StatusSummary:       summary,
+			StatusInd:           statusInd,
+			VideoCount:          vc,
 			Redirect:            redir,
 			LiveTarget:          sourcesLiveTarget,
 			ShowSeries:          showSeries,
@@ -427,7 +437,6 @@ func sourcesSortOpts(r *http.Request, current, curDir string) []listFilterOpt {
 		{Value: library.SortSourceSeries, Label: "Series", Selected: cur == library.SortSourceSeries || cur == library.SortTitle, Icon: "tv"},
 		{Value: library.SortSourceLabel, Label: "Name", Selected: cur == library.SortSourceLabel, Icon: "type"},
 		{Value: library.SortSourceDomain, Label: "Domain", Selected: cur == library.SortSourceDomain, Icon: "globe"},
-		{Value: library.SortSourceKind, Label: "Kind", Selected: cur == library.SortSourceKind, Icon: "shapes"},
 		{Value: library.SortSourceLastScanned, Label: "Last scanned", Selected: cur == library.SortSourceLastScanned, Icon: "clock"}}
 	annotateSortOpts(r, opts, library.SortSourceSeries, curDir)
 	return opts
@@ -468,19 +477,6 @@ func sourcesFilterSelects(h *Handler, r *http.Request, filter library.SourceList
 			selects = append(selects, listFilterSelect{Name: "series", AriaLabel: "Series", Options: opts})
 		}
 	}
-	kindSel := selectedSet(filter.Kinds)
-	showKind := !scoped || len(facets.Kinds) >= 2
-	if showKind {
-		selects = append(selects, listFilterSelect{
-			Name:      "kind",
-			AriaLabel: "Kind",
-			Options: []listFilterOpt{
-				{Value: library.SourceKindFeed, Label: "Feed", Selected: kindSel[library.SourceKindFeed]},
-				{Value: library.SourceKindSingle, Label: "Single", Selected: kindSel[library.SourceKindSingle]},
-			},
-		})
-	}
-
 	var domains []string
 	if scoped {
 		domains = facets.Domains
@@ -557,7 +553,6 @@ func sourcesListBadges(r *http.Request, filter library.SourceListFilter, seriesT
 		}
 		return "#" + s
 	})...)
-	out = append(out, orJoinBadges(r, "kind", "Kind", "kind", filter.Kinds, nil)...)
 	out = append(out, orJoinBadges(r, "domain", "Domain", "domain", filter.Domains, nil)...)
 	if filter.FullScanDone != nil {
 		label := "Full scan: Incomplete"
@@ -607,7 +602,6 @@ func sourcesTableColDefs(showSeries bool) []tableColDef {
 		cols = append(cols, tableColDef{Key: "series", Label: "Series", Default: true})
 	}
 	cols = append(cols,
-		tableColDef{Key: "kind", Label: "Kind", Default: true},
 		tableColDef{Key: "discovered", Label: "Discovered", Default: true},
 		tableColDef{Key: "name", Label: "Name", Default: true},
 		tableColDef{Key: "url", Label: "URL", Default: true},

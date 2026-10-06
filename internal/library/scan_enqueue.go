@@ -58,7 +58,7 @@ func (s *Store) SeriesHasMonitoredSource(seriesID int64) (bool, error) {
 }
 
 // EnqueueScansDue is the scheduled Scan pass at wall clock now.
-// Feed sources with a non-empty scan_cron on monitored series: tip Scan when
+// Sources with a non-empty scan_cron on monitored series: tip Scan when
 // full_scan_done, else full scan (same EnqueueScanSource mode switch).
 //
 // notBefore (usually process start): if the source was already overdue at that
@@ -73,8 +73,9 @@ func (s *Store) EnqueueScansDue(now, notBefore time.Time) (int, error) {
 		SELECT src.id, src.scan_cron, src.url
 		FROM sources src
 		JOIN series ser ON ser.id = src.series_id
-		WHERE ser.monitored = 1 AND src.kind = 'feed'
+		WHERE ser.monitored = 1
 		  AND TRIM(COALESCE(src.scan_cron, '')) != ''
+		  AND LOWER(TRIM(src.scan_cron)) != 'never'
 		ORDER BY src.id
 	`)
 	if err != nil {
