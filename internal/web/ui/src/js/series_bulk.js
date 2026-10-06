@@ -64,7 +64,6 @@ function syncSeriesBulkUI() {
     modeBtn.setAttribute("aria-pressed", seriesBulkMode ? "true" : "false");
     const wrap = modeBtn.closest(".js-list-toolbar-dd");
     if (wrap) wrap.classList.toggle("is-bulk-on", seriesBulkMode);
-    modeBtn.setAttribute("data-tip", seriesBulkMode ? "Exit multi-select" : "Multi-select");
     modeBtn.setAttribute("aria-label", seriesBulkMode ? "Exit multi-select" : "Multi-select");
   }
   live.querySelectorAll("[data-series-select-wrap]").forEach((wrap) => {

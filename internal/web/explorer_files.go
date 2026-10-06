@@ -424,7 +424,7 @@ func fileIntegrityDisplay(failed, hasOK, checkApplicable, missing bool, naTip st
 	case missing:
 		return "Inactive", "File missing - integrity check inactive"
 	default:
-		return "Unchecked", "Not checked yet"
+		return "Unchecked", ""
 	}
 }
 

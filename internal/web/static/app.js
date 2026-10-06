@@ -4912,7 +4912,6 @@
       modeBtn.setAttribute("aria-pressed", seriesBulkMode ? "true" : "false");
       const wrap = modeBtn.closest(".js-list-toolbar-dd");
       if (wrap) wrap.classList.toggle("is-bulk-on", seriesBulkMode);
-      modeBtn.setAttribute("data-tip", seriesBulkMode ? "Exit multi-select" : "Multi-select");
       modeBtn.setAttribute("aria-label", seriesBulkMode ? "Exit multi-select" : "Multi-select");
     }
     live.querySelectorAll("[data-series-select-wrap]").forEach((wrap) => {
@@ -5384,7 +5383,6 @@
       modeBtn.setAttribute("aria-pressed", videoBulkMode ? "true" : "false");
       const wrap = modeBtn.closest(".js-list-toolbar-dd");
       if (wrap) wrap.classList.toggle("is-bulk-on", videoBulkMode);
-      modeBtn.setAttribute("data-tip", videoBulkMode ? "Exit multi-select" : "Multi-select");
       modeBtn.setAttribute("aria-label", videoBulkMode ? "Exit multi-select" : "Multi-select");
     }
     live.querySelectorAll("[data-video-select-wrap]").forEach((wrap) => {
@@ -5828,7 +5826,6 @@
       modeBtn.setAttribute("aria-pressed", filesBulkMode ? "true" : "false");
       const wrap = modeBtn.closest(".js-list-toolbar-dd");
       if (wrap) wrap.classList.toggle("is-bulk-on", filesBulkMode);
-      modeBtn.setAttribute("data-tip", filesBulkMode ? "Exit multi-select" : "Multi-select");
       modeBtn.setAttribute("aria-label", filesBulkMode ? "Exit multi-select" : "Multi-select");
     }
     live.querySelectorAll("[data-file-select-wrap]").forEach((wrap) => {
@@ -5870,7 +5867,7 @@
         }
       });
       if (rowActionsDisabled) {
-        wrap.classList.add("tooltip", "tooltip-left");
+        wrap.classList.add("tooltip", "tooltip-top");
         wrap.setAttribute("data-tip", rowActionsTip);
         wrap.querySelectorAll("[data-tip]").forEach((el) => {
           if (el === wrap) return;
@@ -5885,7 +5882,7 @@
           el.classList.remove("tooltip", "tooltip-top", "tooltip-left");
         });
       } else {
-        wrap.classList.remove("tooltip", "tooltip-left");
+        wrap.classList.remove("tooltip", "tooltip-top");
         wrap.removeAttribute("data-tip");
         wrap.querySelectorAll("[data-bulk-prev-tip]").forEach((el) => {
           const prev = el.getAttribute("data-bulk-prev-tip");
@@ -5893,7 +5890,7 @@
           el.removeAttribute("data-bulk-prev-tip");
           el.removeAttribute("data-bulk-prev-tooltip");
           if (prev) el.setAttribute("data-tip", prev);
-          if (hadTip) el.classList.add("tooltip", "tooltip-left");
+          if (hadTip) el.classList.add("tooltip", "tooltip-top");
         });
       }
     });
@@ -6168,7 +6165,6 @@
       modeBtn.setAttribute("aria-pressed", sourcesBulkMode ? "true" : "false");
       const wrap = modeBtn.closest(".js-list-toolbar-dd");
       if (wrap) wrap.classList.toggle("is-bulk-on", sourcesBulkMode);
-      modeBtn.setAttribute("data-tip", sourcesBulkMode ? "Exit multi-select" : "Multi-select");
       modeBtn.setAttribute("aria-label", sourcesBulkMode ? "Exit multi-select" : "Multi-select");
     }
     live.querySelectorAll("[data-source-select-wrap]").forEach((wrap) => {
@@ -6214,7 +6210,7 @@
         if (rowActionsDisabled) el.setAttribute("aria-disabled", "true");
       });
       if (rowActionsDisabled) {
-        wrap.classList.add("tooltip", "tooltip-left");
+        wrap.classList.add("tooltip", "tooltip-top");
         wrap.setAttribute("data-tip", rowActionsTip);
         wrap.querySelectorAll("[data-tip]").forEach((el) => {
           if (el === wrap) return;
@@ -6229,7 +6225,7 @@
           el.classList.remove("tooltip", "tooltip-top", "tooltip-left");
         });
       } else {
-        wrap.classList.remove("tooltip", "tooltip-left");
+        wrap.classList.remove("tooltip", "tooltip-top");
         wrap.removeAttribute("data-tip");
         wrap.querySelectorAll("[data-bulk-prev-tip]").forEach((el) => {
           const prev = el.getAttribute("data-bulk-prev-tip");
@@ -6237,7 +6233,7 @@
           el.removeAttribute("data-bulk-prev-tip");
           el.removeAttribute("data-bulk-prev-tooltip");
           if (prev) el.setAttribute("data-tip", prev);
-          if (hadTip) el.classList.add("tooltip", "tooltip-left");
+          if (hadTip) el.classList.add("tooltip", "tooltip-top");
         });
       }
     });
@@ -6544,10 +6540,6 @@
       modeBtn.setAttribute("aria-pressed", notificationsBulkMode ? "true" : "false");
       const wrap = modeBtn.closest(".js-list-toolbar-dd");
       if (wrap) wrap.classList.toggle("is-bulk-on", notificationsBulkMode);
-      modeBtn.setAttribute(
-        "data-tip",
-        notificationsBulkMode ? "Exit multi-select" : "Multi-select"
-      );
       modeBtn.setAttribute(
         "aria-label",
         notificationsBulkMode ? "Exit multi-select" : "Multi-select"

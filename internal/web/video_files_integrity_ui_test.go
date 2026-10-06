@@ -55,6 +55,14 @@ func TestFilesExplorerIntegrityFailedUsesTextError(t *testing.T) {
 	if !strings.Contains(indBody, "CheckedAgo") {
 		t.Fatal("file_integrity_indicator tip must use CheckedAgo (since / ISO>7d)")
 	}
+	uncheckedAt := strings.Index(indBody, `eq .Status "Unchecked"`)
+	naAt := strings.Index(indBody, `eq .Status "N/A"`)
+	if uncheckedAt < 0 || naAt <= uncheckedAt {
+		t.Fatal("file_integrity_indicator Unchecked branch bounds")
+	}
+	if branch := indBody[uncheckedAt:naAt]; strings.Contains(branch, "tooltip") || strings.Contains(branch, "data-tip") {
+		t.Fatal("Unchecked integrity must not show a tooltip")
+	}
 	if strings.Contains(body, "tooltip tooltip-left cursor-not-allowed opacity-50") {
 		t.Fatal("files row actions must mute icon, not tip host")
 	}
@@ -103,9 +111,9 @@ func TestFilesExplorerIntegrityFailedUsesTextError(t *testing.T) {
 	if !strings.Contains(body, `data-tip="Delete"`) {
 		t.Fatal("files_list_live missing enabled Delete tip")
 	}
-	if !strings.Contains(body, `tooltip tooltip-left" data-tip="Check integrity"`) ||
-		!strings.Contains(body, `tooltip tooltip-left" data-tip="Delete"`) {
-		t.Fatal("files row actions must use tooltip-left (table wrap clips top tips)")
+	if !strings.Contains(body, `tooltip tooltip-top" data-tip="Check integrity"`) ||
+		!strings.Contains(body, `tooltip tooltip-top" data-tip="Delete"`) {
+		t.Fatal("files row actions must use tooltip-top")
 	}
 	if !strings.Contains(body, `eq .Key "filepath"`) || !strings.Contains(body, `eq .Key "acquired"`) {
 		t.Fatal("files_list_live missing Path/Acquired table columns")

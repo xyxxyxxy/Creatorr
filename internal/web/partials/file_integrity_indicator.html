@@ -3,7 +3,8 @@
   Integrity status: shield icon + short label.
   Status: OK | Failed | Unchecked | N/A | Inactive | "".
   Tip: CheckedAgo (rel_time since / ISO date when >7 days) for OK/Failed;
-  else Tip when set. Mute icon/label only - opacity on tip host fades bubble.
+  else Tip when set (not Unchecked: label is enough). Mute icon/label only -
+  opacity on tip host fades bubble.
 */}}
 {{if eq .Status ""}}
 {{template "empty_value"}}
@@ -21,7 +22,7 @@
   <span class="text-xs whitespace-nowrap">{{.Status}}</span>
 </span>
 {{else if eq .Status "Unchecked"}}
-<span class="inline-flex items-center gap-1.5{{if $tip}} tooltip tooltip-top{{end}}"{{if $tip}} data-tip="{{$tip}}"{{end}} aria-label="{{.Status}}">
+<span class="inline-flex items-center gap-1.5" aria-label="{{.Status}}">
   <i data-lucide="shield-question" class="size-4 shrink-0 opacity-60" aria-hidden="true"></i>
   <span class="text-xs whitespace-nowrap opacity-60">{{.Status}}</span>
 </span>

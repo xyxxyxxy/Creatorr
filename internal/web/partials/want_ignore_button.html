@@ -1,11 +1,11 @@
 {{define "want_ignore_button"}}
 {{/* Same UI slot: Want / Ignore / Delete. Expects VideoID, SeriesID, Status, DomainActive, DomainDisabledTitle, DownloadRunning, Class, optional DeleteClass, FormClass, Redirect, KeepScroll, LiveSwap, Icons.
      Delete: label only here - call delete_video_modal outside any .join (modal siblings break join :last-child radius).
-     Icons (list/table trailing actions): tooltip-left so tips clear .list-table-wrap overflow. */}}
+     Icons (list/table trailing actions): tooltip-top. */}}
 {{$formClass := ""}}{{if .LiveSwap}}{{$formClass = "inline"}}{{else if .KeepScroll}}{{$formClass = "inline js-keep-scroll"}}{{end}}
 {{if .FormClass}}{{$formClass = .FormClass}}{{end}}
 {{$icon := "size-4"}}{{if .Icons}}{{$icon = "size-3.5"}}{{end}}
-{{$tipDir := "tooltip-top"}}{{if .Icons}}{{$tipDir = "tooltip-left"}}{{end}}
+{{$tipDir := "tooltip-top"}}
 {{$live := .LiveSwap}}
 {{$target := "series-videos-live"}}{{if .LiveTarget}}{{$target = .LiveTarget}}{{end}}
 {{if or (eq .Status "ignored") (eq .Status "deleted") (eq .Status "missing") (eq .Status "downloaded_integrity_failed")}}

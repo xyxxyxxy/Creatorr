@@ -118,13 +118,17 @@ form.js-list-filters:has(.js-list-toolbar-dd.dropdown-open) {
 /*
   Configurable series/videos table view: many optional columns. Scroll sideways
   inside the wrap so Title/Actions sticky stay in the panel (not the viewport).
-  Overflow clips daisyUI tips that paint outside the wrap - keep tips short and
-  prefer tooltip-top. Columns settings sit above the wrap (not clipped). Sticky
+  Overflow-x:auto also clips overflow-y (CSS spec), so tooltip-top on Actions
+  would vanish. Unclip the wrap while a tip is open. Keep tips short.
+  Columns settings sit above the wrap (not clipped). Sticky
   cells need their own bg so scrolled content does not show through; match row
   hover and bulk-select fill.
 */
 [data-list-table] .list-table-wrap {
   overflow-x: auto;
+}
+[data-list-table] .list-table-wrap:has(.tooltip:is(:hover, :focus-within)) {
+  overflow: visible;
 }
 [data-list-table] .list-table [data-col="title"],
 [data-list-table] .list-table [data-series-select-wrap]:not(.hidden),

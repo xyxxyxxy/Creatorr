@@ -78,7 +78,6 @@ function syncVideoBulkUI() {
     modeBtn.setAttribute("aria-pressed", videoBulkMode ? "true" : "false");
     const wrap = modeBtn.closest(".js-list-toolbar-dd");
     if (wrap) wrap.classList.toggle("is-bulk-on", videoBulkMode);
-    modeBtn.setAttribute("data-tip", videoBulkMode ? "Exit multi-select" : "Multi-select");
     modeBtn.setAttribute("aria-label", videoBulkMode ? "Exit multi-select" : "Multi-select");
   }
   live.querySelectorAll("[data-video-select-wrap]").forEach((wrap) => {

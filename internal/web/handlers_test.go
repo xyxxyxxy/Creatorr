@@ -2205,11 +2205,11 @@ func TestSeriesSourceScanButtons(t *testing.T) {
 	}
 	idle := get(seriesPath)
 	wantScan := `aria-label="Scan for new videos"`
-	wantBtn := `class="btn btn-xs btn-square join-item tooltip tooltip-left"`
+	wantBtn := `class="btn btn-xs btn-square join-item tooltip tooltip-top"`
 	if !strings.Contains(idle, wantBtn) || strings.Contains(idle, `aria-label="Scan for new videos" aria-disabled="true"`) || !strings.Contains(idle, wantScan) {
 		t.Fatalf("idle tip Scan should be a joined tip host and enabled: %s", truncate(idle, 600))
 	}
-	wantEdit := `class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="Edit" aria-label="Edit"`
+	wantEdit := `class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit"`
 	if !strings.Contains(idle, wantEdit) {
 		t.Fatalf("edit button should match Files join tip style: %s", truncate(idle, 800))
 	}

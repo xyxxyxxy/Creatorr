@@ -71,7 +71,6 @@ function syncFilesBulkUI() {
     modeBtn.setAttribute("aria-pressed", filesBulkMode ? "true" : "false");
     const wrap = modeBtn.closest(".js-list-toolbar-dd");
     if (wrap) wrap.classList.toggle("is-bulk-on", filesBulkMode);
-    modeBtn.setAttribute("data-tip", filesBulkMode ? "Exit multi-select" : "Multi-select");
     modeBtn.setAttribute("aria-label", filesBulkMode ? "Exit multi-select" : "Multi-select");
   }
   live.querySelectorAll("[data-file-select-wrap]").forEach((wrap) => {
@@ -113,7 +112,7 @@ function syncFilesBulkUI() {
       }
     });
     if (rowActionsDisabled) {
-      wrap.classList.add("tooltip", "tooltip-left");
+      wrap.classList.add("tooltip", "tooltip-top");
       wrap.setAttribute("data-tip", rowActionsTip);
       wrap.querySelectorAll("[data-tip]").forEach((el) => {
         if (el === wrap) return;
@@ -128,7 +127,7 @@ function syncFilesBulkUI() {
         el.classList.remove("tooltip", "tooltip-top", "tooltip-left");
       });
     } else {
-      wrap.classList.remove("tooltip", "tooltip-left");
+      wrap.classList.remove("tooltip", "tooltip-top");
       wrap.removeAttribute("data-tip");
       wrap.querySelectorAll("[data-bulk-prev-tip]").forEach((el) => {
         const prev = el.getAttribute("data-bulk-prev-tip");
@@ -136,7 +135,7 @@ function syncFilesBulkUI() {
         el.removeAttribute("data-bulk-prev-tip");
         el.removeAttribute("data-bulk-prev-tooltip");
         if (prev) el.setAttribute("data-tip", prev);
-        if (hadTip) el.classList.add("tooltip", "tooltip-left");
+        if (hadTip) el.classList.add("tooltip", "tooltip-top");
       });
     }
   });

@@ -15,11 +15,10 @@
 {{/* Embeds: multi-select without the full Filter toolbar. */}}
 <div class="mb-2">
   <button type="button"
-          class="btn btn-ghost btn-square tooltip tooltip-top"
+          class="btn btn-ghost btn-square"
           data-files-bulk-mode
           aria-pressed="false"
-          aria-label="Multi-select"
-          data-tip="Multi-select">
+          aria-label="Multi-select">
     <i data-lucide="list-checks" class="size-4" aria-hidden="true"></i>
   </button>
 </div>
@@ -136,7 +135,7 @@
 {{end}}
 
 {{define "files_row_actions"}}
-{{/* tooltip-left: trailing action col; top tips clip on .list-table-wrap overflow-x. */}}
+{{/* tooltip-top: trailing action col (same as other list/table row actions). */}}
 <div class="join shrink-0">
   {{if .CanCheckHash}}
   <form method="post" action="/actions/check-file-hash" class="contents">
@@ -144,22 +143,22 @@
     <input type="hidden" name="series_id" value="{{.SeriesID}}" />
     {{if gt .VideoID 0}}<input type="hidden" name="video_id" value="{{.VideoID}}" />{{end}}
     <input type="hidden" name="redirect" value="{{.Redirect}}" />
-    <button type="submit" class="btn btn-xs btn-square join-item tooltip tooltip-left" data-tip="Check integrity" aria-label="Check integrity">
+    <button type="submit" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Check integrity" aria-label="Check integrity">
       <i data-lucide="shield-check" class="size-3.5"></i>
     </button>
   </form>
   {{else if .CheckDisabledTip}}
   {{/* Mute icon only - opacity on tip host fades the bubble. */}}
-  <span class="btn btn-xs btn-square join-item tooltip tooltip-left cursor-not-allowed" data-tip="{{.CheckDisabledTip}}" aria-label="Check integrity" aria-disabled="true" role="button" tabindex="-1">
+  <span class="btn btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="{{.CheckDisabledTip}}" aria-label="Check integrity" aria-disabled="true" role="button" tabindex="-1">
     <i data-lucide="shield-check" class="size-3.5 opacity-50" aria-hidden="true"></i>
   </span>
   {{end}}
   {{if .CanDelete}}
-  <label for="modal-delete-sidecar-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-left" data-tip="Delete" aria-label="Delete {{.Name}}">
+  <label for="modal-delete-sidecar-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Delete" aria-label="Delete {{.Name}}">
     <i data-lucide="trash-2" class="size-3.5"></i>
   </label>
   {{else}}
-  <span class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-left cursor-not-allowed" data-tip="{{.DeleteDisabledTip}}" aria-label="Delete" aria-disabled="true" role="button" tabindex="-1">
+  <span class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top cursor-not-allowed" data-tip="{{.DeleteDisabledTip}}" aria-label="Delete" aria-disabled="true" role="button" tabindex="-1">
     <i data-lucide="trash-2" class="size-3.5 opacity-50" aria-hidden="true"></i>
   </span>
   {{end}}
