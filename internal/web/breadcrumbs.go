@@ -69,7 +69,7 @@ func taskBreadcrumbs(series *seriesLink, source *sourceLink, video *videoLink, k
 	if series == nil {
 		if live {
 			return []breadcrumb{
-				crumb("/tasks", "Tasks", "list-todo"),
+				crumb("/queues", "Queues", "list-todo"),
 				cur,
 			}
 		}

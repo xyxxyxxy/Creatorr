@@ -107,7 +107,7 @@ func (h *Handler) settingsRedirect(w http.ResponseWriter, r *http.Request) {
 
 func settingsFormRedirect(r *http.Request, defaultPath string) string {
 	redir := strings.TrimSpace(r.FormValue("redirect"))
-	if strings.HasPrefix(redir, "/settings/") || redir == "/tasks" {
+	if strings.HasPrefix(redir, "/settings/") || redir == "/queues" {
 		return redir
 	}
 	return defaultPath

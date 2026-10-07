@@ -17,11 +17,11 @@
   </a>
 </li>
 <li>
-  <a href="/tasks"{{if eq .Nav "tasks"}} class="active"{{end}}>
-    <i data-lucide="list-todo" class="{{$icon}}"></i>Tasks
+  <a href="/queues"{{if eq .Nav "queues"}} class="active"{{end}}>
+    <i data-lucide="list-todo" class="{{$icon}}"></i>Queues
     {{if .IncludeBadgeIDs}}
-    <span id="tasks-badge" class="badge badge-accent badge-sm{{if not .TasksActive}} hidden{{end}}">{{if .TasksActive}}{{template "nav_badge_label" .TasksActive}}{{else}}0{{end}}</span>
-    <span id="tasks-paused-badge" class="badge badge-warning badge-sm{{if not .TasksPaused}} hidden{{end}}">{{if .TasksPaused}}{{template "nav_badge_label" .TasksPaused}}{{else}}0{{end}}</span>
+    <span id="queues-badge" class="badge badge-accent badge-sm{{if not .TasksActive}} hidden{{end}}">{{if .TasksActive}}{{template "nav_badge_label" .TasksActive}}{{else}}0{{end}}</span>
+    <span id="queues-paused-badge" class="badge badge-warning badge-sm{{if not .TasksPaused}} hidden{{end}}">{{if .TasksPaused}}{{template "nav_badge_label" .TasksPaused}}{{else}}0{{end}}</span>
     {{end}}
   </a>
 </li>

@@ -10,7 +10,7 @@
       <a href="/browser?type=sources{{if .Tree}}&tree=0{{end}}" class="btn join-item{{if and (not .Tree) (eq .Type "sources")}} btn-accent{{end}}"{{if and (not .Tree) (eq .Type "sources")}} aria-current="page"{{end}}>Sources</a>
       <a href="/browser?type=videos{{if .Tree}}&tree=0{{end}}" class="btn join-item{{if and (not .Tree) (eq .Type "videos")}} btn-accent{{end}}"{{if and (not .Tree) (eq .Type "videos")}} aria-current="page"{{end}}>Videos</a>
       <a href="/browser?type=files{{if .Tree}}&tree=0{{end}}" class="btn join-item{{if and (not .Tree) (eq .Type "files")}} btn-accent{{end}}"{{if and (not .Tree) (eq .Type "files")}} aria-current="page"{{end}}>Files</a>
-      <a href="/browser?type=tasks{{if .Tree}}&tree=0{{end}}" class="btn join-item{{if and (not .Tree) (eq .Type "tasks")}} btn-accent{{end}}"{{if and (not .Tree) (eq .Type "tasks")}} aria-current="page"{{end}}>Tasks</a>
+      <a href="/browser?type=tasks{{if .Tree}}&tree=0{{end}}" class="btn join-item{{if and (not .Tree) (eq .Type "tasks")}} btn-accent{{end}}"{{if and (not .Tree) (eq .Type "tasks")}} aria-current="page"{{end}}>Queues</a>
       <a href="/browser?type=notifications{{if .Tree}}&tree=0{{end}}" class="btn join-item{{if and (not .Tree) (eq .Type "notifications")}} btn-accent{{end}}"{{if and (not .Tree) (eq .Type "notifications")}} aria-current="page"{{end}}>Notifications</a>
     </div>
     <a href="{{.TreeHref}}" class="btn btn-square shrink-0 tooltip{{if .Tree}} btn-accent{{end}}"

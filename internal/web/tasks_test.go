@@ -44,7 +44,17 @@ func TestTasksLanePagesAtTen(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/tasks", nil)
+	reqLegacy := httptest.NewRequest(http.MethodGet, "/tasks?p_example_com=1", nil)
+	recLegacy := httptest.NewRecorder()
+	r.ServeHTTP(recLegacy, reqLegacy)
+	if recLegacy.Code != http.StatusMovedPermanently {
+		t.Fatalf("legacy /tasks status %d want %d", recLegacy.Code, http.StatusMovedPermanently)
+	}
+	if loc := recLegacy.Header().Get("Location"); loc != "/queues?p_example_com=1" {
+		t.Fatalf("legacy /tasks Location=%q", loc)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/queues", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	if rec.Code != 200 {
@@ -55,7 +65,7 @@ func TestTasksLanePagesAtTen(t *testing.T) {
 		t.Fatalf("missing tasks-list-live")
 	}
 	if strings.Contains(body, `aria-label="Notification filters"`) || strings.Contains(body, `aria-label="Task filters"`) {
-		t.Fatalf("/tasks must not show Explorer filters")
+		t.Fatalf("/queues must not show Explorer filters")
 	}
 	if !strings.Contains(body, "example.com") {
 		t.Fatalf("missing example.com lane")
@@ -70,7 +80,7 @@ func TestTasksLanePagesAtTen(t *testing.T) {
 		t.Fatalf("pager missing live target")
 	}
 
-	req2 := httptest.NewRequest(http.MethodGet, "/tasks?p_example_com=2", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/queues?p_example_com=2", nil)
 	rec2 := httptest.NewRecorder()
 	r.ServeHTTP(rec2, req2)
 	if rec2.Code != 200 {
@@ -135,7 +145,7 @@ func TestBrowserTasksAndNotificationsTypes(t *testing.T) {
 			t.Fatalf("failed task message should use text-error")
 		}
 		if typ == "tasks" && strings.Contains(body, `aria-label="Status: Queued, Running"`) {
-			t.Fatalf("Browser Tasks must not default Status to Queued+Running")
+			t.Fatalf("Browser Queues must not default Status to Queued+Running")
 		}
 		if typ == "tasks" && strings.Contains(body, "All statuses") {
 			t.Fatalf("Filter must not offer All statuses clear row")
@@ -148,18 +158,18 @@ func TestBrowserTasksAndNotificationsTypes(t *testing.T) {
 		}
 	}
 
-	reqTasks := httptest.NewRequest(http.MethodGet, "/tasks", nil)
+	reqTasks := httptest.NewRequest(http.MethodGet, "/queues", nil)
 	recTasks := httptest.NewRecorder()
 	r.ServeHTTP(recTasks, reqTasks)
 	if recTasks.Code != 200 {
-		t.Fatalf("/tasks status %d", recTasks.Code)
+		t.Fatalf("/queues status %d", recTasks.Code)
 	}
 	tasksBody := recTasks.Body.String()
 	if strings.Contains(tasksBody, `aria-label="Status: Queued, Running"`) {
-		t.Fatalf("/tasks must not show Status filter chip")
+		t.Fatalf("/queues must not show Status filter chip")
 	}
 	if !strings.Contains(tasksBody, "system") {
-		t.Fatalf("/tasks missing system lane")
+		t.Fatalf("/queues missing system lane")
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/history", nil)

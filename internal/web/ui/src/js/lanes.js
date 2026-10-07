@@ -10,8 +10,8 @@ export function refreshTasksPanel(force) {
   refreshTasksPanel._at = now;
   const q = location.search || "";
   let url;
-  if (location.pathname === "/tasks") {
-    url = "/tasks" + q;
+  if (location.pathname === "/queues") {
+    url = "/queues" + q;
   } else if (location.pathname === "/browser") {
     const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
     if (params.get("type") !== "tasks") return;

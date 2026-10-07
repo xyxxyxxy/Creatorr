@@ -26,7 +26,7 @@ type taskView struct {
 	Message     string
 	Progress    *float64
 	LanePaused  bool   // domain soft-pause: pending bars use warning
-	Redirect    string // form redirect; empty = /tasks
+	Redirect    string // form redirect; empty = /queues
 	NoActions   bool   // hide To front / Cancel (Overview locked glance)
 }
 
@@ -331,7 +331,7 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 		FlareConfigured bool
 		OOB             bool
 	}{
-		pageBase:        newPage("Tasks", "tasks", flashFromQuery(r)),
+		pageBase:        newPage("Queues", "queues", flashFromQuery(r)),
 		Lanes:           lanes,
 		FlareConfigured: flareOK,
 	}
@@ -347,8 +347,8 @@ func (h *Handler) actionRunScheduled(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	key := strings.TrimSpace(r.FormValue("key"))
 	redir := strings.TrimSpace(r.FormValue("redirect"))
-	if redir != "/tasks" {
-		redir = "/tasks"
+	if redir != "/queues" {
+		redir = "/queues"
 	}
 	if h.Library == nil {
 		http.Redirect(w, r, redir+"?err="+urlQuery("library unavailable"), http.StatusSeeOther)

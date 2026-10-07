@@ -38,7 +38,7 @@ Compose service **`creatorr-flaresolverr`** (`ghcr.io/flaresolverr/flaresolverr`
 | Pre-solve | Creatorr calls FlareSolverr `request.get` (not yt-dlp `--flaresolverr`), merges cookies into a Netscape jar, passes `--cookies` / `--user-agent` to yt-dlp. |
 | Session | One browser session per hostname (`sessions.create`) while that domain lane has pending/running work; destroyed when the lane drains. `session_ttl_minutes` safety net on each get. |
 | Cookie cache | Successful clearance cookies are cached in-process (2–30 min) so warm lanes often skip Flare HTTP; cache miss still hits the warm session when open. |
-| Tasks UI | Lane header shield icon when Flare is effective: muted = enabled, `text-info` = session warm. |
+| Queues UI | Lane header shield icon when Flare is effective: muted = enabled, `text-info` = session warm. |
 | Health | `/api/health` check `flaresolverr` probes the env URL (skipped if unset). Settings → Connect loads the same probe asynchronously after the page shell (Healthy join). |
 
 ## PO Token provider

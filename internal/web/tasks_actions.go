@@ -78,19 +78,19 @@ func (h *Handler) actionSetDomainPaused(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, safeTasksRedirect(r, ""), http.StatusSeeOther)
 }
 
-// safeTasksRedirect returns form redirect when it is a same-origin /tasks or Browser tasks path; else /tasks.
+// safeTasksRedirect returns form redirect when it is a same-origin /queues or Browser tasks path; else /queues.
 // optionalQuery is appended (e.g. ok=…).
 func safeTasksRedirect(r *http.Request, optionalQuery string) string {
 	redir := strings.TrimSpace(r.FormValue("redirect"))
 	if redir == "" || !strings.HasPrefix(redir, "/") || strings.HasPrefix(redir, "//") {
-		redir = "/tasks"
+		redir = "/queues"
 	} else {
 		path := redir
 		if i := strings.IndexByte(redir, '?'); i >= 0 {
 			path = redir[:i]
 		}
-		if path != "/tasks" && path != "/browser" {
-			redir = "/tasks"
+		if path != "/queues" && path != "/browser" {
+			redir = "/queues"
 		}
 	}
 	if optionalQuery == "" {
