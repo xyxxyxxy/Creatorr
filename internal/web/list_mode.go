@@ -17,12 +17,10 @@ const (
 
 const (
 	// VideoPageSize is the page length for paginated video lists (series detail, table).
-	// Sized to fill a large viewport of dense list/table rows on first paint.
-	VideoPageSize = 50
-	// SeriesPageSize is the page length for paginated /series table view.
-	SeriesPageSize = 50
+	VideoPageSize = 20
+	// SeriesPageSize is the page length for paginated /series table view and Explorer tables.
+	SeriesPageSize = 20
 	// InfiniteChunkSize is rows per infinite-scroll chunk (/series and /videos list|cards|gallery).
-	// Same budget as paginated pages so first paint fills large screens before the sentinel.
 	InfiniteChunkSize = 50
 	// FixedDefault is the one-shot size for Overview Recent additions
 	// (two browser-video gallery rows at lg:grid-cols-4).

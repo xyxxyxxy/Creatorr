@@ -6,8 +6,8 @@ import (
 	"strconv"
 )
 
-// PageSize is the default page length for admin list tables.
-const PageSize = 50
+// PageSize is the default page length for paginated admin list tables.
+const PageSize = 20
 
 // HistoryPageSize is the page length for /history Notifications and Tasks tables.
 const HistoryPageSize = 20

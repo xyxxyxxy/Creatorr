@@ -9,7 +9,7 @@ import (
 func TestNewPageInfo(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/history?status=failed&page=2", nil)
 	info := NewPageInfo(r, "page", 2, 120)
-	if info.TotalPages != 3 || info.From != 51 || info.To != 100 {
+	if info.PageSize != PageSize || info.TotalPages != 6 || info.From != 21 || info.To != 40 {
 		t.Fatalf("info=%+v", info)
 	}
 	if !info.HasPrev || !info.HasNext {
@@ -29,7 +29,7 @@ func TestNewPageInfo(t *testing.T) {
 			t.Fatalf("FirstHref=%q", info.FirstHref)
 		}
 	}
-	if info.LastHref != "/history?page=3&status=failed" && info.LastHref != "/history?status=failed&page=3" {
+	if info.LastHref != "/history?page=6&status=failed" && info.LastHref != "/history?status=failed&page=6" {
 		t.Fatalf("LastHref=%q", info.LastHref)
 	}
 }
@@ -52,7 +52,7 @@ func TestSlicePage(t *testing.T) {
 	}
 	r := httptest.NewRequest(http.MethodGet, "/?page=2", nil)
 	page, info := SlicePage(r, "page", items)
-	if len(page) != 5 || page[0] != 51 || info.Total != 55 {
+	if len(page) != PageSize || page[0] != PageSize+1 || info.Total != 55 || info.TotalPages != 3 {
 		t.Fatalf("page=%v info=%+v", page, info)
 	}
 }
