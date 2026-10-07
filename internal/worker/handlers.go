@@ -47,5 +47,6 @@ func DefaultHandlers(d Deps) map[string]TaskHandler {
 	out[queue.KindBulkEditSeries] = BulkEditSeriesHandler(d)
 	out[queue.KindBulkEditVideos] = BulkEditVideosHandler(d)
 	out[queue.KindSeriesMove] = SeriesMoveHandler(d)
+	out[queue.KindRewriteCatalogMeta] = RewriteCatalogMetaHandler(d)
 	return out
 }

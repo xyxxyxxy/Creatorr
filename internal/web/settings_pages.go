@@ -97,6 +97,9 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 	settingRows := make([]settingsRowView, 0, len(entries))
 	subtitleLangs := settings.ParseSubtitleLangsJSON(settings.DefaultSubtitleLangs)
 	subtitleAuto := false
+	softFillTags := true
+	softFillGenres := true
+	softFillDomainTag := true
 	for _, e := range entries {
 		switch e.Key {
 		case settings.KeySubtitleLangs:
@@ -107,6 +110,15 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 			continue
 		case settings.KeySubtitleAuto:
 			subtitleAuto = settings.NormalizeSubtitleAuto(e.Value) == "1"
+			continue
+		case settings.KeySoftFillTags:
+			softFillTags = settings.NormalizeMetadataFlag(e.Value) == "1"
+			continue
+		case settings.KeySoftFillGenres:
+			softFillGenres = settings.NormalizeMetadataFlag(e.Value) == "1"
+			continue
+		case settings.KeySoftFillDomainTag:
+			softFillDomainTag = settings.NormalizeMetadataFlag(e.Value) == "1"
 			continue
 		}
 		row := settingsRowView{
@@ -128,6 +140,9 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		SubtitleLangs               []string
 		SubtitleLangOptions         []string
 		SubtitleAuto                bool
+		SoftFillTags                bool
+		SoftFillGenres              bool
+		SoftFillDomainTag           bool
 	}{
 		pageBase:                    newSettingsPage("Settings · Library", "library", flashFromQuery(r)),
 		Settings:                    settingRows,
@@ -142,6 +157,9 @@ func (h *Handler) settingsLibrary(w http.ResponseWriter, r *http.Request) {
 		SubtitleLangs:               subtitleLangs,
 		SubtitleLangOptions:         settings.SubtitleLangSeed,
 		SubtitleAuto:                subtitleAuto,
+		SoftFillTags:                softFillTags,
+		SoftFillGenres:              softFillGenres,
+		SoftFillDomainTag:           softFillDomainTag,
 	})
 }
 

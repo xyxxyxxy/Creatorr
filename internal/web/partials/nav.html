@@ -52,6 +52,11 @@
         </a>
       </li>
       <li>
+        <a href="/settings/catalog"{{if eq .SettingsTab "catalog"}} class="active"{{end}}>
+          <i data-lucide="tags" class="{{$icon}}"></i>Catalog
+        </a>
+      </li>
+      <li>
         <a href="/settings/connect"{{if eq .SettingsTab "connect"}} class="active"{{end}}>
           <i data-lucide="plug" class="{{$icon}}"></i>Connect
         </a>

@@ -131,7 +131,7 @@ func applyVideoPrefetchDraft(video *library.Video, d library.VideoPrefetchDraft,
 		if out.SourceURL.Valid {
 			sourceURL = out.SourceURL.String
 		}
-		out.Tags = library.MergeDomainTag(out.Tags, sourceURL)
+		out.Tags = lib.MergeDomainTagIfEnabled(out.Tags, sourceURL)
 		if len(d.Genres) > 0 {
 			out.Genres = library.MergeCategoryGenres(out.Genres, d.Genres)
 		}

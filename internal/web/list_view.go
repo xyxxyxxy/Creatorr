@@ -724,6 +724,8 @@ func filterValueChipLabel(queryKey, value string) string {
 		return "Tag: " + v
 	case "actor":
 		return "Actor: " + v
+	case "actor_role":
+		return "Actor role: " + v
 	default:
 		return v
 	}

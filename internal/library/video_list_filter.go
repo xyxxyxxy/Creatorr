@@ -27,6 +27,7 @@ func appendVideoListFilterSQL(b *strings.Builder, args *[]any, f VideoListFilter
 	appendJSONStringListMatch(b, args, "genres", f.Genres)
 	appendJSONStringListMatch(b, args, "tags", f.Tags)
 	appendJSONActorNameMatch(b, args, "actors", f.Actors)
+	appendJSONActorRoleMatch(b, args, "actors", f.ActorRoles)
 	appendVideoPresenceSQL(b, f.Empty, f.NotEmpty)
 	years := uniqNonZeroInts(f.Years)
 	if len(years) > 0 {

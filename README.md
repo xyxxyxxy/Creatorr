@@ -80,17 +80,23 @@ file system
 
 ## Features
 
-- **Metadata fetching & management** - fetch and edit series/video metadata; pack NFO and sidecars for Emby, Jellyfin, and similar
-- **Special episodes & extras** - pack as Season 00 Specials (NFO for Emby/Jellyfin) or extras folders (trailers, interviews, …) with separate naming formats
-- **Quality profiles** - format selectors and optional maturity media/sidecar refresh
-- **Domains & queues** - per-host rate limits, credentials (Access cookies), and soft pause
-- **Smart cookie usage** - learn per source when cookies help; prefer them to cut wasted tries and spare the account
-- **Web Archive fallback** - when an indexed YouTube video is deleted or unavailable, queue a [Web Archive](https://archive.org/) download
+- **Metadata management**
+  - **Fetch** - pull titles, descriptions, thumbnails, and related fields from sources
+  - **Auto-fill** - genres, tags, and domain tags on ingress (toggles + blocklist under Settings)
+  - **Special episodes & extras** - pack as Season 00 Specials (NFO for Emby/Jellyfin) or extras folders (trailers, interviews, …) with separate naming formats
+  - **Bulk editing** - edit metadata across many series or videos at once
+  - **Catalog management** - library-wide rename, remove, and remove+block for shared genres, tags, studios, and related fields; deep-link usage into Browser
+  - **NFO sidecar packing** - `tvshow.nfo` / episode NFO plus images for Emby, Jellyfin, and similar
+- **Managed downloads**
+  - **Quality profiles** - format selectors and optional maturity media/sidecar refresh
+  - **Audio-only series** - per-series bestaudio remux to MKA as TV-style episodes
+  - **Domains & queues** - per-host rate limits, credentials (Access cookies), and soft pause
+  - **Smart cookie usage** - learn per source when cookies help; prefer them to cut wasted tries and spare the account
+  - **Web Archive fallback** - when an indexed YouTube video is deleted or unavailable, queue a [Web Archive](https://archive.org/) download
+  - **SponsorBlock** - chapters, cut-out, and cut-out with an inserted info card
+  - **FlareSolverr & PO tokens** - Compose sidecars out of the box for challenge pre-solve and proof-of-origin minting
 - **Import existing downloads** - bring in files already on disk with automated matching
 - **Integrity check** - optional per-profile file integrity (null-decode + checksums)
-- **Audio-only series** - per-series bestaudio remux to MKA as TV-style episodes
-- **SponsorBlock** - chapters, cut-out, and cut-out with an inserted info card
-- **FlareSolverr & PO tokens** - Compose sidecars out of the box for challenge pre-solve and proof-of-origin minting
 - **Video retention** - delete media after a configured number of days
 - **Automatic yt-dlp updates** - scheduled GitHub checks when cron is set; Connect **Update now** always works (even with empty schedule)
 - **Notifications** - in-app alerts plus Apprise channels for digests and warnings

@@ -87,6 +87,40 @@
 {{end}}
 {{template "list_panel_end"}}
 
+<section id="metadata" class="card bg-base-100 border border-base-300 mb-4 scroll-mt-20">
+  <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl js-settings-autosave">
+    <input type="hidden" name="redirect" value="/settings/library" />
+    <input type="hidden" name="softfill_settings" value="1" />
+    <h2 class="text-lg font-semibold">Metadata</h2>
+    <p class="text-sm opacity-60">Choose what Creatorr auto-fills from the site / packed info.json, and whether new sources get a domain tag. Changing these does not rewrite existing media or source defaults. Block specific values under <a class="link link-primary" href="/settings/catalog">Settings → Catalog</a>.</p>
+    <div class="space-y-3 w-full min-w-0">
+      {{template "checkbox_field" (dict
+        "Name" "softfill_domain_tag"
+        "Label" "Seed domain tag on source add"
+        "Checked" .SoftFillDomainTag
+        "Hint" "On source create, add the source hostname to default video tags and video Metadata prefetch draft."
+        "AutosaveChange" true
+      )}}
+      {{template "checkbox_field" (dict
+        "Name" "softfill_tags"
+        "Label" "Auto-fill tags from site / info.json"
+        "Checked" .SoftFillTags
+        "Hint" "Add site tags to video tags when metadata is automatically applied."
+        "CatalogBlockField" "tags"
+        "AutosaveChange" true
+      )}}
+      {{template "checkbox_field" (dict
+        "Name" "softfill_genres"
+        "Label" "Auto-fill genres from categories"
+        "Checked" .SoftFillGenres
+        "Hint" "Add site categories to video genres when metadata is automatically applied."
+        "CatalogBlockField" "genres"
+        "AutosaveChange" true
+      )}}
+    </div>
+  </form>
+</section>
+
 <section class="card bg-base-100 border border-base-300 mb-4">
   <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl js-settings-autosave">
     <input type="hidden" name="redirect" value="/settings/library" />

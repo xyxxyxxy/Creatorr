@@ -1,0 +1,176 @@
+{{define "settings_catalog_values"}}
+{{$field := .Field}}
+{{$busy := .Busy}}
+{{$pathBusy := .PathBusy}}
+{{$locked := or $busy $pathBusy}}
+{{$lockTip := "Catalog rewrite queued or running"}}
+{{if $pathBusy}}{{$lockTip = "Another path-touching task is open"}}{{end}}
+{{$warnSoft := .WarnSoft}}
+
+{{if not .Values}}
+<p class="text-sm opacity-60">No values in the library for this field.</p>
+{{else}}
+{{template "list_table"}}
+<thead>
+  <tr>
+    <th>Value</th>
+    <th>Series</th>
+    <th>Videos</th>
+    <th>Sources</th>
+    <th></th>
+  </tr>
+</thead>
+<tbody>
+  {{range $i, $v := .Values}}
+  {{if or (gt $v.SeriesCount 0) (gt $v.VideoCount 0) (gt $v.SourceCount 0)}}
+  <tr>
+    <td class="font-mono text-sm break-all">
+      {{$v.Value}}
+      {{if $v.Blocked}}<span class="badge badge-ghost badge-sm ms-1">Blocked from auto-fill</span>{{end}}
+    </td>
+    <td>{{if and (gt $v.SeriesCount 0) $v.SeriesHref}}<a class="link link-primary" href="{{$v.SeriesHref}}">{{$v.SeriesCount}}</a>{{else}}{{$v.SeriesCount}}{{end}}</td>
+    <td>{{if and (gt $v.VideoCount 0) $v.VideoHref}}<a class="link link-primary" href="{{$v.VideoHref}}">{{$v.VideoCount}}</a>{{else}}{{$v.VideoCount}}{{end}}</td>
+    <td>{{if and (gt $v.SourceCount 0) $v.SourceHref}}<a class="link link-primary" href="{{$v.SourceHref}}">{{$v.SourceCount}}</a>{{else}}{{$v.SourceCount}}{{end}}</td>
+    <td class="whitespace-nowrap text-end">
+      <div class="join">
+        {{if $locked}}
+        <span class="btn btn-xs btn-square join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Rename: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">
+          <i data-lucide="pencil" class="size-3.5" aria-hidden="true"></i>
+        </span>
+        <span class="btn btn-soft btn-error btn-xs btn-square join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Remove: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">
+          <i data-lucide="trash-2" class="size-3.5" aria-hidden="true"></i>
+        </span>
+        {{if not $v.Blocked}}
+        <span class="btn btn-soft btn-warning btn-xs btn-square join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Remove and block auto-fill: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">
+          <i data-lucide="shield-ban" class="size-3.5" aria-hidden="true"></i>
+        </span>
+        {{else}}
+        <span class="btn btn-xs btn-square join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Allow auto-fill: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">
+          <i data-lucide="shield-off" class="size-3.5" aria-hidden="true"></i>
+        </span>
+        {{end}}
+        {{else}}
+        <label for="modal-catalog-rename-{{$i}}" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Rename" aria-label="Rename">
+          <i data-lucide="pencil" class="size-3.5"></i>
+        </label>
+        <label for="modal-catalog-remove-{{$i}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Remove" aria-label="Remove">
+          <i data-lucide="trash-2" class="size-3.5"></i>
+        </label>
+        {{if not $v.Blocked}}
+        <label for="modal-catalog-block-{{$i}}" class="btn btn-soft btn-warning btn-xs btn-square join-item tooltip tooltip-top" data-tip="Remove and block auto-fill" aria-label="Remove and block auto-fill">
+          <i data-lucide="shield-ban" class="size-3.5"></i>
+        </label>
+        {{else}}
+        <form method="post" action="/actions/catalog-vocab-unblock" class="join-item m-0 inline">
+          <input type="hidden" name="field" value="{{$field}}" />
+          <input type="hidden" name="from" value="{{$v.Value}}" />
+          <button type="submit" class="btn btn-xs btn-square tooltip tooltip-top" data-tip="Allow auto-fill" aria-label="Allow auto-fill">
+            <i data-lucide="shield-off" class="size-3.5"></i>
+          </button>
+        </form>
+        {{end}}
+        {{end}}
+      </div>
+    </td>
+  </tr>
+  {{end}}
+  {{end}}
+</tbody>
+{{template "list_table_end"}}
+{{end}}
+
+{{$hasBlockedIdle := false}}
+{{range .Values}}{{if and .Blocked (eq .SeriesCount 0) (eq .VideoCount 0) (eq .SourceCount 0)}}{{$hasBlockedIdle = true}}{{end}}{{end}}
+<h3 class="font-semibold text-base mt-4">Blocked from auto-fill</h3>
+<p class="text-sm opacity-60 mb-2">These values are not added automatically.</p>
+{{if $hasBlockedIdle}}
+<ul class="space-y-2">
+  {{range .Values}}
+  {{if and .Blocked (eq .SeriesCount 0) (eq .VideoCount 0) (eq .SourceCount 0)}}
+  <li class="flex flex-wrap items-center gap-2 justify-between border border-base-300 rounded-box px-3 py-2">
+    <span class="font-mono text-sm break-all">{{.Value}}</span>
+    {{if $locked}}
+    <span class="btn btn-xs btn-square btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Allow auto-fill: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">
+      <i data-lucide="shield-off" class="size-3.5" aria-hidden="true"></i>
+    </span>
+    {{else}}
+    <form method="post" action="/actions/catalog-vocab-unblock" class="m-0">
+      <input type="hidden" name="field" value="{{$field}}" />
+      <input type="hidden" name="from" value="{{.Value}}" />
+      <button type="submit" class="btn btn-xs btn-square tooltip tooltip-top" data-tip="Allow auto-fill" aria-label="Allow auto-fill">
+        <i data-lucide="shield-off" class="size-3.5"></i>
+      </button>
+    </form>
+    {{end}}
+  </li>
+  {{end}}
+  {{end}}
+</ul>
+{{else}}
+<p class="text-sm opacity-60">No blocked values.</p>
+{{end}}
+
+{{if not $locked}}
+{{range $i, $v := .Values}}
+{{if or (gt $v.SeriesCount 0) (gt $v.VideoCount 0) (gt $v.SourceCount 0)}}
+<input type="checkbox" id="modal-catalog-rename-{{$i}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Rename {{$v.Value}}</h3>
+    <p class="text-sm mb-3">Rewrites this value on every series, video, and source default (all casings). Rename to an existing value merges them.</p>
+    <form method="post" action="/actions/catalog-vocab-rename" class="space-y-3">
+      <input type="hidden" name="field" value="{{$field}}" />
+      <input type="hidden" name="from" value="{{$v.Value}}" />
+      {{template "field_input" (dict "Name" "to" "Label" "New value" "Value" $v.Value "Required" true)}}
+      <div class="modal-action">
+        <label for="modal-catalog-rename-{{$i}}" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Rename</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-catalog-remove-{{$i}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Remove {{$v.Value}}</h3>
+    <p class="text-sm mb-3">Removes this value from {{$v.SeriesCount}} series, {{$v.VideoCount}} videos, and {{$v.SourceCount}} sources (all casings).</p>
+    {{if $warnSoft}}
+    <p class="text-sm mb-3 text-warning">Auto-fill is on for this field. Download pack or rescan may add the value again unless you use Remove and block auto-fill.</p>
+    {{end}}
+    <form method="post" action="/actions/catalog-vocab-remove">
+      <input type="hidden" name="field" value="{{$field}}" />
+      <input type="hidden" name="from" value="{{$v.Value}}" />
+      <div class="modal-action">
+        <label for="modal-catalog-remove-{{$i}}" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-error">Remove</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+{{if not $v.Blocked}}
+<input type="checkbox" id="modal-catalog-block-{{$i}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Remove and block auto-fill</h3>
+    <p class="text-sm mb-3">Removes <span class="font-mono">{{$v.Value}}</span> from {{$v.SeriesCount}} series, {{$v.VideoCount}} videos, and {{$v.SourceCount}} sources, and stops auto-fill from adding it again from site / info.json, source defaults, and domain seed. Manual Metadata edit and Import NFO can still set it.</p>
+    <form method="post" action="/actions/catalog-vocab-remove">
+      <input type="hidden" name="field" value="{{$field}}" />
+      <input type="hidden" name="from" value="{{$v.Value}}" />
+      <input type="hidden" name="block" value="1" />
+      <div class="modal-action">
+        <label for="modal-catalog-block-{{$i}}" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Remove and block auto-fill</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+{{end}}
+{{end}}
+{{end}}
+{{end}}

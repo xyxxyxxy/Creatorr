@@ -129,6 +129,13 @@ type SourceListFilter struct {
 	Q               string   // case-insensitive substring against QField
 	QField          string   // url|name|series; empty = name; legacy label accepted
 	Domains         []string // hostname facets; OR of url LIKE
+	Studios         []string // default video metadata; OR
+	Countries       []string
+	MPAAs           []string
+	Genres          []string
+	Tags            []string
+	Actors          []string // actor names in default metadata
+	ActorRoles      []string // actor roles in default metadata
 	HasError        *bool    // nil = any; true = last event scan_error; false = not
 	FullScanDone    *bool    // nil = any; true = done; false = incomplete
 	ScheduleOn      *bool    // nil = any; true = non-empty cron; false = Never
@@ -152,6 +159,13 @@ func (f SourceListFilter) MenuActive() bool {
 	return f.SeriesID > 0 ||
 		len(uniqPositiveInt64s(f.SeriesIDs)) > 0 ||
 		len(trimNonEmptyStrings(f.Domains)) > 0 ||
+		len(trimNonEmptyStrings(f.Studios)) > 0 ||
+		len(trimNonEmptyStrings(f.Countries)) > 0 ||
+		len(trimNonEmptyStrings(f.MPAAs)) > 0 ||
+		len(trimNonEmptyStrings(f.Genres)) > 0 ||
+		len(trimNonEmptyStrings(f.Tags)) > 0 ||
+		len(trimNonEmptyStrings(f.Actors)) > 0 ||
+		len(trimNonEmptyStrings(f.ActorRoles)) > 0 ||
 		f.HasError != nil ||
 		f.FullScanDone != nil ||
 		f.ScheduleOn != nil ||
@@ -213,6 +227,13 @@ func (f SourceListFilter) where() (string, []any) {
 			args = append(args, "%"+d+"%")
 		}
 	}
+	appendStringsIn(&b, &args, "src.studio", f.Studios, true)
+	appendStringsIn(&b, &args, "src.country", f.Countries, true)
+	appendStringsIn(&b, &args, "src.mpaa", f.MPAAs, true)
+	appendJSONStringListMatch(&b, &args, "src.genres", f.Genres)
+	appendJSONStringListMatch(&b, &args, "src.tags", f.Tags)
+	appendJSONActorNameMatch(&b, &args, "src.actors", f.Actors)
+	appendJSONActorRoleMatch(&b, &args, "src.actors", f.ActorRoles)
 	if f.HasError != nil {
 		sub := `(
 				SELECT sh.event FROM source_history sh

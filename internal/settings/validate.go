@@ -20,8 +20,11 @@ func validateValue(key, value string) error {
 	if key == KeySubtitleAuto {
 		return validateSubtitleAuto(value)
 	}
-	if key == KeyArchiveFallback {
+	if key == KeyArchiveFallback || key == KeySoftFillTags || key == KeySoftFillGenres || key == KeySoftFillDomainTag {
 		return validateMetadataFlag(value)
+	}
+	if key == KeySoftFillBlocklist {
+		return validateSoftFillBlocklist(value)
 	}
 	return nil
 }

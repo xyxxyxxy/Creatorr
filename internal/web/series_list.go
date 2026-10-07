@@ -51,11 +51,12 @@ func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
 		Studios: parseMultiQuery(q, "studio"),
 		Countries: parseMultiQuery(q, "country"),
 		MPAAs:   parseMultiQuery(q, "mpaa"),
-		Genres:  parseMultiQuery(q, "genre"),
-		Tags:    parseMultiQuery(q, "tag"),
-		Actors:  parseMultiQuery(q, "actor"),
-		Sort:    parseSeriesSort(q.Get("sort")),
-		SortDir: parseSortDir(q.Get("dir")),
+		Genres:     parseMultiQuery(q, "genre"),
+		Tags:       parseMultiQuery(q, "tag"),
+		Actors:     parseMultiQuery(q, "actor"),
+		ActorRoles: parseMultiQuery(q, "actor_role"),
+		Sort:       parseSeriesSort(q.Get("sort")),
+		SortDir:    parseSortDir(q.Get("dir")),
 	}
 	f.Empty, f.NotEmpty = parsePresenceParams(q)
 	f.RootIDs = parseMultiInt64(q, "root")

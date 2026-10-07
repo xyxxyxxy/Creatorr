@@ -2,6 +2,8 @@ package library
 
 import (
 	"strings"
+
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 // MergeDomainTag prepends NamingDomain(sourceURL) when missing; no-op when domain unknown.
@@ -16,6 +18,27 @@ func MergeDomainTag(tags []string, sourceURL string) []string {
 // SeedDomainIntoTags prepends NamingDomain(url) into a tag list when missing.
 func SeedDomainIntoTags(tags []string, sourceURL string) []string {
 	return MergeDomainTag(tags, sourceURL)
+}
+
+// SeedDomainIntoTagsIfEnabled seeds the domain tag when softfill_domain_tag is on and not SoftFill-blocked.
+func (s *Store) SeedDomainIntoTagsIfEnabled(tags []string, sourceURL string) []string {
+	on, err := settings.SoftFillDomainTagEnabled(s.DB)
+	if err != nil || !on {
+		return ParseStringListFields(tags)
+	}
+	host := NamingDomain(sourceURL)
+	if host == "" {
+		return ParseStringListFields(tags)
+	}
+	if blocked, _ := settings.IsSoftFillBlocked(s.DB, settings.CatalogFieldTags, host); blocked {
+		return ParseStringListFields(tags)
+	}
+	return SeedDomainIntoTags(tags, sourceURL)
+}
+
+// MergeDomainTagIfEnabled applies MergeDomainTag when softfill_domain_tag is on and host is not SoftFill-blocked.
+func (s *Store) MergeDomainTagIfEnabled(tags []string, sourceURL string) []string {
+	return s.SeedDomainIntoTagsIfEnabled(tags, sourceURL)
 }
 
 // mergeStringListFirst prepends first when missing; moves to index 0 when present elsewhere.

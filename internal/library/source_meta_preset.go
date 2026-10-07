@@ -3,6 +3,8 @@ package library
 import (
 	"database/sql"
 	"strings"
+
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 // SoftFillVideoMetaFromSourcePreset merges source default catalog fields into video fields.
@@ -113,8 +115,9 @@ func (s *Store) ApplySourceMetadataPreset(videoID int64) (bool, error) {
 	if !sourcePresetHasValues(src) {
 		return false, nil
 	}
+	preset := filterSourcePresetSoftFillBlocks(*src, s)
 	studio, country, mpaa, packRole, genres, tags, actors, changed := SoftFillVideoMetaFromSourcePreset(
-		v.Studio, v.Country, v.MPAA, v.PackRole, v.Genres, v.Tags, v.Actors, *src,
+		v.Studio, v.Country, v.MPAA, v.PackRole, v.Genres, v.Tags, v.Actors, preset,
 	)
 	if !changed {
 		return false, nil
@@ -130,6 +133,38 @@ func (s *Store) ApplySourceMetadataPreset(videoID int64) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func filterSourcePresetSoftFillBlocks(src Source, s *Store) Source {
+	bl, err := settings.GetSoftFillBlocklist(s.DB)
+	if err != nil || len(bl) == 0 {
+		return src
+	}
+	if bl.Blocked(settings.CatalogFieldStudio, src.Studio) {
+		src.Studio = ""
+	}
+	if bl.Blocked(settings.CatalogFieldCountry, src.Country) {
+		src.Country = ""
+	}
+	if bl.Blocked(settings.CatalogFieldMPAA, src.MPAA) {
+		src.MPAA = ""
+	}
+	src.Genres = settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldGenres, src.Genres)
+	src.Tags = settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldTags, src.Tags)
+	if len(src.Actors) > 0 {
+		var actors []SeriesActor
+		for _, a := range src.Actors {
+			if bl.Blocked(settings.CatalogFieldActorName, a.Name) {
+				continue
+			}
+			if bl.Blocked(settings.CatalogFieldActorRole, a.Role) {
+				a.Role = ""
+			}
+			actors = append(actors, a)
+		}
+		src.Actors = actors
+	}
+	return src
 }
 
 func sourcePresetHasValues(src *Source) bool {

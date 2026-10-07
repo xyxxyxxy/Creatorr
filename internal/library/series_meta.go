@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 // SeriesActor is one <actor> for tvshow.nfo.
@@ -262,7 +264,23 @@ func (s *Store) ListMetaSuggestions() (MetaSuggestions, error) {
 	out.MPAAs = sortedKeys(mpaas)
 	out.ActorNames = sortedKeys(names)
 	out.ActorRoles = sortedKeys(roles)
+	out = s.filterMetaSuggestionsSoftFillBlocked(out)
 	return out, nil
+}
+
+func (s *Store) filterMetaSuggestionsSoftFillBlocked(in MetaSuggestions) MetaSuggestions {
+	bl, err := settings.GetSoftFillBlocklist(s.DB)
+	if err != nil || len(bl) == 0 {
+		return in
+	}
+	in.Studios = settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldStudio, in.Studios)
+	in.Genres = settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldGenres, in.Genres)
+	in.Tags = settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldTags, in.Tags)
+	in.Countries = settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldCountry, in.Countries)
+	in.MPAAs = settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldMPAA, in.MPAAs)
+	in.ActorNames = settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldActorName, in.ActorNames)
+	in.ActorRoles = settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldActorRole, in.ActorRoles)
+	return in
 }
 
 func sortedKeys(m map[string]struct{}) []string {

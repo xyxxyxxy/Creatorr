@@ -790,7 +790,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	for _, path := range []string{"/settings/general", "/settings/connect", "/settings/library", "/settings/maintenance", "/settings/scheduler", "/settings/queue", "/settings/domains", "/tasks", "/history", "/stats"} {
+	for _, path := range []string{"/settings/general", "/settings/connect", "/settings/library", "/settings/catalog", "/settings/maintenance", "/settings/scheduler", "/settings/queue", "/settings/domains", "/tasks", "/history", "/stats"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
@@ -969,9 +969,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 				t.Fatalf("/tasks still has header download schedule chip")
 			}
 		}
-		if path == "/settings/library" || path == "/settings/queue" || path == "/settings/maintenance" {
+		if path == "/settings/library" || path == "/settings/catalog" || path == "/settings/queue" || path == "/settings/maintenance" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "/settings/general") || !strings.Contains(body, "/settings/connect") || !strings.Contains(body, "/settings/queue") || !strings.Contains(body, "/settings/scheduler") || !strings.Contains(body, "/settings/maintenance") {
+			if !strings.Contains(body, "/settings/general") || !strings.Contains(body, "/settings/connect") || !strings.Contains(body, "/settings/catalog") || !strings.Contains(body, "/settings/queue") || !strings.Contains(body, "/settings/scheduler") || !strings.Contains(body, "/settings/maintenance") {
 				t.Fatalf("%s missing settings sub-nav in navbar", path)
 			}
 			if strings.Contains(body, `href="/settings/domains"`) {
@@ -1052,6 +1052,31 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			}
 			if strings.Contains(body, "Saving does not") {
 				t.Fatalf("%s still has per-field Saving does not hints", path)
+			}
+			if !strings.Contains(body, "softfill_tags") || !strings.Contains(body, ">Metadata</h2>") || !strings.Contains(body, `id="metadata"`) {
+				t.Fatalf("%s missing Metadata auto-fill toggles", path)
+			}
+			if !strings.Contains(body, `href="/settings/catalog?field=tags"`) || !strings.Contains(body, `href="/settings/catalog?field=genres"`) {
+				t.Fatalf("%s missing Catalog deep links in Metadata hints", path)
+			}
+			continue
+		}
+		if path == "/settings/catalog" {
+			body := rec.Body.String()
+			if !strings.Contains(body, "Catalog values") || !strings.Contains(body, "Manage shared metadata") {
+				t.Fatalf("%s missing Catalog UI", path)
+			}
+			if !strings.Contains(body, "Blocked from auto-fill") || !strings.Contains(body, "No blocked values.") {
+				t.Fatalf("%s missing empty Blocked from auto-fill section", path)
+			}
+			if !strings.Contains(body, `href="/settings/library#metadata"`) {
+				t.Fatalf("%s missing auto-fill toggles deep link", path)
+			}
+			if strings.Contains(body, "tabs-boxed") || !strings.Contains(body, `class="btn join-item btn-accent"`) {
+				t.Fatalf("%s Catalog field switcher not join buttons", path)
+			}
+			if strings.Contains(body, "A Catalog rewrite is queued or running") {
+				t.Fatalf("%s still has Catalog busy banner", path)
 			}
 			continue
 		}

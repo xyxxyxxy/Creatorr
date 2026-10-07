@@ -1,0 +1,21 @@
+{{define "settings_catalog"}}
+{{template "head" .}}
+{{template "settings_nav" .}}
+{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
+
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <div class="card-body gap-3">
+    <h2 class="text-lg font-semibold">Catalog values</h2>
+    <p class="text-sm opacity-60">Manage shared metadata values across series, videos, and source defaults. Auto-fill skips blocked values from site / info.json, source defaults, and domain seed. Auto-fill toggles live under <a class="link link-primary" href="/settings/library#metadata">Settings → Library → Metadata</a>.</p>
+    <div class="join min-w-0 overflow-x-auto" role="group" aria-label="Catalog field">
+      {{range .Tabs}}
+      <a href="/settings/catalog?field={{.Key}}" class="btn join-item{{if eq $.Field .Key}} btn-accent{{end}}"{{if eq $.Field .Key}} aria-current="page"{{end}}>{{.Label}}</a>
+      {{end}}
+    </div>
+    <div id="catalog-values-live">
+      {{template "settings_catalog_values" .}}
+    </div>
+  </div>
+</section>
+{{template "foot" .}}
+{{end}}

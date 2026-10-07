@@ -85,7 +85,8 @@ type VideoListFilter struct {
 	MPAAs      []string
 	Genres     []string
 	Tags       []string
-	Actors     []string
+	Actors     []string // actor names
+	ActorRoles []string // actor roles
 	Empty      []string // presence field ids
 	NotEmpty   []string
 	Sort       string // upload|added|acquired|title; empty = upload
@@ -110,7 +111,7 @@ func (f VideoListFilter) MenuActive() bool {
 		f.FromDay != "" || f.ToDay != "" ||
 		len(trimNonEmptyStrings(f.Studios)) > 0 || len(trimNonEmptyStrings(f.Countries)) > 0 ||
 		len(trimNonEmptyStrings(f.MPAAs)) > 0 ||
-		len(f.Genres) > 0 || len(f.Tags) > 0 || len(f.Actors) > 0 ||
+		len(f.Genres) > 0 || len(f.Tags) > 0 || len(f.Actors) > 0 || len(f.ActorRoles) > 0 ||
 		len(f.Empty) > 0 || len(f.NotEmpty) > 0
 }
 

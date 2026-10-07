@@ -27,7 +27,8 @@ type SeriesListFilter struct {
 	PremieredYears     []int // UTC calendar years; 0 entries ignored
 	Genres             []string
 	Tags               []string
-	Actors             []string
+	Actors             []string // actor names
+	ActorRoles         []string // actor roles
 	Empty              []string
 	NotEmpty           []string
 	Sort               string // title|added; empty = title
@@ -43,6 +44,7 @@ func (f SeriesListFilter) MenuActive() bool {
 		len(trimNonEmptyStrings(f.Studios)) > 0 || len(trimNonEmptyStrings(f.Countries)) > 0 ||
 		len(trimNonEmptyStrings(f.MPAAs)) > 0 ||
 		len(uniqNonZeroInts(f.PremieredYears)) > 0 || len(f.Genres) > 0 || len(f.Tags) > 0 || len(f.Actors) > 0 ||
+		len(f.ActorRoles) > 0 ||
 		len(f.Empty) > 0 || len(f.NotEmpty) > 0
 }
 
@@ -142,6 +144,7 @@ func appendSeriesListFilterSQL(b *strings.Builder, args *[]any, f SeriesListFilt
 	appendJSONStringListMatch(b, args, "s.genres", f.Genres)
 	appendJSONStringListMatch(b, args, "s.tags", f.Tags)
 	appendJSONActorNameMatch(b, args, "s.actors", f.Actors)
+	appendJSONActorRoleMatch(b, args, "s.actors", f.ActorRoles)
 	appendSeriesPresenceSQL(b, f.Empty, f.NotEmpty)
 	appendSeriesListStatusesSQL(b, args, f.Statuses)
 }
