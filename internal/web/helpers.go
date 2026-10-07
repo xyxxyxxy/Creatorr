@@ -26,7 +26,7 @@ type pageBase struct {
 	NavTasksPaused  int
 }
 
-// pageNavBadges are shell badge counts for newPage (series/tasks; notify uses SetNotifyBadgeForPage).
+// pageNavBadges are shell badge counts for newPage (series/queues; notify uses SetNotifyBadgeForPage).
 type pageNavBadges struct {
 	SeriesErrors int
 	TasksActive  int
@@ -39,7 +39,7 @@ var usernameForPage func() string
 // notifyBadgeForPage returns unread badge count + has-alert (set from Handler.Mount).
 var notifyBadgeForPage func() (count int, hasAlert bool)
 
-// navBadgesForPage returns series/tasks nav badge counts for shell chrome (set from Handler.Mount).
+// navBadgesForPage returns series/queues nav badge counts for shell chrome (set from Handler.Mount).
 var navBadgesForPage func() pageNavBadges
 
 // SetUsernameForPage wires the operator username lookup used by newPage.
@@ -52,7 +52,7 @@ func SetNotifyBadgeForPage(fn func() (count int, hasAlert bool)) {
 	notifyBadgeForPage = fn
 }
 
-// SetNavBadgesForPage wires series/tasks nav badge counts used by newPage.
+// SetNavBadgesForPage wires series/queues nav badge counts used by newPage.
 func SetNavBadgesForPage(fn func() pageNavBadges) {
 	navBadgesForPage = fn
 }
@@ -97,7 +97,7 @@ func pageIcon(nav string) string {
 		return "square-play"
 	case "import":
 		return "folder-input"
-	case "tasks":
+	case "queues":
 		return "list-todo"
 	case "stats":
 		return "chart-column"

@@ -25,7 +25,7 @@ const (
 
 type tasksListLiveData struct {
 	Items           []taskExplorerRow
-	ListRows        []taskView // list view: same layout as /tasks task_row
+	ListRows        []taskView // list view: same layout as /queues task_row
 	Page            PageInfo
 	Load            ListLoad
 	ListMode        ListMode
@@ -40,7 +40,7 @@ type tasksListLiveData struct {
 	InfiniteID      string
 	RowsID          string
 	OOB             bool
-	BrowseHref      string // Overview: Browser Tasks URL matching the locked glance filter
+	BrowseHref      string // Overview: Browser Queues URL matching the locked glance filter
 }
 
 // overviewVideosBrowseHref is Browser Videos with the Recent additions glance filter.
@@ -181,7 +181,7 @@ func (h *Handler) loadTasksListLive(w http.ResponseWriter, r *http.Request) (tas
 	redirect := explorerCanonicalURL(r, explorerTypeTasks)
 	if redirect == "" {
 		if atTasks {
-			redirect = "/tasks"
+			redirect = "/queues"
 		} else if overview {
 			redirect = "/"
 		} else {

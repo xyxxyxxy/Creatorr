@@ -1,8 +1,8 @@
 import { createLucideIcons } from "./dom_helpers.js";
 
-const badge = () => document.getElementById("tasks-badge");
+const badge = () => document.getElementById("queues-badge");
 
-const pausedBadge = () => document.getElementById("tasks-paused-badge");
+const pausedBadge = () => document.getElementById("queues-paused-badge");
 
 const notifyBadge = () => document.getElementById("notify-badge");
 

@@ -98,8 +98,8 @@
     refreshTasksPanel._at = now;
     const q = location.search || "";
     let url;
-    if (location.pathname === "/tasks") {
-      url = "/tasks" + q;
+    if (location.pathname === "/queues") {
+      url = "/queues" + q;
     } else if (location.pathname === "/browser") {
       const params = new URLSearchParams(q.startsWith("?") ? q.slice(1) : q);
       if (params.get("type") !== "tasks") return;
@@ -4154,8 +4154,8 @@
   }
 
   // src/js/badges.js
-  var badge = () => document.getElementById("tasks-badge");
-  var pausedBadge = () => document.getElementById("tasks-paused-badge");
+  var badge = () => document.getElementById("queues-badge");
+  var pausedBadge = () => document.getElementById("queues-paused-badge");
   var notifyBadge = () => document.getElementById("notify-badge");
   var seriesErrorBadge = () => document.getElementById("series-error-badge");
   async function refreshBadge() {

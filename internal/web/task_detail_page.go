@@ -160,7 +160,7 @@ func (h *Handler) taskDetail(w http.ResponseWriter, r *http.Request) {
 	live := !isHistoryStatus(t.Status)
 	nav := "history"
 	if live {
-		nav = "tasks"
+		nav = "queues"
 	}
 	logLines := h.Queue.Logs.Snapshot(id)
 	if len(logLines) == 0 {

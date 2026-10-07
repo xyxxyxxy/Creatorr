@@ -61,7 +61,7 @@ function onSSE(ev) {
     return;
   }
   if (ev.type === "task.updated") {
-    // In-place patch on Tasks page - full swap recreates Busy/Cancel every tick.
+    // In-place patch on Queues page - full swap recreates Busy/Cancel every tick.
     if (!patchTaskRow(ev)) refreshTasksPanel(false);
     patchTaskDetail(ev);
     refreshTaskIndicators();

@@ -12,7 +12,7 @@ const PageSize = 20
 // HistoryPageSize is the page length for /history Notifications and Tasks tables.
 const HistoryPageSize = 20
 
-// TaskPageSize is the page length for open tasks in each /tasks domain lane.
+// TaskPageSize is the page length for open tasks in each /queues domain lane.
 const TaskPageSize = 10
 
 // PageInfo drives the pagination partial under a list table.

@@ -278,7 +278,7 @@ func cooldownWaitTip(remSec int) string {
 	return "Waiting " + formatDurationCompact(time.Duration(remSec)*time.Second)
 }
 
-// scheduledTaskWaitTip is the countdown label for upcoming scheduler rows on Tasks.
+// scheduledTaskWaitTip is the countdown label for upcoming scheduler rows on Queues.
 func scheduledTaskWaitTip(remSec int) string {
 	if remSec < 1 {
 		remSec = 1

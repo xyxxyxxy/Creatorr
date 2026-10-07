@@ -1,6 +1,6 @@
 {{define "task_row"}}
-{{/* Open + finished tasks. Dot: taskView (Redirect empty → /tasks). */}}
-{{$redir := .Redirect}}{{if not $redir}}{{$redir = "/tasks"}}{{end}}
+{{/* Open + finished tasks. Dot: taskView (Redirect empty → /queues). */}}
+{{$redir := .Redirect}}{{if not $redir}}{{$redir = "/queues"}}{{end}}
 {{$open := or (eq .Status "pending") (eq .Status "running")}}
 <li id="task-row-{{.ID}}" class="list-row" data-task-row-status="{{.Status}}"{{if .LanePaused}} data-lane-paused{{end}}{{if .Domain}} data-task-domain="{{.Domain}}"{{end}}>
   <span class="shrink-0 self-center inline-flex items-center justify-center min-w-[1.75rem]" data-task-pos>

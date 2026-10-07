@@ -1,6 +1,8 @@
 package web
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/xyxxyxxy/Creatorr/internal/health"
@@ -102,7 +104,12 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/series/{id}/videos/{vid}/files/{fid}", h.videoSidecarViewPage)
 	r.Get("/series/{id}/videos/{vid}/files/{fid}/raw", h.videoSidecarFile)
 	r.Get("/series/{id}/videos/{vid}/task-indicator", h.videoTaskIndicator)
-	r.Get("/tasks", h.tasks)
+	r.Get("/queues", h.tasks)
+	r.Get("/tasks", func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		u.Path = "/queues"
+		http.Redirect(w, r, u.RequestURI(), http.StatusMovedPermanently)
+	})
 	r.Get("/stats", h.statsPage)
 	r.Get("/stats/series.json", h.statsSeriesJSON)
 	r.Get("/stats/library-size.json", h.statsLibrarySizeJSON)

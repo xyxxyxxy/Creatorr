@@ -60,24 +60,6 @@ file system
 
 A media server can read it as-is, with full metadata and images for each series and its episodes.
 
-Special episodes pack under series-level `Specials/` (Season 00). Special features (trailers, interviews, …) pack under series-level kind folders next to seasons, never inside `S{year}/`.
-
-```text
-file system
-└── /library/
-    └── Series A/
-        ├── tvshow.nfo
-        ├── poster.jpg
-        ├── S2024/
-        │   ├── S2024E0001 [jK4mN8pQ2xL].mkv
-        │   └── …
-        ├── Specials/
-        │   ├── S00E0001 [bonusId].mkv
-        │   └── S00E0001 [bonusId].nfo
-        └── trailers/
-            └── 01 My Trailer.mkv
-```
-
 ## Features
 
 - **Metadata management**

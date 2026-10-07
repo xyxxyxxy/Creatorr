@@ -64,7 +64,7 @@ export function shouldKeepScrollForm(form) {
   // Creatorr actions: hidden redirect back to this page → restore after reload.
   const dest = formRedirectPathname(form);
   if (dest !== "" && dest === location.pathname) return true;
-  // Tasks page: POST /actions/* always returns to /tasks (full reload).
+  // Queues page: POST /actions/* always returns to /queues (full reload).
   if (document.getElementById("tasks-list-live") && String(form.method || "").toLowerCase() === "post") {
     const action = form.getAttribute("action") || "";
     if (action.startsWith("/actions/")) return true;

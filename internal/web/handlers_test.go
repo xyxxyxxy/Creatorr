@@ -380,7 +380,7 @@ func TestOverviewRenders(t *testing.T) {
 		"status": {queue.StatusDone, queue.StatusFailed, queue.StatusCancelled},
 		"sort":   {queue.TaskSortCreated},
 	}) {
-		t.Fatalf("empty overview Recent tasks Browse must open finished Browser Tasks filter: %s", truncate(body, 800))
+		t.Fatalf("empty overview Recent tasks Browse must open finished Browser Queues filter: %s", truncate(body, 800))
 	}
 	if strings.Contains(body, `id="overview-recent-list"`) {
 		t.Fatalf("overview Recent must stay gallery, not list: %s", truncate(body, 400))
@@ -478,7 +478,7 @@ func TestOverviewShowsRecentTasks(t *testing.T) {
 		"status": {queue.StatusPending, queue.StatusRunning},
 		"sort":   {queue.TaskSortQueue},
 	}) {
-		t.Fatalf("open overview Recent tasks Browse must open pending+running Browser Tasks: %s", truncate(body, 800))
+		t.Fatalf("open overview Recent tasks Browse must open pending+running Browser Queues: %s", truncate(body, 800))
 	}
 	if !strings.Contains(body, `id="task-row-`+strconv.FormatInt(runningID, 10)+`"`) {
 		t.Fatalf("missing running task row: %s", truncate(body, 600))
@@ -555,7 +555,7 @@ func TestOverviewShowsRecentTasks(t *testing.T) {
 		"status": {queue.StatusDone, queue.StatusFailed, queue.StatusCancelled},
 		"sort":   {queue.TaskSortCreated},
 	}) {
-		t.Fatalf("idle overview Recent tasks Browse must open finished Browser Tasks filter: %s", truncate(body, 800))
+		t.Fatalf("idle overview Recent tasks Browse must open finished Browser Queues filter: %s", truncate(body, 800))
 	}
 }
 
@@ -594,7 +594,7 @@ func TestActionRunScheduledQueuesSyncFiles(t *testing.T) {
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	form := strings.NewReader("key=" + settings.KeySyncFilesCron + "&redirect=/tasks")
+	form := strings.NewReader("key=" + settings.KeySyncFilesCron + "&redirect=/queues")
 	req := httptest.NewRequest(http.MethodPost, "/actions/run-scheduled", form)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -760,7 +760,7 @@ func TestTasksShowsSoftPausedHostWithoutDomainsRow(t *testing.T) {
 	if err := domains.SetPaused(d, "tylerraw.com", true); err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/tasks", nil)
+	req := httptest.NewRequest(http.MethodGet, "/queues", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	if rec.Code != 200 {
@@ -790,7 +790,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	for _, path := range []string{"/settings/general", "/settings/connect", "/settings/library", "/settings/catalog", "/settings/maintenance", "/settings/scheduler", "/settings/queue", "/settings/domains", "/tasks", "/history", "/stats"} {
+	for _, path := range []string{"/settings/general", "/settings/connect", "/settings/library", "/settings/catalog", "/settings/maintenance", "/settings/scheduler", "/settings/queue", "/settings/domains", "/queues", "/history", "/stats"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
@@ -951,22 +951,22 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		if path == "/history" {
 			continue
 		}
-		if path == "/tasks" {
+		if path == "/queues" {
 			body := rec.Body.String()
 			if !strings.Contains(body, "interactive") || !strings.Contains(body, "Pausing a domain") {
-				t.Fatalf("/tasks missing interactive/pause note")
+				t.Fatalf("/queues missing interactive/pause note")
 			}
 			if !strings.Contains(body, `id="tasks-list-live"`) {
-				t.Fatalf("/tasks missing tasks-list-live")
+				t.Fatalf("/queues missing tasks-list-live")
 			}
 			if !strings.Contains(body, `data-scheduled-task`) || !strings.Contains(body, "download_wanted") || !strings.Contains(body, queue.KindSyncFiles) {
-				t.Fatalf("/tasks missing scheduled task rows")
+				t.Fatalf("/queues missing scheduled task rows")
 			}
 			if !strings.Contains(body, `action="/actions/run-scheduled"`) || !strings.Contains(body, `data-tip="Queue now"`) {
-				t.Fatalf("/tasks missing queue-now on scheduled rows")
+				t.Fatalf("/queues missing queue-now on scheduled rows")
 			}
 			if strings.Contains(body, "data-download-schedule") {
-				t.Fatalf("/tasks still has header download schedule chip")
+				t.Fatalf("/queues still has header download schedule chip")
 			}
 		}
 		if path == "/settings/library" || path == "/settings/catalog" || path == "/settings/queue" || path == "/settings/maintenance" {
