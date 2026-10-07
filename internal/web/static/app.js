@@ -6265,7 +6265,7 @@
       const m = sourcesBulkFilterTotal();
       const countEl = bar.querySelector("[data-sources-bulk-count]");
       if (countEl) countEl.textContent = n + "/" + m;
-      bar.querySelectorAll("[data-sources-bulk-scan], [data-sources-bulk-delete]").forEach((btn) => {
+      bar.querySelectorAll("[data-sources-bulk-scan], [data-sources-bulk-edit], [data-sources-bulk-delete]").forEach((btn) => {
         btn.disabled = n === 0;
       });
       const selectAllBtn = bar.querySelector("[data-sources-select-all-matching]");
@@ -6323,6 +6323,11 @@
       }
       setSourcesBulkScanConfirm(n);
       openSourcesBulkModal("modal-bulk-scan-sources");
+      return;
+    }
+    if (action === "edit") {
+      setTitle("[data-sources-bulk-edit-title]", "Edit sources (" + n + "/" + m + ")");
+      openSourcesBulkModal("modal-bulk-edit-sources");
       return;
     }
     if (action === "delete") {
@@ -6446,6 +6451,12 @@
         runSourcesBulkAction("scan");
         return;
       }
+      const edit = ev.target.closest("[data-sources-bulk-edit]");
+      if (edit) {
+        ev.preventDefault();
+        runSourcesBulkAction("edit");
+        return;
+      }
       const del = ev.target.closest("[data-sources-bulk-delete]");
       if (del) {
         ev.preventDefault();
@@ -6455,7 +6466,7 @@
     document.body.addEventListener("submit", (ev) => {
       const form = ev.target;
       if (!(form instanceof HTMLFormElement)) return;
-      if (form.id !== "form-bulk-scan-sources" && form.id !== "form-bulk-scan-sources-confirm") {
+      if (form.id !== "form-bulk-scan-sources" && form.id !== "form-bulk-scan-sources-confirm" && form.id !== "form-bulk-edit-sources" && form.id !== "form-bulk-delete-sources") {
         return;
       }
       fillSourcesBulkIDs(document);

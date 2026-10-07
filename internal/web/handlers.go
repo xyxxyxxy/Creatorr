@@ -128,6 +128,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/bulk-check-file-hash", h.actionBulkCheckFileHash)
 	r.Post("/actions/bulk-delete-video-sidecar", h.actionBulkDeleteVideoSidecar)
 	r.Post("/actions/bulk-scan-sources", h.actionBulkScanSources)
+	r.Post("/actions/bulk-edit-sources", h.actionBulkEditSources)
 	r.Post("/actions/bulk-delete-sources", h.actionBulkDeleteSources)
 	r.Post("/actions/bulk-notification-read", h.actionBulkNotificationRead)
 	r.Post("/actions/save-series-metadata", h.actionSaveSeriesMetadata)

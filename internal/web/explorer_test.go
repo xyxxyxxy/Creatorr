@@ -430,6 +430,82 @@ func TestSeriesDetailFilesShowsSeriesMetaOnly(t *testing.T) {
 	}
 }
 
+func TestBulkEditSourcesUpdatesSharedField(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Bulk Edit Src", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://www.example.com/@bulkedit1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcA := ser.Sources[0]
+	srcB, err := lib.AddSource(ser.ID, library.AddSourceParams{
+		URL: "https://www.example.com/@bulkedit2", ScanCron: "@weekly",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.UpdateSource(ser.ID, srcA.ID, library.UpdateSourceParams{
+		Studio: strPtr("KeepMe"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.UpdateSource(ser.ID, srcB.ID, library.UpdateSourceParams{
+		Studio: strPtr("KeepMe"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+	form := url.Values{}
+	form.Add("source_id", strconv.FormatInt(srcA.ID, 10))
+	form.Add("source_id", strconv.FormatInt(srcB.ID, 10))
+	form.Set("scan_cron", "never")
+	form.Set("index_as_ignored", "1")
+	form.Set("country", "US")
+	form.Set("redirect", "/browser?type=sources")
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/actions/bulk-edit-sources", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "ok=bulk_sources_updated") {
+		t.Fatalf("redirect: %s", loc)
+	}
+	for _, id := range []int64{srcA.ID, srcB.ID} {
+		got, err := lib.GetSourceByID(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got.ScanCronNever() {
+			t.Fatalf("source %d cron=%q want Never", id, got.ScanCron)
+		}
+		if !got.IndexAsIgnored {
+			t.Fatalf("source %d IndexAsIgnored=false", id)
+		}
+		if got.Country != "US" {
+			t.Fatalf("source %d country=%q", id, got.Country)
+		}
+		if got.Studio != "KeepMe" {
+			t.Fatalf("source %d studio=%q want KeepMe (No change)", id, got.Studio)
+		}
+	}
+}
+
+func strPtr(s string) *string { return &s }
+
 func TestSourcesExplorerBulkModeAndIDs(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
@@ -466,9 +542,18 @@ func TestSourcesExplorerBulkModeAndIDs(t *testing.T) {
 	if !strings.Contains(body, `data-sources-bulk-scan`) {
 		t.Fatalf("sources explorer missing Scan (btn_labeled): %s", truncate(body, 600))
 	}
+	if !strings.Contains(body, `data-sources-bulk-edit`) {
+		t.Fatalf("sources explorer missing Edit (btn_labeled): %s", truncate(body, 600))
+	}
 	if !strings.Contains(body, `action="/actions/bulk-scan-sources"`) ||
+		!strings.Contains(body, `action="/actions/bulk-edit-sources"`) ||
 		!strings.Contains(body, `action="/actions/bulk-delete-sources"`) {
 		t.Fatalf("sources explorer missing bulk actions: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `id="modal-bulk-edit-sources"`) ||
+		!strings.Contains(body, `name="scan_cron"`) ||
+		!strings.Contains(body, `value="__nochange__"`) {
+		t.Fatalf("sources explorer missing bulk Edit modal: %s", truncate(body, 800))
 	}
 	idsRec := httptest.NewRecorder()
 	r.ServeHTTP(idsRec, httptest.NewRequest(http.MethodGet, "/sources/ids?type=sources&at=browser", nil))

@@ -238,6 +238,16 @@ func flashFromQuery(r *http.Request) *flash {
 			return flashWarn(strings.TrimSuffix(msg, ".") + "; " + skipped + " skipped.")
 		}
 		return flashOK(msg)
+	case "bulk_sources_updated":
+		msg := "Sources updated"
+		if n := r.URL.Query().Get("n"); n != "" {
+			msg += " (" + n + ")"
+		}
+		msg += "."
+		if skipped := r.URL.Query().Get("skipped"); skipped != "" && skipped != "0" {
+			return flashWarn(strings.TrimSuffix(msg, ".") + "; " + skipped + " skipped.")
+		}
+		return flashOK(msg)
 	case "metadata":
 		return flashOK("Series metadata saved (tvshow.nfo + art).")
 	case "video-metadata":

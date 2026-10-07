@@ -1,5 +1,5 @@
 {{define "sources_bulk_modals"}}
-{{/* Host inside sources_list_live (Browser + series detail). */}}
+{{/* Dot: sourcesListLiveData (Suggestions, PackRoleOptions, ScanCronDescriptors). */}}
 <form method="post" action="/actions/bulk-scan-sources" id="form-bulk-scan-sources" class="hidden">
   <input type="hidden" name="redirect" value="" data-bulk-sources-redirect />
   <div data-bulk-source-ids></div>
@@ -16,6 +16,129 @@
       <div class="modal-action">
         <label for="modal-bulk-scan-sources" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary" data-sources-bulk-scan-confirm>Scan</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-edit-sources" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box max-w-2xl modal-box-scroll flex flex-col gap-2">
+    <h3 class="font-bold text-lg shrink-0" data-sources-bulk-edit-title>Edit sources</h3>
+    <p class="text-sm opacity-70 shrink-0">Leave fields at No change to keep each source's current value. Filled fields replace that value on every selected source. Genres, tags, and actors replace the whole list when you add at least one entry.</p>
+    <form method="post" action="/actions/bulk-edit-sources" class="space-y-3 min-h-0 overflow-y-auto grow" id="form-bulk-edit-sources">
+      <input type="hidden" name="redirect" value="" data-bulk-sources-redirect />
+      <div data-bulk-source-ids></div>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Scan schedule</legend>
+        <select name="scan_cron" class="select w-full" aria-label="Scan schedule">
+          <option value="__nochange__" selected>No change</option>
+          <option value="never">Never</option>
+          {{range .ScanCronDescriptors}}
+          <option value="{{.}}">{{.}}</option>
+          {{end}}
+        </select>
+      </fieldset>
+
+      <div class="space-y-2">
+        <h4 class="font-semibold text-base">Filter</h4>
+        <fieldset class="fieldset bg-base-200 border border-base-300 rounded-box p-4">
+          <legend class="fieldset-legend">Stop full scan after</legend>
+          <div class="join w-full">
+            <input type="number" name="full_scan_limit" id="bulk-edit-sources-full-scan-limit"
+                   class="input join-item grow min-w-0"
+                   min="1"
+                   step="1"
+                   placeholder="No change" />
+            <span class="btn join-item no-animation pointer-events-none">videos</span>
+          </div>
+          <p class="label">Empty = No change. Caps how many entries yt-dlp lists on a full scan.</p>
+        </fieldset>
+        <fieldset class="fieldset bg-base-200 border border-base-300 rounded-box p-4">
+          <legend class="fieldset-legend">Video title</legend>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full min-w-0">
+            {{template "field_input" (dict
+              "Name" "title_regexp_include"
+              "Label" "Include"
+              "Value" ""
+              "ID" "bulk-edit-sources-title-include"
+              "Mono" true
+              "Placeholder" "No change"
+            )}}
+            {{template "field_input" (dict
+              "Name" "title_regexp_exclude"
+              "Label" "Exclude"
+              "Value" ""
+              "ID" "bulk-edit-sources-title-exclude"
+              "Mono" true
+              "Placeholder" "No change"
+            )}}
+          </div>
+          <p class="label">Empty = No change. Include keeps matching titles; exclude drops them.</p>
+        </fieldset>
+      </div>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Discovered video status</legend>
+        <select name="index_as_ignored" class="select w-full" aria-label="Discovered video status">
+          <option value="" selected>No change</option>
+          <option value="0">Wanted</option>
+          <option value="1">Ignored</option>
+        </select>
+      </fieldset>
+
+      <details class="collapse collapse-arrow bg-base-200 border border-base-300 rounded-box w-full">
+        <summary class="collapse-title font-medium text-sm min-h-0 py-3">Default video metadata</summary>
+        <div class="collapse-content gap-3 flex flex-col">
+          <p class="text-sm opacity-60">Initial metadata SoftFilled onto newly indexed videos.</p>
+          <fieldset class="fieldset w-full min-w-0 border-0 p-0 bg-transparent">
+            <label class="select w-full">
+              <span class="label shrink-0">Special kind</span>
+              <select name="special_feature" class="grow min-w-0" aria-label="Special kind">
+                <option value="" selected>No change</option>
+                <option value="episode">none</option>
+                {{range .PackRoleOptions}}
+                <option value="{{.Value}}">{{.Label}}</option>
+                {{end}}
+              </select>
+            </label>
+          </fieldset>
+          <div class="grid gap-3 sm:grid-cols-2">
+            {{template "metadata_suggest_row" (dict "Name" "studio" "Label" "Studio" "Value" "" "Placeholder" "No change" "ListID" "sources-bulk-meta-dl-studio" "Options" .Suggestions.Studios)}}
+            {{template "metadata_suggest_row" (dict "Name" "country" "Label" "Country" "Value" "" "Placeholder" "No change" "ListID" "sources-bulk-meta-dl-country" "Options" .Suggestions.Countries)}}
+          </div>
+          {{template "metadata_suggest_row" (dict "Name" "mpaa" "Label" "Content rating" "Value" "" "Placeholder" "No change" "ListID" "sources-bulk-meta-dl-mpaa" "Options" .Suggestions.MPAAs)}}
+          <div class="grid gap-3 sm:grid-cols-2">
+            {{template "metadata_string_list_editor" (dict
+              "Label" "Genres"
+              "Name" "genre"
+              "Singular" "genre"
+              "Items" (list)
+              "Options" .Suggestions.Genres
+              "ListID" "sources-bulk-meta-dl-genres"
+              "Placeholder" "Add a genre"
+              "EmptyText" "No change"
+            )}}
+            {{template "metadata_string_list_editor" (dict
+              "Label" "Tags"
+              "Name" "tag"
+              "Singular" "tag"
+              "Items" (list)
+              "Options" .Suggestions.Tags
+              "ListID" "sources-bulk-meta-dl-tags"
+              "Placeholder" "Add a tag"
+              "EmptyText" "No change"
+            )}}
+          </div>
+          {{template "metadata_actors_editor" (dict "Actors" (list) "NameOptions" .Suggestions.ActorNames "RoleOptions" .Suggestions.ActorRoles "EmptyText" "No change")}}
+        </div>
+      </details>
+
+      <div class="modal-action shrink-0">
+        <label for="modal-bulk-edit-sources" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
   </div>

@@ -33,7 +33,7 @@
 {{if and .ShowToolbar (ne .ViewMode "table")}}{{template "list_load_controls" .}}{{end}}
 {{end}}
 {{if .ShowRowActions}}{{template "sources_row_modals" .}}{{end}}
-{{if .SourcesBulkMode}}{{template "sources_bulk_modals"}}{{end}}
+{{if .SourcesBulkMode}}{{template "sources_bulk_modals" .}}{{end}}
 </div>
 {{end}}
 

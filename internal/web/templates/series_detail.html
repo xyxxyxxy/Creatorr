@@ -78,11 +78,11 @@
 {{end}}
 {{template "list_panel_end"}}
 
+{{template "notes_editor" (dict "Value" .Series.Notes "Action" "/actions/save-series-notes" "IDName" "series_id" "ID" .Series.ID)}}
+
 {{if .HasVideos}}
 {{template "series_videos_live" .VideosLive}}
 {{end}}
-
-{{template "notes_editor" (dict "Value" .Series.Notes "Action" "/actions/save-series-notes" "IDName" "series_id" "ID" .Series.ID)}}
 
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Series folder files: tvshow.nfo, art.")}}

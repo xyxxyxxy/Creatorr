@@ -2,11 +2,13 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
+	"github.com/xyxxyxxy/Creatorr/internal/cronexpr"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
@@ -132,6 +134,98 @@ func (h *Handler) actionBulkScanSources(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	http.Redirect(w, r, sourcesBulkRedirect(r, "bulk_scan_sources", queued, skipped, ""), http.StatusSeeOther)
+}
+
+// parseBulkEditSourceParams builds UpdateSourceParams with nil pointers for No-change fields.
+func parseBulkEditSourceParams(r *http.Request) (library.UpdateSourceParams, error) {
+	_ = r.ParseForm()
+	var p library.UpdateSourceParams
+	if cron := strings.TrimSpace(r.FormValue("scan_cron")); cron != "" && cron != "__nochange__" {
+		if strings.EqualFold(cron, "never") {
+			empty := ""
+			p.ScanCron = &empty
+		} else {
+			normalized, err := cronexpr.NormalizeScanCron(cron)
+			if err != nil {
+				return p, err
+			}
+			p.ScanCron = &normalized
+		}
+	}
+	if raw := strings.TrimSpace(r.FormValue("full_scan_limit")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			return p, fmt.Errorf("full_scan_limit must be >= 1 (leave empty for No change)")
+		}
+		p.FullScanLimit = &n
+	}
+	if v := strings.TrimSpace(r.FormValue("title_regexp_include")); v != "" {
+		p.TitleRegexpInclude = &v
+	}
+	if v := strings.TrimSpace(r.FormValue("title_regexp_exclude")); v != "" {
+		p.TitleRegexpExclude = &v
+	}
+	switch strings.TrimSpace(r.FormValue("index_as_ignored")) {
+	case "0":
+		f := false
+		p.IndexAsIgnored = &f
+	case "1":
+		t := true
+		p.IndexAsIgnored = &t
+	}
+	if v := strings.TrimSpace(r.FormValue("studio")); v != "" {
+		p.Studio = &v
+	}
+	if v := strings.TrimSpace(r.FormValue("country")); v != "" {
+		p.Country = &v
+	}
+	if v := strings.TrimSpace(r.FormValue("mpaa")); v != "" {
+		p.MPAA = &v
+	}
+	if g := library.ParseStringListFields(r.Form["genre"]); len(g) > 0 {
+		p.Genres = &g
+	}
+	if t := library.ParseStringListFields(r.Form["tag"]); len(t) > 0 {
+		p.Tags = &t
+	}
+	if a := library.ParseActorsFromFields(r.Form["actor_name"], r.Form["actor_role"]); len(a) > 0 {
+		p.Actors = &a
+	}
+	if v := strings.TrimSpace(r.FormValue("special_feature")); v != "" {
+		p.SpecialFeature = &v
+	}
+	return p, nil
+}
+
+func (h *Handler) actionBulkEditSources(w http.ResponseWriter, r *http.Request) {
+	ids := parseSourceIDList(r)
+	if len(ids) == 0 {
+		http.Redirect(w, r, sourcesBulkRedirect(r, "", 0, 0, "select at least one source"), http.StatusSeeOther)
+		return
+	}
+	p, err := parseBulkEditSourceParams(r)
+	if err != nil {
+		http.Redirect(w, r, sourcesBulkRedirect(r, "", 0, 0, err.Error()), http.StatusSeeOther)
+		return
+	}
+	updated, skipped := 0, 0
+	for _, id := range ids {
+		src, err := h.Library.GetSourceByID(id)
+		if err != nil {
+			skipped++
+			continue
+		}
+		if _, err := h.Library.UpdateSource(src.SeriesID, id, p); err != nil {
+			skipped++
+			continue
+		}
+		updated++
+	}
+	if updated == 0 && skipped > 0 {
+		http.Redirect(w, r, sourcesBulkRedirect(r, "", 0, skipped, "no sources updated"), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, sourcesBulkRedirect(r, "bulk_sources_updated", updated, skipped, ""), http.StatusSeeOther)
 }
 
 func (h *Handler) actionBulkDeleteSources(w http.ResponseWriter, r *http.Request) {
