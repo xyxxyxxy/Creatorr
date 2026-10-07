@@ -34,23 +34,39 @@
     <td class="whitespace-nowrap text-end">
       <div class="join">
         {{if $locked}}
-        <span class="btn btn-xs join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Rename: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">Rename</span>
-        <span class="btn btn-xs join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Remove: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">Remove</span>
+        <span class="btn btn-xs btn-square join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Rename: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">
+          <i data-lucide="pencil" class="size-3.5" aria-hidden="true"></i>
+        </span>
+        <span class="btn btn-soft btn-error btn-xs btn-square join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Remove: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">
+          <i data-lucide="trash-2" class="size-3.5" aria-hidden="true"></i>
+        </span>
         {{if not $v.Blocked}}
-        <span class="btn btn-xs join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Remove and block auto-fill: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">Remove and block auto-fill</span>
+        <span class="btn btn-soft btn-warning btn-xs btn-square join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Remove and block auto-fill: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">
+          <i data-lucide="shield-ban" class="size-3.5" aria-hidden="true"></i>
+        </span>
         {{else}}
-        <span class="btn btn-xs join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Allow auto-fill: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">Allow auto-fill</span>
+        <span class="btn btn-xs btn-square join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Allow auto-fill: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">
+          <i data-lucide="shield-off" class="size-3.5" aria-hidden="true"></i>
+        </span>
         {{end}}
         {{else}}
-        <label for="modal-catalog-rename-{{$i}}" class="btn btn-xs join-item">Rename</label>
-        <label for="modal-catalog-remove-{{$i}}" class="btn btn-xs join-item">Remove</label>
+        <label for="modal-catalog-rename-{{$i}}" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Rename" aria-label="Rename">
+          <i data-lucide="pencil" class="size-3.5"></i>
+        </label>
+        <label for="modal-catalog-remove-{{$i}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Remove" aria-label="Remove">
+          <i data-lucide="trash-2" class="size-3.5"></i>
+        </label>
         {{if not $v.Blocked}}
-        <label for="modal-catalog-block-{{$i}}" class="btn btn-xs btn-warning join-item">Remove and block auto-fill</label>
+        <label for="modal-catalog-block-{{$i}}" class="btn btn-soft btn-warning btn-xs btn-square join-item tooltip tooltip-top" data-tip="Remove and block auto-fill" aria-label="Remove and block auto-fill">
+          <i data-lucide="shield-ban" class="size-3.5"></i>
+        </label>
         {{else}}
         <form method="post" action="/actions/catalog-vocab-unblock" class="join-item m-0 inline">
           <input type="hidden" name="field" value="{{$field}}" />
           <input type="hidden" name="from" value="{{$v.Value}}" />
-          <button type="submit" class="btn btn-xs">Allow auto-fill</button>
+          <button type="submit" class="btn btn-xs btn-square tooltip tooltip-top" data-tip="Allow auto-fill" aria-label="Allow auto-fill">
+            <i data-lucide="shield-off" class="size-3.5"></i>
+          </button>
         </form>
         {{end}}
         {{end}}
@@ -67,19 +83,23 @@
 {{range .Values}}{{if and .Blocked (eq .SeriesCount 0) (eq .VideoCount 0) (eq .SourceCount 0)}}{{$hasBlockedIdle = true}}{{end}}{{end}}
 {{if $hasBlockedIdle}}
 <h3 class="font-semibold text-base mt-4">Blocked from auto-fill</h3>
-<p class="text-sm opacity-60 mb-2">These values are not added automatically. Allow auto-fill does not restore prior usages.</p>
+<p class="text-sm opacity-60 mb-2">These values are not added automatically.</p>
 <ul class="space-y-2">
   {{range .Values}}
   {{if and .Blocked (eq .SeriesCount 0) (eq .VideoCount 0) (eq .SourceCount 0)}}
   <li class="flex flex-wrap items-center gap-2 justify-between border border-base-300 rounded-box px-3 py-2">
     <span class="font-mono text-sm break-all">{{.Value}}</span>
     {{if $locked}}
-    <span class="btn btn-xs btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Allow auto-fill: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">Allow auto-fill</span>
+    <span class="btn btn-xs btn-square btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Allow auto-fill: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">
+      <i data-lucide="shield-off" class="size-3.5" aria-hidden="true"></i>
+    </span>
     {{else}}
     <form method="post" action="/actions/catalog-vocab-unblock" class="m-0">
       <input type="hidden" name="field" value="{{$field}}" />
       <input type="hidden" name="from" value="{{.Value}}" />
-      <button type="submit" class="btn btn-xs">Allow auto-fill</button>
+      <button type="submit" class="btn btn-xs btn-square tooltip tooltip-top" data-tip="Allow auto-fill" aria-label="Allow auto-fill">
+        <i data-lucide="shield-off" class="size-3.5"></i>
+      </button>
     </form>
     {{end}}
   </li>
@@ -134,7 +154,7 @@
 <div class="modal">
   <div class="modal-box">
     <h3 class="font-bold text-lg mb-2">Remove and block auto-fill</h3>
-    <p class="text-sm mb-3">Removes <span class="font-mono">{{$v.Value}}</span> from {{$v.SeriesCount}} series, {{$v.VideoCount}} videos, and {{$v.SourceCount}} sources, and stops auto-fill from adding it again (site / info.json, source defaults, domain seed). Manual Metadata edit and Import NFO can still set it.</p>
+    <p class="text-sm mb-3">Removes <span class="font-mono">{{$v.Value}}</span> from {{$v.SeriesCount}} series, {{$v.VideoCount}} videos, and {{$v.SourceCount}} sources, and stops auto-fill from adding it again from site / info.json, source defaults, and domain seed. Manual Metadata edit and Import NFO can still set it.</p>
     <form method="post" action="/actions/catalog-vocab-remove">
       <input type="hidden" name="field" value="{{$field}}" />
       <input type="hidden" name="from" value="{{$v.Value}}" />
