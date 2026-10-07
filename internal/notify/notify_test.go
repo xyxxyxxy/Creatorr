@@ -358,6 +358,36 @@ func TestFormatFileSyncIssuesBody(t *testing.T) {
 	if !strings.Contains(body, "downloaded_integrity_failed") || !strings.Contains(body, "sidecar") {
 		t.Fatalf("want downloaded_integrity_failed + sidecar hint: %q", body)
 	}
+	if !strings.Contains(body, "Want or Download now") || strings.Contains(body, "Re-download or regenerate") {
+		t.Fatalf("want Want/Download now hint, not Re-download: %q", body)
+	}
+}
+
+func TestVerifyFailedBodyUsesWantOrDownloadNow(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "verify-fail.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	taskID := seedTask(t, d)
+	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
+		return nil
+	})
+	defer notify.SetSendFnForTest(old)
+	if err := notify.VerifyFailed(context.Background(), d, taskID, "Series", "Ep", "null_decode boom"); err != nil {
+		t.Fatal(err)
+	}
+	items, err := notify.ListNotifications(d, notify.ListFilter{}, 10, 0)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%v err=%v", items, err)
+	}
+	body := items[0].Body
+	if !strings.Contains(body, "Want or Download now to retry") {
+		t.Fatalf("want Want/Download now: %q", body)
+	}
+	if strings.Contains(body, "Re-download to retry") {
+		t.Fatalf("stale Re-download copy: %q", body)
+	}
 }
 
 func TestFileSyncIssuesEmptyNoop(t *testing.T) {
