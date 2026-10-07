@@ -1,5 +1,5 @@
 {{define "want_ignore_button"}}
-{{/* Same UI slot: Want / Ignore / Delete. Expects VideoID, SeriesID, Status, DomainActive, DomainDisabledTitle, DownloadRunning, Class, optional DeleteClass, FormClass, Redirect, KeepScroll, LiveSwap, Icons.
+{{/* Same UI slot: Want / Ignore / Delete. Expects VideoID, SeriesID, Status, DomainActive, DomainDisabledTitle, DownloadRunning, Class, optional DeleteClass, FormClass, Redirect, KeepScroll, LiveSwap, Icons, BulkEditLocked.
      Delete: label only here - call delete_video_modal outside any .join (modal siblings break join :last-child radius).
      Icons (list/table trailing actions): tooltip-top. */}}
 {{$formClass := ""}}{{if .LiveSwap}}{{$formClass = "inline"}}{{else if .KeepScroll}}{{$formClass = "inline js-keep-scroll"}}{{end}}
@@ -8,12 +8,19 @@
 {{$tipDir := "tooltip-top"}}
 {{$live := .LiveSwap}}
 {{$target := "series-videos-live"}}{{if .LiveTarget}}{{$target = .LiveTarget}}{{end}}
+{{$actionDisabled := not .DomainActive}}
+{{$actionTip := ""}}
+{{if not .DomainActive}}{{$actionTip = .DomainDisabledTitle}}{{end}}
+{{if .BulkEditLocked}}
+  {{$actionDisabled = true}}
+  {{$actionTip = "Bulk edit queued"}}
+{{end}}
 {{if or (eq .Status "ignored") (eq .Status "deleted") (eq .Status "missing") (eq .Status "downloaded_integrity_failed")}}
 <form method="post" action="/actions/want-video"{{if $formClass}} class="{{$formClass}}"{{end}}{{if $live}} hx-post="/actions/want-video" hx-target="#{{$target}}" hx-swap="outerHTML"{{end}}>
   <input type="hidden" name="video_id" value="{{.VideoID}}" />
   <input type="hidden" name="series_id" value="{{.SeriesID}}" />
   {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
-  <button type="submit" class="{{.Class}}{{if .Icons}} tooltip {{$tipDir}}{{end}}" aria-label="Want" {{if not .DomainActive}}disabled{{end}}{{if .Icons}} data-tip="{{if not .DomainActive}}{{.DomainDisabledTitle}}{{else}}Want{{end}}"{{end}}>
+  <button type="submit" class="{{.Class}}{{if .Icons}} tooltip {{$tipDir}}{{end}}" aria-label="Want" {{if $actionDisabled}}disabled{{end}}{{if .Icons}} data-tip="{{if $actionTip}}{{$actionTip}}{{else}}Want{{end}}"{{end}}>
     {{if .Icons}}<i data-lucide="eye" class="{{$icon}}"></i>{{else}}<i data-lucide="eye" class="size-4"></i> Want{{end}}
   </button>
 </form>
@@ -25,7 +32,7 @@
 {{if not .DeferModal}}{{template "delete_video_modal" .}}{{end}}
 {{else if and (ne .Status "downloaded") (ne .Status "ignored") (ne .Status "missing") (ne .Status "deleted") (ne .Status "downloaded_integrity_failed")}}
 {{if .DownloadRunning}}
-<label for="modal-ignore-video-{{.VideoID}}" class="{{.Class}}{{if .Icons}} tooltip {{$tipDir}}{{end}}" aria-label="Ignore" data-modal-for="modal-ignore-video-{{.VideoID}}" {{if not .DomainActive}}aria-disabled="true"{{end}}{{if .Icons}} data-tip="{{if not .DomainActive}}{{.DomainDisabledTitle}}{{else}}Ignore{{end}}"{{end}}>
+<label for="modal-ignore-video-{{.VideoID}}" class="{{.Class}}{{if .Icons}} tooltip {{$tipDir}}{{end}}{{if $actionDisabled}} btn-disabled pointer-events-none{{end}}" aria-label="Ignore" data-modal-for="modal-ignore-video-{{.VideoID}}" {{if $actionDisabled}}aria-disabled="true"{{end}}{{if .Icons}} data-tip="{{if $actionTip}}{{$actionTip}}{{else}}Ignore{{end}}"{{end}}>
   {{if .Icons}}<i data-lucide="eye-off" class="{{$icon}}"></i>{{else}}<i data-lucide="eye-off" class="size-4"></i> Ignore{{end}}
 </label>
 {{else}}
@@ -33,7 +40,7 @@
   <input type="hidden" name="video_id" value="{{.VideoID}}" />
   <input type="hidden" name="series_id" value="{{.SeriesID}}" />
   {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
-  <button type="submit" class="{{.Class}}{{if .Icons}} tooltip {{$tipDir}}{{end}}" aria-label="Ignore" {{if not .DomainActive}}disabled{{end}}{{if .Icons}} data-tip="{{if not .DomainActive}}{{.DomainDisabledTitle}}{{else}}Ignore{{end}}"{{end}}>
+  <button type="submit" class="{{.Class}}{{if .Icons}} tooltip {{$tipDir}}{{end}}" aria-label="Ignore" {{if $actionDisabled}}disabled{{end}}{{if .Icons}} data-tip="{{if $actionTip}}{{$actionTip}}{{else}}Ignore{{end}}"{{end}}>
     {{if .Icons}}<i data-lucide="eye-off" class="{{$icon}}"></i>{{else}}<i data-lucide="eye-off" class="size-4"></i> Ignore{{end}}
   </button>
 </form>

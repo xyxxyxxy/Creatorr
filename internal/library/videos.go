@@ -647,7 +647,11 @@ func (s *Store) enqueueDownload(videoID int64, downloadNow bool) (int64, error) 
 // Pending and running download tasks for the video are cancelled.
 // Returns cancelled download tasks so the caller can write Activity rows.
 // Downloaded videos cannot be ignored - use DeleteVideo.
+// Conflict when the video is in an open bulk_edit_videos payload.
 func (s *Store) IgnoreVideo(videoID int64) ([]queue.Task, error) {
+	if err := s.errIfVideoBulkEditLocked(videoID); err != nil {
+		return nil, err
+	}
 	cur, err := s.GetVideo(videoID)
 	if err != nil {
 		return nil, err
@@ -819,7 +823,11 @@ func (s *Store) ListVideoHistoryByTaskID(taskID int64) ([]VideoHistoryEvent, err
 
 // WantVideo sets status to wanted from ignored, deleted, missing, or downloaded_integrity_failed.
 // Does not enqueue a download - download_wanted_cron or Download now picks it up.
+// Conflict when the video is in an open bulk_edit_videos payload.
 func (s *Store) WantVideo(id int64) (*Video, error) {
+	if err := s.errIfVideoBulkEditLocked(id); err != nil {
+		return nil, err
+	}
 	cur, err := s.GetVideo(id)
 	if err != nil {
 		return nil, err

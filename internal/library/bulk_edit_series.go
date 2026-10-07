@@ -53,6 +53,7 @@ func (s *Store) BulkEditSeriesBusy() (bool, error) {
 }
 
 // EnqueueBulkEditSeries queues a system-lane bulk series edit (settings and/or metadata).
+// Multiple tasks may coexist; Conflict when any requested id overlaps an open same-kind payload.
 func (s *Store) EnqueueBulkEditSeries(p BulkEditSeriesParams) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue unavailable", ErrInvalid)
@@ -63,6 +64,9 @@ func (s *Store) EnqueueBulkEditSeries(p BulkEditSeriesParams) (int64, error) {
 	}
 	if !p.hasAnyField() {
 		return 0, fmt.Errorf("%w: at least one field required", ErrInvalid)
+	}
+	if err := s.errIfBulkEditIDsOverlap(queue.KindBulkEditSeries, "series_ids", ids); err != nil {
+		return 0, err
 	}
 	if p.RootID != nil {
 		if _, err := s.GetRoot(*p.RootID); err != nil {
@@ -127,20 +131,13 @@ func (s *Store) EnqueueBulkEditSeries(p BulkEditSeriesParams) (int64, error) {
 	if p.hasMetadata() && !p.hasSettings() {
 		msg = "Bulk edit series metadata"
 	}
-	id, err := s.Queue.Enqueue(queue.EnqueueParams{
-		Origin: queue.OriginManual,
+	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin:  queue.OriginManual,
 		Kind:    queue.KindBulkEditSeries,
 		Domain:  queue.SystemDomain,
 		Payload: payload,
 		Message: msg,
 	})
-	if err != nil {
-		if errors.Is(err, queue.ErrDuplicate) {
-			return 0, fmt.Errorf("%w: bulk edit already queued", ErrConflict)
-		}
-		return 0, err
-	}
-	return id, nil
 }
 
 // SetSeriesMonitoredBulk sets monitored on each id. Continues on missing series.
@@ -257,7 +254,7 @@ func (s *Store) applyBulkEditOne(ser *Series, p bulkEditSeriesPayload, taskID in
 			m := NormalizeDeliveryMode(*p.DeliveryMode)
 			up.DeliveryMode = &m
 		}
-		if _, err := s.UpdateSeries(ser.ID, up); err != nil {
+		if _, err := s.updateSeriesDetailed(ser.ID, up); err != nil {
 			return err
 		}
 		ser2, err := s.GetSeries(ser.ID, false)
@@ -275,7 +272,7 @@ func (s *Store) applyBulkEditOne(ser *Series, p bulkEditSeriesPayload, taskID in
 		}
 	}
 	if p.Monitored != nil {
-		if err := s.SetSeriesMonitored(ser.ID, *p.Monitored); err != nil {
+		if err := s.setSeriesMonitored(ser.ID, *p.Monitored); err != nil {
 			return err
 		}
 	}
@@ -314,7 +311,7 @@ func (s *Store) applyBulkEditOne(ser *Series, p bulkEditSeriesPayload, taskID in
 	if p.SetActors {
 		meta.Actors = normalizeActorsList(p.Actors)
 	}
-	return s.SaveSeriesMetadata(ser.ID, meta)
+	return s.saveSeriesMetadata(ser.ID, meta)
 }
 
 func normalizeActorsList(actors []SeriesActor) []SeriesActor {

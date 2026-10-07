@@ -1,7 +1,6 @@
 {{define "series_list_live"}}
 <div id="series-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
      data-filter-total="{{.FilterTotal}}"
-     data-bulk-busy="{{if .BulkEditBusy}}1{{else}}0{{end}}"
      data-bulk-mode="0"
      data-view-mode="{{.ViewMode}}"
      data-list-mode="{{.ListMode}}"
@@ -32,8 +31,7 @@
       style="--list-grid-cols: max-content 1fr max-content">
     <div class="self-center flex items-center gap-3">
       <input type="checkbox" class="checkbox checkbox-sm" id="series-select-page"
-             aria-label="Select all on this page"
-             {{if .BulkEditBusy}}disabled{{end}} />
+             aria-label="Select all on this page" />
       <div class="text-sm tabular-nums opacity-70 whitespace-nowrap">
         <span data-series-bulk-count>0/{{.FilterTotal}}</span>
         <span>selected</span>
@@ -43,18 +41,12 @@
       {{if .ShowSelectAll}}
       <button type="button"
               class="btn btn-ghost btn-sm"
-              data-series-select-all-matching
-              {{if .BulkEditBusy}}disabled{{end}}>
+              data-series-select-all-matching>
         <i data-lucide="list-checks" class="size-4"></i>
         Select all
       </button>
       {{end}}
-      {{if .BulkEditBusy}}
-      <span class="text-sm opacity-60">Bulk edit running…</span>
-      <a class="link link-hover text-sm" href="/tasks">Tasks</a>
-      {{end}}
     </div>
-    {{if not .BulkEditBusy}}
     <div class="self-center justify-self-end flex flex-wrap gap-2 items-center">
       {{/* Labeled actions match page-navbar default btn; icon-only stay joined. */}}
       {{template "btn_labeled" (dict "Icon" "pencil" "Label" "Edit" "Data" "series-bulk-edit" "Disabled" true)}}
@@ -72,9 +64,6 @@
         </button>
       </div>
     </div>
-    {{else}}
-    <div class="size-10 shrink-0" aria-hidden="true"></div>
-    {{end}}
   </li>
 </ul>
 {{if ne .ViewMode "table"}}{{template "list_load_controls" .}}{{end}}

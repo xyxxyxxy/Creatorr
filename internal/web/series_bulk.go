@@ -148,6 +148,17 @@ func (h *Handler) seriesIDsJSON(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	locked, _ := h.Library.SeriesIDsLockedByBulkEdit()
+	if len(locked) > 0 {
+		out := make([]int64, 0, len(ids))
+		for _, id := range ids {
+			if _, ok := locked[id]; ok {
+				continue
+			}
+			out = append(out, id)
+		}
+		ids = out
+	}
 	if ids == nil {
 		ids = []int64{}
 	}

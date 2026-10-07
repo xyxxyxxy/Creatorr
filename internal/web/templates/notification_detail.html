@@ -25,7 +25,7 @@
 
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Message")}}
-<pre class="text-sm whitespace-pre-wrap font-sans max-h-[32rem] overflow-y-auto">{{.MessageBody}}</pre>
+<pre class="text-sm whitespace-pre-wrap font-mono max-h-[32rem] overflow-y-auto bg-base-200 rounded-box border border-base-300 p-3">{{.MessageBody}}</pre>
 {{template "list_panel_end"}}
 
 {{if or .RelatedTask .RelatedSections}}
@@ -49,7 +49,7 @@
         {{else if .RelatedTask.Message}}<span class="truncate">{{.RelatedTask.Message}}</span>{{end}}
       </div>
       {{if .RelatedTask.ErrorMessage}}
-      <pre class="text-xs whitespace-pre-wrap font-mono mt-1 max-h-24 overflow-y-auto{{if eq .RelatedTask.Status "failed"}} text-error{{end}}">{{.RelatedTask.ErrorMessage}}</pre>
+      <pre class="text-xs font-mono mt-1 truncate max-w-full{{if eq .RelatedTask.Status "failed"}} text-error{{end}}">{{.RelatedTask.ErrorMessage}}</pre>
       {{end}}
     </div>
   </li>

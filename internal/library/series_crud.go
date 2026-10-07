@@ -179,7 +179,15 @@ func (s *Store) UpdateSeries(id int64, p UpdateSeriesParams) (*Series, error) {
 }
 
 // UpdateSeriesDetailed is UpdateSeries with move-queue outcome.
+// Conflict when the series is in an open bulk_edit_series payload.
 func (s *Store) UpdateSeriesDetailed(id int64, p UpdateSeriesParams) (UpdateSeriesOutcome, error) {
+	if err := s.errIfSeriesBulkEditLocked(id); err != nil {
+		return UpdateSeriesOutcome{}, err
+	}
+	return s.updateSeriesDetailed(id, p)
+}
+
+func (s *Store) updateSeriesDetailed(id int64, p UpdateSeriesParams) (UpdateSeriesOutcome, error) {
 	var out UpdateSeriesOutcome
 	cur, err := s.GetSeries(id, false)
 	if err != nil {
@@ -289,7 +297,15 @@ func (s *Store) DeleteSeries(id int64, deleteFiles bool) error {
 // SetSeriesMonitored updates only series.monitored. Never mutates source/video/domain flags.
 // Turning off cancels pending tip Scan tasks only; full scans keep going.
 // Turning on does not enqueue scans - unfinished full scan already runs; tip Scan is cron/manual.
+// Conflict when the series is in an open bulk_edit_series payload.
 func (s *Store) SetSeriesMonitored(seriesID int64, monitored bool) error {
+	if err := s.errIfSeriesBulkEditLocked(seriesID); err != nil {
+		return err
+	}
+	return s.setSeriesMonitored(seriesID, monitored)
+}
+
+func (s *Store) setSeriesMonitored(seriesID int64, monitored bool) error {
 	if _, err := s.GetSeries(seriesID, false); err != nil {
 		return err
 	}

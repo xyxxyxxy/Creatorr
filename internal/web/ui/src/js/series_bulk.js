@@ -15,11 +15,6 @@ function seriesBulkFilterTotal() {
   return Number.isFinite(n) ? n : 0;
 }
 
-function seriesBulkBusy() {
-  const live = document.getElementById("series-list-live");
-  return !!(live && live.getAttribute("data-bulk-busy") === "1");
-}
-
 function seriesBulkPageCheckboxes() {
   return Array.from(document.querySelectorAll("#series-list-live .js-series-select"));
 }
@@ -45,13 +40,14 @@ function setSeriesBulkMode(on) {
 }
 
 function toggleSeriesBulkID(id) {
-  if (!id || seriesBulkBusy()) return;
-  if (seriesBulkSelected.has(id)) seriesBulkSelected.delete(id);
-  else seriesBulkSelected.add(id);
+  if (!id) return;
   const cb = document.querySelector(
     '#series-list-live .js-series-select[value="' + CSS.escape(id) + '"]'
   );
-  if (cb) cb.checked = seriesBulkSelected.has(id);
+  if (cb instanceof HTMLInputElement && cb.disabled) return;
+  if (seriesBulkSelected.has(id)) seriesBulkSelected.delete(id);
+  else seriesBulkSelected.add(id);
+  if (cb instanceof HTMLInputElement) cb.checked = seriesBulkSelected.has(id);
   syncSeriesBulkUI();
 }
 
@@ -71,7 +67,9 @@ function syncSeriesBulkUI() {
   });
   live.querySelectorAll("[data-series-monitor-wrap]").forEach((wrap) => {
     wrap.classList.remove("hidden");
-    const disabled = seriesBulkMode || seriesBulkBusy();
+    const lockedCb = wrap.closest("[data-series-id]")?.querySelector(".js-series-select");
+    const bulkLocked = !!(lockedCb && lockedCb.disabled);
+    const disabled = seriesBulkMode || bulkLocked;
     wrap.querySelectorAll("button, input, .monitor-toggle").forEach((el) => {
       if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement) {
         el.disabled = disabled;
@@ -125,15 +123,14 @@ function syncSeriesBulkUI() {
     const m = seriesBulkFilterTotal();
     const countEl = bar.querySelector("[data-series-bulk-count]");
     if (countEl) countEl.textContent = n + "/" + m;
-    const busy = seriesBulkBusy();
     bar.querySelectorAll(
       "[data-series-bulk-monitor], [data-series-bulk-unmonitor], [data-series-bulk-edit], [data-series-bulk-metadata], [data-series-bulk-delete]"
     ).forEach((btn) => {
-      btn.disabled = busy || n === 0;
+      btn.disabled = n === 0;
     });
     const selectAllBtn = bar.querySelector("[data-series-select-all-matching]");
     if (selectAllBtn) {
-      selectAllBtn.disabled = busy || (m > 0 && n >= m);
+      selectAllBtn.disabled = m > 0 && n >= m;
     }
   }
   // Always mirror Set → checkbox UI (exit mode clears Set but left boxes checked).
@@ -142,14 +139,14 @@ function syncSeriesBulkUI() {
     cb.checked = seriesBulkSelected.has(cb.value);
   });
   if (bar) {
-    const busy = seriesBulkBusy();
+    const unlocked = pageBoxes.filter((cb) => !cb.disabled);
     const pageAll =
-      pageBoxes.length > 0 && pageBoxes.every((cb) => seriesBulkSelected.has(cb.value));
+      unlocked.length > 0 && unlocked.every((cb) => seriesBulkSelected.has(cb.value));
     const pageCb = document.getElementById("series-select-page");
     if (pageCb) {
       pageCb.checked = pageAll;
-      pageCb.indeterminate = !pageAll && pageBoxes.some((cb) => seriesBulkSelected.has(cb.value));
-      pageCb.disabled = busy || pageBoxes.length === 0;
+      pageCb.indeterminate = !pageAll && unlocked.some((cb) => seriesBulkSelected.has(cb.value));
+      pageCb.disabled = unlocked.length === 0;
     }
   }
   fillSeriesBulkIDs(document);
@@ -328,7 +325,7 @@ function submitSeriesBulkForm(formId) {
 }
 
 function runSeriesBulkAction(action) {
-  if (!seriesBulkMode || seriesBulkBusy() || seriesBulkSelected.size === 0) return;
+  if (!seriesBulkMode || seriesBulkSelected.size === 0) return;
   const n = seriesBulkSelected.size;
   const m = seriesBulkFilterTotal();
   fillSeriesBulkIDs(document);
@@ -451,7 +448,7 @@ export function bootSeriesBulk() {
     const selectAll = ev.target.closest("[data-series-select-all-matching]");
     if (selectAll) {
       ev.preventDefault();
-      if (seriesBulkBusy() || selectAll.disabled) return;
+      if (selectAll.disabled) return;
       selectAll.disabled = true;
       selectAllMatchingSeries()
         .catch(() => {})

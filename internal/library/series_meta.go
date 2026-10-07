@@ -90,7 +90,15 @@ type SaveSeriesMetadataParams struct {
 }
 
 // SaveSeriesMetadata writes DB fields, ensures series dir, applies art, writes tvshow.nfo.
+// Conflict when the series is in an open bulk_edit_series payload.
 func (s *Store) SaveSeriesMetadata(seriesID int64, p SaveSeriesMetadataParams) error {
+	if err := s.errIfSeriesBulkEditLocked(seriesID); err != nil {
+		return err
+	}
+	return s.saveSeriesMetadata(seriesID, p)
+}
+
+func (s *Store) saveSeriesMetadata(seriesID int64, p SaveSeriesMetadataParams) error {
 	ser, err := s.GetSeries(seriesID, false)
 	if err != nil {
 		return err

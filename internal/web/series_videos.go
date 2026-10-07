@@ -19,6 +19,7 @@ type seriesVideoRow struct {
 	DownloadRunning     bool
 	DeliveryQueued      bool
 	Deleting            bool
+	BulkEditLocked      bool
 	SizeLabel           string
 	ResolutionLabel     string
 	DurationLabel       string
@@ -218,6 +219,10 @@ func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, s
 	}
 
 	videos := h.buildSeriesVideoRows(vidList, byVideo, domainBySource)
+	lockedIDs, _ := h.Library.VideoIDsLockedByBulkEdit()
+	for i := range videos {
+		_, videos[i].BulkEditLocked = lockedIDs[videos[i].ID]
+	}
 	return seriesVideosLiveData{
 		SeriesID:        id,
 		Videos:          videos,

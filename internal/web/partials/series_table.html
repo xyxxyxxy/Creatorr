@@ -1,5 +1,5 @@
 {{define "series_table"}}
-{{/* Dot: Series []seriesListRow, TableCols, TableColsCookie, BulkEditBusy, Page PageInfo */}}
+{{/* Dot: Series []seriesListRow, TableCols, TableColsCookie, Page PageInfo */}}
 <div data-list-table>
   {{template "list_table_chrome" (dict
     "Page" .Page
@@ -21,9 +21,15 @@
         {{range .Series}}
         <tr data-series-id="{{.ID}}" class="row-hover">
           <td class="hidden w-0 align-middle" data-series-select-wrap>
+            {{if .BulkEditLocked}}
+            <span class="tooltip tooltip-top inline-flex" data-tip="Bulk edit queued">
+              <input type="checkbox" class="checkbox checkbox-sm js-series-select" value="{{.ID}}"
+                     aria-label="Bulk edit queued" disabled />
+            </span>
+            {{else}}
             <input type="checkbox" class="checkbox checkbox-sm js-series-select" value="{{.ID}}"
-                   aria-label="Select series"
-                   {{if $.BulkEditBusy}}disabled{{end}} />
+                   aria-label="Select series" />
+            {{end}}
           </td>
           {{$row := .}}
           {{range $.TableCols}}
@@ -47,7 +53,8 @@
                 "LiveTarget" "series-list-live"
                 "AsButton" true
                 "Title" "Include this series in scans and download-wanted"
-                "Disabled" $.BulkEditBusy
+                "Disabled" $row.BulkEditLocked
+                "DisabledTitle" "Bulk edit queued"
               )}}
             </div>
             {{else if eq .Key "progress"}}

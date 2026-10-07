@@ -246,10 +246,11 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 	// System lane: at most one pending/running task per kind (except import keeps per-video).
 	if p.Domain == SystemDomain {
 		switch p.Kind {
-		case KindSyncFiles, KindRetentionDelete, KindRegenerateNFO, KindResetMetadataFromInfo, KindIntegrityCheck, KindYtDlpUpdate, KindBulkEditSeries, KindBulkEditVideos:
+		case KindSyncFiles, KindRetentionDelete, KindRegenerateNFO, KindResetMetadataFromInfo, KindIntegrityCheck, KindYtDlpUpdate:
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE domain = ? AND kind = ? AND status IN (?, ?) LIMIT 1
 			`, SystemDomain, p.Kind, StatusPending, StatusRunning)
+			// KindBulkEditSeries / KindBulkEditVideos: overlap checked in library enqueue helpers.
 			// KindRenameEpisodes: full vs scoped dedup is handled in library enqueue helpers.
 		}
 	}

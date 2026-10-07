@@ -4868,10 +4868,6 @@
     const n = parseInt(live.getAttribute("data-filter-total") || "0", 10);
     return Number.isFinite(n) ? n : 0;
   }
-  function seriesBulkBusy() {
-    const live = document.getElementById("series-list-live");
-    return !!(live && live.getAttribute("data-bulk-busy") === "1");
-  }
   function seriesBulkPageCheckboxes() {
     return Array.from(document.querySelectorAll("#series-list-live .js-series-select"));
   }
@@ -4894,13 +4890,14 @@
     syncSeriesBulkUI();
   }
   function toggleSeriesBulkID(id) {
-    if (!id || seriesBulkBusy()) return;
-    if (seriesBulkSelected.has(id)) seriesBulkSelected.delete(id);
-    else seriesBulkSelected.add(id);
+    if (!id) return;
     const cb = document.querySelector(
       '#series-list-live .js-series-select[value="' + CSS.escape(id) + '"]'
     );
-    if (cb) cb.checked = seriesBulkSelected.has(id);
+    if (cb instanceof HTMLInputElement && cb.disabled) return;
+    if (seriesBulkSelected.has(id)) seriesBulkSelected.delete(id);
+    else seriesBulkSelected.add(id);
+    if (cb instanceof HTMLInputElement) cb.checked = seriesBulkSelected.has(id);
     syncSeriesBulkUI();
   }
   function syncSeriesBulkUI() {
@@ -4919,7 +4916,9 @@
     });
     live.querySelectorAll("[data-series-monitor-wrap]").forEach((wrap) => {
       wrap.classList.remove("hidden");
-      const disabled = seriesBulkMode || seriesBulkBusy();
+      const lockedCb = wrap.closest("[data-series-id]")?.querySelector(".js-series-select");
+      const bulkLocked = !!(lockedCb && lockedCb.disabled);
+      const disabled = seriesBulkMode || bulkLocked;
       wrap.querySelectorAll("button, input, .monitor-toggle").forEach((el) => {
         if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement) {
           el.disabled = disabled;
@@ -4969,15 +4968,14 @@
       const m = seriesBulkFilterTotal();
       const countEl = bar.querySelector("[data-series-bulk-count]");
       if (countEl) countEl.textContent = n + "/" + m;
-      const busy = seriesBulkBusy();
       bar.querySelectorAll(
         "[data-series-bulk-monitor], [data-series-bulk-unmonitor], [data-series-bulk-edit], [data-series-bulk-metadata], [data-series-bulk-delete]"
       ).forEach((btn) => {
-        btn.disabled = busy || n === 0;
+        btn.disabled = n === 0;
       });
       const selectAllBtn = bar.querySelector("[data-series-select-all-matching]");
       if (selectAllBtn) {
-        selectAllBtn.disabled = busy || m > 0 && n >= m;
+        selectAllBtn.disabled = m > 0 && n >= m;
       }
     }
     const pageBoxes = seriesBulkPageCheckboxes();
@@ -4985,13 +4983,13 @@
       cb.checked = seriesBulkSelected.has(cb.value);
     });
     if (bar) {
-      const busy = seriesBulkBusy();
-      const pageAll = pageBoxes.length > 0 && pageBoxes.every((cb) => seriesBulkSelected.has(cb.value));
+      const unlocked = pageBoxes.filter((cb) => !cb.disabled);
+      const pageAll = unlocked.length > 0 && unlocked.every((cb) => seriesBulkSelected.has(cb.value));
       const pageCb = document.getElementById("series-select-page");
       if (pageCb) {
         pageCb.checked = pageAll;
-        pageCb.indeterminate = !pageAll && pageBoxes.some((cb) => seriesBulkSelected.has(cb.value));
-        pageCb.disabled = busy || pageBoxes.length === 0;
+        pageCb.indeterminate = !pageAll && unlocked.some((cb) => seriesBulkSelected.has(cb.value));
+        pageCb.disabled = unlocked.length === 0;
       }
     }
     fillSeriesBulkIDs(document);
@@ -5150,7 +5148,7 @@
     if (form) form.requestSubmit();
   }
   function runSeriesBulkAction(action) {
-    if (!seriesBulkMode || seriesBulkBusy() || seriesBulkSelected.size === 0) return;
+    if (!seriesBulkMode || seriesBulkSelected.size === 0) return;
     const n = seriesBulkSelected.size;
     const m = seriesBulkFilterTotal();
     fillSeriesBulkIDs(document);
@@ -5264,7 +5262,7 @@
       const selectAll = ev.target.closest("[data-series-select-all-matching]");
       if (selectAll) {
         ev.preventDefault();
-        if (seriesBulkBusy() || selectAll.disabled) return;
+        if (selectAll.disabled) return;
         selectAll.disabled = true;
         selectAllMatchingSeries().catch(() => {
         }).finally(() => syncSeriesBulkUI());
@@ -5334,10 +5332,6 @@
     const n = parseInt(live.getAttribute("data-filter-total") || "0", 10);
     return Number.isFinite(n) ? n : 0;
   }
-  function videoBulkBusy() {
-    const live = videoBulkLive();
-    return !!(live && live.getAttribute("data-bulk-busy") === "1");
-  }
   function videoBulkSeriesID() {
     return "";
   }
@@ -5365,12 +5359,13 @@
     syncVideoBulkUI();
   }
   function toggleVideoBulkID(id) {
-    if (!id || videoBulkBusy()) return;
+    if (!id) return;
+    const live = videoBulkLive();
+    const cb0 = live ? live.querySelector('.js-video-select[value="' + CSS.escape(id) + '"]') : null;
+    if (cb0 instanceof HTMLInputElement && cb0.disabled) return;
     if (videoBulkSelected.has(id)) videoBulkSelected.delete(id);
     else videoBulkSelected.add(id);
-    const live = videoBulkLive();
-    const cb = live ? live.querySelector('.js-video-select[value="' + CSS.escape(id) + '"]') : null;
-    if (cb) cb.checked = videoBulkSelected.has(id);
+    if (cb0 instanceof HTMLInputElement) cb0.checked = videoBulkSelected.has(id);
     syncVideoBulkUI();
   }
   function syncVideoBulkUI() {
@@ -5387,8 +5382,8 @@
     live.querySelectorAll("[data-video-select-wrap]").forEach((wrap) => {
       wrap.classList.toggle("hidden", !videoBulkMode);
     });
-    const rowActionsDisabled = videoBulkMode || videoBulkBusy();
-    const rowActionsTip = videoBulkBusy() ? "Bulk edit running\u2026" : "Use the multi-select bar";
+    const rowActionsDisabled = videoBulkMode;
+    const rowActionsTip = "Use the multi-select bar";
     live.querySelectorAll("[data-video-row-actions]").forEach((wrap) => {
       wrap.querySelectorAll("button").forEach((btn) => {
         if (rowActionsDisabled) {
@@ -5485,15 +5480,14 @@
       const m = videoBulkFilterTotal();
       const countEl = bar.querySelector("[data-video-bulk-count]");
       if (countEl) countEl.textContent = n + "/" + m;
-      const busy = videoBulkBusy();
       bar.querySelectorAll(
         "[data-video-bulk-want], [data-video-bulk-ignore], [data-video-bulk-refresh], [data-video-bulk-metadata], [data-video-bulk-delete], [data-video-bulk-clear-errors]"
       ).forEach((btn) => {
-        btn.disabled = busy || n === 0;
+        btn.disabled = n === 0;
       });
       const selectAllBtn = bar.querySelector("[data-video-select-all-matching]");
       if (selectAllBtn) {
-        selectAllBtn.disabled = busy || m > 0 && n >= m;
+        selectAllBtn.disabled = m > 0 && n >= m;
       }
     }
     const pageBoxes = videoBulkPageCheckboxes();
@@ -5501,13 +5495,13 @@
       cb.checked = videoBulkSelected.has(cb.value);
     });
     if (bar) {
-      const busy = videoBulkBusy();
-      const pageAll = pageBoxes.length > 0 && pageBoxes.every((cb) => videoBulkSelected.has(cb.value));
+      const unlocked = pageBoxes.filter((cb) => !cb.disabled);
+      const pageAll = unlocked.length > 0 && unlocked.every((cb) => videoBulkSelected.has(cb.value));
       const pageCb = document.getElementById("video-select-page");
       if (pageCb) {
         pageCb.checked = pageAll;
-        pageCb.indeterminate = !pageAll && pageBoxes.some((cb) => videoBulkSelected.has(cb.value));
-        pageCb.disabled = busy || pageBoxes.length === 0;
+        pageCb.indeterminate = !pageAll && unlocked.some((cb) => videoBulkSelected.has(cb.value));
+        pageCb.disabled = unlocked.length === 0;
       }
     }
     fillVideoBulkIDs(document);
@@ -5567,7 +5561,7 @@
     }
   }
   function runVideoBulkAction(action) {
-    if (!videoBulkMode || videoBulkBusy() || videoBulkSelected.size === 0) return;
+    if (!videoBulkMode || videoBulkSelected.size === 0) return;
     const n = videoBulkSelected.size;
     const m = videoBulkFilterTotal();
     fillVideoBulkIDs(document);
@@ -5699,7 +5693,7 @@
       const selectAll = ev.target.closest("[data-video-select-all-matching]");
       if (selectAll) {
         ev.preventDefault();
-        if (videoBulkBusy() || selectAll.disabled) return;
+        if (selectAll.disabled) return;
         selectAll.disabled = true;
         selectAllMatchingVideos().catch(() => {
         }).finally(() => syncVideoBulkUI());

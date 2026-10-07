@@ -42,6 +42,7 @@ func (s *Store) BulkEditVideosBusy() (bool, error) {
 }
 
 // EnqueueBulkEditVideos queues a system-lane bulk video metadata edit.
+// Multiple tasks may coexist; Conflict when any requested id overlaps an open same-kind payload.
 func (s *Store) EnqueueBulkEditVideos(p BulkEditVideosParams) (int64, error) {
 	if s.Queue == nil {
 		return 0, fmt.Errorf("%w: queue unavailable", ErrInvalid)
@@ -52,6 +53,9 @@ func (s *Store) EnqueueBulkEditVideos(p BulkEditVideosParams) (int64, error) {
 	}
 	if !p.hasMetadata() {
 		return 0, fmt.Errorf("%w: at least one metadata field required", ErrInvalid)
+	}
+	if err := s.errIfBulkEditIDsOverlap(queue.KindBulkEditVideos, "video_ids", ids); err != nil {
+		return 0, err
 	}
 	payload := map[string]any{
 		"video_ids": ids,
@@ -89,20 +93,13 @@ func (s *Store) EnqueueBulkEditVideos(p BulkEditVideosParams) (int64, error) {
 		payload["set_special_feature"] = true
 		payload["special_feature"] = role
 	}
-	id, err := s.Queue.Enqueue(queue.EnqueueParams{
-		Origin: queue.OriginManual,
+	return s.Queue.Enqueue(queue.EnqueueParams{
+		Origin:  queue.OriginManual,
 		Kind:    queue.KindBulkEditVideos,
 		Domain:  queue.SystemDomain,
 		Payload: payload,
 		Message: "Bulk edit video metadata",
 	})
-	if err != nil {
-		if errors.Is(err, queue.ErrDuplicate) {
-			return 0, fmt.Errorf("%w: bulk edit already queued", ErrConflict)
-		}
-		return 0, err
-	}
-	return id, nil
 }
 
 // ListVideoIDsFiltered returns video ids for a series matching filter (list order).
@@ -237,7 +234,7 @@ func (s *Store) applyBulkEditVideoOne(videoID int64, p bulkEditVideosPayload) er
 	if p.SetSpecialFeature {
 		meta.PackRole = p.SpecialFeature
 	}
-	_, err = s.SaveVideoMetadata(v.ID, meta)
+	_, err = s.saveVideoMetadata(v.ID, meta)
 	return err
 }
 

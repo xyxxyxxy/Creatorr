@@ -1,5 +1,5 @@
 {{define "video_table"}}
-{{/* Dot: Videos []seriesVideoRow, TableCols, TableColsCookie, BulkEditBusy,
+{{/* Dot: Videos []seriesVideoRow, TableCols, TableColsCookie,
      SeriesTitles? map, ShowSeries bool, LiveTarget, Select bool, Page PageInfo */}}
 <div data-list-table>
   {{template "list_table_chrome" (dict
@@ -28,9 +28,15 @@
         <tr class="row-hover"{{if $.Select}} data-video-id="{{.ID}}"{{end}}>
           {{if $.Select}}
           <td class="hidden w-0 align-middle" data-video-select-wrap>
+            {{if .BulkEditLocked}}
+            <span class="tooltip tooltip-top inline-flex" data-tip="Bulk edit queued">
+              <input type="checkbox" class="checkbox checkbox-sm js-video-select" value="{{.ID}}"
+                     aria-label="Bulk edit queued" disabled />
+            </span>
+            {{else}}
             <input type="checkbox" class="checkbox checkbox-sm js-video-select" value="{{.ID}}"
-                   aria-label="Select video"
-                   {{if $.BulkEditBusy}}disabled{{end}} />
+                   aria-label="Select video" />
+            {{end}}
           </td>
           {{end}}
           {{$row := .}}
@@ -84,6 +90,7 @@
               "DeferModal" true
               "Class" "btn btn-square btn-xs join-item"
               "DeleteClass" "btn btn-soft btn-error btn-square btn-xs"
+              "BulkEditLocked" $row.BulkEditLocked
             }}
             <div class="join justify-end">
               {{if ne $row.Status "downloaded"}}
