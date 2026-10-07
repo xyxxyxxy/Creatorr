@@ -25,11 +25,14 @@ const (
 	SeriesPageSize = 20
 	// InfiniteChunkSize is rows per infinite-scroll chunk (/series and /videos list|cards|gallery).
 	InfiniteChunkSize = 50
-	// FixedDefault is the one-shot size for Overview Recent additions
-	// (two browser-video gallery rows at lg:grid-cols-4).
+	// FixedDefault is the max Overview Recent additions fetch (two Browser Videos
+	// gallery rows at lg:grid-cols-4). Narrower breakpoints hide trailing cards in CSS
+	// so the glance stays full rows (2×2 / 2×3 / 2×4).
 	FixedDefault = 8
-	// OverviewGalleryRow is one Overview Most wanted row (Browser Series gallery at lg:grid-cols-6).
-	OverviewGalleryRow = 6
+	// OverviewGalleryRow is the max Overview Most wanted fetch (one Browser Series
+	// gallery row at xl:grid-cols-7). Narrower breakpoints hide trailing cards in CSS
+	// so the glance stays one full row (3 / 4 / 5 / 6 / 7).
+	OverviewGalleryRow = 7
 	// OverviewTasksFixed is the one-shot size for Overview Recent tasks.
 	OverviewTasksFixed = 4
 	// MaxInfiniteRows caps auto-load append browsing.

@@ -36,7 +36,8 @@
 {{if not .RecentVideos}}
 {{template "list_empty" "No downloaded videos yet."}}
 {{else}}
-<ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" id="overview-recent-gallery">
+{{/* Fetch max (2 rows × lg:4). Hide trailing cards so each breakpoint is full rows only. */}}
+<ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 [&>:nth-child(n+5)]:hidden sm:[&>:nth-child(n+5)]:block sm:[&>:nth-child(n+7)]:hidden lg:[&>:nth-child(n+7)]:block" id="overview-recent-gallery">
   {{range .RecentVideos}}
   {{template "video_gallery_card" (dict
     "ID" .ID
@@ -59,7 +60,8 @@
 {{if not .WantedSeries}}
 {{template "list_empty" "No series yet."}}
 {{else}}
-<ul class="grid gap-3 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7" id="overview-wanted-gallery">
+{{/* Fetch max (xl:7). Hide trailing cards so each breakpoint is one full row only. */}}
+<ul class="grid gap-3 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 [&>:nth-child(n+4)]:hidden sm:[&>:nth-child(n+4)]:block sm:[&>:nth-child(n+5)]:hidden md:[&>:nth-child(n+5)]:block md:[&>:nth-child(n+6)]:hidden lg:[&>:nth-child(n+6)]:block lg:[&>:nth-child(n+7)]:hidden xl:[&>:nth-child(n+7)]:block" id="overview-wanted-gallery">
   {{range .WantedSeries}}
   {{template "series_gallery_card" .}}
   {{end}}
