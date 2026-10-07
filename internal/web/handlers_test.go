@@ -389,6 +389,10 @@ func TestOverviewRenders(t *testing.T) {
 		!strings.Contains(body, `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`) {
 		t.Fatalf("overview Recent gallery must match Browser Videos gallery grid: %s", truncate(body, 400))
 	}
+	if strings.Contains(body, `id="overview-recent-gallery"`) &&
+		!strings.Contains(body, `[&>:nth-child(n+5)]:hidden`) {
+		t.Fatalf("overview Recent gallery must hide overflow cards by breakpoint: %s", truncate(body, 500))
+	}
 	// Empty library: Most wanted stays empty (no gallery grid to assert).
 
 	idxRecent := strings.Index(body, "Recent additions")
@@ -417,8 +421,11 @@ func TestOverviewWantedGalleryMatchesSeriesGalleryGrid(t *testing.T) {
 	if !strings.Contains(tag, want) {
 		t.Fatalf("Most wanted must use Browser Series gallery grid %q, got %q", want, tag)
 	}
-	if web.OverviewGalleryRow != 6 {
-		t.Fatalf("OverviewGalleryRow=%d want 6 (one lg series-gallery row)", web.OverviewGalleryRow)
+	if !strings.Contains(tag, `[&>:nth-child(n+4)]:hidden`) || !strings.Contains(tag, `xl:[&>:nth-child(n+7)]:block`) {
+		t.Fatalf("Most wanted must hide overflow cards by breakpoint, got %q", tag)
+	}
+	if web.OverviewGalleryRow != 7 {
+		t.Fatalf("OverviewGalleryRow=%d want 7 (max xl series-gallery row)", web.OverviewGalleryRow)
 	}
 }
 

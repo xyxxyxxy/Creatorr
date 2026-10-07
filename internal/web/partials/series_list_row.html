@@ -1,7 +1,7 @@
 {{define "series_list_row"}}
 {{/* Dot: seriesListRow. Circular poster + title/progress/monitor.
-     Banner is last child, abspos fill of the list-row padding box: full height,
-     right-aligned fanart. Fade+scrim start at the banner art's left edge.
+     Banner is last child: layer fills the row; art is a right half-width
+     cover crop (object-position right) with mask+scrim fade from the left.
      Bulk JS expects list-row + data-series-id. */}}
 <li class="list-row relative min-h-20{{if .BannerURL}} series-list-banner-row{{end}}"
     data-series-id="{{.ID}}"
