@@ -50,7 +50,7 @@ func TestSeriesMoveExclusivity(t *testing.T) {
 		t.Fatalf("move other series while one open: %v", err)
 	}
 	// Open move blocks the other path-touching kinds.
-	for _, k := range []string{queue.KindRenameEpisodes, queue.KindRegenerateNFO, queue.KindResetMetadataFromInfo, queue.KindSyncFiles, queue.KindRetentionDelete} {
+	for _, k := range []string{queue.KindRenameEpisodes, queue.KindRegenerateNFO, queue.KindResetMetadataFromInfo, queue.KindSyncFiles, queue.KindRetentionDelete, queue.KindRewriteCatalogMeta} {
 		if err := sys(k); !errors.Is(err, queue.ErrDuplicate) {
 			t.Fatalf("%s while series_move open: %v", k, err)
 		}

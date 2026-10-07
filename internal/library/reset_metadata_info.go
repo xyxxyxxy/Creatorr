@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 // EnqueueResetMetadataFromInfoScoped queues a resumable reset of video catalog
@@ -165,6 +166,28 @@ func (s *Store) ResetVideoMetadataFromInfoJSON(videoID int64, taskID int64) (Res
 	meta := MediaMetaFromInfoJSON(infoPath)
 	genres := CategoriesFromInfoJSON(infoPath)
 	tags := TagsFromInfoJSON(infoPath)
+	softTags, err := settings.SoftFillTagsEnabled(s.DB)
+	if err != nil {
+		return out, err
+	}
+	softGenres, err := settings.SoftFillGenresEnabled(s.DB)
+	if err != nil {
+		return out, err
+	}
+	bl, err := settings.GetSoftFillBlocklist(s.DB)
+	if err != nil {
+		return out, err
+	}
+	if softGenres {
+		genres = settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldGenres, ParseStringListFields(genres))
+	} else {
+		genres = v.Genres
+	}
+	if softTags {
+		tags = settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldTags, ParseStringListFields(tags))
+	} else {
+		tags = v.Tags
+	}
 
 	title := strings.TrimSpace(meta.Title)
 	if title == "" {

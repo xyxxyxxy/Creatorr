@@ -4,6 +4,7 @@ package queue
 // They never run together: see PathTouchingSystemBusy and series_move in rejectDuplicate.
 var PathTouchingKinds = []string{
 	KindRenameEpisodes, KindRegenerateNFO, KindResetMetadataFromInfo, KindSyncFiles, KindRetentionDelete, KindSeriesMove,
+	KindRewriteCatalogMeta,
 }
 
 // PathTouchingSystemBusy reports a pending/running system task of any given kind.

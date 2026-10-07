@@ -66,6 +66,16 @@ func RegenerateNFOHandler(d Deps) TaskHandler {
 	}
 }
 
+// RewriteCatalogMetaHandler renames/removes Catalog values across series/videos/sources.
+func RewriteCatalogMetaHandler(d Deps) TaskHandler {
+	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
+		if d.Library == nil {
+			return apperrors.New(apperrors.CodeInternal, "catalog rewrite deps missing")
+		}
+		return d.Library.RewriteCatalogMetaPass(ctx, t, progress)
+	}
+}
+
 // ResetMetadataFromInfoHandler force-resets video metadata from packed info.json (resumable).
 func ResetMetadataFromInfoHandler(d Deps) TaskHandler {
 	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {

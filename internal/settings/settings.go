@@ -34,6 +34,10 @@ var Help = map[string]string{
 	KeyRetentionDeleteCron:          "Deleting old data according to root folder retention ('Settings → Library').",
 	KeySubtitleLangs:                "Supports all, regex (en.*), and -TAG exclusions. Applies on next download, metadata rescan, or Refresh sidecars.",
 	KeySubtitleAuto:                 "Also download auto-generated subtitles when no custom track exists for that language. Auto-only files are packed as .lang.auto.srt (e.g. .en.auto.srt).",
+	KeySoftFillTags:                 "Union yt-dlp / info.json tags into video tags on pack SoftFill and when SoftFill is applied from info.json. SoftFill blocks still drop listed values. Manage values under Settings → Catalog.",
+	KeySoftFillGenres:               "Union yt-dlp categories into video genres on pack SoftFill, metadata rescan, and when SoftFill is applied from info.json. SoftFill blocks still drop listed values. Manage values under Settings → Catalog.",
+	KeySoftFillDomainTag:            "On source create, seed the source hostname into default video tags (and video Metadata prefetch draft). Existing source tags are unchanged when this is off. SoftFill blocks still skip a blocked hostname.",
+	KeySoftFillBlocklist:            "", // Catalog UI; not shown as a Library knob
 	KeyArchiveFallback:              "When a cataloged video is gone at the live source, queue a Web Archive download (yt-dlp). Original source URL is kept. Operator is notified when archive media packs.",
 	KeyYtDlpUpdateChannel:           "GitHub release channel for Update now and for automatic updates when a schedule is set.",
 	KeyYtDlpUpdateCron:              "When set, Creatorr checks GitHub on boot and on this schedule. Configure update channel under 'Settings → Connect'. Disabling skips boot and cron.",
@@ -55,6 +59,10 @@ var Labels = map[string]string{
 	KeyRetentionDeleteCron:          "Retention delete schedule",
 	KeySubtitleLangs:                "Subtitle languages",
 	KeySubtitleAuto:                 "Include auto-generated subtitles",
+	KeySoftFillTags:                 "SoftFill tags from site / info.json",
+	KeySoftFillGenres:               "SoftFill genres from categories",
+	KeySoftFillDomainTag:            "Seed domain tag on source add",
+	KeySoftFillBlocklist:            "SoftFill blocklist",
 	KeyArchiveFallback:              "Web Archive fallback",
 	KeyYtDlpUpdateChannel:           "yt-dlp update channel",
 	KeyYtDlpUpdateCron:              "yt-dlp update schedule",
@@ -84,10 +92,14 @@ var schedulerOrder = []string{
 	KeyYtDlpUpdateCron,
 }
 
-// libraryOrder is Settings → Library (subtitles).
+// libraryOrder is Settings → Library (subtitles + SoftFill toggles).
+// softfill_blocklist is seeded but managed under Settings → Catalog (not listed here).
 var libraryOrder = []string{
 	KeySubtitleLangs,
 	KeySubtitleAuto,
+	KeySoftFillTags,
+	KeySoftFillGenres,
+	KeySoftFillDomainTag,
 }
 
 // CronKeys are schedule settings stored as cron (validated).
@@ -124,6 +136,10 @@ func SeedDefaults(database *db.DB) error {
 		KeyRetentionDeleteCron:          "@daily",
 		KeySubtitleLangs:                DefaultSubtitleLangs,
 		KeySubtitleAuto:                 DefaultSubtitleAuto,
+		KeySoftFillTags:                 DefaultSoftFillTags,
+		KeySoftFillGenres:               DefaultSoftFillGenres,
+		KeySoftFillDomainTag:            DefaultSoftFillDomainTag,
+		KeySoftFillBlocklist:            DefaultSoftFillBlocklist,
 		KeyArchiveFallback:              DefaultArchiveFallback,
 		KeyYtDlpUpdateCron:              "@weekly",
 		KeyYtDlpUpdateChannel:           YtDlpChannelStable,
@@ -131,6 +147,7 @@ func SeedDefaults(database *db.DB) error {
 	allKeys := append([]string{}, generalOrder...)
 	allKeys = append(allKeys, schedulerOrder...)
 	allKeys = append(allKeys, libraryOrder...)
+	allKeys = append(allKeys, KeySoftFillBlocklist)
 	allKeys = append(allKeys, KeyArchiveFallback)
 	allKeys = append(allKeys, KeyPotFetch, KeyYoutubePlayerClient, KeyYtDlpUpdateChannel)
 	for _, key := range allKeys {
@@ -289,6 +306,12 @@ func Set(database *db.DB, key, value string) error {
 	if key == KeySubtitleAuto {
 		value = NormalizeSubtitleAuto(value)
 	}
+	if key == KeySoftFillTags || key == KeySoftFillGenres || key == KeySoftFillDomainTag {
+		value = NormalizeMetadataFlag(value)
+	}
+	if key == KeySoftFillBlocklist {
+		value = SoftFillBlocklistJSON(ParseSoftFillBlocklistJSON(value))
+	}
 	if key == KeyArchiveFallback {
 		value = NormalizeMetadataFlag(value)
 	}
@@ -329,6 +352,14 @@ func SetMany(database *db.DB, values map[string]string) error {
 		}
 		if k == KeySubtitleAuto {
 			v = NormalizeSubtitleAuto(v)
+			values[k] = v
+		}
+		if k == KeySoftFillTags || k == KeySoftFillGenres || k == KeySoftFillDomainTag {
+			v = NormalizeMetadataFlag(v)
+			values[k] = v
+		}
+		if k == KeySoftFillBlocklist {
+			v = SoftFillBlocklistJSON(ParseSoftFillBlocklistJSON(v))
 			values[k] = v
 		}
 		if k == KeyArchiveFallback {

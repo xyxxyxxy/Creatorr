@@ -790,7 +790,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	for _, path := range []string{"/settings/general", "/settings/connect", "/settings/library", "/settings/maintenance", "/settings/scheduler", "/settings/queue", "/settings/domains", "/tasks", "/history", "/stats"} {
+	for _, path := range []string{"/settings/general", "/settings/connect", "/settings/library", "/settings/catalog", "/settings/maintenance", "/settings/scheduler", "/settings/queue", "/settings/domains", "/tasks", "/history", "/stats"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
@@ -969,9 +969,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 				t.Fatalf("/tasks still has header download schedule chip")
 			}
 		}
-		if path == "/settings/library" || path == "/settings/queue" || path == "/settings/maintenance" {
+		if path == "/settings/library" || path == "/settings/catalog" || path == "/settings/queue" || path == "/settings/maintenance" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "/settings/general") || !strings.Contains(body, "/settings/connect") || !strings.Contains(body, "/settings/queue") || !strings.Contains(body, "/settings/scheduler") || !strings.Contains(body, "/settings/maintenance") {
+			if !strings.Contains(body, "/settings/general") || !strings.Contains(body, "/settings/connect") || !strings.Contains(body, "/settings/catalog") || !strings.Contains(body, "/settings/queue") || !strings.Contains(body, "/settings/scheduler") || !strings.Contains(body, "/settings/maintenance") {
 				t.Fatalf("%s missing settings sub-nav in navbar", path)
 			}
 			if strings.Contains(body, `href="/settings/domains"`) {
@@ -1052,6 +1052,16 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			}
 			if strings.Contains(body, "Saving does not") {
 				t.Fatalf("%s still has per-field Saving does not hints", path)
+			}
+			if !strings.Contains(body, "softfill_tags") || !strings.Contains(body, ">Metadata</h2>") {
+				t.Fatalf("%s missing Metadata SoftFill toggles", path)
+			}
+			continue
+		}
+		if path == "/settings/catalog" {
+			body := rec.Body.String()
+			if !strings.Contains(body, "Catalog values") || !strings.Contains(body, "Remove and block SoftFill") {
+				t.Fatalf("%s missing Catalog UI", path)
 			}
 			continue
 		}

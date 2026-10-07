@@ -90,6 +90,38 @@
 <section class="card bg-base-100 border border-base-300 mb-4">
   <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl js-settings-autosave">
     <input type="hidden" name="redirect" value="/settings/library" />
+    <input type="hidden" name="softfill_settings" value="1" />
+    <h2 class="text-lg font-semibold">Metadata</h2>
+    <p class="text-sm opacity-60">Control automatic SoftFill from the site / packed info.json and domain seed on source add. SoftFill blocks for specific values are managed under <a class="link link-primary" href="/settings/catalog">Settings → Catalog</a>. Maintenance Reset metadata from info.json respects these SoftFill toggles (off leaves that field unchanged).</p>
+    <div class="space-y-3 w-full min-w-0">
+      {{template "checkbox_field" (dict
+        "Name" "softfill_tags"
+        "Label" "SoftFill tags from site / info.json"
+        "Checked" .SoftFillTags
+        "Hint" "Union yt-dlp tags into video tags on pack SoftFill and when SoftFill is applied from info.json. SoftFill blocks still drop listed values."
+        "AutosaveChange" true
+      )}}
+      {{template "checkbox_field" (dict
+        "Name" "softfill_genres"
+        "Label" "SoftFill genres from categories"
+        "Checked" .SoftFillGenres
+        "Hint" "Union yt-dlp categories into video genres on pack SoftFill, metadata rescan, and when SoftFill is applied from info.json. SoftFill blocks still drop listed values."
+        "AutosaveChange" true
+      )}}
+      {{template "checkbox_field" (dict
+        "Name" "softfill_domain_tag"
+        "Label" "Seed domain tag on source add"
+        "Checked" .SoftFillDomainTag
+        "Hint" "On source create, seed the source hostname into default video tags (and video Metadata prefetch draft). Existing source tags are unchanged when this is off."
+        "AutosaveChange" true
+      )}}
+    </div>
+  </form>
+</section>
+
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <form method="post" action="/actions/save-settings" class="card-body gap-3 max-w-3xl js-settings-autosave">
+    <input type="hidden" name="redirect" value="/settings/library" />
     <input type="hidden" name="subtitle_settings" value="1" />
     <h2 class="text-lg font-semibold">Subtitles</h2>
     <p class="text-sm opacity-60">Sidecars are always SRT (yt-dlp <a class="link link-primary" href="https://github.com/yt-dlp/yt-dlp#post-processing-options" target="_blank" rel="noopener noreferrer">--convert-subs</a>). Added on download and Replace sidecars.</p>

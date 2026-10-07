@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 // MergeCategoryGenres ensures category genres are present and listed first.
@@ -26,23 +28,31 @@ func MergeCategoryGenres(genres, categories []string) []string {
 	return append(managed, tail...)
 }
 
-// SoftFillVideoGenresFromCategories merges yt-dlp categories into videos.genres (always on).
+// SoftFillVideoGenresFromCategories merges yt-dlp categories into videos.genres when SoftFill genres is on.
 // Returns true when the row was updated.
 func (s *Store) SoftFillVideoGenresFromCategories(videoID int64, categories []string) (bool, error) {
 	return s.EnsureVideoGenresFromCategories(videoID, categories)
 }
 
-// EnsureVideoGenresFromCategories merges category genres into videos.genres (always on).
+// EnsureVideoGenresFromCategories merges category genres into videos.genres (gated by softfill_genres + SoftFill blocklist).
 func (s *Store) EnsureVideoGenresFromCategories(videoID int64, categories []string) (bool, error) {
 	if videoID <= 0 {
 		return false, nil
 	}
-	genres := ParseStringListFields(categories)
-	if len(genres) == 0 {
+	on, err := settings.SoftFillGenresEnabled(s.DB)
+	if err != nil || !on {
+		return false, err
+	}
+	bl, err := settings.GetSoftFillBlocklist(s.DB)
+	if err != nil {
+		return false, err
+	}
+	categories = settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldGenres, ParseStringListFields(categories))
+	if len(categories) == 0 {
 		return false, nil
 	}
 	var raw string
-	err := s.DB.SQL.QueryRow(`SELECT COALESCE(genres, '[]') FROM videos WHERE id = ?`, videoID).Scan(&raw)
+	err = s.DB.SQL.QueryRow(`SELECT COALESCE(genres, '[]') FROM videos WHERE id = ?`, videoID).Scan(&raw)
 	if err != nil {
 		return false, err
 	}

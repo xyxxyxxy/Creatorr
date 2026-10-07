@@ -4,24 +4,34 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+
+	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
-// SoftFillVideoTagsFromInfo merges yt-dlp tags from info.json into videos.tags (always on).
+// SoftFillVideoTagsFromInfo merges yt-dlp tags from info.json into videos.tags when SoftFill tags is on.
 func (s *Store) SoftFillVideoTagsFromInfoJSON(videoID int64, infoPath string) (bool, error) {
 	return s.EnsureVideoTagsFromInfo(videoID, TagsFromInfoJSON(infoPath))
 }
 
-// EnsureVideoTagsFromInfo unions tags into videos.tags.
+// EnsureVideoTagsFromInfo unions tags into videos.tags (gated by softfill_tags + SoftFill blocklist).
 func (s *Store) EnsureVideoTagsFromInfo(videoID int64, tags []string) (bool, error) {
 	if videoID <= 0 {
 		return false, nil
 	}
-	incoming := ParseStringListFields(tags)
+	on, err := settings.SoftFillTagsEnabled(s.DB)
+	if err != nil || !on {
+		return false, err
+	}
+	bl, err := settings.GetSoftFillBlocklist(s.DB)
+	if err != nil {
+		return false, err
+	}
+	incoming := settings.FilterSoftFillBlockedStrings(bl, settings.CatalogFieldTags, ParseStringListFields(tags))
 	if len(incoming) == 0 {
 		return false, nil
 	}
 	var raw string
-	err := s.DB.SQL.QueryRow(`SELECT COALESCE(tags, '[]') FROM videos WHERE id = ?`, videoID).Scan(&raw)
+	err = s.DB.SQL.QueryRow(`SELECT COALESCE(tags, '[]') FROM videos WHERE id = ?`, videoID).Scan(&raw)
 	if err != nil {
 		return false, err
 	}

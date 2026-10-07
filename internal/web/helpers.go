@@ -15,7 +15,7 @@ type pageBase struct {
 	Title        string
 	Nav          string
 	Icon         string // lucide icon for page title headers
-	SettingsTab  string // set when Nav == "settings" (general|library|connect|queue|scheduler|maintenance)
+	SettingsTab  string // set when Nav == "settings" (general|library|catalog|connect|queue|scheduler|maintenance)
 	Flash        *flash
 	AuthUsername string // operator account; for navbar account menu
 	NotifyCount  int    // unread notifications for nav bell badge
@@ -121,6 +121,8 @@ func settingsTabIcon(tab string) string {
 		return "plug"
 	case "library":
 		return "folder"
+	case "catalog":
+		return "tags"
 	case "maintenance":
 		return "wrench"
 	case "scheduler":

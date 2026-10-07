@@ -243,7 +243,7 @@ func (s *Store) AddSource(seriesID int64, p AddSourceParams) (*Source, error) {
 	if p.IndexAsIgnored {
 		idx = 1
 	}
-	res, err := s.insertSource(seriesID, url, label, scanCron, idx, titleIncludeVal, titleExcludeVal, limit, SeedDomainIntoTags(nil, url))
+	res, err := s.insertSource(seriesID, url, label, scanCron, idx, titleIncludeVal, titleExcludeVal, limit, s.SeedDomainIntoTagsIfEnabled(nil, url))
 	if err != nil {
 		if isUniqueConstraint(err) {
 			return nil, fmt.Errorf("%w: source URL already on this series", ErrConflict)

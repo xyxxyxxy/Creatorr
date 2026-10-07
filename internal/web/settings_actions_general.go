@@ -49,6 +49,15 @@ func (h *Handler) actionSaveSettings(w http.ResponseWriter, r *http.Request) {
 				vals[settings.KeySubtitleAuto] = "0"
 			}
 		}
+		if r.FormValue("softfill_settings") == "1" {
+			for _, key := range []string{settings.KeySoftFillTags, settings.KeySoftFillGenres, settings.KeySoftFillDomainTag} {
+				if r.FormValue(key) == "1" {
+					vals[key] = "1"
+				} else {
+					vals[key] = "0"
+				}
+			}
+		}
 	}
 	if r.FormValue("redirect") == "/settings/queue" {
 		if r.FormValue("archive_fallback_settings") == "1" {

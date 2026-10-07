@@ -31,6 +31,7 @@ const (
 	KindBulkEditSeries        = "bulk_edit_series"
 	KindBulkEditVideos        = "bulk_edit_videos"
 	KindSeriesMove            = "series_move"
+	KindRewriteCatalogMeta    = "rewrite_catalog_meta"
 
 	// SystemDomain is the queue lane for maintenance tasks.
 	SystemDomain = "system"

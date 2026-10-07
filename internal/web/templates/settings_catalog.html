@@ -1,0 +1,30 @@
+{{define "settings_catalog"}}
+{{template "head" .}}
+{{template "settings_nav" .}}
+{{if .Flash}}{{template "flash_toast" .Flash}}{{end}}
+
+<section class="card bg-base-100 border border-base-300 mb-4">
+  <div class="card-body gap-3">
+    <h2 class="text-lg font-semibold">Catalog values</h2>
+    <p class="text-sm opacity-60">Rename or remove shared metadata values across series, videos, and source defaults. <strong>Remove and block SoftFill</strong> also stops automatic SoftFill (site / info.json, source defaults, domain seed) from adding the value again. Manual Metadata Save and Import NFO can still set a SoftFill-blocked value. Large rewrites hold the path-touching lock (same as Regenerate NFO). SoftFill toggles live under <a class="link link-primary" href="/settings/library">Settings → Library → Metadata</a>.</p>
+    {{if .Busy}}
+    <div class="alert alert-info text-sm">
+      <span>A Catalog rewrite is queued or running. <a class="link link-primary" href="/tasks?domain=system">Open Tasks</a>.</span>
+    </div>
+    {{else if .PathBusy}}
+    <div class="alert alert-warning text-sm">
+      <span>Another path-touching task is open. Finish or wait, then try again. <a class="link link-primary" href="/tasks?domain=system">Open Tasks</a>.</span>
+    </div>
+    {{end}}
+    <div role="tablist" class="tabs tabs-boxed flex-wrap w-fit">
+      {{range .Tabs}}
+      <a role="tab" class="tab{{if eq $.Field .Key}} tab-active{{end}}" href="/settings/catalog?field={{.Key}}">{{.Label}}</a>
+      {{end}}
+    </div>
+    <div id="catalog-values-live">
+      {{template "settings_catalog_values" .}}
+    </div>
+  </div>
+</section>
+{{template "foot" .}}
+{{end}}
