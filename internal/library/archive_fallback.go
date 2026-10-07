@@ -67,8 +67,9 @@ func (s *Store) MarkWantedArchive(videoID, taskID int64, detail string) error {
 
 // EnqueueArchiveDownload queues a download on the archive.org lane for ytarchive:{remote_id}.
 // Does not EnsureHost (no Domains override row). Honors active / soft-pause / max queue.
+// parentTaskID > 0 forces origin=task (live unavailable spawn). Empty origin defaults to manual.
 // Returns (taskID, true, nil) when enqueued; (0, false, nil) when skipped (busy/paused/full/inactive/setting).
-func (s *Store) EnqueueArchiveDownload(videoID int64) (int64, bool, error) {
+func (s *Store) EnqueueArchiveDownload(videoID, parentTaskID int64, origin string) (int64, bool, error) {
 	if s.Queue == nil {
 		return 0, false, fmt.Errorf("%w: queue not configured", ErrInvalid)
 	}
@@ -112,14 +113,21 @@ func (s *Store) EnqueueArchiveDownload(videoID int64) (int64, bool, error) {
 	if err != nil {
 		return 0, false, err
 	}
+	if origin == "" {
+		origin = queue.OriginManual
+	}
+	if parentTaskID > 0 {
+		origin = queue.OriginTask
+	}
 	id, err := s.Queue.Enqueue(queue.EnqueueParams{
-		Origin: queue.OriginManual,
-		Kind:     queue.KindDownload,
-		Domain:   domain,
-		SeriesID: v.SeriesID,
-		VideoID:  videoID,
-		Message:  "Web Archive download",
-		Payload:  map[string]any{"video_id": videoID, "archive_fallback": true},
+		Origin:       origin,
+		ParentTaskID: parentTaskID,
+		Kind:         queue.KindDownload,
+		Domain:       domain,
+		SeriesID:     v.SeriesID,
+		VideoID:      videoID,
+		Message:      "Web Archive download",
+		Payload:      map[string]any{"video_id": videoID, "archive_fallback": true},
 	})
 	if err != nil {
 		if errors.Is(err, queue.ErrDuplicate) || errors.Is(err, queue.ErrQueueFull) {
@@ -151,18 +159,22 @@ func (s *Store) QueueArchiveFallbackAfterUnavailable(videoID, liveTaskID int64, 
 	if err := s.MarkWantedArchive(videoID, liveTaskID, detail); err != nil {
 		return false, err
 	}
-	_, _, err = s.EnqueueArchiveDownload(videoID)
+	_, _, err = s.EnqueueArchiveDownload(videoID, liveTaskID, queue.OriginTask)
 	return true, err
 }
 
 // EnqueueWantedArchiveBackfill enqueues archive.org downloads for wanted_archive rows lacking a task.
-func (s *Store) EnqueueWantedArchiveBackfill(limit int) (int, error) {
+// origin is the kick source (scheduled from cron, manual from Scheduler Run now); no parent.
+func (s *Store) EnqueueWantedArchiveBackfill(limit int, origin string) (int, error) {
 	if limit <= 0 || s.Queue == nil {
 		return 0, nil
 	}
 	on, err := settings.ArchiveFallbackEnabled(s.DB)
 	if err != nil || !on {
 		return 0, err
+	}
+	if origin == "" {
+		origin = queue.OriginManual
 	}
 	rows, err := s.DB.SQL.Query(`
 		SELECT id FROM videos WHERE status = ? ORDER BY id ASC LIMIT ?
@@ -180,7 +192,7 @@ func (s *Store) EnqueueWantedArchiveBackfill(limit int) (int, error) {
 		if err := rows.Scan(&id); err != nil {
 			return n, err
 		}
-		_, ok, err := s.EnqueueArchiveDownload(id)
+		_, ok, err := s.EnqueueArchiveDownload(id, 0, origin)
 		if err != nil {
 			return n, err
 		}

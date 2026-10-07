@@ -366,7 +366,7 @@ func (h *Handler) actionRunScheduled(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
 			return
 		}
-		an, err := h.Library.EnqueueWantedArchiveBackfill(32)
+		an, err := h.Library.EnqueueWantedArchiveBackfill(32, queue.OriginManual)
 		if err != nil {
 			http.Redirect(w, r, redir+"?err="+urlQuery(err.Error()), http.StatusSeeOther)
 			return

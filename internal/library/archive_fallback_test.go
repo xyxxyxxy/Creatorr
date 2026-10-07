@@ -1,6 +1,7 @@
 package library_test
 
 import (
+	"database/sql"
 	"strings"
 	"testing"
 
@@ -60,15 +61,23 @@ func TestQueueArchiveFallbackAfterUnavailable(t *testing.T) {
 		t.Fatal("expected pending archive.org download task")
 	}
 	var payload string
+	var origin string
+	var parent sql.NullInt64
 	if err := s.DB.SQL.QueryRow(`
-		SELECT payload FROM tasks
+		SELECT payload, origin, parent_task_id FROM tasks
 		WHERE kind = ? AND video_id = ? AND domain = ? AND status = ?
 		LIMIT 1
-	`, queue.KindDownload, res.VideoID, library.ArchiveOrgDomain, queue.StatusPending).Scan(&payload); err != nil {
+	`, queue.KindDownload, res.VideoID, library.ArchiveOrgDomain, queue.StatusPending).Scan(&payload, &origin, &parent); err != nil {
 		t.Fatal(err)
 	}
 	if !library.TaskPayloadArchive(payload) {
 		t.Fatalf("payload missing archive_fallback: %s", payload)
+	}
+	if origin != queue.OriginTask {
+		t.Fatalf("origin=%q want %q", origin, queue.OriginTask)
+	}
+	if !parent.Valid || parent.Int64 != liveTID {
+		t.Fatalf("parent_task_id=%v want %d", parent, liveTID)
 	}
 	src := ""
 	if v.SourceURL.Valid {
@@ -238,7 +247,7 @@ func TestEnqueueArchiveDownloadHonorsSoftPause(t *testing.T) {
 	if err := domains.SetPaused(s.DB, library.ArchiveOrgDomain, true); err != nil {
 		t.Fatal(err)
 	}
-	_, ok, err := s.EnqueueArchiveDownload(res.VideoID)
+	_, ok, err := s.EnqueueArchiveDownload(res.VideoID, 0, queue.OriginScheduled)
 	if err != nil || ok {
 		t.Fatalf("ok=%v err=%v want skip while paused", ok, err)
 	}

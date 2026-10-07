@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/db"
@@ -11,7 +12,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
-func TestEnqueueBulkEditSeriesBusy(t *testing.T) {
+func TestEnqueueBulkEditSeriesOverlapAndMulti(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "bulk.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -27,34 +28,62 @@ func TestEnqueueBulkEditSeriesBusy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ser, err := lib.CreateSeries(library.CreateSeriesParams{
-		Title: "Show", RootID: root.ID, QualityProfileID: profile.ID, Monitored: true,
+	a, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "A", RootID: root.ID, QualityProfileID: profile.ID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "B", RootID: root.ID, QualityProfileID: profile.ID, Monitored: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	mode := library.DeliveryAudio
-	id, err := lib.EnqueueBulkEditSeries(library.BulkEditSeriesParams{
-		SeriesIDs:    []int64{ser.ID},
+	id1, err := lib.EnqueueBulkEditSeries(library.BulkEditSeriesParams{
+		SeriesIDs:    []int64{a.ID},
 		DeliveryMode: &mode,
 	})
-	if err != nil || id <= 0 {
-		t.Fatalf("enqueue: id=%d err=%v", id, err)
+	if err != nil || id1 <= 0 {
+		t.Fatalf("enqueue a: id=%d err=%v", id1, err)
 	}
-	busy, err := lib.BulkEditSeriesBusy()
-	if err != nil || !busy {
-		t.Fatalf("busy=%v err=%v", busy, err)
+	locked, err := lib.SeriesBulkEditLocked(a.ID)
+	if err != nil || !locked {
+		t.Fatalf("a locked=%v err=%v", locked, err)
 	}
 	_, err = lib.EnqueueBulkEditSeries(library.BulkEditSeriesParams{
-		SeriesIDs:    []int64{ser.ID},
+		SeriesIDs:    []int64{a.ID, b.ID},
 		DeliveryMode: &mode,
 	})
+	if !errors.Is(err, library.ErrConflict) || !strings.Contains(err.Error(), "One or more items already in a bulk edit") {
+		t.Fatalf("want overlap Conflict, got %v", err)
+	}
+	id2, err := lib.EnqueueBulkEditSeries(library.BulkEditSeriesParams{
+		SeriesIDs:    []int64{b.ID},
+		DeliveryMode: &mode,
+	})
+	if err != nil || id2 <= 0 {
+		t.Fatalf("enqueue disjoint b: id=%d err=%v", id2, err)
+	}
+	err = lib.SaveSeriesMetadata(a.ID, library.SaveSeriesMetadataParams{Studio: "X"})
+	if !errors.Is(err, library.ErrConflict) || !strings.Contains(err.Error(), "Bulk edit queued") {
+		t.Fatalf("want Save Conflict, got %v", err)
+	}
+	err = lib.SetSeriesMonitored(a.ID, false)
 	if !errors.Is(err, library.ErrConflict) {
-		t.Fatalf("want ErrConflict, got %v", err)
+		t.Fatalf("want monitored Conflict, got %v", err)
+	}
+	if _, err := d.SQL.Exec(`UPDATE tasks SET status = ? WHERE id = ?`, queue.StatusDone, id1); err != nil {
+		t.Fatal(err)
+	}
+	locked, err = lib.SeriesBulkEditLocked(a.ID)
+	if err != nil || locked {
+		t.Fatalf("a unlocked after done: locked=%v err=%v", locked, err)
 	}
 }
 
-func TestBulkEditSeriesPassMetadata(t *testing.T) {
+func TestBulkEditSeriesPassBypassesLock(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "bulk.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -177,22 +206,22 @@ func TestCommonSeriesMetadata(t *testing.T) {
 		{Name: "Host", Role: "Host", Order: 1},
 	}
 	if err := lib.SaveSeriesMetadata(a.ID, library.SaveSeriesMetadataParams{
-		Studio: "Studio X",
+		Studio:  "Studio X",
 		Country: "US",
-		MPAA:   "TV-MA",
-		Genres: []string{"Comedy", "Talk"},
-		Tags:   []string{"live"},
-		Actors: actorsSame,
+		MPAA:    "TV-MA",
+		Genres:  []string{"Comedy", "Talk"},
+		Tags:    []string{"live"},
+		Actors:  actorsSame,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := lib.SaveSeriesMetadata(b.ID, library.SaveSeriesMetadataParams{
-		Studio: "Studio X",
+		Studio:  "Studio X",
 		Country: "UK",
-		MPAA:   "TV-MA",
-		Genres: []string{"Comedy", "Talk"},
-		Tags:   []string{"live"},
-		Actors: actorsSame,
+		MPAA:    "TV-MA",
+		Genres:  []string{"Comedy", "Talk"},
+		Tags:    []string{"live"},
+		Actors:  actorsSame,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -220,12 +249,12 @@ func TestCommonSeriesMetadata(t *testing.T) {
 	}
 
 	if err := lib.SaveSeriesMetadata(b.ID, library.SaveSeriesMetadataParams{
-		Studio: "Studio X",
+		Studio:  "Studio X",
 		Country: "UK",
-		MPAA:   "TV-MA",
-		Genres: []string{"Comedy", "Talk"},
-		Tags:   []string{"live"},
-		Actors: actorsReordered,
+		MPAA:    "TV-MA",
+		Genres:  []string{"Comedy", "Talk"},
+		Tags:    []string{"live"},
+		Actors:  actorsReordered,
 	}); err != nil {
 		t.Fatal(err)
 	}

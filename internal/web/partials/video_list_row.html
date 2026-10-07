@@ -2,13 +2,20 @@
 {{/* Dot is a dict: ID Title Status StatusLabel UploadDate SizeLabel ResolutionLabel DurationLabel MediaTypeLabel ThumbURL TaskInd DownloadRunning
      DeliveryQueued DomainActive DomainDisabledTitle SeriesID KeepScroll LiveSwap Redirect FormClass Deleting
      SeriesTitle? (cross-series lists: link in meta), NoActions - thumb + title + meta only,
-     Select? BulkEditBusy? - multi-select checkbox (hidden until video bulk mode). */}}
+     Select? BulkEditLocked? - multi-select checkbox (hidden until video bulk mode). */}}
+{{$lockTip := "Bulk edit queued"}}
 <li class="list-row" {{if .Select}}data-video-id="{{.ID}}"{{end}}{{if .Select}} style="--list-grid-cols: minmax(0, auto) 1fr max-content"{{end}}>
   {{if .Select}}
   <div class="self-center hidden" data-video-select-wrap>
+    {{if .BulkEditLocked}}
+    <span class="tooltip tooltip-top inline-flex" data-tip="{{$lockTip}}">
+      <input type="checkbox" class="checkbox checkbox-sm js-video-select" value="{{.ID}}"
+             aria-label="{{$lockTip}}" disabled />
+    </span>
+    {{else}}
     <input type="checkbox" class="checkbox checkbox-sm js-video-select" value="{{.ID}}"
-           aria-label="Select video"
-           {{if .BulkEditBusy}}disabled{{end}} />
+           aria-label="Select video" />
+    {{end}}
   </div>
   {{end}}
   <div class="relative shrink-0 w-[112px] aspect-video bg-base-200 rounded overflow-hidden">
@@ -60,6 +67,7 @@
         "DeferModal" true
         "Class" "btn btn-square btn-xs join-item"
         "DeleteClass" "btn btn-soft btn-error btn-square btn-xs"
+        "BulkEditLocked" .BulkEditLocked
       }}
       {{if ne .Status "downloaded"}}
       {{template "clear_download_error_button" $wantIgnore}}

@@ -1,7 +1,6 @@
 {{define "videos_live"}}
 <div id="videos-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
      data-filter-total="{{.FilterTotal}}"
-     data-bulk-busy="{{if .BulkEditBusy}}1{{else}}0{{end}}"
      data-bulk-mode="0"
      data-view-mode="{{.ViewMode}}"
      data-list-mode="{{.ListMode}}"
@@ -18,7 +17,6 @@
 {{else}}
 {{template "video_bulk_bar" (dict
   "FilterTotal" .FilterTotal
-  "BulkEditBusy" .BulkEditBusy
   "ShowSelectAll" .ShowSelectAll
 )}}
 {{if ne .ViewMode "table"}}{{template "list_load_controls" .}}{{end}}
@@ -32,7 +30,6 @@
   "Videos" .Videos
   "TableCols" .TableCols
   "TableColsCookie" .TableColsCookie
-  "BulkEditBusy" .BulkEditBusy
   "SeriesTitles" .SeriesTitles
   "Select" true
   "LiveTarget" "videos-list-live"
@@ -94,7 +91,7 @@
     "LiveSwap" true
     "LiveTarget" "videos-list-live"
     "Select" true
-    "BulkEditBusy" $.BulkEditBusy
+    "BulkEditLocked" .BulkEditLocked
   )}}
   {{end}}
 {{else if eq .ViewMode "gallery"}}
@@ -115,7 +112,7 @@
     "LiveSwap" true
     "LiveTarget" "videos-list-live"
     "Select" true
-    "BulkEditBusy" $.BulkEditBusy
+    "BulkEditLocked" .BulkEditLocked
   )}}
   {{end}}
 {{else}}
@@ -144,7 +141,7 @@
     "LiveTarget" "videos-list-live"
     "FormClass" "inline"
     "Select" true
-    "BulkEditBusy" $.BulkEditBusy
+    "BulkEditLocked" .BulkEditLocked
   )}}
   {{end}}
 {{end}}

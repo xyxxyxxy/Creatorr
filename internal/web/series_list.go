@@ -15,7 +15,7 @@ type seriesListRow struct {
 	library.Series
 	HasMonitoredSource bool
 	Busy               bool
-	BulkEditBusy       bool
+	BulkEditLocked     bool
 	StatusInd          *seriesStatusView // health errors/warnings (list: title row; cards: poster)
 	PosterURL          string
 	BannerURL          string
@@ -33,7 +33,6 @@ type seriesListLiveData struct {
 	ListMode        ListMode
 	SeriesFilter    listViewToolbar
 	FilterActive    bool
-	BulkEditBusy    bool
 	FilterTotal     int
 	ViewMode        string
 	TableCols       []tableCol
@@ -152,7 +151,7 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 	if redir == "" {
 		redir = "/series"
 	}
-	bulkBusy, _ := h.Library.BulkEditSeriesBusy()
+	lockedIDs, _ := h.Library.SeriesIDsLockedByBulkEdit()
 
 	rows := make([]seriesListRow, 0, len(list))
 	for _, s := range list {
@@ -189,11 +188,12 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 		if v, ok := buildSeriesHealthStatus(errFlags[s.ID], warnLevels[s.ID]); ok {
 			statusInd = &v
 		}
+		_, locked := lockedIDs[s.ID]
 		rows = append(rows, seriesListRow{
 			Series:             s,
 			HasMonitoredSource: s.Monitored,
 			Busy:               best != nil,
-			BulkEditBusy:       bulkBusy,
+			BulkEditLocked:     locked,
 			StatusInd:          statusInd,
 			PosterURL:          posterURL,
 			BannerURL:          bannerURL,
@@ -240,9 +240,8 @@ func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (se
 		Load:            load,
 		ListMode:        mode,
 		SeriesFilter:    toolbar,
-		FilterActive:    filter.Active(),
-		BulkEditBusy:    bulkBusy,
-		FilterTotal:     total,
+		FilterActive: filter.Active(),
+		FilterTotal:  total,
 		ViewMode:        viewMode,
 		TableCols: annotateTableColsSort(
 			parseTableColsCookie(r, cookieColsSeries, seriesTableColDefs()),

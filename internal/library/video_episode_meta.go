@@ -55,7 +55,15 @@ type SaveVideoMetadataOutcome struct {
 // Upload date changes reindex season/episode; title or upload_date path changes enqueue
 // scoped Apply episode format. Does not change remote_id / source_url.
 // Sidecar refresh (yt-dlp re-fetch) remains a separate task (EnqueueRefreshSidecarsVideo).
+// Conflict when the video is in an open bulk_edit_videos payload.
 func (s *Store) SaveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (SaveVideoMetadataOutcome, error) {
+	if err := s.errIfVideoBulkEditLocked(videoID); err != nil {
+		return SaveVideoMetadataOutcome{}, err
+	}
+	return s.saveVideoMetadata(videoID, p)
+}
+
+func (s *Store) saveVideoMetadata(videoID int64, p SaveVideoMetadataParams) (SaveVideoMetadataOutcome, error) {
 	var out SaveVideoMetadataOutcome
 	v, err := s.GetVideo(videoID)
 	if err != nil {

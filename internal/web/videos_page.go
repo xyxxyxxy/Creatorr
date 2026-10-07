@@ -17,7 +17,6 @@ type videosPageLiveData struct {
 	FilterActive    bool
 	ViewMode        string
 	SeriesTitles    map[int64]string
-	BulkEditBusy    bool
 	TableCols       []tableCol
 	TableColsCookie string
 	ShowSelectAll   bool
@@ -83,6 +82,10 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		}
 	}
 	rows := h.buildSeriesVideoRows(list, byVideo, nil)
+	lockedIDs, _ := h.Library.VideoIDsLockedByBulkEdit()
+	for i := range rows {
+		_, rows[i].BulkEditLocked = lockedIDs[rows[i].ID]
+	}
 	// Badge/chip labels need titles for every filtered series, not only rows on this page.
 	seriesIDs := make([]int64, 0, len(filter.SeriesIDs)+len(list))
 	seen := map[int64]struct{}{}
@@ -146,7 +149,6 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 	}
 	applyExplorerToolbar(&toolbar, explorerTypeVideos, at)
 
-	bulkBusy, _ := h.Library.BulkEditVideosBusy()
 	showSelectAll := total > len(rows)
 	if mode == ListModePaginated {
 		showSelectAll = load.Page.Show
@@ -161,7 +163,6 @@ func (h *Handler) loadVideosLive(w http.ResponseWriter, r *http.Request) (videos
 		FilterActive: filter.Active(),
 		ViewMode:     viewMode,
 		SeriesTitles: titles,
-		BulkEditBusy: bulkBusy,
 		TableCols: annotateTableColsSort(
 			parseTableColsCookie(r, cookieColsVideos, videoTableColDefs(true)),
 			toolbar.SortOpts, toolbar.SortDir),

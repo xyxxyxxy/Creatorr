@@ -20,11 +20,6 @@ function videoBulkFilterTotal() {
   return Number.isFinite(n) ? n : 0;
 }
 
-function videoBulkBusy() {
-  const live = videoBulkLive();
-  return !!(live && live.getAttribute("data-bulk-busy") === "1");
-}
-
 function videoBulkSeriesID() {
   // Bulk runs on Browser Videos only (library-wide ids endpoint).
   return "";
@@ -57,14 +52,15 @@ function setVideoBulkMode(on) {
 }
 
 function toggleVideoBulkID(id) {
-  if (!id || videoBulkBusy()) return;
-  if (videoBulkSelected.has(id)) videoBulkSelected.delete(id);
-  else videoBulkSelected.add(id);
+  if (!id) return;
   const live = videoBulkLive();
-  const cb = live
+  const cb0 = live
     ? live.querySelector('.js-video-select[value="' + CSS.escape(id) + '"]')
     : null;
-  if (cb) cb.checked = videoBulkSelected.has(id);
+  if (cb0 instanceof HTMLInputElement && cb0.disabled) return;
+  if (videoBulkSelected.has(id)) videoBulkSelected.delete(id);
+  else videoBulkSelected.add(id);
+  if (cb0 instanceof HTMLInputElement) cb0.checked = videoBulkSelected.has(id);
   syncVideoBulkUI();
 }
 
@@ -84,8 +80,8 @@ function syncVideoBulkUI() {
   });
   // Keep per-row actions visible in multi-select; disable so bulk bar is the only path.
   // Tip lives on the wrap: disabled buttons + pointer-events-none children kill daisyUI tips.
-  const rowActionsDisabled = videoBulkMode || videoBulkBusy();
-  const rowActionsTip = videoBulkBusy() ? "Bulk edit running…" : "Use the multi-select bar";
+  const rowActionsDisabled = videoBulkMode;
+  const rowActionsTip = "Use the multi-select bar";
   live.querySelectorAll("[data-video-row-actions]").forEach((wrap) => {
     wrap.querySelectorAll("button").forEach((btn) => {
       if (rowActionsDisabled) {
@@ -184,17 +180,16 @@ function syncVideoBulkUI() {
     const m = videoBulkFilterTotal();
     const countEl = bar.querySelector("[data-video-bulk-count]");
     if (countEl) countEl.textContent = n + "/" + m;
-    const busy = videoBulkBusy();
     bar
       .querySelectorAll(
         "[data-video-bulk-want], [data-video-bulk-ignore], [data-video-bulk-refresh], [data-video-bulk-metadata], [data-video-bulk-delete], [data-video-bulk-clear-errors]"
       )
       .forEach((btn) => {
-        btn.disabled = busy || n === 0;
+        btn.disabled = n === 0;
       });
     const selectAllBtn = bar.querySelector("[data-video-select-all-matching]");
     if (selectAllBtn) {
-      selectAllBtn.disabled = busy || (m > 0 && n >= m);
+      selectAllBtn.disabled = m > 0 && n >= m;
     }
   }
   const pageBoxes = videoBulkPageCheckboxes();
@@ -202,14 +197,14 @@ function syncVideoBulkUI() {
     cb.checked = videoBulkSelected.has(cb.value);
   });
   if (bar) {
-    const busy = videoBulkBusy();
+    const unlocked = pageBoxes.filter((cb) => !cb.disabled);
     const pageAll =
-      pageBoxes.length > 0 && pageBoxes.every((cb) => videoBulkSelected.has(cb.value));
+      unlocked.length > 0 && unlocked.every((cb) => videoBulkSelected.has(cb.value));
     const pageCb = document.getElementById("video-select-page");
     if (pageCb) {
       pageCb.checked = pageAll;
-      pageCb.indeterminate = !pageAll && pageBoxes.some((cb) => videoBulkSelected.has(cb.value));
-      pageCb.disabled = busy || pageBoxes.length === 0;
+      pageCb.indeterminate = !pageAll && unlocked.some((cb) => videoBulkSelected.has(cb.value));
+      pageCb.disabled = unlocked.length === 0;
     }
   }
   fillVideoBulkIDs(document);
@@ -279,7 +274,7 @@ async function hydrateVideoBulkMetadataForm() {
 }
 
 function runVideoBulkAction(action) {
-  if (!videoBulkMode || videoBulkBusy() || videoBulkSelected.size === 0) return;
+  if (!videoBulkMode || videoBulkSelected.size === 0) return;
   const n = videoBulkSelected.size;
   const m = videoBulkFilterTotal();
   fillVideoBulkIDs(document);
@@ -422,7 +417,7 @@ export function bootVideoBulk() {
     const selectAll = ev.target.closest("[data-video-select-all-matching]");
     if (selectAll) {
       ev.preventDefault();
-      if (videoBulkBusy() || selectAll.disabled) return;
+      if (selectAll.disabled) return;
       selectAll.disabled = true;
       selectAllMatchingVideos()
         .catch(() => {})

@@ -40,6 +40,23 @@ func (h *Handler) Mount(r chi.Router) {
 		}
 		return n, hasAlert
 	})
+	SetNavBadgesForPage(func() pageNavBadges {
+		var out pageNavBadges
+		if h.Library != nil {
+			out.SeriesErrors, _ = h.Library.CountSeriesWithError()
+		}
+		if h.Queue == nil {
+			return out
+		}
+		// Match refreshBadge: count all open tasks; soft-pause alone never invents work.
+		// Keep TasksPaused at 0 so SSR matches JS (paused badge stays hidden).
+		tasks, err := h.Queue.ListActive()
+		if err != nil {
+			return out
+		}
+		out.TasksActive = len(tasks)
+		return out
+	})
 
 	r.Get("/setup", h.setupGet)
 	r.Post("/setup", h.setupPost)

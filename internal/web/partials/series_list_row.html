@@ -7,9 +7,15 @@
     data-series-id="{{.ID}}"
     style="--list-grid-cols: minmax(0, auto) 1fr max-content">
   <div class="self-center hidden z-10" data-series-select-wrap>
+    {{if .BulkEditLocked}}
+    <span class="tooltip tooltip-top inline-flex" data-tip="Bulk edit queued">
+      <input type="checkbox" class="checkbox checkbox-sm js-series-select" value="{{.ID}}"
+             aria-label="Bulk edit queued" disabled />
+    </span>
+    {{else}}
     <input type="checkbox" class="checkbox checkbox-sm js-series-select" value="{{.ID}}"
-           aria-label="Select series"
-           {{if .BulkEditBusy}}disabled{{end}} />
+           aria-label="Select series" />
+    {{end}}
   </div>
   <div class="relative self-start size-14 shrink-0 z-10">
     {{if .PosterURL}}
@@ -44,7 +50,8 @@
       "LiveTarget" .LiveTarget
       "AsButton" true
       "Title" "Include this series in scans and download-wanted"
-      "Disabled" .BulkEditBusy
+      "Disabled" .BulkEditLocked
+      "DisabledTitle" "Bulk edit queued"
     )}}
   </div>
   {{if .BannerURL}}

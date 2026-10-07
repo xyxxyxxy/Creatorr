@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/db"
@@ -192,5 +193,67 @@ func TestEnqueueBulkEditVideosSpecialFeature(t *testing.T) {
 	}
 	if library.NormalizePackRole(v.PackRole) != library.PackRoleSpecialEpisode {
 		t.Fatalf("PackRole=%q", v.PackRole)
+	}
+}
+
+func TestEnqueueBulkEditVideosOverlap(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "bulk-ov.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	root, err := lib.CreateRoot("r", t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := lib.CreateProfile("best", "bv*+ba/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "S", RootID: root.ID, QualityProfileID: profile.ID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	insert := func(remote string) int64 {
+		t.Helper()
+		res, err := d.SQL.Exec(`
+			INSERT INTO videos (series_id, remote_id, title, status, genres, tags, actors)
+			VALUES (?, ?, ?, 'wanted', '[]', '[]', '[]')
+		`, ser.ID, remote, remote)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	a := insert("a")
+	b := insert("b")
+	studio := "S"
+	if _, err := lib.EnqueueBulkEditVideos(library.BulkEditVideosParams{
+		VideoIDs: []int64{a}, Studio: &studio,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = lib.EnqueueBulkEditVideos(library.BulkEditVideosParams{
+		VideoIDs: []int64{a, b}, Studio: &studio,
+	})
+	if err == nil || !strings.Contains(err.Error(), "One or more items already in a bulk edit") {
+		t.Fatalf("want overlap Conflict, got %v", err)
+	}
+	if _, err := lib.EnqueueBulkEditVideos(library.BulkEditVideosParams{
+		VideoIDs: []int64{b}, Studio: &studio,
+	}); err != nil {
+		t.Fatalf("disjoint enqueue: %v", err)
+	}
+	_, err = lib.SaveVideoMetadata(a, library.SaveVideoMetadataParams{Title: "A", Studio: "X"})
+	if err == nil || !strings.Contains(err.Error(), "Bulk edit queued") {
+		t.Fatalf("want Save Conflict, got %v", err)
 	}
 }

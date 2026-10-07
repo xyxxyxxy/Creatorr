@@ -136,7 +136,10 @@ const sourceSelectCols = `id, series_id, url, label, scan_cron, index_as_ignored
 func (s *Store) listSources(seriesID int64) ([]Source, error) {
 	rows, err := s.DB.SQL.Query(`
 		SELECT `+sourceSelectCols+`
-		FROM sources WHERE series_id = ? ORDER BY id
+		FROM sources WHERE series_id = ?
+		ORDER BY LOWER(CASE WHEN TRIM(COALESCE(label, '')) <> '' THEN label ELSE url END),
+		         LOWER(url),
+		         id
 	`, seriesID)
 	if err != nil {
 		return nil, err
