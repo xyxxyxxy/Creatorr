@@ -168,9 +168,9 @@ func formatAgoShort(then, now time.Time) string {
 	return fmt.Sprintf("%d %s ago", p.n, label)
 }
 
-// formatAgoCompact is formatInShort-style for the past within one week.
+// formatAgoCompact is formatInShort-style for the past within one week, plus " ago".
 // Older than 7 days → ISO date (YYYY-MM-DD). Tip still carries the absolute time.
-// Examples: "just now", "3 min", "1 h 2 min", "7 d", "2026-07-10".
+// Examples: "just now", "3 min ago", "1 h 2 min ago", "7 d ago", "2026-07-10".
 func formatAgoCompact(then, now time.Time) string {
 	if iso, ok := agoISODate(then, now); ok {
 		return iso
@@ -179,7 +179,7 @@ func formatAgoCompact(then, now time.Time) string {
 	if s == "now" {
 		return "just now"
 	}
-	return s
+	return s + " ago"
 }
 
 // formatInShort returns a compact relative future span (at most two units).

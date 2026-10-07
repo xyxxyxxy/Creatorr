@@ -1,0 +1,150 @@
+{{define "video_card"}}
+{{/* Dot: same fields as video_list_row + ShowSeries bool.
+     daisyUI image-full like series_card: status top-right; title/series +
+     duration/quality at bottom. No per-item Want/Ignore/Delete (use list/table
+     or bulk bar). Status sits outside the figure so tooltips are not clipped. */}}
+<li class="card bg-base-100 border border-base-300 relative rounded-box" {{if .Select}}data-video-id="{{.ID}}"{{end}}>
+  {{if .Select}}
+  <div class="absolute top-2 left-2 z-20 hidden" data-video-select-wrap>
+    {{/* Plate under checkbox: bg on the input fights daisyUI :checked fill. */}}
+    <span class="inline-flex items-center justify-center rounded-box bg-base-100/90 shadow p-0.5">
+      <input type="checkbox" class="checkbox checkbox-sm js-video-select" value="{{.ID}}"
+             aria-label="Select video"
+             {{if .BulkEditBusy}}disabled{{end}} />
+    </span>
+  </div>
+  {{end}}
+  {{if not .NoActions}}
+  <div class="absolute top-1 right-1 z-30">
+    <span class="inline-flex items-center justify-center rounded-box bg-base-100/90 shadow p-0.5">
+      {{template "task_indicator" .TaskInd}}
+    </span>
+  </div>
+  {{end}}
+  <div class="relative aspect-video w-full overflow-hidden rounded-box">
+    <div class="card image-full absolute inset-0 min-w-0 rounded-none border-0 shadow-none bg-base-200">
+      <figure class="m-0 size-full overflow-hidden">
+        {{if .ThumbURL}}
+        <img class="size-full object-cover" src="{{.ThumbURL}}" alt="" loading="lazy" />
+        {{else}}
+        <div class="size-full flex items-center justify-center bg-base-300" aria-hidden="true">
+          <i data-lucide="square-play" class="thumb-placeholder-icon opacity-40"></i>
+        </div>
+        {{end}}
+      </figure>
+      <div class="card-body justify-end p-3 gap-1 min-w-0 overflow-visible">
+        <a class="card-title text-sm link link-hover text-neutral-content line-clamp-2{{if eq .Status "ignored"}} opacity-40{{end}}" href="/series/{{.SeriesID}}/videos/{{.ID}}">{{.Title}}</a>
+        {{if .ShowSeries}}{{if .SeriesTitle}}
+        <a class="block min-w-0 text-xs link link-hover text-neutral-content/80 truncate" href="/series/{{.SeriesID}}">{{.SeriesTitle}}</a>
+        {{end}}{{end}}
+        {{if or .DurationLabel (and .ResolutionLabel (ne .ResolutionLabel ""))}}
+        <div class="flex items-center gap-2 text-xs opacity-80 text-neutral-content tabular-nums min-w-0">
+          {{if .DurationLabel}}<span class="shrink-0">{{.DurationLabel}}</span>{{end}}
+          {{if and .ResolutionLabel (ne .ResolutionLabel "")}}<span class="shrink-0">{{.ResolutionLabel}}</span>{{end}}
+        </div>
+        {{end}}
+      </div>
+    </div>
+  </div>
+</li>
+{{end}}
+
+{{define "video_gallery_card"}}
+{{/* Dot: same as video_card; daisyUI image-full + gallery-hover-overlay when thumb
+     exists (hover title). No thumb: always show title. No per-item actions. */}}
+<li class="card image-full{{if .ThumbURL}} gallery-hover-overlay{{end}} bg-base-100 border border-base-300 relative aspect-video overflow-hidden" {{if .Select}}data-video-id="{{.ID}}"{{end}}>
+  <figure class="m-0">
+    {{if .ThumbURL}}
+    <img class="size-full object-cover" src="{{.ThumbURL}}" alt="" loading="lazy" />
+    {{else}}
+    <div class="size-full min-h-full aspect-video flex items-center justify-center bg-base-300" aria-hidden="true">
+      <i data-lucide="square-play" class="thumb-placeholder-icon opacity-40"></i>
+    </div>
+    {{end}}
+  </figure>
+  <div class="card-body justify-end p-3 pointer-events-none">
+    <span class="card-title text-sm line-clamp-2{{if eq .Status "ignored"}} opacity-40{{end}}">{{.Title}}</span>
+  </div>
+  <a href="/series/{{.SeriesID}}/videos/{{.ID}}" class="absolute inset-0 z-10" aria-label="{{.Title}}"></a>
+  {{if .Select}}
+  <div class="absolute top-2 left-2 z-20 hidden" data-video-select-wrap onclick="event.stopPropagation()">
+    <span class="inline-flex items-center justify-center rounded-box bg-base-100/90 shadow p-0.5">
+      <input type="checkbox" class="checkbox checkbox-sm js-video-select" value="{{.ID}}"
+             aria-label="Select video"
+             {{if .BulkEditBusy}}disabled{{end}} />
+    </span>
+  </div>
+  {{end}}
+</li>
+{{end}}
+
+{{define "series_card"}}
+{{/* Dot: seriesListRow fields.
+     daisyUI image-full 1:1: title + Line2 + progress in overlay; monitor absolute. */}}
+<li class="card bg-base-100 border border-base-300 relative rounded-box" data-series-id="{{.ID}}">
+  <div class="absolute top-2 left-2 z-20 hidden" data-series-select-wrap>
+    <span class="inline-flex items-center justify-center rounded-box bg-base-100/90 shadow p-0.5">
+      <input type="checkbox" class="checkbox checkbox-sm js-series-select" value="{{.ID}}"
+             aria-label="Select series"
+             {{if .BulkEditBusy}}disabled{{end}} />
+    </span>
+  </div>
+  <div class="absolute top-1 right-1 z-30" data-series-monitor-wrap>
+    {{template "monitor_toggle" (dict
+      "Action" "/actions/set-series-monitored"
+      "SeriesID" .ID
+      "Monitored" .Monitored
+      "Redirect" "/series"
+      "LiveTarget" "series-list-live"
+      "AsButton" true
+      "Title" "Include this series in scans and download-wanted"
+      "Disabled" .BulkEditBusy
+    )}}
+  </div>
+  <div class="relative aspect-square w-full overflow-hidden rounded-box">
+    <div class="card image-full absolute inset-0 rounded-none border-0 shadow-none bg-base-200">
+      <figure class="m-0 size-full">
+        {{if .PosterURL}}
+        <img class="size-full object-cover" src="{{.PosterURL}}" alt="" loading="lazy" />
+        {{else}}
+        <div class="size-full flex items-center justify-center bg-base-300" aria-hidden="true">
+          <i data-lucide="tv" class="size-10 opacity-40"></i>
+        </div>
+        {{end}}
+      </figure>
+      <div class="card-body justify-end p-3 gap-2">
+        <a class="card-title text-sm link link-hover text-neutral-content line-clamp-2" href="/series/{{.ID}}">{{.Title}}</a>
+        {{if .Line2}}<div class="text-xs opacity-80 truncate text-neutral-content">{{.Line2}}</div>{{end}}
+        {{template "series_progress" .}}
+      </div>
+    </div>
+  </div>
+</li>
+{{end}}
+
+{{define "series_gallery_card"}}
+{{/* Dot: seriesListRow fields; gallery-hover-overlay when poster exists.
+     No poster: always show title. No per-item monitor. */}}
+<li class="card image-full{{if .PosterURL}} gallery-hover-overlay{{end}} bg-base-100 border border-base-300 relative aspect-square overflow-hidden" data-series-id="{{.ID}}">
+  <figure class="m-0">
+    {{if .PosterURL}}
+    <img class="size-full object-cover" src="{{.PosterURL}}" alt="" loading="lazy" />
+    {{else}}
+    <div class="size-full min-h-full aspect-square flex items-center justify-center bg-base-300" aria-hidden="true">
+      <i data-lucide="tv" class="size-10 opacity-40"></i>
+    </div>
+    {{end}}
+  </figure>
+  <div class="card-body justify-end p-3 pointer-events-none">
+    <span class="card-title text-sm line-clamp-2">{{.Title}}</span>
+  </div>
+  <a href="/series/{{.ID}}" class="absolute inset-0 z-10" aria-label="{{.Title}}"></a>
+  <div class="absolute top-2 left-2 z-20 hidden" data-series-select-wrap onclick="event.stopPropagation()">
+    <span class="inline-flex items-center justify-center rounded-box bg-base-100/90 shadow p-0.5">
+      <input type="checkbox" class="checkbox checkbox-sm js-series-select" value="{{.ID}}"
+             aria-label="Select series"
+             {{if .BulkEditBusy}}disabled{{end}} />
+    </span>
+  </div>
+</li>
+{{end}}

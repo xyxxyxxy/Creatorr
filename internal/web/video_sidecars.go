@@ -14,22 +14,24 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 const sidecarViewMaxBytes = 2 << 20 // 2 MiB text preview
 
 // videoFileView is one files-table row on the video detail page (media or sidecar).
 type videoFileView struct {
-	ID        int64
-	Kind      string
-	KindLabel string
-	Icon      string // lucide icon name
-	Name      string
-	Path      string
-	SizeLabel string
-	Missing   bool
-	ViewHref  string // file detail page
-	CanDelete bool   // registered sub/thumb/other
+	ID               int64
+	Kind             string
+	KindLabel        string
+	Icon             string // lucide icon name
+	Name             string
+	Path             string
+	SizeLabel        string
+	Missing          bool
+	IntegrityFailed  bool
+	ViewHref         string // file detail page
+	CanDelete        bool   // registered sub/thumb/other
 }
 
 func videoFileViews(lib *library.Store, seriesID, videoID int64, files []library.VideoFile) []videoFileView {
@@ -39,13 +41,14 @@ func videoFileViews(lib *library.Store, seriesID, videoID int64, files []library
 	out := make([]videoFileView, 0, len(files))
 	for _, f := range files {
 		v := videoFileView{
-			ID:        f.ID,
-			Kind:      f.Kind,
-			KindLabel: sidecarKindLabel(f.Kind),
-			Icon:      sidecarKindIcon(f.Kind),
-			Name:      filepath.Base(f.Path),
-			Path:      f.Path,
-			SizeLabel: "-",
+			ID:              f.ID,
+			Kind:            f.Kind,
+			KindLabel:       sidecarKindLabel(f.Kind),
+			Icon:            sidecarKindIcon(f.Kind),
+			Name:            filepath.Base(f.Path),
+			Path:            f.Path,
+			SizeLabel:       "-",
+			IntegrityFailed: f.IntegrityFailed(),
 		}
 		if f.ID > 0 {
 			v.ViewHref = fmt.Sprintf("/series/%d/videos/%d/files/%d", seriesID, videoID, f.ID)
@@ -164,19 +167,6 @@ func sidecarKindIcon(kind string) string {
 	}
 }
 
-func fileKindIntegrityNote(kind string) string {
-	switch kind {
-	case "nfo":
-		return "File sync checks presence only. Integrity check compares NFO XML when 'File integrity' is on."
-	case "video":
-		return "File sync checks presence and size. Integrity check runs null-decode and SHA-256 when 'File integrity' is on."
-	case "json", "thumb", "sub", "sponsorblock", "other":
-		return "File sync checks presence and size. Integrity check fills/compares SHA-256 when 'File integrity' is on."
-	default:
-		return "File sync checks presence (and size when applicable). Integrity check applies when 'File integrity' is on."
-	}
-}
-
 func (h *Handler) loadVideoSidecar(seriesID, videoID, fileID int64) (*library.Video, *library.VideoFile, error) {
 	v, err := h.Library.GetVideo(videoID)
 	if err != nil {
@@ -211,12 +201,8 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 	st, err := os.Stat(f.Path)
 	missing := err != nil
 	sizeLabel := "-"
-	diskSizeLabel := "-"
-	var mtimeLabel string
 	if !missing && !st.IsDir() {
 		sizeLabel = library.FormatBytes(st.Size())
-		diskSizeLabel = sizeLabel
-		mtimeLabel = st.ModTime().UTC().Format(time.RFC3339)
 	}
 	dbSizeLabel := "-"
 	if f.SizeBytes.Valid {
@@ -226,18 +212,9 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 			dbSizeLabel = library.FormatBytes(f.SizeBytes.Int64)
 		}
 	}
-	hashLabel := "-"
-	if f.ContentHash.Valid && strings.TrimSpace(f.ContentHash.String) != "" {
-		h := strings.TrimSpace(f.ContentHash.String)
-		if len(h) > 16 {
-			hashLabel = h[:16] + "…"
-		} else {
-			hashLabel = h
-		}
-	}
-	registeredLabel := "-"
+	acquiredAt, acquiredAgo := "", ""
 	if strings.TrimSpace(f.AcquiredAt) != "" {
-		registeredLabel = f.AcquiredAt
+		acquiredAt, acquiredAgo = createdAgoPair(f.AcquiredAt, time.Now().UTC())
 	}
 	profileOn, _ := h.Library.SeriesProfileVerifyMedia(vid)
 	nfoMatchLabel := ""
@@ -258,68 +235,129 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	lastIssue, lastTaskID := h.Library.LastFileIntegrityIssue(vid, fid, f.Kind)
-	kindNote := fileKindIntegrityNote(f.Kind)
+
+	integrityFailed := f.IntegrityFailed()
+	hasOK := f.ContentHashOkAt.Valid && strings.TrimSpace(f.ContentHashOkAt.String) != ""
+	integrityAt, integrityAgo, integrityOkAt, integrityOkAgo := "", "", "", ""
+	now := time.Now().UTC()
+	if integrityFailed {
+		if f.ContentHashCheckedAt.Valid && strings.TrimSpace(f.ContentHashCheckedAt.String) != "" {
+			integrityAt, integrityAgo = createdAgoPair(f.ContentHashCheckedAt.String, now)
+		}
+		if hasOK {
+			integrityOkAt, integrityOkAgo = createdAgoPair(f.ContentHashOkAt.String, now)
+		}
+	} else if hasOK {
+		integrityAt, integrityAgo = createdAgoPair(f.ContentHashOkAt.String, now)
+	}
+
+	checkBusy, checkTaskID, _ := h.Library.FileHashCheckBusy(vid, fid)
+	checkBusyTip := ""
+	checkTaskKind, checkTaskPrefix := "", ""
+	checkDisabled := f.Kind == "nfo"
+	checkDisabledTip := ""
+	if checkDisabled {
+		checkDisabledTip = "Integrity check skipped, can be regenerated"
+		checkBusy = false
+		checkTaskID = 0
+	} else if checkBusy {
+		checkBusyTip = "Integrity check already queued"
+		if checkTaskID > 0 {
+			checkBusyTip = "Integrity check already queued - see Check in Details"
+			checkTaskKind = queue.KindFileHashCheck
+			checkTaskPrefix = "Queued"
+			if h.Queue != nil {
+				if t, err := h.Queue.GetTask(checkTaskID); err == nil && t != nil {
+					checkTaskKind = t.Kind
+					checkTaskPrefix = activeTaskLinkPrefix(t.Status)
+				}
+			}
+		}
+	}
+	integrityStatus, integrityTip := fileIntegrityDisplay(integrityFailed, hasOK, !checkDisabled, missing, checkDisabledTip)
 
 	rawHref := fmt.Sprintf("/series/%d/videos/%d/files/%d/raw", seriesID, vid, fid)
 	view := struct {
 		pageBase
-		Crumbs         []breadcrumb
-		Series         *library.Series
-		Video          *library.Video
-		FileID         int64
-		Kind           string
-		KindLabel      string
-		Icon           string
-		Name           string
-		Path           string
-		SizeLabel      string
-		DBSizeLabel    string
-		DiskSizeLabel  string
-		Registered     string
-		MtimeLabel     string
-		HashLabel      string
-		NFOMatchLabel  string
-		LastIssue      string
-		LastIssueTask  int64
-		KindNote       string
-		Missing        bool
-		CanDelete      bool
-		IsImage        bool
-		IsVideo        bool
-		IsText         bool
-		IsJSON         bool
-		Text           string
-		TextPretty     string
-		HasPretty      bool
-		Truncated      bool
-		RawHref        string
+		Crumbs            []breadcrumb
+		Series            *library.Series
+		Video             *library.Video
+		FileID            int64
+		Kind              string
+		KindLabel         string
+		Icon              string
+		Name              string
+		Path              string
+		SizeLabel         string
+		DBSizeLabel       string
+		CreatedAt         string // acquired_at absolute (rel_time tip)
+		CreatedAgo        string // acquired_at relative
+		IntegrityStatus   string // OK | Failed | Unchecked | N/A | Inactive
+		IntegrityAt       string // last checked absolute (Details rel_time tip)
+		IntegrityAgo      string // last checked since / ISO>7d (indicator tip + Details)
+		IntegrityOkAt     string // last OK absolute; Failed only
+		IntegrityOkAgo    string // last OK relative; Failed only
+		IntegrityTip      string // tip when not OK/Failed
+		IntegrityFailed   bool
+		NFOMatchLabel     string
+		LastIssue         string
+		LastIssueTask     int64
+		Missing           bool
+		CanDelete           bool
+		CheckHashDisabled   bool
+		CheckHashDisabledTip string
+		CheckHashBusy       bool
+		CheckHashBusyTip    string
+		CheckHashTaskID     int64
+		CheckHashTaskKind   string
+		CheckHashTaskPrefix string
+		IsImage             bool
+		IsVideo           bool
+		IsText            bool
+		IsJSON            bool
+		Text              string
+		TextPretty        string
+		HasPretty         bool
+		Truncated         bool
+		RawHref           string
 	}{
-		pageBase:      newPage(name, "series", flashFromQuery(r)),
-		Series:        ser,
-		Video:         v,
-		FileID:        fid,
-		Kind:          f.Kind,
-		KindLabel:     sidecarKindLabel(f.Kind),
-		Icon:          sidecarKindIcon(f.Kind),
-		Name:          name,
-		Path:          f.Path,
-		SizeLabel:     sizeLabel,
-		DBSizeLabel:   dbSizeLabel,
-		DiskSizeLabel: diskSizeLabel,
-		Registered:    registeredLabel,
-		MtimeLabel:    mtimeLabel,
-		HashLabel:     hashLabel,
-		NFOMatchLabel: nfoMatchLabel,
-		LastIssue:     lastIssue,
-		LastIssueTask: lastTaskID,
-		KindNote:      kindNote,
-		Missing:       missing,
-		CanDelete:     library.DeletableSidecarKind(f.Kind),
-		IsImage:       sidecarIsImage(f.Kind, f.Path),
-		IsVideo:       sidecarIsVideo(f.Kind, f.Path),
-		IsText:        sidecarIsText(f.Kind, f.Path),
-		IsJSON:        sidecarIsJSON(f.Kind, f.Path),
-		RawHref:       rawHref,
+		pageBase:         newPage(name, "series", flashFromQuery(r)),
+		Series:           ser,
+		Video:            v,
+		FileID:           fid,
+		Kind:             f.Kind,
+		KindLabel:        sidecarKindLabel(f.Kind),
+		Icon:             sidecarKindIcon(f.Kind),
+		Name:             name,
+		Path:             f.Path,
+		SizeLabel:        sizeLabel,
+		DBSizeLabel:      dbSizeLabel,
+		CreatedAt:        acquiredAt,
+		CreatedAgo:       acquiredAgo,
+		IntegrityStatus:  integrityStatus,
+		IntegrityAt:      integrityAt,
+		IntegrityAgo:     integrityAgo,
+		IntegrityOkAt:    integrityOkAt,
+		IntegrityOkAgo:   integrityOkAgo,
+		IntegrityTip:     integrityTip,
+		IntegrityFailed:  integrityFailed,
+		NFOMatchLabel:    nfoMatchLabel,
+		LastIssue:        lastIssue,
+		LastIssueTask:    lastTaskID,
+		Missing:              missing,
+		CanDelete:            library.DeletableSidecarKind(f.Kind),
+		CheckHashDisabled:    checkDisabled,
+		CheckHashDisabledTip: checkDisabledTip,
+		CheckHashBusy:        checkBusy,
+		CheckHashBusyTip:     checkBusyTip,
+		CheckHashTaskID:      checkTaskID,
+		CheckHashTaskKind:    checkTaskKind,
+		CheckHashTaskPrefix:  checkTaskPrefix,
+		IsImage:              sidecarIsImage(f.Kind, f.Path),
+		IsVideo:              sidecarIsVideo(f.Kind, f.Path),
+		IsText:               sidecarIsText(f.Kind, f.Path),
+		IsJSON:               sidecarIsJSON(f.Kind, f.Path),
+		RawHref:              rawHref,
 		Crumbs: []breadcrumb{
 			crumb("/series", "Series", "tv"),
 			crumb(fmt.Sprintf("/series/%d", ser.ID), ser.Title, "clapperboard"),

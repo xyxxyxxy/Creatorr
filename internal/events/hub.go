@@ -31,6 +31,7 @@ type Event struct {
 	Result         string         `json:"result,omitempty"`
 	NotificationID int64          `json:"notification_id,omitempty"`
 	UnreadCount    *int           `json:"unread_count,omitempty"`
+	HasAlert       *bool          `json:"has_alert,omitempty"`
 	Extra          map[string]any `json:"extra,omitempty"`
 }
 
@@ -127,18 +128,20 @@ func (h *Hub) TaskFailed(taskID int64, kind, domain, message, code string, serie
 }
 
 // NotificationCreated publishes notification.created.
-func (h *Hub) NotificationCreated(notificationID int64, event string, unreadCount int) {
+func (h *Hub) NotificationCreated(notificationID int64, event string, unreadCount int, hasAlert bool) {
 	uc := unreadCount
+	ha := hasAlert
 	h.Publish(Event{
 		Type: TypeNotificationCreated, NotificationID: notificationID,
-		Kind: event, UnreadCount: &uc,
+		Kind: event, UnreadCount: &uc, HasAlert: &ha,
 	})
 }
 
 // NotificationRead publishes notification.read (after mark-one or mark-all).
-func (h *Hub) NotificationRead(notificationID int64, unreadCount int) {
+func (h *Hub) NotificationRead(notificationID int64, unreadCount int, hasAlert bool) {
 	uc := unreadCount
+	ha := hasAlert
 	h.Publish(Event{
-		Type: TypeNotificationRead, NotificationID: notificationID, UnreadCount: &uc,
+		Type: TypeNotificationRead, NotificationID: notificationID, UnreadCount: &uc, HasAlert: &ha,
 	})
 }

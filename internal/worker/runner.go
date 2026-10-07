@@ -303,13 +303,13 @@ func (r *Runner) maybeNotifyFailure(ctx context.Context, log *slog.Logger, task 
 	if task.Domain == "" || task.Domain == "unknown" || task.Domain == "system" {
 		return
 	}
-	if code == apperrors.CodeAgeRestricted {
+	if code == apperrors.CodeAgeRestricted || code == apperrors.CodeMemberOnly {
 		return
 	}
 	switch code {
 	case apperrors.CodeCookieInvalid, apperrors.CodeRateLimited,
 		apperrors.CodeRemuxFailed, apperrors.CodePackFailed, apperrors.CodeIntegrityCheckFailed,
-		apperrors.CodeLiveBroadcastSkipped, apperrors.CodeAgeRestricted:
+		apperrors.CodeLiveBroadcastSkipped, apperrors.CodeAgeRestricted, apperrors.CodeMemberOnly:
 		// keep classified code (do not re-detect remux/pack/verify/age into pause)
 	default:
 		detectSrc := detail
@@ -408,11 +408,13 @@ func StubHandlers() map[string]TaskHandler {
 		queue.KindSyncFiles:          stub(queue.KindSyncFiles),
 		queue.KindRetentionDelete:    stub(queue.KindRetentionDelete),
 		queue.KindRenameEpisodes:     stub(queue.KindRenameEpisodes),
-		queue.KindRegenerateNFO:      stub(queue.KindRegenerateNFO),
-		queue.KindIntegrityCheck:     stub(queue.KindIntegrityCheck),
+		queue.KindRegenerateNFO:         stub(queue.KindRegenerateNFO),
+		queue.KindResetMetadataFromInfo: stub(queue.KindResetMetadataFromInfo),
+		queue.KindIntegrityCheck:        stub(queue.KindIntegrityCheck),
 		queue.KindDeleteFiles:        stub(queue.KindDeleteFiles),
 		queue.KindSponsorblockCut:    stub(queue.KindSponsorblockCut),
 		queue.KindIntegrityCheckInitial:        stub(queue.KindIntegrityCheckInitial),
+		queue.KindFileHashCheck:      stub(queue.KindFileHashCheck),
 		queue.KindYtDlpUpdate:        stub(queue.KindYtDlpUpdate),
 		queue.KindBulkEditSeries:     stub(queue.KindBulkEditSeries),
 		queue.KindBulkEditVideos:     stub(queue.KindBulkEditVideos),

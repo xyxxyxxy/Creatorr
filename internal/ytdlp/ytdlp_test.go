@@ -170,3 +170,19 @@ func TestUpgradeCodeAgeRestricted(t *testing.T) {
 		t.Fatalf("prior AgeRestricted must upgrade to CookieInvalid, got %q", got)
 	}
 }
+
+func TestUpgradeCodeMemberOnly(t *testing.T) {
+	yt := "ERROR: [youtube] wz_HDa2f0tc: This video is available to this channel's members on level: Director's Commentary (or any higher level). Join this channel to get access to member"
+	got := upgradeCode("DownloadFailed", yt)
+	if got != "MemberOnly" {
+		t.Fatalf("upgradeCode youtube members=%q want MemberOnly", got)
+	}
+	mde := "ERROR: [mdetv] id: mde.tv stream sign HTTP 403: video is outside your membership tier (needs regular access); use an account that includes this content"
+	got = upgradeCode("DownloadFailed", mde)
+	if got != "MemberOnly" {
+		t.Fatalf("upgradeCode mde tier=%q want MemberOnly", got)
+	}
+	if pauseMessage("MemberOnly") != "Members only" {
+		t.Fatalf("pauseMessage MemberOnly=%q", pauseMessage("MemberOnly"))
+	}
+}

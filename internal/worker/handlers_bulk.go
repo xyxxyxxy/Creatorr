@@ -66,6 +66,21 @@ func RegenerateNFOHandler(d Deps) TaskHandler {
 	}
 }
 
+// ResetMetadataFromInfoHandler force-resets video metadata from packed info.json (resumable).
+func ResetMetadataFromInfoHandler(d Deps) TaskHandler {
+	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {
+		if d.Library == nil {
+			return apperrors.New(apperrors.CodeInternal, "reset metadata deps missing")
+		}
+		reset, skipped, failed, err := d.Library.ResetMetadataFromInfoPass(ctx, t, progress)
+		if err != nil {
+			return err
+		}
+		d.Library.RecordResetMetadataFromInfoActivity(t.ID, reset, skipped, failed)
+		return nil
+	}
+}
+
 // VerifyAllMediaHandler null-decodes all packed downloaded/downloaded_integrity_failed media (resumable).
 func DeleteFilesHandler(d Deps) TaskHandler {
 	return func(ctx context.Context, t *queue.Task, progress func(msg string, pct *float64)) error {

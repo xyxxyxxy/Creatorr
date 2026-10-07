@@ -1,10 +1,11 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
-	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
@@ -16,7 +17,21 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
 
-	recentVids, _ := h.Library.ListRecentVideos(VideoPageSize)
+	wantedSeries, _ := h.Library.ListMostWantedSeries(OverviewGalleryRow)
+	wantedRows := make([]seriesListRow, 0, len(wantedSeries))
+	for _, s := range wantedSeries {
+		art := h.Library.SeriesArtFlagsFor(&s)
+		posterURL := ""
+		if art.Poster {
+			posterURL = fmt.Sprintf("/series/%d/art/poster", s.ID)
+		}
+		wantedRows = append(wantedRows, seriesListRow{
+			Series:    s,
+			PosterURL: posterURL,
+		})
+	}
+
+	recentVids, _ := h.Library.ListRecentVideos(FixedDefault)
 	recentRows := h.buildSeriesVideoRows(recentVids, nil, nil)
 	seriesIDs := make([]int64, 0, len(recentVids))
 	seen := map[int64]struct{}{}
@@ -29,12 +44,23 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 	}
 	seriesTitles, _ := h.Library.SeriesTitles(seriesIDs)
 
+	tasksReq := httptest.NewRequest(http.MethodGet, "/explorer/browse?type=tasks&at=overview&view=list", nil)
+	tasksLive, err := h.loadTasksListLive(w, tasksReq)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
 	render(w, "overview", struct {
 		pageBase
 		SeriesCount         int
 		VideoCount          int
+		DownloadedCount     int
 		SizeHuman           string
-		RunningTasks        []taskView
+		TasksLive           tasksListLiveData
+		SeriesBrowseHref    string
+		VideosBrowseHref    string
+		WantedSeries        []seriesListRow
 		RecentVideos        []seriesVideoRow
 		SeriesTitles        map[int64]string
 		Roots               []library.RootFolder
@@ -44,61 +70,16 @@ func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
 		pageBase:            newPage("Overview", "overview", flashFromQuery(r)),
 		SeriesCount:         totals.SeriesCount,
 		VideoCount:          totals.VideoCount,
+		DownloadedCount:     totals.DownloadedCount,
 		SizeHuman:           library.FormatBytes(totals.SizeBytes),
-		RunningTasks:        h.runningTaskViews(),
+		TasksLive:           tasksLive,
+		SeriesBrowseHref:    overviewSeriesBrowseHref,
+		VideosBrowseHref:    overviewVideosBrowseHref,
+		WantedSeries:        wantedRows,
 		RecentVideos:        recentRows,
 		SeriesTitles:        seriesTitles,
 		Roots:               roots,
 		Profiles:            profiles,
 		ScanCronDescriptors: scanCronDescriptors(),
 	})
-}
-
-// runningTaskViews returns status=running tasks across all domains (read-only overview).
-func (h *Handler) runningTaskViews() []taskView {
-	if h.Queue == nil {
-		return nil
-	}
-	tasks, err := h.Queue.ListActive()
-	if err != nil {
-		return nil
-	}
-	titles := map[int64]string{}
-	videoTitles := map[int64]string{}
-	var out []taskView
-	for _, t := range tasks {
-		if t.Status != queue.StatusRunning {
-			continue
-		}
-		tv := taskView{
-			ID: t.ID, Status: t.Status, Kind: t.Kind, Domain: t.Domain, Message: t.Message,
-		}
-		if t.SeriesID.Valid {
-			tv.SeriesID = t.SeriesID.Int64
-			if title, ok := titles[tv.SeriesID]; ok {
-				tv.SeriesTitle = title
-			} else if ser, err := h.Library.GetSeries(tv.SeriesID, false); err == nil {
-				titles[tv.SeriesID] = ser.Title
-				tv.SeriesTitle = ser.Title
-			}
-		}
-		if t.VideoID.Valid {
-			tv.VideoID = t.VideoID.Int64
-			if title, ok := videoTitles[tv.VideoID]; ok {
-				tv.VideoTitle = title
-			} else if v, err := h.Library.GetVideo(tv.VideoID); err == nil {
-				videoTitles[tv.VideoID] = v.Title
-				tv.VideoTitle = v.Title
-				if tv.SeriesID == 0 {
-					tv.SeriesID = v.SeriesID
-				}
-			}
-		}
-		if t.Progress.Valid {
-			p := t.Progress.Float64
-			tv.Progress = &p
-		}
-		out = append(out, tv)
-	}
-	return out
 }

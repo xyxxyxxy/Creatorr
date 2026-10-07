@@ -1,0 +1,84 @@
+{{define "library_tree"}}
+<div id="library-tree-live" class="library-tree card bg-base-100 border border-base-300"
+     data-library-tree>
+  <div class="card-body gap-2 p-3">
+    {{if not .Roots}}
+    <p class="text-sm opacity-70">No root folders yet. Add one under Settings → Library.</p>
+    {{else}}
+    <ul class="library-tree-list flex flex-col gap-0.5" role="tree" aria-label="Library tree">
+      {{range .Roots}}
+      {{template "library_tree_node" .}}
+      {{end}}
+    </ul>
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+{{define "library_tree_node"}}
+<li class="library-tree-node" role="treeitem"
+    data-tree-kind="{{.Kind}}" data-tree-id="{{.ID}}"
+    data-tree-depth="{{.Depth}}"
+    style="--tree-depth: {{.Depth}}">
+  <div class="library-tree-row flex items-center gap-1 min-h-8 rounded-lg hover:bg-base-200/60 px-1">
+    <span class="library-tree-indent shrink-0" aria-hidden="true"></span>
+    {{if .Expandable}}
+    <button type="button"
+            class="btn btn-ghost btn-xs btn-square shrink-0"
+            data-tree-expand
+            aria-expanded="false"
+            aria-label="Expand {{.Name}}"
+            data-tip="Expand"
+            hx-get="{{.ChildrenURL}}"
+            hx-target="#tree-children-{{.Kind}}-{{.ID}}"
+            hx-swap="innerHTML"
+            hx-sync="#library-tree-live:abort">
+      <i data-lucide="chevron-right" class="size-4 library-tree-chevron" aria-hidden="true"></i>
+    </button>
+    {{else}}
+    <span class="inline-flex size-6 shrink-0" aria-hidden="true"></span>
+    {{end}}
+    <span class="inline-flex shrink-0 text-base-content/70" aria-hidden="true">
+      <i data-lucide="{{.Icon}}" class="size-4"></i>
+    </span>
+    {{if .Href}}
+    <a class="link link-hover text-sm min-w-0 truncate" href="{{.Href}}">{{.Name}}</a>
+    {{else}}
+    <span class="text-sm min-w-0 truncate">{{.Name}}</span>
+    {{end}}
+    {{if and .Expandable (gt .ChildCount 0)}}
+    <span class="badge badge-ghost badge-sm tabular-nums shrink-0">{{.ChildCount}}</span>
+    {{end}}
+  </div>
+  {{if .Expandable}}
+  <ul id="tree-children-{{.Kind}}-{{.ID}}"
+      class="library-tree-children list-none m-0 p-0"
+      role="group"
+      data-tree-children
+      data-tree-parent-kind="{{.Kind}}"
+      data-tree-parent-id="{{.ID}}"></ul>
+  {{end}}
+</li>
+{{end}}
+
+{{define "library_tree_children"}}
+{{range .Nodes}}
+{{template "library_tree_node" .}}
+{{end}}
+{{if .HasMore}}
+<li class="library-tree-load-more" data-tree-load-more-wrap style="--tree-depth: {{.Depth}}">
+  <div class="library-tree-row flex items-center gap-1 min-h-8 px-1">
+    <span class="library-tree-indent shrink-0" aria-hidden="true"></span>
+    <span class="inline-flex size-6 shrink-0" aria-hidden="true"></span>
+    <button type="button" class="btn btn-ghost btn-xs"
+            data-tree-load-more
+            hx-get="{{.MoreURL}}"
+            hx-target="closest [data-tree-load-more-wrap]"
+            hx-swap="outerHTML"
+            hx-sync="#library-tree-live:abort">
+      Load more
+    </button>
+  </div>
+</li>
+{{end}}
+{{end}}

@@ -159,13 +159,13 @@ func (s *Store) SetSeriesMonitoredBulk(ids []int64, monitored bool) (updated, sk
 	return updated, skipped, nil
 }
 
-// ListSeriesIDsFiltered returns series ids matching filter (title order).
+// ListSeriesIDsFiltered returns series ids matching filter (same ORDER BY as the list).
 func (s *Store) ListSeriesIDsFiltered(filter SeriesListFilter) ([]int64, error) {
 	var b strings.Builder
-	b.WriteString(`SELECT s.id FROM series s WHERE 1=1`)
+	b.WriteString(`SELECT s.id` + seriesListFromJoins + ` WHERE 1=1`)
 	args := []any{}
 	appendSeriesListFilterSQL(&b, &args, filter)
-	b.WriteString(` ORDER BY s.title COLLATE NOCASE`)
+	b.WriteString(` ORDER BY ` + seriesOrderByClause(filter.Sort, filter.SortDir))
 	rows, err := s.DB.SQL.Query(b.String(), args...)
 	if err != nil {
 		return nil, err

@@ -33,16 +33,16 @@ func publishCreated(database *db.DB, id int64, event string) {
 	if eventsHub == nil || id <= 0 {
 		return
 	}
-	n, _ := CountUnread(database)
-	eventsHub.NotificationCreated(id, event, n)
+	n, hasAlert, _ := UnreadBadge(database)
+	eventsHub.NotificationCreated(id, event, n, hasAlert)
 }
 
 func publishRead(database *db.DB, id int64) {
 	if eventsHub == nil {
 		return
 	}
-	n, _ := CountUnread(database)
-	eventsHub.NotificationRead(id, n)
+	n, hasAlert, _ := UnreadBadge(database)
+	eventsHub.NotificationRead(id, n, hasAlert)
 }
 
 // SetSendFnForTest swaps the send implementation; returns the previous one.
@@ -79,8 +79,9 @@ func Send(ctx context.Context, urls []string, title, body string) error {
 // notifications row; Apprise channels call sendFn. taskID is required (>0) for
 // unread events (alert + warning); may be 0 for info digests (stored NULL).
 // Info events like live_skipped may still pass task_id so the detail page links the task.
-// Successful Apprise delivery sets external_ok only; unread alerts/warnings stay
-// unread until acknowledged in-app (History open, detail open, or mark-read).
+// Successful Apprise delivery sets external_ok. When any successful Apprise channel
+// has MarkExternalRead (default on), the in-app row is marked read too; otherwise
+// unread alerts/warnings stay unread until History open, detail open, or mark-read.
 func SendEvent(ctx context.Context, database *db.DB, event, title, body string, taskID int64) error {
 	if database == nil {
 		return nil
@@ -110,6 +111,7 @@ func SendEvent(ctx context.Context, database *db.DB, event, title, body string, 
 	var notifID int64
 	var first error
 	anyAppriseOK := false
+	markExternalRead := false
 	for _, c := range channels {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -129,6 +131,9 @@ func SendEvent(ctx context.Context, database *db.DB, event, title, body string, 
 			continue
 		}
 		anyAppriseOK = true
+		if c.MarkExternalRead {
+			markExternalRead = true
+		}
 	}
 	if notifID == 0 {
 		// Should not happen: in-app is always subscribed via EventAll.
@@ -140,6 +145,9 @@ func SendEvent(ctx context.Context, database *db.DB, event, title, body string, 
 	}
 	if anyAppriseOK {
 		_ = MarkExternalOK(database, notifID)
+		if markExternalRead {
+			_ = MarkRead(database, notifID)
+		}
 	}
 	publishCreated(database, notifID, event)
 	return first
@@ -197,6 +205,64 @@ func VerifyFailed(ctx context.Context, database *db.DB, taskID int64, series, ti
 	nTitle := fmt.Sprintf("Integrity check failed (%s)", label)
 	body := fmt.Sprintf("%s: %s failed Integrity check. File kept; status downloaded_integrity_failed. Re-download to retry.\n\n%s", label, vt, detail)
 	return SendEvent(ctx, database, EventVerifyFailed, nTitle, body, taskID)
+}
+
+// SeriesMetaVerifyFailed notifies that series art failed hash check (videos unchanged).
+func SeriesMetaVerifyFailed(ctx context.Context, database *db.DB, taskID int64, series, kind, detail string) error {
+	detail = truncateDetailTail(detail)
+	label := strings.TrimSpace(series)
+	if label == "" {
+		label = "library"
+	}
+	k := strings.TrimSpace(kind)
+	if k == "" {
+		k = "art"
+	}
+	nTitle := fmt.Sprintf("Integrity check failed (%s)", label)
+	body := fmt.Sprintf("%s: series %s failed Integrity check. File kept; series integrity indicator raised.\n\n%s", label, k, detail)
+	return SendEvent(ctx, database, EventVerifyFailed, nTitle, body, taskID)
+}
+
+// SeriesIntegrityRecovered notifies when a series has zero derived-failed files again.
+func SeriesIntegrityRecovered(ctx context.Context, database *db.DB, taskID int64, series string) error {
+	label := strings.TrimSpace(series)
+	nTitle := "Integrity recovered"
+	if label != "" {
+		nTitle = fmt.Sprintf("Integrity recovered (%s)", label)
+	}
+	body := fmt.Sprintf("%s: all series files passed Integrity check; series integrity indicator cleared.", labelOrLibrary(label))
+	return SendEvent(ctx, database, EventIntegrityRecovered, nTitle, body, taskID)
+}
+
+// IntegrityRecovered notifies that a video left downloaded_integrity_failed after a successful check.
+func IntegrityRecovered(ctx context.Context, database *db.DB, taskID int64, series, title string) error {
+	label := strings.TrimSpace(series)
+	vt := strings.TrimSpace(title)
+	if vt == "" {
+		vt = "video"
+	}
+	nTitle := "Integrity recovered"
+	if label != "" {
+		nTitle = fmt.Sprintf("Integrity recovered (%s)", label)
+	}
+	body := fmt.Sprintf("%s: %s passed Integrity check; status restored to downloaded.", labelOrLibrary(label), vt)
+	return SendEvent(ctx, database, EventIntegrityRecovered, nTitle, body, taskID)
+}
+
+// IntegrityRecoveredDigest sends one info notification for multiple recoveries in a bulk check.
+func IntegrityRecoveredDigest(ctx context.Context, database *db.DB, taskID int64, items []DigestItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	title := fmt.Sprintf("%d integrity recovery(ies)", len(items))
+	return SendEvent(ctx, database, EventIntegrityRecovered, title, FormatDigestBody(items), taskID)
+}
+
+func labelOrLibrary(label string) string {
+	if strings.TrimSpace(label) == "" {
+		return "library"
+	}
+	return label
 }
 
 // POTProvider notifies that the PO token sidecar/plugin had a problem while

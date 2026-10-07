@@ -5,6 +5,7 @@ import (
 
 	"github.com/xyxxyxxy/Creatorr/internal/health"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/ytdlp"
@@ -29,6 +30,16 @@ func (h *Handler) Mount(r chi.Router) {
 		u, _ := settings.AuthUsername(h.Queue.DB)
 		return u
 	})
+	SetNotifyBadgeForPage(func() (int, bool) {
+		if h.Queue == nil || h.Queue.DB == nil {
+			return 0, false
+		}
+		n, hasAlert, err := notify.UnreadBadge(h.Queue.DB)
+		if err != nil {
+			return 0, false
+		}
+		return n, hasAlert
+	})
 
 	r.Get("/setup", h.setupGet)
 	r.Post("/setup", h.setupPost)
@@ -37,8 +48,18 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/logout", h.logoutPost)
 
 	r.Get("/", h.overview)
+	r.Get("/browser", h.browserPage)
+	r.Get("/explorer/browse", h.explorerBrowse)
+	r.Get("/explorer/tree-children", h.libraryTreeChildren)
+	r.Get("/videos", h.videosPage)
+	r.Get("/videos/live", redirectExplorerLive(explorerTypeVideos))
+	r.Get("/videos/ids", h.videosIDsJSON)
+	r.Get("/files/ids", h.filesIDsJSON)
+	r.Get("/sources/ids", h.sourcesIDsJSON)
+	r.Get("/sources/delete-impact", h.sourcesDeleteImpactJSON)
+	r.Get("/notifications/ids", h.notificationsIDsJSON)
 	r.Get("/series", h.seriesList)
-	r.Get("/series/list-live", h.seriesListLive)
+	r.Get("/series/list-live", redirectExplorerLive(explorerTypeSeries))
 	r.Get("/series/ids", h.seriesIDsJSON)
 	r.Post("/series/bulk-metadata-common", h.seriesBulkMetadataCommonJSON)
 	r.Post("/series/bulk-settings-common", h.seriesBulkSettingsCommonJSON)
@@ -104,6 +125,12 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/bulk-refresh-sidecars-videos", h.actionBulkRefreshSidecarsVideos)
 	r.Post("/actions/bulk-edit-videos-metadata", h.actionBulkEditVideosMetadata)
 	r.Post("/actions/bulk-delete-videos", h.actionBulkDeleteVideos)
+	r.Post("/actions/bulk-check-file-hash", h.actionBulkCheckFileHash)
+	r.Post("/actions/bulk-delete-video-sidecar", h.actionBulkDeleteVideoSidecar)
+	r.Post("/actions/bulk-scan-sources", h.actionBulkScanSources)
+	r.Post("/actions/bulk-edit-sources", h.actionBulkEditSources)
+	r.Post("/actions/bulk-delete-sources", h.actionBulkDeleteSources)
+	r.Post("/actions/bulk-notification-read", h.actionBulkNotificationRead)
 	r.Post("/actions/save-series-metadata", h.actionSaveSeriesMetadata)
 	r.Post("/actions/series-metadata-prefetch", h.actionSeriesMetadataPrefetch)
 	r.Post("/actions/save-video-metadata", h.actionSaveVideoMetadata)
@@ -121,13 +148,13 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/metadata-rescan-series", h.actionMetadataRescanSeries)
 	r.Post("/actions/metadata-rescan-video", h.actionMetadataRescanVideo)
 	r.Post("/actions/refresh-sidecars-video", h.actionRefreshSidecarsVideo)
+	r.Post("/actions/check-file-hash", h.actionCheckFileHash)
 	r.Post("/actions/want-video", h.actionWantVideo)
 	r.Post("/actions/set-source-monitored", h.actionSetSourceMonitored)
 	r.Post("/actions/set-series-monitored", h.actionSetSeriesMonitored)
 	r.Post("/actions/download-video", h.actionDownloadVideo)
 	r.Post("/actions/clear-video-download-error", h.actionClearVideoDownloadError)
 	r.Post("/actions/clear-series-download-errors", h.actionClearSeriesDownloadErrors)
-	r.Post("/actions/retry-source-errors", h.actionRetrySourceErrors)
 	r.Post("/actions/ignore-video", h.actionIgnoreVideo)
 	r.Post("/actions/delete-video", h.actionDeleteVideo)
 	r.Post("/actions/delete-video-sidecar", h.actionDeleteVideoSidecar)
@@ -143,6 +170,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/actions/test-notify-channel", h.actionTestNotifyChannel)
 	r.Post("/actions/mark-notification-read", h.actionMarkNotificationRead)
 	r.Post("/actions/mark-all-notifications-read", h.actionMarkAllNotificationsRead)
+	r.Post("/actions/toggle-notification-read", h.actionToggleNotificationRead)
 	r.Post("/actions/set-domain-active", h.actionSetDomainActive)
 	r.Post("/actions/set-domain-paused", h.actionSetDomainPaused)
 	r.Post("/actions/save-domain-default", h.actionSaveDomainDefault)

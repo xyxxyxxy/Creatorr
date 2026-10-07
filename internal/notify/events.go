@@ -18,6 +18,7 @@ const (
 	EventRateLimited         = "rate_limited"
 	EventYtDlpFailed         = "ytdlp_failed"
 	EventVerifyFailed        = "integrity_check_failed"
+	EventIntegrityRecovered  = "integrity_recovered"
 	EventFileSyncIssues      = "file_sync_issues"
 	EventPOTProvider         = "pot_provider"
 	EventPathCollision       = "path_collision"
@@ -44,6 +45,7 @@ var AllEvents = []string{
 	EventDownloadDigest,
 	EventLiveSkipped,
 	EventArchiveFallback,
+	EventIntegrityRecovered,
 	EventYtDlpFailed,
 	EventVerifyFailed,
 	EventFileSyncIssues,
@@ -60,6 +62,7 @@ var EventLabels = map[string]string{
 	EventRateLimited:         "Rate limit / IP block",
 	EventYtDlpFailed:         "yt-dlp / site failure",
 	EventVerifyFailed:        "Integrity check failed",
+	EventIntegrityRecovered:  "Integrity recovered",
 	EventFileSyncIssues:      "File sync issues",
 	EventPOTProvider:         "PO token provider failure",
 	EventPathCollision:       "Episode path collision",
@@ -138,7 +141,8 @@ func IsWarningEvent(event string) bool {
 	return slices.Contains(WarningEvents, event)
 }
 
-// IsUnreadEvent reports whether event stays unread until in-app acknowledgment.
+// IsUnreadEvent reports whether event is inserted unread (alert/warning).
+// Info is inserted read; operators can still mark any row unread later.
 func IsUnreadEvent(event string) bool {
 	return IsAlertEvent(event) || IsWarningEvent(event)
 }
@@ -157,25 +161,46 @@ func EventLevel(event string) string {
 
 // EventsForLevel returns canonical event ids for a level filter (empty level → nil).
 func EventsForLevel(level string) []string {
-	switch strings.TrimSpace(level) {
-	case LevelAlert:
-		return append([]string(nil), AlertEvents...)
-	case LevelWarning:
-		return append([]string(nil), WarningEvents...)
-	case LevelInfo:
-		out := make([]string, 0, len(AllEvents))
-		for _, e := range AllEvents {
-			if EventLevel(e) == LevelInfo {
-				out = append(out, e)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
+	return EventsForLevels([]string{level})
 }
 
-// UnreadEvents returns alert + warning event ids (SQL IN lists, mark-all).
+// EventsForLevels unions event ids for each level (unknown levels skipped).
+func EventsForLevels(levels []string) []string {
+	if len(levels) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var out []string
+	for _, level := range levels {
+		level = strings.TrimSpace(level)
+		var evs []string
+		switch level {
+		case LevelAlert:
+			evs = AlertEvents
+		case LevelWarning:
+			evs = WarningEvents
+		case LevelInfo:
+			evs = make([]string, 0, len(AllEvents))
+			for _, e := range AllEvents {
+				if EventLevel(e) == LevelInfo {
+					evs = append(evs, e)
+				}
+			}
+		default:
+			continue
+		}
+		for _, e := range evs {
+			if _, ok := seen[e]; ok {
+				continue
+			}
+			seen[e] = struct{}{}
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// UnreadEvents returns alert + warning event ids (events stored unread by default).
 func UnreadEvents() []string {
 	out := make([]string, 0, len(AlertEvents)+len(WarningEvents))
 	out = append(out, AlertEvents...)
@@ -261,7 +286,7 @@ func notifyTypeFor(event string) apprise.NotifyType {
 		return apprise.NotifyFailure
 	case EventDownloadDigest:
 		return apprise.NotifySuccess
-	case EventLiveSkipped, EventArchiveFallback:
+	case EventLiveSkipped, EventArchiveFallback, EventIntegrityRecovered:
 		return apprise.NotifyInfo
 	default:
 		return apprise.NotifyInfo

@@ -204,12 +204,13 @@ func TestTickEnqueuesFullScanWhenBackfillIncomplete(t *testing.T) {
 	ser, err := lib.CreateSeries(library.CreateSeriesParams{
 		Title: "S", SourceURL: "https://example.com/feed",
 		RootID: root.ID, QualityProfileID: prof.ID, Monitored: true,
+		ScanCron: "@weekly",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, _ = q.CancelAll()
-	// CreateSeries defaults weekly scan_cron; leave full_scan_done false.
+	// Leave full_scan_done false with a scheduled scan_cron.
 	if _, err := d.SQL.Exec(`UPDATE sources SET full_scan_done = 0 WHERE series_id = ?`, ser.ID); err != nil {
 		t.Fatal(err)
 	}

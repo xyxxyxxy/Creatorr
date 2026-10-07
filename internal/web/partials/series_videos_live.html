@@ -2,15 +2,17 @@
 <div id="series-videos-live" {{if .OOB}}hx-swap-oob="true"{{end}}
      data-filter-total="{{.FilterTotal}}"
      data-series-id="{{.SeriesID}}"
-     data-download-error-count="{{.DownloadErrorCount}}"
-     data-bulk-busy="{{if .BulkEditBusy}}1{{else}}0{{end}}"
-     data-bulk-mode="0">
+     data-list-mode="fixed"
+     data-view-mode="gallery">
 {{template "list_panel"}}
 {{template "list_header" (dict
   "level" "section"
   "title" "Videos"
   "icon" "square-play"
-  "help" "Indexed from scans. Open a video for details."
+  "help" "Newest acquired first. Open a video for details."
+  "add_href" .BrowseHref
+  "add_label" "Browse all"
+  "add_class" "btn"
   "ShowProgress" true
   "ProgressTotal" .ProgressTotal
   "DownloadedCount" .DownloadedCount
@@ -18,132 +20,25 @@
   "WantedCount" .WantedCount
   "Monitored" .Monitored
 )}}
-{{template "list_filters" (dict
-  "Query" .VideoFilter.Query
-  "QueryPlaceholder" .VideoFilter.QueryPlaceholder
-  "AriaLabel" .VideoFilter.AriaLabel
-  "Selects" .VideoFilter.Selects
-  "LiveTarget" .VideoFilter.LiveTarget
-  "FormAction" .VideoFilter.FormAction
-  "VideoBulkMode" true
-)}}
+<div data-list-mode="fixed">
 {{if not .Videos}}
-{{if .FilterActive}}
-{{template "list_empty" "No videos match the filters."}}
-{{else}}
 {{template "list_empty" "No videos indexed yet. Run a scan."}}
-{{end}}
 {{else}}
-<ul class="list bg-base-100 rounded-box border border-base-300" id="series-videos-rows">
-  {{/* Bulk bar: checkbox+count | grow | actions. Rows keep thumb column for checkbox alignment. */}}
-  <li id="video-bulk-bar"
-      class="list-row py-2 hidden"
-      data-video-bulk-bar
-      style="--list-grid-cols: max-content 1fr max-content">
-    <div class="self-center flex items-center gap-3">
-      <input type="checkbox" class="checkbox checkbox-sm" id="video-select-page"
-             aria-label="Select all on this page"
-             {{if .BulkEditBusy}}disabled{{end}} />
-      <div class="text-sm tabular-nums opacity-70 whitespace-nowrap">
-        <span data-video-bulk-count>0/{{.FilterTotal}}</span>
-        <span>selected</span>
-      </div>
-    </div>
-    <div class="list-col-grow min-w-0 flex flex-wrap items-center gap-2 self-center">
-      {{if .VideosPage.Show}}
-      <button type="button"
-              class="btn btn-ghost btn-sm"
-              data-video-select-all-matching
-              {{if .BulkEditBusy}}disabled{{end}}>
-        <i data-lucide="list-checks" class="size-4"></i>
-        Select all
-      </button>
-      {{end}}
-      {{if .BulkEditBusy}}
-      <span class="text-sm opacity-60">Bulk edit running…</span>
-      <a class="link link-hover text-sm" href="/tasks">Tasks</a>
-      {{end}}
-    </div>
-    {{if not .BulkEditBusy}}
-    <div class="self-center justify-self-end">
-      <div class="join">
-        <button type="button" class="btn join-item" data-video-bulk-refresh disabled>
-          <i data-lucide="refresh-cw" class="size-4"></i>
-          Refresh sidecars
-        </button>
-        <button type="button" class="btn join-item" data-video-bulk-metadata disabled>
-          <i data-lucide="file-pen" class="size-4"></i>
-          Edit metadata
-        </button>
-        <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-video-bulk-clear-errors data-tip="Clear selected" aria-label="Clear selected" disabled>
-          <i data-lucide="badge-x" class="size-4"></i>
-        </button>
-        <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-video-bulk-want data-tip="Want" aria-label="Want" disabled>
-          <i data-lucide="eye" class="size-4"></i>
-        </button>
-        <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-video-bulk-ignore data-tip="Ignore" aria-label="Ignore" disabled>
-          <i data-lucide="eye-off" class="size-4"></i>
-        </button>
-        <button type="button" class="btn btn-soft btn-error btn-square join-item tooltip tooltip-top" data-video-bulk-delete data-tip="Delete" aria-label="Delete" disabled>
-          <i data-lucide="trash-2" class="size-4"></i>
-        </button>
-      </div>
-    </div>
-    {{else}}
-    <div class="size-10 shrink-0" aria-hidden="true"></div>
-    {{end}}
-  </li>
+<ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" id="series-videos-rows">
   {{range .Videos}}
-  {{template "video_list_row" (dict
+  {{template "video_gallery_card" (dict
     "ID" .ID
     "Title" .Title
     "Status" .Status
-    "StatusLabel" .StatusLabel
-    "UploadDate" .UploadDate
-    "SizeLabel" .SizeLabel
-    "ResolutionLabel" .ResolutionLabel
     "DurationLabel" .DurationLabel
-    "MediaTypeLabel" .MediaTypeLabel
     "ThumbURL" .ThumbURL
-    "TaskInd" .TaskInd
-    "DownloadRunning" .DownloadRunning
-    "DeliveryQueued" .DeliveryQueued
-    "Deleting" .Deleting
-    "DomainActive" .DomainActive
-    "DomainDisabledTitle" .DomainDisabledTitle
     "SeriesID" $.SeriesID
-    "PackRoleBadge" .PackRoleBadge
-    "KeepScroll" true
-    "LiveSwap" true
-    "FormClass" "inline"
-    "Select" true
-    "BulkEditBusy" $.BulkEditBusy
+    "NoActions" true
   )}}
   {{end}}
 </ul>
-{{template "pagination" .VideosPage}}
 {{end}}
-{{template "list_panel_end"}}
-
-{{range .Videos}}
-{{if .DownloadRunning}}
-<input type="checkbox" id="modal-ignore-video-{{.ID}}" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Ignore video</h3>
-    <p class="text-sm mb-4">A download task is in progress for <strong>{{.Title}}</strong>. Ignore and cancel it?</p>
-    <form method="post" action="/actions/ignore-video" class="inline" hx-post="/actions/ignore-video" hx-target="#series-videos-live" hx-swap="outerHTML">
-      <input type="hidden" name="video_id" value="{{.ID}}" />
-      <input type="hidden" name="series_id" value="{{$.SeriesID}}" />
-      <div class="modal-action">
-        <label for="modal-ignore-video-{{.ID}}" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-warning">Ignore and cancel task</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
-{{end}}
-{{end}}
+{{template "list_panel_end"}}
 </div>
 {{end}}

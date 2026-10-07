@@ -1,0 +1,33 @@
+{{define "notifications_bulk_bar"}}
+{{/* Dot: FilterTotal, ShowSelectAll */}}
+<ul class="list bg-base-100 rounded-box border border-base-300 mb-3 hidden" id="notifications-bulk-bar-wrap">
+  <li id="notifications-bulk-bar"
+      class="list-row py-2 hidden"
+      data-notifications-bulk-bar
+      style="--list-grid-cols: max-content 1fr max-content">
+    <div class="self-center flex items-center gap-3">
+      <input type="checkbox" class="checkbox checkbox-sm" id="notifications-select-page"
+             aria-label="Select all on this page" />
+      <div class="text-sm tabular-nums opacity-70 whitespace-nowrap">
+        <span data-notifications-bulk-count>0/{{.SelectableTotal}}</span>
+        <span>selected</span>
+      </div>
+    </div>
+    <div class="list-col-grow min-w-0 flex flex-wrap items-center gap-2 self-center">
+      {{if .ShowSelectAll}}
+      <button type="button"
+              class="btn btn-ghost btn-sm"
+              data-notifications-select-all-matching>
+        <i data-lucide="list-checks" class="size-4"></i>
+        Select all
+      </button>
+      {{end}}
+    </div>
+    <div class="self-center justify-self-end flex flex-wrap gap-2 items-center">
+      {{template "btn_labeled" (dict "Icon" "mail-open" "Label" "Mark read" "Data" "notifications-bulk-read" "Disabled" true)}}
+      {{template "btn_labeled" (dict "Icon" "mail" "Label" "Mark unread" "Data" "notifications-bulk-unread" "Disabled" true)}}
+
+    </div>
+  </li>
+</ul>
+{{end}}

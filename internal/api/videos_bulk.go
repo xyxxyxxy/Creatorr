@@ -20,8 +20,11 @@ func (s *Server) ListSeriesVideoIds(w http.ResponseWriter, r *http.Request, id g
 	if params.Q != nil {
 		filter.Title = *params.Q
 	}
+	if params.QField != nil {
+		filter.QField = library.NormalizeQField(string(*params.QField))
+	}
 	if params.Source != nil {
-		filter.SourceID = *params.Source
+		filter.SourceIDs = []int64{*params.Source}
 	}
 	if params.Status != nil {
 		for _, part := range strings.Split(*params.Status, ",") {
@@ -33,14 +36,70 @@ func (s *Server) ListSeriesVideoIds(w http.ResponseWriter, r *http.Request, id g
 	}
 	if params.Year != nil {
 		y := strings.TrimSpace(*params.Year)
-		if y == "unknown" {
-			filter.Year = library.VideoYearUnknown
-		} else if y != "" {
+		if y != "" {
 			n, err := strconv.Atoi(y)
 			if err == nil && n > 0 {
-				filter.Year = n
+				filter.Years = []int{n}
 			}
 		}
+	}
+	if params.Kind != nil {
+		raw := strings.TrimSpace(*params.Kind)
+		switch raw {
+		case library.PackRoleRegular:
+			filter.PackRoles = []string{library.PackRoleRegular}
+		case library.VideoPackRoleAnySpecial:
+			filter.PackRoles = []string{library.VideoPackRoleAnySpecial}
+		default:
+			if err := library.ValidatePackRole(raw); err == nil && library.IsSpecialPackRole(raw) {
+				filter.PackRoles = []string{library.NormalizePackRole(raw)}
+			}
+		}
+	}
+	if params.From != nil {
+		if d := strings.TrimSpace(*params.From); len(d) == 10 {
+			filter.FromDay = d
+		}
+	}
+	if params.To != nil {
+		if d := strings.TrimSpace(*params.To); len(d) == 10 {
+			filter.ToDay = d
+		}
+	}
+	if params.Studio != nil {
+		if s := strings.TrimSpace(*params.Studio); s != "" {
+			filter.Studios = []string{s}
+		}
+	}
+	if params.Country != nil {
+		if s := strings.TrimSpace(*params.Country); s != "" {
+			filter.Countries = []string{s}
+		}
+	}
+	if params.Mpaa != nil {
+		if s := strings.TrimSpace(*params.Mpaa); s != "" {
+			filter.MPAAs = []string{s}
+		}
+	}
+	if params.MediaType != nil {
+		if s := strings.TrimSpace(*params.MediaType); s != "" {
+			filter.MediaTypes = []string{s}
+		}
+	}
+	if params.Genre != nil {
+		filter.Genres = append([]string(nil), (*params.Genre)...)
+	}
+	if params.Tag != nil {
+		filter.Tags = append([]string(nil), (*params.Tag)...)
+	}
+	if params.Actor != nil {
+		filter.Actors = append([]string(nil), (*params.Actor)...)
+	}
+	if params.Empty != nil {
+		filter.Empty = append([]string(nil), (*params.Empty)...)
+	}
+	if params.NotEmpty != nil {
+		filter.NotEmpty = append([]string(nil), (*params.NotEmpty)...)
 	}
 	ids, err := s.Library.ListVideoIDsFiltered(int64(id), filter)
 	if err != nil {

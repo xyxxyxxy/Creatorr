@@ -1,0 +1,85 @@
+{{define "list_infinite_sentinel"}}
+{{/* Dot: Load ListLoad, InfiniteID, ViewMode. Self-replacing HTMX load-more.
+     Next-chunk skeletons only (not full remaining): loading affordance without
+     letting the scrollbar scrub far past loaded rows. */}}
+{{if .Load.HasMore}}
+{{$series := eq .InfiniteID "series-list-infinite"}}
+{{$grid := or (eq .ViewMode "cards") (eq .ViewMode "gallery")}}
+{{$gallery := eq .ViewMode "gallery"}}
+<li id="{{.InfiniteID}}"
+    class="list-none col-span-full !p-0 !m-0 border-0"
+    hx-get="{{.Load.NextHref}}"
+    hx-trigger="revealed"
+    hx-swap="outerHTML"
+    hx-sync="this:replace"
+    hx-select="[data-infinite-chunk] > *"
+    data-infinite-page="{{.Load.NextPage}}"
+    aria-busy="true"
+    aria-label="Loading more">
+  {{if $grid}}
+  {{$seriesGrid := "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"}}
+  {{if and $series $gallery}}{{$seriesGrid = "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7"}}{{end}}
+  <ul class="grid gap-3 {{if $series}}{{$seriesGrid}}{{else}}grid-cols-2 sm:grid-cols-3 lg:grid-cols-4{{end}}" aria-hidden="true">
+    {{range seq .Load.SkeletonCount}}
+    <li class="card{{if $gallery}} image-full{{end}} bg-base-100 border border-base-300 overflow-hidden pointer-events-none{{if and $gallery $series}} aspect-square{{else if $gallery}} aspect-video{{end}}">
+      {{if $gallery}}
+      <div class="skeleton size-full"></div>
+      <div class="card-body justify-end p-3">
+        <div class="skeleton h-4 w-3/4"></div>
+      </div>
+      {{else if $series}}
+      <div class="relative aspect-square w-full">
+        <div class="card image-full absolute inset-0 rounded-none border-0 shadow-none">
+          <div class="skeleton size-full"></div>
+          <div class="card-body justify-end p-3 gap-2">
+            <div class="skeleton h-4 w-3/4"></div>
+            <div class="skeleton h-3 w-1/2"></div>
+            <div class="skeleton h-2 w-full"></div>
+          </div>
+        </div>
+      </div>
+      {{else}}
+      <div class="relative aspect-video w-full overflow-hidden rounded-box">
+        <div class="card image-full absolute inset-0 rounded-none border-0 shadow-none">
+          <div class="skeleton size-full"></div>
+          <div class="card-body justify-end p-3 gap-1">
+            <div class="skeleton h-4 w-3/4"></div>
+            <div class="skeleton h-3 w-1/2"></div>
+          </div>
+        </div>
+      </div>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <div class="flex flex-col" aria-hidden="true">
+    {{range seq .Load.SkeletonCount}}
+    <div class="flex gap-4 items-center px-4 py-3{{if not $series}} border-b border-base-200 last:border-0{{end}}">
+      {{if $series}}
+      <div class="skeleton size-14 shrink-0 rounded-full"></div>
+      {{else}}
+      <div class="skeleton w-[112px] aspect-video shrink-0 rounded"></div>
+      {{end}}
+      <div class="flex-1 flex flex-col gap-2 min-w-0">
+        <div class="skeleton h-4 w-3/5"></div>
+        <div class="skeleton h-3 w-2/5"></div>
+      </div>
+    </div>
+    {{end}}
+  </div>
+  {{end}}
+</li>
+{{else if .Load.BrowseCapped}}
+<li class="list-none col-span-full text-center text-sm opacity-60 py-3" role="status">
+  Refine filters or use table view to browse further.
+</li>
+{{end}}
+{{end}}
+
+{{define "list_load_controls"}}
+{{/* Dot: ListMode, Load (Page inside for paginated). */}}
+{{if eq .ListMode "paginated"}}
+{{template "pagination" .Load.Page}}
+{{end}}
+{{end}}

@@ -1,4 +1,5 @@
 import { refreshBadge, refreshNotificationHistoryPanel, refreshNotifyBadge, refreshNotifyDropdown } from "./badges.js";
+import { maybeRefreshFilesList } from "./files_live.js";
 import { refreshTasksPanel } from "./lanes.js";
 import { maybeRefreshMaintenance } from "./maintenance.js";
 import { maybeRefreshSeriesList, maybeRefreshSeriesVideos } from "./series_live.js";
@@ -44,11 +45,17 @@ function onSSE(ev) {
   refreshBadge();
   if (ev.type === "notification.created" || ev.type === "notification.read") {
     let uc;
+    let hasAlert;
     try {
       const data = JSON.parse(ev.data || "{}");
       if (typeof data.unread_count === "number") uc = data.unread_count;
+      if (typeof data.has_alert === "boolean") hasAlert = data.has_alert;
     } catch (_) {}
-    refreshNotifyBadge(uc);
+    if (typeof uc === "number" && typeof hasAlert === "boolean") {
+      refreshNotifyBadge(uc, hasAlert);
+    } else {
+      refreshNotifyBadge();
+    }
     refreshNotifyDropdown();
     refreshNotificationHistoryPanel();
     return;
@@ -70,6 +77,7 @@ function onSSE(ev) {
   }
   maybeRefreshSeriesVideos(ev);
   maybeRefreshSeriesList(ev);
+  maybeRefreshFilesList(ev);
   maybeRefreshMaintenance(ev);
   maybeRefreshYtDlpConnect(ev);
   if (typeof window.refreshImportTasksBusy === "function") {

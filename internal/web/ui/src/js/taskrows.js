@@ -3,21 +3,16 @@ import { applyInferredLaneStatus, lanePanelFor, refreshTasksPanel } from "./lane
 import { flushNotesAutosave } from "./notes.js";
 
 export function refreshHistoryPanel() {
-  if (!location.pathname.startsWith("/history")) return;
-  const panel = document.getElementById("history-live");
-  if (panel && window.htmx) {
-    const q = location.search || "";
-    window.htmx.ajax("GET", location.pathname + q, {
-      target: "#history-live",
-      select: "#history-live",
-      swap: "outerHTML",
-    });
-    return;
-  }
-  // Detail page: reload so finished task appears / updates.
-  if (/^\/history\/\d+/.test(location.pathname)) {
-    location.reload();
-  }
+  // Finished tasks now live under Tasks Explorer; refresh that panel.
+  refreshTasksPanel(true);
+}
+
+/** Match task_row / task_detail: failed messages use text-error, else muted. */
+function syncTaskMessageTone(el, status) {
+  if (!el) return;
+  const failed = status === "failed";
+  el.classList.toggle("text-error", failed);
+  el.classList.toggle("opacity-60", !failed && el.classList.contains("text-xs"));
 }
 
 /** Match partials/status_badge.html (icon + tooltip). */
@@ -181,6 +176,7 @@ export function patchTaskRow(ev) {
     } else if (typeof data.message === "string") {
       msgEl.textContent = data.message || "-";
     }
+    if (st) syncTaskMessageTone(msgEl, st);
   }
   const progressChanged = Object.prototype.hasOwnProperty.call(data, "progress");
   if (statusChanged || progressChanged) {
@@ -237,7 +233,10 @@ export function patchTaskDetail(ev) {
     if (text != null) {
       msgEls.forEach((el) => {
         el.textContent = text;
+        if (st) syncTaskMessageTone(el, st);
       });
+    } else if (statusChanged && st) {
+      msgEls.forEach((el) => syncTaskMessageTone(el, st));
     }
   }
   const progressChanged = Object.prototype.hasOwnProperty.call(data, "progress");

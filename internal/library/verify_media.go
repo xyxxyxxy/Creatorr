@@ -149,21 +149,35 @@ func (s *Store) RunIntegrityCheckVideo(ctx context.Context, videoID int64, progr
 		report.Outcome = IntegrityOutcomeSkipped
 		return report, nil
 	}
-	if err := VerifyDownloadedMedia(ctx, path, progress); err != nil {
-		report.SetCheck(IntegrityCheckNullDecode, IntegrityResultFailed, integrityFailDetail(err))
-		report.SetCheck(IntegrityCheckMediaChecksum, IntegrityResultSkipped, "not run")
-		report.SetCheck(IntegrityCheckSidecarChecksum, IntegrityResultSkipped, "not run")
-		report.SetCheck(IntegrityCheckNFO, IntegrityResultSkipped, "not run")
-		report.FinalizeCheckOutcome()
-		return report, err
-	}
-	report.SetCheck(IntegrityCheckNullDecode, IntegrityResultOK, "")
-	if progress != nil {
-		progress("Checking file integrity…", nil)
-	}
 	mediaFiles, err := s.ListVideoMediaFiles(videoID)
 	if err != nil {
 		return report, err
+	}
+	needNullDecode := false
+	for _, f := range mediaFiles {
+		if !f.ContentHash.Valid || strings.TrimSpace(f.ContentHash.String) == "" {
+			needNullDecode = true
+			break
+		}
+	}
+	if needNullDecode {
+		if err := VerifyDownloadedMedia(ctx, path, progress); err != nil {
+			report.SetCheck(IntegrityCheckNullDecode, IntegrityResultFailed, integrityFailDetail(err))
+			report.SetCheck(IntegrityCheckMediaChecksum, IntegrityResultSkipped, "not run")
+			report.SetCheck(IntegrityCheckSidecarChecksum, IntegrityResultSkipped, "not run")
+			report.SetCheck(IntegrityCheckNFO, IntegrityResultSkipped, "not run")
+			report.FinalizeCheckOutcome()
+			for _, f := range mediaFiles {
+				_ = s.MarkFileHashAttempted(f.ID)
+			}
+			return report, err
+		}
+		report.SetCheck(IntegrityCheckNullDecode, IntegrityResultOK, "")
+	} else {
+		report.SetCheck(IntegrityCheckNullDecode, IntegrityResultSkipped, "hash present")
+	}
+	if progress != nil {
+		progress("Checking file integrity…", nil)
 	}
 	mediaResult := IntegrityResultSkipped
 	mediaDetail := ""
@@ -209,8 +223,6 @@ func (s *Store) RunIntegrityCheckVideo(ctx context.Context, videoID int64, progr
 	}
 	sideChecked := 0
 	sideFilled := 0
-	sideFailed := 0
-	var sideDetail strings.Builder
 	for _, f := range sidecars {
 		if f.Kind == "nfo" {
 			continue
@@ -227,7 +239,6 @@ func (s *Store) RunIntegrityCheckVideo(ctx context.Context, videoID int64, progr
 			return report, herr
 		}
 		if result == IntegrityResultFailed {
-			sideFailed++
 			stored, _, _ := s.FileContentHash(f.ID)
 			disk, _ := integrity.SHA256File(f.Path)
 			_ = s.AddVideoHistory(videoID, "sidecar_externally_changed", "Sidecar integrity check failed", map[string]any{
@@ -239,11 +250,13 @@ func (s *Store) RunIntegrityCheckVideo(ctx context.Context, videoID int64, progr
 				"old_hash": stored,
 				"new_hash": disk,
 			}, opts.TaskID)
-			if sideDetail.Len() > 0 {
-				sideDetail.WriteString("; ")
-			}
-			sideDetail.WriteString(f.Kind + ": " + mismatch)
-			continue
+			report.SetCheck(IntegrityCheckSidecarChecksum, IntegrityResultFailed, f.Kind+": "+mismatch)
+			report.SetCheck(IntegrityCheckNFO, IntegrityResultSkipped, "not run")
+			report.FinalizeCheckOutcome()
+			return report, apperrors.WithDetail(
+				apperrors.New(apperrors.CodeIntegrityCheckFailed, "integrity check failed"),
+				mismatch,
+			)
 		}
 		if result == IntegrityResultFilled {
 			sideFilled++
@@ -252,8 +265,6 @@ func (s *Store) RunIntegrityCheckVideo(ctx context.Context, videoID int64, progr
 	switch {
 	case sideChecked == 0:
 		report.SetCheck(IntegrityCheckSidecarChecksum, IntegrityResultSkipped, "no sidecars")
-	case sideFailed > 0:
-		report.SetCheck(IntegrityCheckSidecarChecksum, IntegrityResultPartial, sideDetail.String())
 	case sideFilled > 0:
 		report.SetCheck(IntegrityCheckSidecarChecksum, IntegrityResultFilled, "")
 	default:
@@ -266,24 +277,32 @@ func (s *Store) RunIntegrityCheckVideo(ctx context.Context, videoID int64, progr
 		report.FinalizeCheckOutcome()
 		return report, nerr
 	}
+	var nfoFileID int64
+	for _, f := range sidecars {
+		if f.Kind == "nfo" {
+			nfoFileID = f.ID
+			break
+		}
+	}
 	if nfoPath == "" {
 		report.SetCheck(IntegrityCheckNFO, IntegrityResultSkipped, "no NFO")
 	} else if !match {
-		var fileID int64
-		for _, f := range sidecars {
-			if f.Kind == "nfo" {
-				fileID = f.ID
-				break
-			}
+		if nfoFileID > 0 {
+			_ = s.MarkFileHashAttempted(nfoFileID)
 		}
 		_ = s.AddVideoHistory(videoID, "sidecar_externally_changed", "NFO does not match expected metadata", map[string]any{
 			"reason":  "integrity_check",
 			"kind":    "nfo",
 			"path":    nfoPath,
-			"file_id": fileID,
+			"file_id": nfoFileID,
 		}, opts.TaskID)
 		report.SetCheck(IntegrityCheckNFO, IntegrityResultFailed, "NFO does not match expected metadata")
+		report.FinalizeCheckOutcome()
+		return report, apperrors.New(apperrors.CodeIntegrityCheckFailed, "NFO does not match expected metadata")
 	} else {
+		if nfoFileID > 0 {
+			_ = s.MarkFileHashOK(nfoFileID)
+		}
 		report.SetCheck(IntegrityCheckNFO, IntegrityResultOK, "")
 	}
 	report.FinalizeCheckOutcome()
@@ -293,7 +312,7 @@ func (s *Store) RunIntegrityCheckVideo(ctx context.Context, videoID int64, progr
 // listRegisteredSidecars returns files rows for non-video kinds.
 func (s *Store) listRegisteredSidecars(videoID int64) ([]VideoFile, error) {
 	rows, err := s.DB.SQL.Query(`
-		SELECT id, path, kind, acquired_at, size_bytes, content_hash
+		SELECT `+videoFileSelectCols+`
 		FROM files
 		WHERE video_id = ? AND kind != 'video'
 		ORDER BY kind, path
@@ -304,8 +323,8 @@ func (s *Store) listRegisteredSidecars(videoID int64) ([]VideoFile, error) {
 	defer func() { _ = rows.Close() }()
 	var out []VideoFile
 	for rows.Next() {
-		var f VideoFile
-		if err := rows.Scan(&f.ID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes, &f.ContentHash); err != nil {
+		f, err := scanVideoFile(rows.Scan)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, f)
@@ -482,7 +501,7 @@ func (s *Store) MarkVerifyFailed(videoID, taskID int64, message string, report *
 
 // MarkVerified appends integrity_checked history and restores status to downloaded
 // (including videos previously marked downloaded_integrity_failed).
-// report is optional; when outcome is partial, message notes sidecar/NFO issues.
+// report is optional.
 func (s *Store) MarkVerified(videoID, taskID int64, report *IntegrityCheckReport) error {
 	if _, err := s.DB.SQL.Exec(`
 		UPDATE videos SET status = 'downloaded'
@@ -495,9 +514,6 @@ func (s *Store) MarkVerified(videoID, taskID int64, report *IntegrityCheckReport
 	if report != nil {
 		if report.Outcome == "" {
 			report.FinalizeCheckOutcome()
-		}
-		if report.Outcome == IntegrityOutcomePartial {
-			msg = "Integrity check ok (sidecar/NFO issues)"
 		}
 		detail = report.DetailMap()
 	}

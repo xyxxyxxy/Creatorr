@@ -1,0 +1,36 @@
+{{define "sources_bulk_bar"}}
+{{/* Dot: FilterTotal, ShowSelectAll - above list|table. */}}
+<ul class="list bg-base-100 rounded-box border border-base-300 mb-3 hidden" id="sources-bulk-bar-wrap">
+  <li id="sources-bulk-bar"
+      class="list-row py-2 hidden"
+      data-sources-bulk-bar
+      style="--list-grid-cols: max-content 1fr max-content">
+    <div class="self-center flex items-center gap-3">
+      <input type="checkbox" class="checkbox checkbox-sm" id="sources-select-page"
+             aria-label="Select all on this page" />
+      <div class="text-sm tabular-nums opacity-70 whitespace-nowrap">
+        <span data-sources-bulk-count>0/{{.FilterTotal}}</span>
+        <span>selected</span>
+      </div>
+    </div>
+    <div class="list-col-grow min-w-0 flex flex-wrap items-center gap-2 self-center">
+      {{if .ShowSelectAll}}
+      <button type="button"
+              class="btn btn-ghost btn-sm"
+              data-sources-select-all-matching>
+        <i data-lucide="list-checks" class="size-4"></i>
+        Select all
+      </button>
+      {{end}}
+    </div>
+    <div class="self-center justify-self-end flex flex-wrap gap-2 items-center">
+      {{template "btn_labeled" (dict "Icon" "scan-line" "Label" "Scan" "Data" "sources-bulk-scan" "Disabled" true)}}
+      {{template "btn_labeled" (dict "Icon" "pencil" "Label" "Edit" "Data" "sources-bulk-edit" "Disabled" true)}}
+
+      <button type="button" class="btn btn-soft btn-error btn-square tooltip tooltip-top" data-sources-bulk-delete data-tip="Delete" aria-label="Delete" disabled>
+        <i data-lucide="trash-2" class="size-4"></i>
+      </button>
+    </div>
+  </li>
+</ul>
+{{end}}

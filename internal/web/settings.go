@@ -40,13 +40,14 @@ type rootSettingsRow struct {
 }
 
 type notifyChannelView struct {
-	ID          int64
-	Name        string
-	URL         string
-	URLMasked   string
-	Events      []string
-	EventLabels []string
-	InApp       bool // fixed Creatorr channel: no edit/delete
+	ID               int64
+	Name             string
+	URL              string
+	URLMasked        string
+	Events           []string
+	EventLabels      []string
+	MarkExternalRead bool
+	InApp            bool // fixed Creatorr channel: no edit/delete
 }
 
 type notifyEventOption struct {

@@ -588,37 +588,48 @@
     const v = VIDEOS.find((x) => Number(x.id) === Number(st.videoId));
     return v ? v.title : videoLabel(st.videoId);
   }
-  function seriesTriggerInnerHTML(st) {
+  function importPickClearHTML(jsClass) {
+    return `<button type="button" class="btn btn-ghost btn-xs btn-square shrink-0 ml-auto tooltip tooltip-top ${jsClass}" data-tip="Clear" aria-label="Clear">
+      <i data-lucide="x" class="size-3" aria-hidden="true"></i>
+    </button>`;
+  }
+  function seriesTriggerInnerHTML(st, clearClass) {
+    const clear = clearClass ? importPickClearHTML(clearClass) : "";
     if (isDraftSeriesId(st.seriesId)) {
-      return `<span class="inline-flex items-center gap-2 min-w-0">
+      return `<span class="inline-flex items-center gap-2 min-w-0 w-full max-w-full">
       <span class="bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></span>
-      <span class="truncate">${escapeHtml(seriesPickLabel(st))}</span>
+      <span class="truncate min-w-0">${escapeHtml(seriesPickLabel(st))}</span>
+      ${clear}
     </span>`;
     }
     if (st.seriesId) {
       const s = SERIES.find((x) => Number(x.id) === Number(st.seriesId));
       const poster = seriesPosterHTML(s).replaceAll("size-10", "size-8").replaceAll("size-5", "size-4").replaceAll('width="40"', 'width="32"').replaceAll('height="40"', 'height="32"');
-      return `<span class="inline-flex items-center gap-2 min-w-0">
+      return `<span class="inline-flex items-center gap-2 min-w-0 w-full max-w-full">
       <span class="relative shrink-0">${poster}</span>
-      <span class="truncate">${escapeHtml(seriesPickLabel(st))}</span>
+      <span class="truncate min-w-0">${escapeHtml(seriesPickLabel(st))}</span>
+      ${clear}
     </span>`;
     }
     return `<span class="opacity-60">Pick series</span>`;
   }
-  function videoTriggerInnerHTML(st) {
+  function videoTriggerInnerHTML(st, clearClass) {
+    const clear = clearClass ? importPickClearHTML(clearClass) : "";
     if (String(st.videoId) === CREATE) {
-      return `<span class="inline-flex items-center gap-2 min-w-0">
+      return `<span class="inline-flex items-center gap-2 min-w-0 w-full max-w-full">
       <span class="js-import-video-thumb bg-base-200 flex items-center justify-center" aria-hidden="true"><i data-lucide="plus" class="size-4 opacity-40"></i></span>
-      <span class="truncate">${escapeHtml(videoPickLabel(st))}</span>
+      <span class="truncate min-w-0">${escapeHtml(videoPickLabel(st))}</span>
+      ${clear}
     </span>`;
     }
     if (st.videoId) {
       const v = VIDEOS.find((x) => Number(x.id) === Number(st.videoId));
       const thumb = v ? videoThumbURL(v) : "";
       const img = thumb ? `<img class="js-import-video-thumb" src="${escapeHtml(thumb)}" alt="" width="56" height="32" loading="lazy" />` : `<span class="js-import-video-thumb bg-base-200 flex items-center justify-center" aria-hidden="true"><i data-lucide="square-play" class="size-4 opacity-40"></i></span>`;
-      return `<span class="inline-flex items-center gap-2 min-w-0">
+      return `<span class="inline-flex items-center gap-2 min-w-0 w-full max-w-full">
       ${img}
-      <span class="truncate">${escapeHtml(videoPickLabel(st))}</span>
+      <span class="truncate min-w-0">${escapeHtml(videoPickLabel(st))}</span>
+      ${clear}
     </span>`;
     }
     return `<span class="opacity-60">Pick episode</span>`;
@@ -667,54 +678,40 @@
     </div>
   </li>`;
   }
-  function importJoinActionBtnHTML(jsClass, tip, icon, off, tipShared) {
-    const tipCls = tipShared ? "" : " tooltip tooltip-top";
-    const tipAttr = tipShared ? "" : ` data-tip="${escapeHtml(tip)}"`;
-    const cls = `btn btn-square join-item ${jsClass}${tipCls}`;
-    const offAttr = off ? " disabled" : "";
-    return `<button type="button" class="${cls}"${offAttr}${tipAttr} aria-label="${escapeHtml(tip)}">
-      <i data-lucide="${icon}" class="size-5" aria-hidden="true"></i>
-    </button>`;
-  }
-  function importActionIsOff(el) {
-    return !el || el.getAttribute("aria-disabled") === "true" || el.disabled;
-  }
   function matchPickersHTML(st, kind) {
     const catalogReady = importPickerReady;
     const forMedia = kind === "media";
     const seriesDisabled = !catalogReady;
     const videoDisabled = !catalogReady;
-    const seriesResetDisabled = seriesDisabled || !st.seriesId;
-    const videoResetDisabled = videoDisabled || !st.videoId;
     const createSeriesAllowed = catalogReady && forMedia;
     const createVideoAllowed = catalogReady && forMedia && !!st.seriesId;
+    const seriesClear = !seriesDisabled && st.seriesId ? "js-import-clear-series" : "";
+    const videoClear = !videoDisabled && st.videoId ? "js-import-clear-video" : "";
     const seriesTip = !catalogReady ? "Loading library index" : "Pick series";
     const videoTip = !catalogReady ? "Loading library index" : "Pick episode";
     const seriesJoinInner = `
   <div class="join join-horizontal max-w-full">
     <details class="dropdown dropdown-bottom js-import-series-dd"${createSeriesAllowed ? ' data-import-allow-create="1"' : ""}>
-      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden${seriesDisabled ? " btn-disabled" : ""}" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ""}>
-        ${seriesTriggerInnerHTML(st)}
+      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start${seriesDisabled ? " btn-disabled" : ""}" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ""}>
+        ${seriesTriggerInnerHTML(st, seriesClear)}
       </summary>
       <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300">
         <input type="search" class="input input-bordered input-sm w-full mb-2 js-import-series-q" placeholder="Search or create" aria-label="Search or create" autocomplete="off" />
         <ul class="list bg-base-100 max-h-64 overflow-y-auto js-import-series-list" role="listbox" aria-label="Series"></ul>
       </div>
     </details>
-    ${importJoinActionBtnHTML("js-import-reset-series", "Clear", "unlink", seriesResetDisabled, seriesDisabled)}
   </div>`;
     const videoJoinInner = `
   <div class="join join-horizontal max-w-full">
     <details class="dropdown dropdown-bottom js-import-video-dd"${createVideoAllowed ? ' data-import-allow-create-video="1"' : ""}>
-      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden${videoDisabled ? " btn-disabled" : ""}" aria-label="${escapeHtml(videoTip)}" ${videoDisabled ? 'aria-disabled="true"' : ""}>
-        ${videoTriggerInnerHTML(st)}
+      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start${videoDisabled ? " btn-disabled" : ""}" aria-label="${escapeHtml(videoTip)}" ${videoDisabled ? 'aria-disabled="true"' : ""}>
+        ${videoTriggerInnerHTML(st, videoClear)}
       </summary>
       <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 js-import-video-panel">
         <input type="search" class="input input-bordered input-sm w-full mb-2 js-import-video-q" placeholder="Search or create" aria-label="Search or create" autocomplete="off" />
         <ul class="list bg-base-100 max-h-64 overflow-y-auto overflow-x-hidden py-1 js-import-video-list" role="listbox" aria-label="Videos"></ul>
       </div>
     </details>
-    ${importJoinActionBtnHTML("js-import-reset-video", "Clear", "unlink", videoResetDisabled, videoDisabled)}
   </div>`;
     return `<div class="import-match-joins">
   ${seriesJoinInner}
@@ -1636,21 +1633,20 @@
     };
     const catalogReady = importPickerReady;
     const seriesDisabled = !catalogReady;
-    const seriesResetDisabled = seriesDisabled || !own.seriesId;
     const createSeriesAllowed = catalogReady;
+    const seriesClear = !seriesDisabled && own.seriesId ? "js-import-clear-folder-series" : "";
     const seriesTip = !catalogReady ? "Loading library index" : "Pick series";
     const joinInner = `
   <div class="join join-horizontal min-w-0 max-w-full" data-folder-path="${escapeHtml(path)}">
     <details class="dropdown dropdown-bottom js-import-folder-series-dd"${createSeriesAllowed ? ' data-import-allow-create="1"' : ""}>
-      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start overflow-hidden min-w-0${seriesDisabled ? " btn-disabled" : ""}" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ""}>
-        ${seriesTriggerInnerHTML(st)}
+      <summary class="btn join-item border-base-300 bg-base-100 font-normal justify-start min-w-0${seriesDisabled ? " btn-disabled" : ""}" aria-label="${escapeHtml(seriesTip)}" ${seriesDisabled ? 'aria-disabled="true"' : ""}>
+        ${seriesTriggerInnerHTML(st, seriesClear)}
       </summary>
       <div class="dropdown-content z-[40] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300">
         <input type="search" class="input input-bordered input-sm w-full mb-2 js-import-series-q" placeholder="Search or create" aria-label="Search or create" autocomplete="off" />
         <ul class="list bg-base-100 max-h-64 overflow-y-auto js-import-series-list" role="listbox" aria-label="Series"></ul>
       </div>
     </details>
-    ${importJoinActionBtnHTML("js-import-reset-folder-series", "Clear", "unlink", seriesResetDisabled, seriesDisabled)}
   </div>`;
     return joinInner;
   }
@@ -2677,6 +2673,33 @@
       applyVideoPick(key, kind, vid.getAttribute("data-import-pick-video"));
     });
     importListRoot.addEventListener("click", (ev) => {
+      const clearFolder = ev.target.closest(".js-import-clear-folder-series");
+      if (clearFolder && importListRoot.contains(clearFolder)) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const folderJoin = clearFolder.closest("[data-folder-path]");
+        const path = folderJoin && folderJoin.getAttribute("data-folder-path");
+        if (path) resetFolderSeriesPick(path);
+        return;
+      }
+      const clearSeries = ev.target.closest(".js-import-clear-series");
+      if (clearSeries && importListRoot.contains(clearSeries)) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const item = clearSeries.closest(".import-item");
+        if (item && item.dataset.stateKey) resetSeriesPick(item.dataset.stateKey);
+        return;
+      }
+      const clearVideo = ev.target.closest(".js-import-clear-video");
+      if (clearVideo && importListRoot.contains(clearVideo)) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const item = clearVideo.closest(".import-item");
+        if (item && item.dataset.stateKey && item.dataset.kind) {
+          resetVideoPick(item.dataset.stateKey, item.dataset.kind);
+        }
+        return;
+      }
       const summary = ev.target.closest("summary.btn");
       if (summary && summary.getAttribute("aria-disabled") === "true" && importListRoot.contains(summary)) {
         ev.preventDefault();
@@ -2685,34 +2708,15 @@
     importListRoot.addEventListener("click", (ev) => {
       const folderJoin = ev.target.closest("[data-folder-path]");
       if (folderJoin) {
-        const path = folderJoin.getAttribute("data-folder-path");
         if (ev.target.closest("[data-import-pick-series], [data-import-pick-video], [data-import-create-series], [data-import-create-video]")) {
           ev.preventDefault();
-          return;
-        }
-        const resetFolder = ev.target.closest(".js-import-reset-folder-series");
-        if (resetFolder) {
-          if (!importActionIsOff(resetFolder)) resetFolderSeriesPick(path);
           return;
         }
       }
       const item = ev.target.closest(".import-item");
       if (!item) return;
-      const key = item.dataset.stateKey;
-      const kind = item.dataset.kind;
-      if (!key || !kind) return;
       if (ev.target.closest("[data-import-pick-series], [data-import-pick-video], [data-import-create-series], [data-import-create-video]")) {
         ev.preventDefault();
-        return;
-      }
-      const resetSeries = ev.target.closest(".js-import-reset-series");
-      if (resetSeries) {
-        if (!importActionIsOff(resetSeries)) resetSeriesPick(key);
-        return;
-      }
-      const resetVideo = ev.target.closest(".js-import-reset-video");
-      if (resetVideo) {
-        if (!importActionIsOff(resetVideo)) resetVideoPick(key, kind);
       }
     });
   }

@@ -62,12 +62,12 @@ func TestFormatAgoCompact(t *testing.T) {
 		want string
 	}{
 		{now.Add(-30 * time.Second), "just now"},
-		{now.Add(-1 * time.Minute), "1 min"},
-		{now.Add(-3*time.Minute - 20*time.Second), "3 min"},
-		{now.Add(-1*time.Hour - 2*time.Minute), "1 h 2 min"},
-		{now.Add(-2*time.Hour - 3*time.Minute), "2 h 3 min"},
-		{now.Add(-26 * time.Hour), "1 d 2 h"},
-		{now.AddDate(0, 0, -7), "7 d"},
+		{now.Add(-1 * time.Minute), "1 min ago"},
+		{now.Add(-3*time.Minute - 20*time.Second), "3 min ago"},
+		{now.Add(-1*time.Hour - 2*time.Minute), "1 h 2 min ago"},
+		{now.Add(-2*time.Hour - 3*time.Minute), "2 h 3 min ago"},
+		{now.Add(-26 * time.Hour), "1 d 2 h ago"},
+		{now.AddDate(0, 0, -7), "7 d ago"},
 		{now.AddDate(0, 0, -8), "2026-07-10"},
 		{time.Date(2026, 5, 29, 18, 1, 40, 0, time.UTC), "2026-05-29"},
 	}

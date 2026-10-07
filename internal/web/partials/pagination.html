@@ -3,19 +3,19 @@
 {{$live := .LiveTarget}}
 <div class="join shrink-0">
   {{if .HasPrev}}
-  <a href="{{.FirstHref}}" class="join-item btn btn-sm js-keep-scroll" aria-label="First page"{{if $live}} hx-get="{{.FirstHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>««</a>
-  <a href="{{.PrevHref}}" class="join-item btn btn-sm js-keep-scroll" aria-label="Previous page"{{if $live}} hx-get="{{.PrevHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>«</a>
+  <a href="{{.FirstHref}}" class="join-item btn btn-sm btn-square js-keep-scroll" aria-label="First page"{{if $live}} hx-get="{{.FirstHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}><i data-lucide="chevron-first" class="size-4"></i></a>
+  <a href="{{.PrevHref}}" class="join-item btn btn-sm btn-square js-keep-scroll" aria-label="Previous page"{{if $live}} hx-get="{{.PrevHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}><i data-lucide="chevron-left" class="size-4"></i></a>
   {{else}}
-  <button type="button" class="join-item btn btn-sm btn-disabled" disabled aria-label="First page">««</button>
-  <button type="button" class="join-item btn btn-sm btn-disabled" disabled aria-label="Previous page">«</button>
+  <button type="button" class="join-item btn btn-sm btn-square btn-disabled" disabled aria-label="First page"><i data-lucide="chevron-first" class="size-4"></i></button>
+  <button type="button" class="join-item btn btn-sm btn-square btn-disabled" disabled aria-label="Previous page"><i data-lucide="chevron-left" class="size-4"></i></button>
   {{end}}
   <span class="join-item btn btn-sm btn-ghost no-animation pointer-events-none">{{.Page}} / {{.TotalPages}}</span>
   {{if .HasNext}}
-  <a href="{{.NextHref}}" class="join-item btn btn-sm js-keep-scroll" aria-label="Next page"{{if $live}} hx-get="{{.NextHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>»</a>
-  <a href="{{.LastHref}}" class="join-item btn btn-sm js-keep-scroll" aria-label="Last page"{{if $live}} hx-get="{{.LastHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>»»</a>
+  <a href="{{.NextHref}}" class="join-item btn btn-sm btn-square js-keep-scroll" aria-label="Next page"{{if $live}} hx-get="{{.NextHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}><i data-lucide="chevron-right" class="size-4"></i></a>
+  <a href="{{.LastHref}}" class="join-item btn btn-sm btn-square js-keep-scroll" aria-label="Last page"{{if $live}} hx-get="{{.LastHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}><i data-lucide="chevron-last" class="size-4"></i></a>
   {{else}}
-  <button type="button" class="join-item btn btn-sm btn-disabled" disabled aria-label="Next page">»</button>
-  <button type="button" class="join-item btn btn-sm btn-disabled" disabled aria-label="Last page">»»</button>
+  <button type="button" class="join-item btn btn-sm btn-square btn-disabled" disabled aria-label="Next page"><i data-lucide="chevron-right" class="size-4"></i></button>
+  <button type="button" class="join-item btn btn-sm btn-square btn-disabled" disabled aria-label="Last page"><i data-lucide="chevron-last" class="size-4"></i></button>
   {{end}}
 </div>
 {{end}}

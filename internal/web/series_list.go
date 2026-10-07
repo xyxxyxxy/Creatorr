@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
@@ -17,8 +16,9 @@ type seriesListRow struct {
 	HasMonitoredSource bool
 	Busy               bool
 	BulkEditBusy       bool
-	StatusInd          *seriesStatusView // poster top-left: health errors/warnings only
+	StatusInd          *seriesStatusView // health errors/warnings (list: title row; cards: poster)
 	PosterURL          string
+	BannerURL          string
 	Line2              string
 	KindIcon           string
 	KindTip            string
@@ -27,63 +27,100 @@ type seriesListRow struct {
 }
 
 type seriesListLiveData struct {
-	Series       []seriesListRow
-	Page         PageInfo
-	SeriesFilter struct {
-		Query            string
-		QueryPlaceholder string
-		AriaLabel        string
-		Selects          []listFilterSelect
-		LiveTarget       string
-		FormAction       string
-	}
-	FilterActive bool
-	BulkEditBusy bool
-	FilterTotal  int
-	OOB          bool
+	Series          []seriesListRow
+	Page            PageInfo
+	Load            ListLoad
+	ListMode        ListMode
+	SeriesFilter    listViewToolbar
+	FilterActive    bool
+	BulkEditBusy    bool
+	FilterTotal     int
+	ViewMode        string
+	TableCols       []tableCol
+	TableColsCookie string
+	ShowSelectAll   bool
+	InfiniteID      string
+	RowsID          string
+	OOB             bool
 }
 
 func parseSeriesListFilter(r *http.Request) library.SeriesListFilter {
 	q := r.URL.Query()
 	f := library.SeriesListFilter{
-		Title: strings.TrimSpace(q.Get("q")),
+		Title:   strings.TrimSpace(q.Get("q")),
+		QField:  parseQField(r),
+		Studios: parseMultiQuery(q, "studio"),
+		Countries: parseMultiQuery(q, "country"),
+		MPAAs:   parseMultiQuery(q, "mpaa"),
+		Genres:  parseMultiQuery(q, "genre"),
+		Tags:    parseMultiQuery(q, "tag"),
+		Actors:  parseMultiQuery(q, "actor"),
+		Sort:    parseSeriesSort(q.Get("sort")),
+		SortDir: parseSortDir(q.Get("dir")),
 	}
-	if v := strings.TrimSpace(q.Get("root")); v != "" {
-		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
-			f.RootID = id
+	f.Empty, f.NotEmpty = parsePresenceParams(q)
+	f.RootIDs = parseMultiInt64(q, "root")
+	f.QualityProfileIDs = parseMultiInt64(q, "quality")
+	f.DeliveryModes = parseMultiQuery(q, "delivery")
+	f.PremieredYears = parseMultiYear(q, "year")
+	seen := map[string]struct{}{}
+	for _, raw := range q["status"] {
+		st := strings.TrimSpace(raw)
+		if st == "" {
+			continue
 		}
-	}
-	if v := strings.TrimSpace(q.Get("quality")); v != "" {
-		if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
-			f.QualityProfileID = id
+		switch st {
+		case library.SeriesListStatusMonitored,
+			library.SeriesListStatusUnmonitored,
+			library.SeriesListStatusComplete,
+			library.SeriesListStatusIncomplete,
+			library.SeriesListStatusHasErrors:
+		default:
+			continue
 		}
-	}
-	switch strings.ToLower(strings.TrimSpace(q.Get("delivery"))) {
-	case library.DeliveryVideo:
-		f.DeliveryMode = library.DeliveryVideo
-	case library.DeliveryAudio:
-		f.DeliveryMode = library.DeliveryAudio
-	}
-	switch strings.TrimSpace(q.Get("status")) {
-	case library.SeriesListStatusMonitored,
-		library.SeriesListStatusUnmonitored,
-		library.SeriesListStatusComplete,
-		library.SeriesListStatusIncomplete,
-		library.SeriesListStatusHasErrors:
-		f.Status = strings.TrimSpace(q.Get("status"))
+		if _, ok := seen[st]; ok {
+			continue
+		}
+		seen[st] = struct{}{}
+		f.Statuses = append(f.Statuses, st)
 	}
 	return f
 }
 
-func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error) {
+func (h *Handler) loadSeriesListLive(w http.ResponseWriter, r *http.Request) (seriesListLiveData, error) {
+	r = mergeSeriesListPrefs(r)
 	filter := parseSeriesListFilter(r)
+	if filter.Sort == "" {
+		filter.Sort = library.SortTitle
+	}
+	writeSeriesListPrefs(w, r, filter)
+	viewMode, writeCookie := resolveViewMode(r, cookieModeSeries, viewList)
+	if writeCookie {
+		writeViewCookie(w, cookieModeSeries, viewMode)
+	}
 	total, err := h.Library.CountSeriesFiltered(filter)
 	if err != nil {
 		return seriesListLiveData{}, err
 	}
-	page := ParsePage(r, "page")
-	pageInfo := NewPageInfoSize(r, "page", page, total, SeriesPageSize)
-	list, err := h.Library.ListSeriesFiltered(filter, SeriesPageSize, OffsetSize(pageInfo.Page, SeriesPageSize))
+
+	mode := libraryListMode(viewMode)
+	const liveTarget = "series-list-live"
+	const infiniteID = "series-list-infinite"
+	const rowsID = "series-list-rows"
+
+	var load ListLoad
+	var limit, offset int
+	switch mode {
+	case ListModeInfinite:
+		load = resolveInfiniteLoad(r, total, liveTarget, infiniteID, "page")
+		limit, offset = infiniteLimitOffset(load)
+	default:
+		load = resolvePaginatedLoad(r, total, SeriesPageSize, liveTarget, "page")
+		limit = load.PageSize
+		offset = OffsetSize(load.Page.Page, load.PageSize)
+	}
+
+	list, err := h.Library.ListSeriesFiltered(filter, limit, offset)
 	if err != nil {
 		return seriesListLiveData{}, err
 	}
@@ -115,15 +152,19 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 	if redir == "" {
 		redir = "/series"
 	}
-	liveTarget := "series-list-live"
 	bulkBusy, _ := h.Library.BulkEditSeriesBusy()
 
 	rows := make([]seriesListRow, 0, len(list))
 	for _, s := range list {
 		best := pickBestTask(bySeries[s.ID])
+		art := h.Library.SeriesArtFlagsFor(&s)
 		posterURL := ""
-		if h.Library.SeriesArtFlagsFor(&s).Poster {
+		if art.Poster {
 			posterURL = fmt.Sprintf("/series/%d/art/poster", s.ID)
+		}
+		bannerURL := ""
+		if art.Banner {
+			bannerURL = fmt.Sprintf("/series/%d/art/banner", s.ID)
 		}
 		kindIcon, kindTip := "", ""
 		if s.IsAudio() {
@@ -155,6 +196,7 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 			BulkEditBusy:       bulkBusy,
 			StatusInd:          statusInd,
 			PosterURL:          posterURL,
+			BannerURL:          bannerURL,
 			Line2:              strings.Join(line2Parts, " - "),
 			KindIcon:           kindIcon,
 			KindTip:            kindTip,
@@ -163,78 +205,56 @@ func (h *Handler) loadSeriesListLive(r *http.Request) (seriesListLiveData, error
 		})
 	}
 
-	pageInfo.LiveTarget = "series-list-live"
-
-	var seriesFilter struct {
-		Query            string
-		QueryPlaceholder string
-		AriaLabel        string
-		Selects          []listFilterSelect
-		LiveTarget       string
-		FormAction       string
+	clearHref := ""
+	if filter.MenuActive() {
+		clearHref = clearOperatorFiltersURL(r)
 	}
-	seriesFilter.Query = filter.Title
-	seriesFilter.QueryPlaceholder = "Search title"
-	seriesFilter.AriaLabel = "Series filters"
-	seriesFilter.LiveTarget = "series-list-live"
-	seriesFilter.FormAction = "/series"
-
-	if len(roots) > 1 {
-		opts := make([]listFilterOpt, 0, len(roots))
-		for _, root := range roots {
-			label := strings.TrimSpace(root.Name)
-			if label == "" {
-				label = root.Path
-			}
-			opts = append(opts, listFilterOpt{
-				Value:    strconv.FormatInt(root.ID, 10),
-				Label:    label,
-				Selected: filter.RootID == root.ID,
-			})
-		}
-		seriesFilter.Selects = append(seriesFilter.Selects, listFilterSelect{
-			Name: "root", AriaLabel: "Root folder", EmptyLabel: "All roots", Options: opts,
-		})
+	at := explorerAtFrom(r, explorerAtSeries)
+	qfOpts := qFieldOpts(filter.QField)
+	toolbar := listViewToolbar{
+		Query:            filter.Title,
+		QueryPlaceholder: searchByPlaceholder(qfOpts),
+		AriaLabel:        "Series filters",
+		QFieldOpts:       qfOpts,
+		SortOpts:         seriesSortOpts(r, filter.Sort, filter.SortDir),
+		SortDir:          library.NormalizeSortDir(filter.Sort, filter.SortDir),
+		ViewOpts:         viewOpts(r, viewMode),
+		ShowView:         true,
+		Selects:          seriesFilterSelects(h, r, filter, roots, profiles),
+		FilterActive:     filter.MenuActive(),
+		Badges:           seriesListBadges(r, filter),
+		ClearAllHref:     clearHref,
+		LiveTarget:       liveTarget,
+		FormAction:       "/explorer/browse",
+		SeriesBulkMode:   true,
 	}
-	if len(profiles) > 0 {
-		opts := make([]listFilterOpt, 0, len(profiles))
-		for _, p := range profiles {
-			opts = append(opts, listFilterOpt{
-				Value:    strconv.FormatInt(p.ID, 10),
-				Label:    p.Name,
-				Selected: filter.QualityProfileID == p.ID,
-			})
-		}
-		seriesFilter.Selects = append(seriesFilter.Selects, listFilterSelect{
-			Name: "quality", AriaLabel: "Quality profile", EmptyLabel: "All quality", Options: opts,
-		})
-	}
-	seriesFilter.Selects = append(seriesFilter.Selects, listFilterSelect{
-		Name: "delivery", AriaLabel: "Delivery mode", EmptyLabel: "All delivery",
-		Options: []listFilterOpt{
-			{Value: library.DeliveryVideo, Label: "Video", Selected: filter.DeliveryMode == library.DeliveryVideo},
-			{Value: library.DeliveryAudio, Label: "Audio", Selected: filter.DeliveryMode == library.DeliveryAudio},
-		},
-	})
-	seriesFilter.Selects = append(seriesFilter.Selects, listFilterSelect{
-		Name: "status", AriaLabel: "Status", EmptyLabel: "Any status",
-		Options: []listFilterOpt{
-			{Value: library.SeriesListStatusMonitored, Label: "Monitored", Selected: filter.Status == library.SeriesListStatusMonitored},
-			{Value: library.SeriesListStatusUnmonitored, Label: "Unmonitored", Selected: filter.Status == library.SeriesListStatusUnmonitored},
-			{Value: library.SeriesListStatusComplete, Label: "Complete", Selected: filter.Status == library.SeriesListStatusComplete},
-			{Value: library.SeriesListStatusIncomplete, Label: "Incomplete", Selected: filter.Status == library.SeriesListStatusIncomplete},
-			{Value: library.SeriesListStatusHasErrors, Label: "Has errors", Selected: filter.Status == library.SeriesListStatusHasErrors},
-		},
-	})
+	applyExplorerToolbar(&toolbar, explorerTypeSeries, at)
 
-	return seriesListLiveData{
-		Series:       rows,
-		Page:         pageInfo,
-		SeriesFilter: seriesFilter,
-		FilterActive: filter.Active(),
-		BulkEditBusy: bulkBusy,
-		FilterTotal:  total,
-	}, nil
+	showSelectAll := total > len(rows)
+	if mode == ListModePaginated {
+		showSelectAll = load.Page.Show
+	}
+	out := seriesListLiveData{
+		Series:          rows,
+		Page:            load.Page,
+		Load:            load,
+		ListMode:        mode,
+		SeriesFilter:    toolbar,
+		FilterActive:    filter.Active(),
+		BulkEditBusy:    bulkBusy,
+		FilterTotal:     total,
+		ViewMode:        viewMode,
+		TableCols: annotateTableColsSort(
+			parseTableColsCookie(r, cookieColsSeries, seriesTableColDefs()),
+			toolbar.SortOpts, toolbar.SortDir),
+		TableColsCookie: cookieColsSeries,
+		ShowSelectAll:   showSelectAll,
+		InfiniteID:      infiniteID,
+		RowsID:          rowsID,
+	}
+	rewriteExplorerInfinite(&out.Load, explorerTypeSeries, 0)
+	out.Page = out.Load.Page
+	return out, nil
 }
 
 func (h *Handler) seriesErrorCountJSON(w http.ResponseWriter, r *http.Request) {
@@ -248,13 +268,17 @@ func (h *Handler) seriesErrorCountJSON(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]int{"count": n})
 }
 
-func (h *Handler) seriesListLive(w http.ResponseWriter, r *http.Request) {
-	data, err := h.loadSeriesListLive(r)
+func (h *Handler) renderSeriesInfiniteChunk(w http.ResponseWriter, r *http.Request) {
+	data, err := h.loadSeriesListLive(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	render(w, "series_list_live", data)
+	if !data.Load.Append {
+		render(w, "series_list_live", data)
+		return
+	}
+	render(w, "series_infinite_chunk", data)
 }
 
 // tryRenderSeriesListLive renders #series-list-live when HTMX targeted it.
@@ -271,7 +295,7 @@ func (h *Handler) tryRenderSeriesListLive(w http.ResponseWriter, r *http.Request
 			req = clone
 		}
 	}
-	data, err := h.loadSeriesListLive(req)
+	data, err := h.loadSeriesListLive(w, req)
 	if err != nil {
 		return false
 	}

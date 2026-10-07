@@ -19,14 +19,19 @@
     </div>
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
-    <label for="modal-edit-series" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>
-      <i data-lucide="pencil" class="size-4"></i>
-      Edit series
-    </label>
-    <label for="modal-edit-series-metadata" class="btn btn-outline{{if .Deleting}} btn-disabled{{end}}" {{if .Deleting}}aria-disabled="true"{{end}}>
-      <i data-lucide="file-pen" class="size-4"></i>
-      Edit metadata
-    </label>
+    {{template "btn_labeled" (dict "Type" "label" "For" "modal-edit-series" "Icon" "pencil" "Label" "Edit series" "Disabled" .Deleting)}}
+    {{template "btn_labeled" (dict "Type" "label" "For" "modal-edit-series-metadata" "Icon" "file-pen" "Label" "Edit metadata" "Disabled" .Deleting)}}
+
+    {{template "monitor_toggle" (dict
+      "Action" "/actions/set-series-monitored"
+      "SeriesID" .Series.ID
+      "Monitored" .Series.Monitored
+      "Redirect" (printf "/series/%d" .Series.ID)
+      "AsButton" true
+      "BtnClass" "btn btn-square"
+      "Disabled" .Deleting
+      "DisabledTitle" "Series is queued for deletion"
+    )}}
     {{if .Deleting}}
     <span class="tooltip tooltip-top" data-tip="Delete">
       <label for="modal-delete-series" class="btn btn-soft btn-error btn-square btn-disabled" aria-disabled="true" aria-label="Delete">
@@ -54,128 +59,42 @@
 <script type="application/json" id="series-source-urls">{{toJSON .SourceURLs}}</script>
 <div class="py-10 px-4 w-full">
   <div class="flex w-full max-w-2xl mx-auto flex-col items-center gap-4">
-    <p class="text-sm opacity-70 text-center max-w-md">No videos yet. Start by adding a single video or a channel/playlist.</p>
-    <div class="flex w-full flex-row items-stretch">
-      <label for="modal-add-single" class="btn btn-outline grow h-auto min-h-12 py-3 whitespace-normal">
-        <i data-lucide="film" class="size-4"></i>
-        Add single video
-      </label>
-      <div class="divider divider-horizontal">OR</div>
-      <label for="modal-add-source" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal">
-        <i data-lucide="list-video" class="size-4"></i>
-        Add channel/playlist
-      </label>
-    </div>
+    <p class="text-sm opacity-70 text-center max-w-md">No videos yet. Start by adding a source.</p>
+    <label for="modal-add-source" class="btn btn-primary h-auto min-h-12 py-3 whitespace-normal">
+      <i data-lucide="list-video" class="size-4"></i>
+      Add source
+    </label>
   </div>
 </div>
 {{else}}
-{{template "list_header" (dict "level" "section" "title" "Sources" "add_modal" "modal-add-source" "add_label" "Add channel/playlist" "add_icon" "list-video" "add_modal2" "modal-add-single" "add_label2" "Add single video" "add_icon2" "film")}}
+{{template "list_header" (dict "level" "section" "title" "Sources" "add_modal" "modal-add-source" "add_label" "Add source" "add_icon" "list-video")}}
 <script type="application/json" id="series-source-urls">{{toJSON .SourceURLs}}</script>
-{{if or .Sources .ImportNullCount}}
-{{template "list_table"}}
-<thead><tr><th>URL / Name</th><th>Status</th><th class="w-0"></th></tr></thead>
-<tbody>
-  {{if .ImportNullCount}}
-  <tr class="hover">
-    <td>
-      <div class="flex items-center gap-2 min-w-0">
-        <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="imported or manually indexed videos with no feed source"><i data-lucide="folder-input" class="size-4 opacity-70"></i></span>
-        <a class="link link-hover font-medium min-w-0 truncate" href="/series/{{.Series.ID}}?source=import#series-videos-live">Import</a>
-      </div>
-    </td>
-    <td><span class="text-sm opacity-80 tabular-nums">{{if eq .ImportNullCount 1}}1 video imported{{else}}{{.ImportNullCount}} videos imported{{end}}</span></td>
-    <td class="whitespace-nowrap text-end"></td>
-  </tr>
-  {{end}}
-  {{range .Sources}}
-  <tr class="hover">
-    <td>
-      <div class="flex items-center gap-2 min-w-0">
-        {{if eq .Kind "single"}}
-        <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="single video"><i data-lucide="film" class="size-4 opacity-70"></i></span>
-        {{else if .IndexAsIgnored}}
-        <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="channel/playlist - new videos marked as ignored"><i data-lucide="list-minus" class="size-4 text-warning"></i></span>
-        {{else}}
-        <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="channel/playlist"><i data-lucide="list-video" class="size-4 opacity-70"></i></span>
-        {{end}}
-        {{if and .Label.Valid .Label.String}}
-        <a class="link link-hover font-medium min-w-0 truncate tooltip tooltip-top" href="/series/{{$.Series.ID}}/sources/{{.ID}}" data-tip="{{.URL}}">{{.Label.String}}</a>
-        {{else}}
-        <a class="link link-hover font-medium break-all min-w-0" href="/series/{{$.Series.ID}}/sources/{{.ID}}">{{displayURL .URL}}</a>
-        {{end}}
-      </div>
-      {{template "source_stalled" .}}
-    </td>
-    {{template "source_status_cell" .StatusInd}}
-    <td class="whitespace-nowrap text-end">
-      <div class="join">
-      {{if .HasRetryable}}
-      <label for="modal-retry-source-{{.ID}}" class="btn btn-primary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Clear download errors on this source and put videos back to wanted" aria-label="Retry">
-        <i data-lucide="rotate-ccw" class="size-3.5"></i>
-      </label>
-      {{end}}
-      {{template "source_scan_actions" .}}
-      <label for="modal-edit-source-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
-        <i data-lucide="pencil" class="size-3.5"></i>
-      </label>
-      <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
-        <i data-lucide="trash-2" class="size-3.5"></i>
-      </label>
-      </div>
-    </td>
-  </tr>
-  {{end}}
-</tbody>
-{{template "list_table_end"}}
-{{if .Sources}}{{template "pagination" .SourcesPage}}{{end}}
+{{template "sources_list_live" .SourcesLive}}
+{{if .ImportNullCount}}
+<a class="link link-hover text-sm mt-3 inline-block"
+   href="{{.ImportedVideosHref}}"
+   aria-label="Show imported videos">{{if eq .ImportNullCount 1}}1 video imported{{else}}{{.ImportNullCount}} videos imported{{end}}</a>
 {{end}}
 {{end}}
 {{template "list_panel_end"}}
+
+{{template "notes_editor" (dict "Value" .Series.Notes "Action" "/actions/save-series-notes" "IDName" "series_id" "ID" .Series.ID)}}
 
 {{if .HasVideos}}
 {{template "series_videos_live" .VideosLive}}
 {{end}}
 
-{{template "notes_editor" (dict "Value" .Series.Notes "Action" "/actions/save-series-notes" "IDName" "series_id" "ID" .Series.ID)}}
-
-{{if .HasVideos}}
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Series folder metadata: tvshow.nfo and art (poster, banner, fanart, clearlogo).")}}
-{{if not .MetaFiles}}
-{{template "list_empty" "No series metadata files yet."}}
-{{else}}
-{{template "list_table"}}
-<thead><tr><th>Type</th><th>File</th><th>Size</th></tr></thead>
-<tbody>
-  {{range .MetaFiles}}
-  <tr>
-    <td class="whitespace-nowrap">
-      <span class="inline-flex items-center gap-1.5">
-        <i data-lucide="{{.Icon}}" class="size-4 shrink-0 opacity-70"></i>
-        <span>{{.KindLabel}}</span>
-      </span>
-    </td>
-    <td class="text-sm break-all">
-      <a class="link link-hover" href="{{.ViewHref}}">
-        <code class="text-xs">{{.Name}}</code>
-      </a>
-    </td>
-    <td class="text-xs whitespace-nowrap tabular-nums">{{if eq .SizeLabel "-"}}{{template "empty_value"}}{{else}}{{.SizeLabel}}{{end}}</td>
-  </tr>
-  {{end}}
-</tbody>
-{{template "list_table_end"}}
-{{end}}
+{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Series folder files: tvshow.nfo, art.")}}
+{{template "files_list_live" .FilesLive}}
 {{template "list_panel_end"}}
-{{end}}
 
 <input type="checkbox" id="modal-add-source" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box max-w-xl">
-    <h3 class="font-bold text-lg mb-2">Add channel/playlist source</h3>
+    <h3 class="font-bold text-lg mb-2">Add source</h3>
         <form method="post" action="/actions/add-source" class="space-y-2 js-source-url-form">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <input type="hidden" name="kind" value="feed" />
       <div class="w-full">
         {{template "field_input" (dict
           "Name" "url"
@@ -190,12 +109,18 @@
       </div>
       {{template "field_input" (dict "Name" "label" "Label" "Name (optional)" "Placeholder" "Source name")}}
       {{template "scan_cron_field" (dict
-        "Value" "@weekly"
+        "Value" ""
         "ID" "add-source-scan-cron"
         "CronDescriptors" .ScanCronDescriptors
       )}}
       {{template "source_filter_fields" (dict
         "FullScanLimitID" "add-source-full-scan-limit"
+      )}}
+      {{template "source_default_metadata" (dict
+        "Source" .NewSource
+        "Suggestions" .MetaForm.Suggestions
+        "PackRoleOptions" .PackRoleOptions
+        "ListPrefix" "add-src"
       )}}
       <div class="modal-action">
         <label for="modal-add-source" class="btn modal-cancel">Cancel</label>
@@ -205,126 +130,6 @@
   </div>
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
-
-<input type="checkbox" id="modal-add-single" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Add single video source</h3>
-        <form method="post" action="/actions/add-source" class="space-y-2 js-source-url-form">
-      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <input type="hidden" name="kind" value="single" />
-      <div class="w-full">
-        {{template "field_input" (dict
-          "Name" "url"
-          "Label" "URL"
-          "Placeholder" "https://…"
-          "Required" true
-          "InputClass" "js-source-url"
-          "Validator" true
-          "ValidatorHint" "Enter a valid http(s) URL with a host."
-          "SupportedSitesLink" "video"
-        )}}
-      </div>
-      {{template "field_input" (dict "Name" "label" "Label" "Name (optional)" "Placeholder" "Source name")}}
-      <div class="modal-action">
-        <label for="modal-add-single" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-
-{{range .Sources}}
-<input type="checkbox" id="modal-edit-source-{{.ID}}" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box max-w-xl">
-    <h3 class="font-bold text-lg mb-2">Edit {{if eq .Kind "single"}}single{{else}}feed{{end}}</h3>
-        <form method="post" action="/actions/update-source" class="space-y-2">
-      <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
-      <input type="hidden" name="source_id" value="{{.ID}}" />
-      {{template "field_input" (dict
-        "Label" "URL"
-        "Value" .URL
-        "Disabled" true
-        "DisabledTitle" "Source URL cannot be changed later. Create a different source instead."
-        "NoPlaceholder" true
-      )}}
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">Name (optional)</legend>
-        <input name="label" class="input w-full" value="{{if .Label.Valid}}{{.Label.String}}{{end}}" />
-      </fieldset>
-      {{if ne .Kind "single"}}
-      {{template "scan_cron_field" (dict
-        "Value" .ScanCron
-        "ID" (printf "edit-source-scan-cron-%d" .ID)
-        "CronDescriptors" $.ScanCronDescriptors
-      )}}
-      {{end}}
-      {{if ne .Kind "single"}}
-      {{template "source_filter_fields" (dict
-        "FullScanLimit" .FullScanLimit
-        "FullScanLimitID" (printf "edit-source-full-scan-limit-%d" .ID)
-        "IndexAsIgnored" .IndexAsIgnored
-        "TitleRegexpInclude" .TitleRegexpInclude
-        "TitleRegexpIncludeID" (printf "edit-source-title-include-%d" .ID)
-        "TitleRegexpExclude" .TitleRegexpExclude
-        "TitleRegexpExcludeID" (printf "edit-source-title-exclude-%d" .ID)
-      )}}
-      {{end}}
-      {{template "source_default_metadata" (dict
-        "Source" .
-        "Suggestions" $.MetaForm.Suggestions
-        "PackRoleOptions" $.PackRoleOptions
-        "ListPrefix" (printf "edit-src-%d" .ID)
-      )}}
-      <div class="modal-action">
-        <label for="modal-edit-source-{{.ID}}" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary">Save</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-
-<input type="checkbox" id="modal-delete-source-{{.ID}}" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Delete source</h3>
-    <p class="text-sm mb-2">Removes this source and <strong>all of its indexed videos</strong> ({{.VideoCount}}) including library files on disk. Related scan/download tasks are cancelled.</p>
-    <p class="text-sm opacity-70 mb-4">To keep videos and only stop scanning, edit this source and turn off 'enabled' on 'Scan schedule'.</p>
-    <form method="post" action="/actions/delete-source" class="space-y-3 js-confirm-submit">
-      <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
-      <input type="hidden" name="source_id" value="{{.ID}}" />
-      {{template "checkbox_field" (dict "Name" "confirm_delete" "Label" "Delete all videos related to this source" "InputClass" "js-confirm-submit-check")}}
-      <div class="modal-action">
-        <label for="modal-delete-source-{{.ID}}" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-error" disabled>Delete source and videos</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-
-{{if .HasRetryable}}
-<input type="checkbox" id="modal-retry-source-{{.ID}}" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Retry download errors</h3>
-    <p class="text-sm mb-4">Set wanted_download_error / wanted_archive videos back to wanted for this source. Cancels pending Web Archive downloads. Does not enqueue downloads.</p>
-    <form method="post" action="/actions/retry-source-errors">
-      <input type="hidden" name="series_id" value="{{$.Series.ID}}" />
-      <input type="hidden" name="source_id" value="{{.ID}}" />
-      <div class="modal-action">
-        <label for="modal-retry-source-{{.ID}}" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary">Retry</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-{{end}}
-{{end}}
 
 {{template "series_metadata_form" .MetaForm}}
 
@@ -361,151 +166,6 @@
       <div class="modal-action">
         <label for="modal-delete-series" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-error" disabled>Delete series</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-
-<input type="checkbox" id="modal-bulk-want-videos" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2" data-video-bulk-want-title>Want videos</h3>
-    <p class="text-sm mb-4">Mark selected videos as wanted. Ineligible statuses are skipped.</p>
-    <form method="post" action="/actions/bulk-want-videos" id="form-bulk-want-videos">
-      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <div data-bulk-video-ids></div>
-      <div class="modal-action">
-        <label for="modal-bulk-want-videos" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary">Want</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-
-{{if not .Deleting}}
-<input type="checkbox" id="modal-bulk-clear-download-errors" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2" data-video-bulk-clear-errors-title>Clear selected errors</h3>
-    <p class="text-sm mb-4">
-      Clear download errors among the selected videos. This will put those videos back into wanted so they can download on the download-wanted schedule. Videos that are not in an error state are skipped.
-    </p>
-    <form method="post" action="/actions/bulk-clear-video-download-errors" id="form-bulk-clear-download-errors">
-      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <div data-bulk-video-ids></div>
-      <div class="modal-action">
-        <label for="modal-bulk-clear-download-errors" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary">Clear selected</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-{{end}}
-
-<input type="checkbox" id="modal-bulk-ignore-videos" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2" data-video-bulk-ignore-title>Ignore videos</h3>
-    <p class="text-sm mb-4">Mark selected videos as ignored. Ineligible statuses are skipped. Running download tasks for those videos are cancelled.</p>
-    <form method="post" action="/actions/bulk-ignore-videos" id="form-bulk-ignore-videos">
-      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <div data-bulk-video-ids></div>
-      <div class="modal-action">
-        <label for="modal-bulk-ignore-videos" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-warning">Ignore</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-
-<input type="checkbox" id="modal-bulk-refresh-sidecars-videos" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2" data-video-bulk-refresh-title>Refresh sidecars</h3>
-    <p class="text-sm mb-4">Enqueue sidecar refresh (thumb / subs / NFO) for selected videos with packed media. Others are skipped. Never rewrites info.json.</p>
-    <form method="post" action="/actions/bulk-refresh-sidecars-videos" id="form-bulk-refresh-sidecars-videos">
-      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <div data-bulk-video-ids></div>
-      <div class="modal-action">
-        <label for="modal-bulk-refresh-sidecars-videos" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary">Refresh sidecars</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-
-<input type="checkbox" id="modal-bulk-edit-videos-metadata" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box max-w-2xl">
-    <h3 class="font-bold text-lg mb-2" data-video-bulk-meta-title>Edit metadata</h3>
-    <p class="text-sm opacity-70 mb-3">Fields shared by every selected video are pre-filled except Special kind (always No change until you pick a value). Clear a field back to empty for No change. Filled fields replace that value on every selected video. Genres, tags, and actors replace the whole list when you add at least one entry (actor order is kept). Upload date is preserved. Changing Special kind may enqueue a file rename.</p>
-    <form method="post" action="/actions/bulk-edit-videos-metadata" class="space-y-3" id="form-bulk-edit-videos-metadata">
-      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <div data-bulk-video-ids></div>
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">Special kind</legend>
-        <select name="special_feature" class="select w-full" data-bulk-special-feature aria-label="Special kind">
-          <option value="">No change</option>
-          <option value="episode">none</option>
-          {{range .PackRoleOptions}}
-          <option value="{{.Value}}">{{.Label}}</option>
-          {{end}}
-        </select>
-        <p class="label whitespace-normal">Controls how packed files are stored. See the library root formats for details.</p>
-      </fieldset>
-      <div class="grid gap-3 sm:grid-cols-2">
-        {{template "metadata_suggest_row" (dict "Name" "studio" "Label" "Studio" "Value" "" "Placeholder" "No change" "ListID" "video-bulk-meta-dl-studio" "Options" .MetaForm.Suggestions.Studios)}}
-        {{template "metadata_suggest_row" (dict "Name" "country" "Label" "Country" "Value" "" "Placeholder" "No change" "ListID" "video-bulk-meta-dl-country" "Options" .MetaForm.Suggestions.Countries)}}
-      </div>
-      {{template "metadata_suggest_row" (dict "Name" "mpaa" "Label" "Content rating" "Value" "" "Placeholder" "No change" "ListID" "video-bulk-meta-dl-mpaa" "Options" .MetaForm.Suggestions.MPAAs)}}
-      <div class="grid gap-3 sm:grid-cols-2">
-        {{template "metadata_string_list_editor" (dict
-          "Label" "Genres"
-          "Name" "genre"
-          "Singular" "genre"
-          "Items" (list)
-          "Options" .MetaForm.Suggestions.Genres
-          "ListID" "video-bulk-meta-dl-genres"
-          "Placeholder" "Add a genre"
-          "EmptyText" "No change"
-        )}}
-        {{template "metadata_string_list_editor" (dict
-          "Label" "Tags"
-          "Name" "tag"
-          "Singular" "tag"
-          "Items" (list)
-          "Options" .MetaForm.Suggestions.Tags
-          "ListID" "video-bulk-meta-dl-tags"
-          "Placeholder" "Add a tag"
-          "EmptyText" "No change"
-        )}}
-      </div>
-      {{template "metadata_actors_editor" (dict "Actors" (list) "NameOptions" .MetaForm.Suggestions.ActorNames "RoleOptions" .MetaForm.Suggestions.ActorRoles "EmptyText" "No change")}}
-      <div class="modal-action">
-        <label for="modal-bulk-edit-videos-metadata" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary">Save</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-
-<input type="checkbox" id="modal-bulk-delete-videos" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2" data-video-bulk-delete-title>Delete downloaded files</h3>
-    <p class="text-sm mb-4">Removes library media and sidecars for the selected videos and sets status to deleted. Ineligible statuses are skipped.</p>
-    <form method="post" action="/actions/bulk-delete-videos" id="form-bulk-delete-videos">
-      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <div data-bulk-video-ids></div>
-      <div class="modal-action">
-        <label for="modal-bulk-delete-videos" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-error">Delete files</button>
       </div>
     </form>
   </div>

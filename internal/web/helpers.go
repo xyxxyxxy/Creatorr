@@ -18,14 +18,24 @@ type pageBase struct {
 	SettingsTab  string // set when Nav == "settings" (general|library|connect|queue|scheduler|maintenance)
 	Flash        *flash
 	AuthUsername string // operator account; for navbar account menu
+	NotifyCount  int    // unread notifications for nav bell badge
+	NotifyAlert  bool   // true when any unread alert (badge-error vs badge-info)
 }
 
 // usernameForPage returns the operator username for shell chrome (set from Handler.Mount).
 var usernameForPage func() string
 
+// notifyBadgeForPage returns unread badge count + has-alert (set from Handler.Mount).
+var notifyBadgeForPage func() (count int, hasAlert bool)
+
 // SetUsernameForPage wires the operator username lookup used by newPage.
 func SetUsernameForPage(fn func() string) {
 	usernameForPage = fn
+}
+
+// SetNotifyBadgeForPage wires unread notification badge lookup used by newPage.
+func SetNotifyBadgeForPage(fn func() (count int, hasAlert bool)) {
+	notifyBadgeForPage = fn
 }
 
 // EpisodeLucideIcon is the Lucide name for indexed episodes (library videos).
@@ -37,6 +47,9 @@ func newPage(title, nav string, flash *flash) pageBase {
 	p := pageBase{Title: title, Nav: nav, Icon: pageIcon(nav), Flash: flash}
 	if usernameForPage != nil {
 		p.AuthUsername = usernameForPage()
+	}
+	if notifyBadgeForPage != nil {
+		p.NotifyCount, p.NotifyAlert = notifyBadgeForPage()
 	}
 	return p
 }
@@ -55,6 +68,8 @@ func pageIcon(nav string) string {
 		return "layout-dashboard"
 	case "series":
 		return "tv"
+	case "videos":
+		return "square-play"
 	case "import":
 		return "folder-input"
 	case "tasks":
@@ -63,6 +78,8 @@ func pageIcon(nav string) string {
 		return "chart-column"
 	case "history":
 		return "history"
+	case "browser":
+		return "layout-panel-left"
 	case "settings":
 		return "settings"
 	default:
@@ -179,6 +196,58 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Metadata rescan enqueued.")
 	case "refresh-sidecars":
 		return flashOK("Sidecar refresh enqueued.")
+	case "check-file-hash":
+		return flashOK("File hash check enqueued.")
+	case "bulk_check_file_hash":
+		msg := "Integrity checks enqueued"
+		if n := r.URL.Query().Get("n"); n != "" {
+			msg += " (" + n + ")"
+		}
+		msg += "."
+		if skipped := r.URL.Query().Get("skipped"); skipped != "" && skipped != "0" {
+			return flashWarn(strings.TrimSuffix(msg, ".") + "; " + skipped + " skipped.")
+		}
+		return flashOK(msg)
+	case "bulk_sidecar_deleted":
+		msg := "Sidecars deleted"
+		if n := r.URL.Query().Get("n"); n != "" {
+			msg += " (" + n + ")"
+		}
+		msg += "."
+		if skipped := r.URL.Query().Get("skipped"); skipped != "" && skipped != "0" {
+			return flashWarn(strings.TrimSuffix(msg, ".") + "; " + skipped + " skipped.")
+		}
+		return flashOK(msg)
+	case "bulk_scan_sources":
+		msg := "Scans enqueued"
+		if n := r.URL.Query().Get("n"); n != "" {
+			msg += " (" + n + ")"
+		}
+		msg += "."
+		if skipped := r.URL.Query().Get("skipped"); skipped != "" && skipped != "0" {
+			return flashWarn(strings.TrimSuffix(msg, ".") + "; " + skipped + " skipped.")
+		}
+		return flashOK(msg)
+	case "bulk_sources_deleted":
+		msg := "Sources deleted"
+		if n := r.URL.Query().Get("n"); n != "" {
+			msg += " (" + n + ")"
+		}
+		msg += "."
+		if skipped := r.URL.Query().Get("skipped"); skipped != "" && skipped != "0" {
+			return flashWarn(strings.TrimSuffix(msg, ".") + "; " + skipped + " skipped.")
+		}
+		return flashOK(msg)
+	case "bulk_sources_updated":
+		msg := "Sources updated"
+		if n := r.URL.Query().Get("n"); n != "" {
+			msg += " (" + n + ")"
+		}
+		msg += "."
+		if skipped := r.URL.Query().Get("skipped"); skipped != "" && skipped != "0" {
+			return flashWarn(strings.TrimSuffix(msg, ".") + "; " + skipped + " skipped.")
+		}
+		return flashOK(msg)
 	case "metadata":
 		return flashOK("Series metadata saved (tvshow.nfo + art).")
 	case "video-metadata":
@@ -287,11 +356,12 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("'Apply episode format' queued.")
 	case "maintenance-run":
 		labels := map[string]string{
-			"apply":    "'Apply episode format'",
-			"nfo":      "'Regenerate all NFO files'",
-			"verify":   "'Integrity check'",
-			"sync":     "'File sync'",
-			"sidecars": "'Refresh sidecars'",
+			"reset-meta": "'Reset metadata from info.json'",
+			"apply":      "'Apply episode format'",
+			"nfo":        "'Regenerate all NFO files'",
+			"verify":     "'Integrity check'",
+			"sync":       "'File sync'",
+			"sidecars":   "'Refresh sidecars'",
 		}
 		parts := strings.Split(r.URL.Query().Get("actions"), ",")
 		var names []string
@@ -375,7 +445,7 @@ func scanCronDescriptors() []string {
 	return cronexpr.ScanDescriptors()
 }
 
-// parseFeedScanCron reads scan_cron (or legacy scan_cron_schedule). emptyDefault used when both empty (add flows).
+// parseFeedScanCron reads scan_cron (or legacy scan_cron_schedule). emptyDefault used when both empty (add flows; "" = Never).
 func parseFeedScanCron(r *http.Request, emptyDefault string) (string, error) {
 	raw := strings.TrimSpace(r.FormValue("scan_cron"))
 	if raw == "" {
@@ -391,7 +461,8 @@ func parseFeedScanCron(r *http.Request, emptyDefault string) (string, error) {
 // Honors redirect when it is under /series/; otherwise the series page.
 func seriesSourceRedirect(r *http.Request, seriesID, _ int64) string {
 	redir := strings.TrimSpace(r.FormValue("redirect"))
-	if strings.HasPrefix(redir, "/series/") && !strings.Contains(redir, "://") {
+	if !strings.Contains(redir, "://") &&
+		(strings.HasPrefix(redir, "/series/") || strings.HasPrefix(redir, "/browser")) {
 		return redir
 	}
 	return fmt.Sprintf("/series/%d", seriesID)
@@ -418,7 +489,7 @@ func hxRedirect(w http.ResponseWriter, url string) {
 }
 
 // finishVideoAction redirects after a video action, or when HTMX targeted
-// #series-videos-live, returns that partial (no full-page reload).
+// a video list live region, returns that partial (no full-page reload).
 func (h *Handler) finishVideoAction(w http.ResponseWriter, r *http.Request, sid int64, redir string, err error) {
 	if redir == "" {
 		redir = fmt.Sprintf("/series/%d", sid)
@@ -426,7 +497,7 @@ func (h *Handler) finishVideoAction(w http.ResponseWriter, r *http.Request, sid 
 	if err != nil {
 		errURL := appendQuery(redir, "err="+urlQuery(err.Error()))
 		if hxRequest(r) {
-			if h.tryRenderSeriesVideosLive(w, r, sid) {
+			if h.tryRenderVideoListLive(w, r, sid) {
 				return
 			}
 			hxRedirect(w, errURL)
@@ -436,13 +507,26 @@ func (h *Handler) finishVideoAction(w http.ResponseWriter, r *http.Request, sid 
 		return
 	}
 	if hxRequest(r) {
-		if h.tryRenderSeriesVideosLive(w, r, sid) {
+		if h.tryRenderVideoListLive(w, r, sid) {
 			return
 		}
 		hxRedirect(w, redir)
 		return
 	}
 	http.Redirect(w, r, redir, http.StatusSeeOther)
+}
+
+// tryRenderVideoListLive renders series-videos-live or videos-list-live for HTMX.
+func (h *Handler) tryRenderVideoListLive(w http.ResponseWriter, r *http.Request, sid int64) bool {
+	target := r.Header.Get("HX-Target")
+	switch target {
+	case "series-videos-live":
+		return h.tryRenderSeriesVideosLive(w, r, sid)
+	case "videos-list-live":
+		return h.tryRenderVideosLive(w, r)
+	default:
+		return false
+	}
 }
 
 // tryRenderSeriesVideosLive renders the series video list partial when the
@@ -470,10 +554,31 @@ func (h *Handler) tryRenderSeriesVideosLive(w http.ResponseWriter, r *http.Reque
 	activeTasks, _ := h.Queue.ListActiveForSeries(sid)
 	seriesTasks, _, byVideo := seriesActivityMaps(activeTasks)
 	h.mergeFileDeleteForSeries(sid, &seriesTasks, byVideo)
-	data, err := h.loadSeriesVideosLive(req, ser, byVideo)
+	data, err := h.loadSeriesVideosLive(w, req, ser, byVideo)
 	if err != nil {
 		return false
 	}
 	render(w, "series_videos_live", data)
+	return true
+}
+
+func (h *Handler) tryRenderVideosLive(w http.ResponseWriter, r *http.Request) bool {
+	if r.Header.Get("HX-Target") != "videos-list-live" {
+		return false
+	}
+	req := r
+	if cur := strings.TrimSpace(r.Header.Get("HX-Current-URL")); cur != "" {
+		if u, perr := url.Parse(cur); perr == nil && u != nil {
+			clone := r.Clone(r.Context())
+			clone.URL = u
+			clone.RequestURI = u.RequestURI()
+			req = clone
+		}
+	}
+	data, err := h.loadVideosLive(w, req)
+	if err != nil {
+		return false
+	}
+	render(w, "videos_live", data)
 	return true
 }

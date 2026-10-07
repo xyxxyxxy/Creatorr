@@ -34,25 +34,25 @@
 </head>
 <body class="min-h-screen bg-base-200">
   {{/* app-shell min-width lives in input.css (Tailwind arbitrary classes need make css). */}}
-  <div class="app-shell flex flex-col min-h-screen w-full max-w-5xl mx-auto">
+  <div class="app-shell flex flex-col min-h-screen w-full mx-auto max-w-5xl">
     <header class="navbar bg-base-100 border-b border-base-300 sticky top-0 z-[1100] min-h-14 px-2 lg:px-4 shrink-0">
       {{template "nav" .}}
       <div class="navbar-end flex items-center gap-1">
         <div class="dropdown dropdown-end">
           <div tabindex="0" role="button" class="btn btn-ghost btn-square relative" aria-label="Notifications" id="notify-bell-btn">
             <i data-lucide="bell" class="size-5"></i>
-            <span id="notify-badge" class="badge badge-error badge-xs absolute top-1 right-1 hidden">0</span>
+            <span id="notify-badge" class="badge badge-xs absolute top-1 right-1{{if not .NotifyCount}} hidden{{end}}{{if .NotifyAlert}} badge-error{{else}} badge-info{{end}}">{{if gt .NotifyCount 99}}99+{{else}}{{.NotifyCount}}{{end}}</span>
           </div>
           <ul tabindex="0" id="notify-menu"
-              class="dropdown-content menu menu-sm bg-base-100 rounded-box z-[1300] w-80 max-w-[calc(100vw-2rem)] p-2 border border-base-300 max-h-[min(24rem,70vh)] overflow-y-auto">
+              class="dropdown-content menu bg-base-100 rounded-box z-[1300] w-80 max-w-[calc(100vw-2rem)] p-2 border border-base-300 max-h-[min(24rem,70vh)] overflow-y-auto">
             <li id="notify-menu-mark-all">
               <button type="button" id="notify-mark-all-read" class="justify-center">
                 Mark all as read
               </button>
             </li>
-            <li id="notify-dropdown-empty" class="disabled"><a class="justify-center">No notifications</a></li>
+            <li id="notify-dropdown-empty" class="disabled"><a class="justify-center">No unread notifications</a></li>
             <li id="notify-menu-view-all">
-              <a href="/history#notifications" class="justify-center">
+              <a href="/browser?type=notifications" class="justify-center">
                 View all
               </a>
             </li>
@@ -62,7 +62,7 @@
           <div tabindex="0" role="button" class="btn btn-ghost btn-square" aria-label="Account" aria-haspopup="menu">
             <i data-lucide="user" class="size-5"></i>
           </div>
-          <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-100 rounded-box z-50 w-52 p-2 border border-base-300">
+          <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-50 w-52 p-2 border border-base-300">
             {{if .AuthUsername}}
             <li class="menu-title"><span>{{.AuthUsername}}</span></li>
             {{end}}

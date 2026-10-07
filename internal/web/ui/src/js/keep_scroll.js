@@ -65,7 +65,7 @@ export function shouldKeepScrollForm(form) {
   const dest = formRedirectPathname(form);
   if (dest !== "" && dest === location.pathname) return true;
   // Tasks page: POST /actions/* always returns to /tasks (full reload).
-  if (document.getElementById("tasks-live") && String(form.method || "").toLowerCase() === "post") {
+  if (document.getElementById("tasks-list-live") && String(form.method || "").toLowerCase() === "post") {
     const action = form.getAttribute("action") || "";
     if (action.startsWith("/actions/")) return true;
   }
@@ -77,6 +77,11 @@ function saveSeriesScroll() {
 }
 
 export function restoreSeriesScroll() {
+  // Import hash owns the viewport; keep-scroll restore would fight it (double rAF).
+  if (location.hash === "#series-videos-live") {
+    sessionStorage.removeItem(SCROLL_KEY);
+    return;
+  }
   restoreKeepScroll();
 }
 

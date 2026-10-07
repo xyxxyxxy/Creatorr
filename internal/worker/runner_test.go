@@ -475,7 +475,7 @@ func testRunnerDomainIssueNotify(t *testing.T, returnCode, returnMsg string, wan
 
 	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{
 		notify.EventCookieInvalid, notify.EventRateLimited, notify.EventYtDlpFailed,
-	}); err != nil {
+	}, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -561,7 +561,7 @@ func TestRunnerDownloadFailedMergesErrorDetail(t *testing.T) {
 	defer notify.SetSendFnForTest(old)
 	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{
 		notify.EventYtDlpFailed,
-	}); err != nil {
+	}, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -639,7 +639,7 @@ func TestRunnerAgeRestrictedDoesNotPauseOrNotify(t *testing.T) {
 
 	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{
 		notify.EventCookieInvalid, notify.EventRateLimited, notify.EventYtDlpFailed,
-	}); err != nil {
+	}, true); err != nil {
 		t.Fatal(err)
 	}
 	_ = domains.EnsureHost(d, "example.com")
@@ -744,7 +744,7 @@ func TestRunnerDownloadsDoneDigest(t *testing.T) {
 	defer func() { _ = d.Close() }()
 	_ = settings.SeedDefaults(d)
 	_ = settings.SetDomainDefault(d, 0, 8, 2, "10M", "0", false)
-	if _, err := notify.Upsert(d, 0, "d", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventDownloadDigest}); err != nil {
+	if _, err := notify.Upsert(d, 0, "d", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventDownloadDigest}, true); err != nil {
 		t.Fatal(err)
 	}
 	_ = domains.EnsureHost(d, "example.com")
@@ -835,7 +835,7 @@ func TestRunnerLiveBroadcastSkippedStaysWanted(t *testing.T) {
 	_ = settings.SetDomainDefault(d, 0, 8, 1, "10M", "0", false)
 	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{
 		notify.EventYtDlpFailed,
-	}); err != nil {
+	}, true); err != nil {
 		t.Fatal(err)
 	}
 

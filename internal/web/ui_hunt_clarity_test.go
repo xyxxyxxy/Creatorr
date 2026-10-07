@@ -68,7 +68,9 @@ func TestVideoStatusLabelOnListAndDetail(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	listReq := httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID)+"?status=wanted_download_error", nil)
+	// Series detail Videos is a gallery glance (no status labels); assert on Browser list.
+	listReq := httptest.NewRequest(http.MethodGet,
+		"/browser?type=videos&series="+itoa(ser.ID)+"&status=wanted_download_error&view=list", nil)
 	listRec := httptest.NewRecorder()
 	r.ServeHTTP(listRec, listReq)
 	if listRec.Code != 200 {
@@ -164,7 +166,8 @@ func TestBulkVideoMetadataModalStartsAtNoChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID), nil)
+	// Bulk metadata modal lives on Browser Videos (series-detail Videos is a locked glance).
+	req := httptest.NewRequest(http.MethodGet, "/browser?type=videos&series="+itoa(ser.ID), nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	if rec.Code != 200 {
@@ -212,6 +215,46 @@ func TestHydrateVideoBulkMetadataSkipsSpecialFeature(t *testing.T) {
 	}
 	if !strings.Contains(fn, "Special kind stays No change") {
 		t.Fatal("hydrate missing Special kind No-change comment guard")
+	}
+}
+
+func TestBulkThumbCardClickSelectsNotNavigates(t *testing.T) {
+	// Multi-select must match thumb cards (li.card) as well as list-row.
+	req := httptest.NewRequest(http.MethodGet, "/static/app.js", nil)
+	rec := httptest.NewRecorder()
+	web.StaticHandler().ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("app.js status %d", rec.Code)
+	}
+	js := rec.Body.String()
+	for _, pin := range []string{
+		`#series-list-rows > [data-series-id]`,
+		`#videos-list-rows > [data-video-id]`,
+		`thumb+list bulk click #series-list-rows > [data-series-id]`,
+		`thumb+list bulk click #videos-list-rows > [data-video-id]`,
+	} {
+		if !strings.Contains(js, pin) {
+			t.Fatalf("app.js missing bulk thumb click pin %q", pin)
+		}
+	}
+	if strings.Contains(js, `#series-list-rows > .list-row[data-series-id]`) {
+		t.Fatal("series bulk click still list-row-only; cards/gallery would navigate")
+	}
+	if strings.Contains(js, `#series-videos-rows`) {
+		t.Fatal("video bulk must not target series-detail Videos glance")
+	}
+	for _, tip := range []string{
+		`Use the multi-select bar`,
+		`VIDEO_BULK_CONFIRM_AFTER = 5`,
+		`SERIES_BULK_CONFIRM_AFTER = 5`,
+		// HTMX settle rewrites id'd bulk bar `hidden`; restore again after settle.
+		`htmx:afterSettle`,
+		// Selected cards use primary outline (list/table keep bg-base-200 fill).
+		`selected card outline outline-accent`,
+	} {
+		if !strings.Contains(js, tip) {
+			t.Fatalf("app.js missing bulk contract %q", tip)
+		}
 	}
 }
 
@@ -278,6 +321,17 @@ func TestTasksBadgeContractOpenCountNotSoftPause(t *testing.T) {
 	if !strings.Contains(fn, "const n = list.length") {
 		t.Fatalf("refreshBadge must count all open tasks: %s", truncate(fn, 600))
 	}
+	setStart := strings.Index(js, "function setNotifyBadge")
+	if setStart < 0 {
+		t.Fatal("setNotifyBadge missing")
+	}
+	setFn := js[setStart:]
+	if end := strings.Index(setFn, "\n  async function refreshNotifyBadge"); end > 0 {
+		setFn = setFn[:end]
+	}
+	if !strings.Contains(setFn, `b.classList.add(alert ? "badge-error" : "badge-info")`) {
+		t.Fatalf("setNotifyBadge must use badge-error when hasAlert: %s", truncate(setFn, 500))
+	}
 }
 
 func TestVideoBulkMetadataCommonStillReportsSpecialFeature(t *testing.T) {
@@ -318,5 +372,52 @@ func TestVideoBulkMetadataCommonStillReportsSpecialFeature(t *testing.T) {
 	sf, _ := meta["special_feature"].(map[string]any)
 	if sf == nil || sf["same"] != true {
 		t.Fatalf("special_feature=%v", meta["special_feature"])
+	}
+}
+
+func TestListLiveSearchPinsViewportAnchor(t *testing.T) {
+	// Live filter search must not jump the page: pin panel top across outerHTML swap.
+	req := httptest.NewRequest(http.MethodGet, "/static/app.js", nil)
+	rec := httptest.NewRecorder()
+	web.StaticHandler().ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("app.js status %d", rec.Code)
+	}
+	js := rec.Body.String()
+	for _, pin := range []string{
+		"listLiveAnchorTop",
+		"sources-list-live",
+		"files-list-live",
+		"tasks-list-live",
+		"notifications-list-live",
+		"getBoundingClientRect().top",
+	} {
+		if !strings.Contains(js, pin) {
+			t.Fatalf("app.js missing live-scroll pin %q", pin)
+		}
+	}
+}
+
+func TestListFilterMenuKeepOpenPins(t *testing.T) {
+	// Filter choice HTMX-swaps the live panel; menu must reopen for the next pick.
+	req := httptest.NewRequest(http.MethodGet, "/static/app.js", nil)
+	rec := httptest.NewRecorder()
+	web.StaticHandler().ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("app.js status %d", rec.Code)
+	}
+	js := rec.Body.String()
+	for _, pin := range []string{
+		"captureListFilterMenuKeep",
+		"restoreListFilterMenuKeep",
+		"data-list-filter-menu",
+		"listFilterMenuKeep",
+		"dropdown-open",
+		"scrollTop",
+		"restoreListFilterMenuScroll",
+	} {
+		if !strings.Contains(js, pin) {
+			t.Fatalf("app.js missing filter menu keep-open pin %q", pin)
+		}
 	}
 }

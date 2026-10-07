@@ -14,6 +14,18 @@ var ageRestrictRe = regexp.MustCompile(`(?i)(` +
 	`sign\s+in\s+to\s+confirm\s+your\s+age` +
 	`)`)
 
+// Per-video membership / tier paywalls (not domain cookie/session failure).
+// Site-shaped arms: add a new alt when another extractor grows a stable message.
+var memberOnlyRe = regexp.MustCompile(`(?i)(` +
+	// YouTube members-only
+	`channel'?s?\s+members|` +
+	`members\s+on\s+level|` +
+	`join\s+this\s+channel\s+to\s+get\s+access|` +
+	`members?[-\s]?only|` +
+	// mde.tv tier (not "membership login required" / session expired)
+	`outside\s+your\s+membership\s+tier` +
+	`)`)
+
 // Pause-worthy external-service failures (domain queue should stop).
 var (
 	// Strong cookie/session failure: wins over age-gate wording in the same stderr
@@ -36,7 +48,7 @@ var (
 		`)`)
 
 	// Tier paywalls ("outside your membership tier") must not match: those are
-	// per-video product gaps, not domain cookie/session failure.
+	// per-video MemberOnly product gaps, not domain cookie/session failure.
 	cookieHTTPRe = regexp.MustCompile(`(?i)` +
 		`HTTP\s*(?:Error\s*)?(401|403).*(cookie|login|auth|sign\s*in)|` +
 		`(cookie|login|auth|sign\s*in).*HTTP\s*(?:Error\s*)?(401|403)`)
@@ -58,9 +70,11 @@ var (
 		`)`)
 
 	// Per-video gone / removed (not domain cookie or rate). Narrow gate for archive fallback.
+	// Require "no longer" on the "this video is … available" arm so YouTube members-only
+	// ("This video is available to this channel's members…") does not match.
 	videoUnavailableRe = regexp.MustCompile(`(?i)(` +
 		`video\s+unavailable|` +
-		`this\s+video\s+(?:is\s+)?(?:no\s+longer\s+)?available|` +
+		`this\s+video\s+(?:is\s+)?no\s+longer\s+available|` +
 		`this\s+video\s+has\s+been\s+removed|` +
 		`has\s+been\s+removed\s+by\s+the\s+(?:uploader|user)|` +
 		`video\s+has\s+been\s+removed|` +
@@ -78,13 +92,24 @@ func DetectAgeRestricted(message string) bool {
 	return ageRestrictRe.MatchString(message)
 }
 
+// DetectMemberOnly reports per-video membership / tier paywall failures in yt-dlp stderr.
+func DetectMemberOnly(message string) bool {
+	if strings.TrimSpace(message) == "" {
+		return false
+	}
+	return memberOnlyRe.MatchString(message)
+}
+
 // DetectVideoUnavailable reports clear per-video gone/removed failures in yt-dlp stderr.
-// Narrow gate only: not cookie/rate/age. Used to enqueue Web Archive fallback.
+// Narrow gate only: not cookie/rate/age/member. Used to enqueue Web Archive fallback.
 func DetectVideoUnavailable(message string) bool {
 	if strings.TrimSpace(message) == "" {
 		return false
 	}
 	if DetectAgeRestricted(message) {
+		return false
+	}
+	if DetectMemberOnly(message) {
 		return false
 	}
 	if DetectPauseCode(message) != "" {
@@ -106,6 +131,9 @@ func DetectPauseCode(message string) string {
 	if DetectAgeRestricted(message) {
 		return ""
 	}
+	if DetectMemberOnly(message) {
+		return ""
+	}
 	if cookieAuthRe.MatchString(message) {
 		return CodeCookieInvalid
 	}
@@ -115,16 +143,16 @@ func DetectPauseCode(message string) string {
 	return ""
 }
 
-// UpgradeCode replaces a generic failure code when message indicates pause or age gate.
-// CookieInvalid / RateLimited win over AgeRestricted when both appear in the message.
+// UpgradeCode replaces a generic failure code when message indicates pause, age, or member gate.
+// CookieInvalid / RateLimited win over AgeRestricted / MemberOnly when both appear in the message.
 // Keeps CookieInvalid / RateLimited / CookieMissing / remux/pack/verify / live-skip / archive unchanged.
 func UpgradeCode(code, message string) string {
 	switch code {
 	case CodeCookieInvalid, CodeRateLimited, CodeCookieMissing, CodeRemuxFailed, CodePackFailed, CodeIntegrityCheckFailed,
 		CodeLiveBroadcastSkipped, CodeArchiveFallbackQueued:
 		return code
-	case CodeAgeRestricted:
-		// Prior age label may have been set before cookie lines were considered.
+	case CodeAgeRestricted, CodeMemberOnly:
+		// Prior per-video label may have been set before cookie lines were considered.
 		if d := DetectPauseCode(message); d != "" {
 			return d
 		}
@@ -135,6 +163,9 @@ func UpgradeCode(code, message string) string {
 	}
 	if DetectAgeRestricted(message) {
 		return CodeAgeRestricted
+	}
+	if DetectMemberOnly(message) {
+		return CodeMemberOnly
 	}
 	return code
 }
@@ -148,6 +179,8 @@ func PauseMessage(code string) string {
 		return "Rate limited or IP blocked"
 	case CodeAgeRestricted:
 		return "Age restricted"
+	case CodeMemberOnly:
+		return "Members only"
 	default:
 		return "Domain issue"
 	}
@@ -156,7 +189,7 @@ func PauseMessage(code string) string {
 // IsYtDlpPauseCode reports whether a classified failure should soft-pause the domain lane.
 // Only cookie/session and rate-limit/IP-block failures pause the hostname queue.
 // Generic DownloadFailed / ResolveFailed stay per-task (and per-video for downloads);
-// remux/pack/verify/age-gate are never pause codes.
+// remux/pack/verify/age-gate/member-only are never pause codes.
 func IsYtDlpPauseCode(code string) bool {
 	switch code {
 	case CodeCookieInvalid, CodeRateLimited:

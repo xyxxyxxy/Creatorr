@@ -1,0 +1,26 @@
+{{define "source_list_meta"}}
+{{/*
+  List-row second line: scan phrase + discovered phrase (text-xs opacity-60).
+  Expects StatusInd (sourceStatusView), IndexAsIgnored, optional StatusSummary.
+  id source-status-N matches prior Status cell so task-indicators OOB still targets it.
+*/}}
+{{$m := sourceListMeta .StatusInd .StatusSummary .IndexAsIgnored}}
+<div id="source-status-{{$m.SourceID}}" class="text-xs opacity-60 truncate"
+     {{if $m.OOB}}hx-swap-oob="true"{{end}}
+     onclick="event.stopPropagation()">
+  {{if $m.Title -}}
+  <span class="tooltip tooltip-top" aria-label="{{$m.Title}}">
+    <div class="tooltip-content text-start whitespace-pre-line">{{$m.Title}}</div>
+    {{- if $m.Href -}}
+    <a class="link link-hover" href="{{$m.Href}}">{{$m.Scan}}</a>
+    {{- else -}}
+    {{$m.Scan}}
+    {{- end -}}
+  </span>
+  {{- else if $m.Href -}}
+  <a class="link link-hover" href="{{$m.Href}}">{{$m.Scan}}</a>
+  {{- else -}}
+  {{$m.Scan}}
+  {{- end -}}, {{$m.Discovered}}
+</div>
+{{end}}

@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/xyxxyxxy/Creatorr/internal/api/gen"
 	apperrors "github.com/xyxxyxxy/Creatorr/internal/errors"
@@ -14,17 +16,59 @@ func (s *Server) ListSeriesIds(w http.ResponseWriter, r *http.Request, params ge
 	if params.Q != nil {
 		filter.Title = *params.Q
 	}
+	if params.QField != nil {
+		filter.QField = library.NormalizeQField(string(*params.QField))
+	}
 	if params.Root != nil {
-		filter.RootID = *params.Root
+		filter.RootIDs = []int64{*params.Root}
 	}
 	if params.Quality != nil {
-		filter.QualityProfileID = *params.Quality
+		filter.QualityProfileIDs = []int64{*params.Quality}
 	}
 	if params.Delivery != nil {
-		filter.DeliveryMode = string(*params.Delivery)
+		filter.DeliveryModes = []string{string(*params.Delivery)}
 	}
 	if params.Status != nil {
-		filter.Status = string(*params.Status)
+		filter.Statuses = []string{string(*params.Status)}
+	}
+	if params.Studio != nil {
+		if s := strings.TrimSpace(*params.Studio); s != "" {
+			filter.Studios = []string{s}
+		}
+	}
+	if params.Country != nil {
+		if s := strings.TrimSpace(*params.Country); s != "" {
+			filter.Countries = []string{s}
+		}
+	}
+	if params.Mpaa != nil {
+		if s := strings.TrimSpace(*params.Mpaa); s != "" {
+			filter.MPAAs = []string{s}
+		}
+	}
+	if params.Year != nil {
+		y := strings.TrimSpace(*params.Year)
+		if y != "" {
+			n, err := strconv.Atoi(y)
+			if err == nil && n > 0 {
+				filter.PremieredYears = []int{n}
+			}
+		}
+	}
+	if params.Genre != nil {
+		filter.Genres = append([]string(nil), (*params.Genre)...)
+	}
+	if params.Tag != nil {
+		filter.Tags = append([]string(nil), (*params.Tag)...)
+	}
+	if params.Actor != nil {
+		filter.Actors = append([]string(nil), (*params.Actor)...)
+	}
+	if params.Empty != nil {
+		filter.Empty = append([]string(nil), (*params.Empty)...)
+	}
+	if params.NotEmpty != nil {
+		filter.NotEmpty = append([]string(nil), (*params.NotEmpty)...)
 	}
 	ids, err := s.Library.ListSeriesIDsFiltered(filter)
 	if err != nil {

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
@@ -34,6 +35,29 @@ func TestBuildSourceStatusScheduleOffSaysDisabled(t *testing.T) {
 	})
 	if on.Kind != "scheduled" || on.Label != "28 days ago (11 new)" {
 		t.Fatalf("schedule on: %+v", on)
+	}
+}
+
+func TestBuildSourceStatusScanErrorTipOmitsLongMessage(t *testing.T) {
+	t.Parallel()
+	long := "yt-dlp metadata failed: ERROR: [youtube] abc: This video is available to this channel's members on level: Gold"
+	v := buildSourceStatus(sourceStatusParams{
+		Src:        library.Source{ID: 19, FullScanDone: true},
+		HasError:   true,
+		ErrCode:    "ResolveFailed",
+		ErrMsg:     long,
+		Summary:    long,
+		HasScanned: true,
+		HistoryID:  99,
+	})
+	if v.Kind != "scan_error" || v.Label != "ResolveFailed" || v.Href != "/task/99" {
+		t.Fatalf("scan_error chrome: %+v", v)
+	}
+	if strings.Contains(v.Title, "yt-dlp") || strings.Contains(v.Title, "Last scan:") {
+		t.Fatalf("tip must omit long error body, got %q", v.Title)
+	}
+	if !strings.Contains(v.Title, "ResolveFailed") || !strings.Contains(v.Title, "Open task for full error") {
+		t.Fatalf("tip=%q", v.Title)
 	}
 }
 

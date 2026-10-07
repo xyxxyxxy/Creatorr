@@ -8,10 +8,15 @@
   </a>
 </li>
 <li>
+  <a href="/browser"{{if eq .Nav "browser"}} class="active"{{end}}>
+    <i data-lucide="layout-panel-left" class="{{$icon}}"></i>Browser
+  </a>
+</li>
+<li>
   <a href="/tasks"{{if eq .Nav "tasks"}} class="active"{{end}}>
     <i data-lucide="list-todo" class="{{$icon}}"></i>Tasks
     {{if .IncludeBadgeIDs}}
-    <span id="tasks-badge" class="badge badge-primary badge-sm hidden">0</span>
+    <span id="tasks-badge" class="badge badge-accent badge-sm hidden">0</span>
     <span id="tasks-paused-badge" class="badge badge-warning badge-sm hidden">0</span>
     {{end}}
   </a>
@@ -19,11 +24,6 @@
 <li>
   <a href="/import"{{if eq .Nav "import"}} class="active"{{end}}>
     <i data-lucide="folder-input" class="{{$icon}}"></i>Import
-  </a>
-</li>
-<li>
-  <a href="/history"{{if eq .Nav "history"}} class="active"{{end}}>
-    <i data-lucide="history" class="{{$icon}}"></i>History
   </a>
 </li>
 <li>

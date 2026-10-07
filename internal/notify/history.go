@@ -21,18 +21,22 @@ type Notification struct {
 	ReadAt     sql.NullString
 }
 
-// Unread reports whether this alert/warning notification is still unread.
+// Unread reports whether read_at is unset (any level; info can be marked unread).
 func (n Notification) Unread() bool {
-	return IsUnreadEvent(n.Event) && !n.ReadAt.Valid
+	return !n.ReadAt.Valid
 }
 
 // ListFilter selects notification rows.
 type ListFilter struct {
 	Event      string
-	Level      string // info | warning | alert; empty = all
-	From       string // inclusive UTC RFC3339Nano on created_at
-	To         string // inclusive UTC RFC3339Nano on created_at
-	UnreadOnly bool
+	Levels     []string // info | warning | alert; OR via event IN union
+	From       string   // inclusive UTC RFC3339Nano on created_at
+	To         string   // inclusive UTC RFC3339Nano on created_at
+	UnreadOnly bool     // read_at IS NULL (any event)
+	ReadOnly   bool     // read_at IS NOT NULL; mutually exclusive with UnreadOnly
+	Q          string   // free-text contains match on title, body, event, id
+	Sort       string   // created | level; empty = created; legacy when accepted
+	SortDir    string   // asc|desc
 }
 
 // InsertNotification writes a notification row. taskID <= 0 stores NULL.
@@ -68,7 +72,8 @@ func InsertNotification(database *db.DB, event, title, body string, taskID int64
 	return res.LastInsertId()
 }
 
-// MarkExternalOK sets external_ok=1. Does not change read_at; in-app ack only.
+// MarkExternalOK sets external_ok=1. Does not change read_at by itself; SendEvent
+// may also MarkRead when a successful Apprise channel has MarkExternalRead.
 func MarkExternalOK(database *db.DB, id int64) error {
 	if database == nil || id <= 0 {
 		return nil
@@ -106,10 +111,11 @@ func ListNotifications(database *db.DB, f ListFilter, limit, offset int) ([]Noti
 		offset = 0
 	}
 	where, args := notificationWhere(f)
+	order := notificationOrderSQL(f)
 	q := `
 		SELECT id, created_at, event, title, body, task_id, external_ok, read_at
 		FROM notifications` + where + `
-		ORDER BY id DESC LIMIT ? OFFSET ?`
+		ORDER BY ` + order + ` LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 	rows, err := database.SQL.Query(q, args...)
 	if err != nil {
@@ -138,9 +144,58 @@ func CountNotifications(database *db.DB, f ListFilter) (int, error) {
 	return n, err
 }
 
-// CountUnread returns unread alert notifications.
+// ListNotificationIDs returns notification ids matching filter (list order).
+// toggleableOnly is kept for callers; all in-app rows are toggleable (incl. info).
+func ListNotificationIDs(database *db.DB, f ListFilter, toggleableOnly bool) ([]int64, error) {
+	if database == nil {
+		return nil, nil
+	}
+	_ = toggleableOnly
+	where, args := notificationWhere(f)
+	q := `SELECT id FROM notifications` + where + ` ORDER BY ` + notificationOrderSQL(f)
+	rows, err := database.SQL.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// CountUnread returns total unread notification count for the nav badge (all levels).
 func CountUnread(database *db.DB) (int, error) {
-	return CountNotifications(database, ListFilter{UnreadOnly: true})
+	n, _, err := UnreadBadge(database)
+	return n, err
+}
+
+// UnreadBadge returns total unread count and whether any unread alert is present.
+// Nav badge is error-red when hasAlert; otherwise info (warnings and info unread).
+func UnreadBadge(database *db.DB) (count int, hasAlert bool, err error) {
+	if database == nil {
+		return 0, false, nil
+	}
+	// Include legacy download_failed rows (aliased to ytdlp_failed on write/read).
+	evs := append(append([]string{}, AlertEvents...), legacyEventDownloadFailed)
+	ph := strings.Repeat("?,", len(evs))
+	ph = ph[:len(ph)-1]
+	args := make([]any, 0, len(evs))
+	for _, e := range evs {
+		args = append(args, e)
+	}
+	var alertN int
+	err = database.SQL.QueryRow(
+		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN event IN (`+ph+`) THEN 1 ELSE 0 END), 0)
+		 FROM notifications WHERE read_at IS NULL`,
+		args...,
+	).Scan(&count, &alertN)
+	return count, alertN > 0, err
 }
 
 // MarkRead sets read_at on one notification (no-op if already read).
@@ -158,24 +213,84 @@ func MarkRead(database *db.DB, id int64) error {
 	return err
 }
 
-// MarkAllRead marks all unread alert/warning notifications as read.
+// MarkUnread clears read_at on one notification (no-op if already unread).
+func MarkUnread(database *db.DB, id int64) error {
+	if database == nil || id <= 0 {
+		return nil
+	}
+	_, err := database.SQL.Exec(`
+		UPDATE notifications SET read_at = NULL WHERE id = ? AND read_at IS NOT NULL
+	`, id)
+	if err == nil {
+		publishRead(database, id)
+	}
+	return err
+}
+
+// MarkReadMany sets read_at on selected ids (one SSE publish).
+func MarkReadMany(database *db.DB, ids []int64) (int64, error) {
+	return markReadStateMany(database, ids, true)
+}
+
+// MarkUnreadMany clears read_at on selected ids (one SSE publish).
+func MarkUnreadMany(database *db.DB, ids []int64) (int64, error) {
+	return markReadStateMany(database, ids, false)
+}
+
+func markReadStateMany(database *db.DB, ids []int64, wantRead bool) (int64, error) {
+	if database == nil || len(ids) == 0 {
+		return 0, nil
+	}
+	clean := make([]int64, 0, len(ids))
+	seen := map[int64]struct{}{}
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		clean = append(clean, id)
+	}
+	if len(clean) == 0 {
+		return 0, nil
+	}
+	idPh := strings.Repeat("?,", len(clean))
+	idPh = idPh[:len(idPh)-1]
+	args := make([]any, 0, 1+len(clean))
+	var q string
+	if wantRead {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		args = append(args, now)
+		q = `UPDATE notifications SET read_at = ? WHERE id IN (` + idPh + `) AND read_at IS NULL`
+	} else {
+		q = `UPDATE notifications SET read_at = NULL WHERE id IN (` + idPh + `) AND read_at IS NOT NULL`
+	}
+	for _, id := range clean {
+		args = append(args, id)
+	}
+	res, err := database.SQL.Exec(q, args...)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	if n > 0 {
+		publishRead(database, 0)
+	}
+	return n, nil
+}
+
+// MarkAllRead marks every notification with null read_at as read (any level).
 func MarkAllRead(database *db.DB) (int64, error) {
 	if database == nil {
 		return 0, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	evs := UnreadEvents()
-	ph := strings.Repeat("?,", len(evs))
-	ph = ph[:len(ph)-1]
-	args := make([]any, 0, 1+len(evs))
-	args = append(args, now)
-	for _, e := range evs {
-		args = append(args, e)
-	}
 	res, err := database.SQL.Exec(`
 		UPDATE notifications SET read_at = ?
-		WHERE read_at IS NULL AND event IN (`+ph+`)
-	`, args...)
+		WHERE read_at IS NULL
+	`, now)
 	if err != nil {
 		return 0, err
 	}
@@ -193,7 +308,7 @@ func notificationWhere(f ListFilter) (string, []any) {
 		parts = append(parts, `event = ?`)
 		args = append(args, AliasEvent(ev))
 	}
-	if evs := EventsForLevel(f.Level); len(evs) > 0 {
+	if evs := EventsForLevels(f.Levels); len(evs) > 0 {
 		ph := strings.Repeat("?,", len(evs))
 		ph = ph[:len(ph)-1]
 		parts = append(parts, `event IN (`+ph+`)`)
@@ -210,18 +325,66 @@ func notificationWhere(f ListFilter) (string, []any) {
 		args = append(args, to)
 	}
 	if f.UnreadOnly {
-		evs := UnreadEvents()
-		ph := strings.Repeat("?,", len(evs))
-		ph = ph[:len(ph)-1]
-		parts = append(parts, `read_at IS NULL AND event IN (`+ph+`)`)
-		for _, e := range evs {
-			args = append(args, e)
-		}
+		parts = append(parts, `read_at IS NULL`)
+	} else if f.ReadOnly {
+		parts = append(parts, `read_at IS NOT NULL`)
+	}
+	if q := strings.TrimSpace(f.Q); q != "" {
+		pat := likeContainsPattern(q)
+		parts = append(parts, `(
+			COALESCE(title,'') LIKE ? ESCAPE '\' OR
+			COALESCE(body,'') LIKE ? ESCAPE '\' OR
+			COALESCE(event,'') LIKE ? ESCAPE '\' OR
+			CAST(id AS TEXT) LIKE ? ESCAPE '\'
+		)`)
+		args = append(args, pat, pat, pat, pat)
 	}
 	if len(parts) == 0 {
 		return "", args
 	}
 	return ` WHERE ` + strings.Join(parts, ` AND `), args
+}
+
+// likeContainsPattern wraps s for SQL LIKE … ESCAPE '\' (substring match).
+func likeContainsPattern(s string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return `%` + replacer.Replace(s) + `%`
+}
+
+func notificationOrderSQL(f ListFilter) string {
+	dir := strings.ToLower(strings.TrimSpace(f.SortDir))
+	if dir != "asc" && dir != "desc" {
+		dir = "desc"
+	}
+	dirSQL := "DESC"
+	if dir == "asc" {
+		dirSQL = "ASC"
+	}
+	switch strings.ToLower(strings.TrimSpace(f.Sort)) {
+	case "level":
+		return notificationLevelOrderExpr() + ` ` + dirSQL + `, id ` + dirSQL
+	default: // created (and legacy when)
+		return `created_at ` + dirSQL + `, id ` + dirSQL
+	}
+}
+
+func levelEventPlaceholders(level string) string {
+	evs := EventsForLevel(level)
+	if len(evs) == 0 {
+		return "''"
+	}
+	parts := make([]string, len(evs))
+	for i, e := range evs {
+		parts[i] = "'" + strings.ReplaceAll(e, "'", "''") + "'"
+	}
+	return strings.Join(parts, ",")
+}
+
+func notificationLevelOrderExpr() string {
+	return `CASE
+		WHEN event IN (` + levelEventPlaceholders("alert") + `) THEN 0
+		WHEN event IN (` + levelEventPlaceholders("warning") + `) THEN 1
+		ELSE 2 END`
 }
 
 func scanNotification(row rowScanner) (Notification, error) {

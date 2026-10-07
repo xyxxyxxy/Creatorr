@@ -18,7 +18,7 @@
           <button type="button" class="btn btn-primary grow h-auto min-h-12 py-3 whitespace-normal js-add-series-pick" data-mode="url">
             <span class="flex flex-col gap-0.5 items-center text-center">
               <span class="font-semibold">From channel / playlist URL</span>
-              <span class="text-sm font-normal opacity-70">Fetch series metadata and add URL as first feed source.</span>
+              <span class="text-sm font-normal opacity-70">Fetch series metadata and add URL as first source.</span>
             </span>
           </button>
           <div class="divider">OR</div>
@@ -78,7 +78,6 @@
         {{template "series_settings_fields" (dict
           "DeliveryMode" "video"
           "TitleID" "add-series-title"
-          "Monitored" true
           "Roots" .Roots
           "Profiles" .Profiles
         )}}

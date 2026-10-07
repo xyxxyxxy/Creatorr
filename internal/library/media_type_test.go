@@ -18,7 +18,7 @@ func TestBuildDownloadMatchFilter(t *testing.T) {
 }
 
 func TestVideoListFilterMediaTypeActive(t *testing.T) {
-	if !(VideoListFilter{MediaType: "short"}).Active() {
+	if !(VideoListFilter{MediaTypes: []string{"short"}}).Active() {
 		t.Fatal("media_type should be active")
 	}
 }

@@ -1,5 +1,5 @@
 {{define "history_row"}}
-<tr class="hover">
+<tr class="row-hover">
   <td class="truncate"><a class="link link-hover" href="/task/{{.ID}}">{{.Kind}}</a></td>
   <td class="text-xs font-mono truncate">{{if .Domain}}{{.Domain}}{{else}}{{template "empty_value"}}{{end}}</td>
   <td class="font-mono text-xs truncate">{{if .Origin}}{{.Origin}}{{else}}{{template "empty_value"}}{{end}}</td>

@@ -5,6 +5,7 @@ function onMaintenancePage() {
 const maintenanceTaskKinds = new Set([
   "rename_episodes",
   "regenerate_nfo",
+  "reset_metadata_from_info",
   "integrity_check",
   "sync_files",
 ]);
@@ -13,6 +14,7 @@ const maintenanceTaskKinds = new Set([
 let maintenanceScope = {
   seriesIds: [],
   seriesTitles: [],
+  allLibrary: false,
 };
 
 /** Selected action values; restored after HTMX busy refresh. Cleared on Run. */
@@ -26,6 +28,7 @@ let maintenanceSeriesCatalogReady = false;
 let maintenanceSeriesCatalogPromise = null;
 
 const maintenanceActionLabels = {
+  reset_metadata_from_info: "Reset metadata from info.json",
   apply_episode_naming: "Apply episode format",
   regenerate_nfos: "Regenerate all NFO files",
   integrity_check: "Integrity check",
@@ -42,7 +45,11 @@ function escapeMaintenanceHtml(s) {
 }
 
 function clearMaintenanceScope() {
-  maintenanceScope = { seriesIds: [], seriesTitles: [] };
+  maintenanceScope = { seriesIds: [], seriesTitles: [], allLibrary: false };
+}
+
+function maintenanceScopeReady() {
+  return maintenanceScope.allLibrary || maintenanceScope.seriesIds.length > 0;
 }
 
 function ensureMaintenanceSeriesCatalog() {
@@ -77,12 +84,14 @@ function maintenanceSeriesById(id) {
 
 function maintenanceSeriesPosterHTML(s) {
   const fallback =
-    '<span class="bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></span>';
+    '<div class="bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></div>';
   if (!s || !s.poster_url) return fallback;
+  // Picker always returns poster_url; missing art 404s - swap to TV icon like Import.
   return (
     '<img class="size-8 rounded-full object-cover shrink-0" src="' +
     escapeMaintenanceHtml(s.poster_url) +
-    '" alt="" width="32" height="32" loading="lazy" />'
+    '" alt="" width="32" height="32" loading="lazy" onerror="this.onerror=null;this.classList.add(\'hidden\');this.nextElementSibling.classList.remove(\'hidden\')" />' +
+    '<div class="hidden bg-base-200 size-8 rounded-full flex items-center justify-center shrink-0" aria-hidden="true"><i data-lucide="tv" class="size-4 opacity-40"></i></div>'
   );
 }
 
@@ -164,12 +173,14 @@ function fillMaintenanceSeriesPickList(q) {
       );
     })
     .join("");
+  lucideRefreshMaintenance(ul);
 }
 
 function addMaintenanceSeries(id) {
   const n = Number(id);
   if (!(n > 0) || maintenanceScope.seriesIds.includes(n)) return;
   const s = maintenanceSeriesById(n);
+  maintenanceScope.allLibrary = false;
   maintenanceScope.seriesIds.push(n);
   maintenanceScope.seriesTitles.push((s && s.title) || "Series #" + n);
   refreshMaintenanceScopeUI();
@@ -184,18 +195,45 @@ function removeMaintenanceSeries(id) {
   refreshMaintenanceScopeUI();
 }
 
+function setMaintenanceAllLibrary(on) {
+  maintenanceScope.allLibrary = !!on;
+  if (maintenanceScope.allLibrary) {
+    maintenanceScope.seriesIds = [];
+    maintenanceScope.seriesTitles = [];
+    const dd = document.querySelector("details.js-maintenance-series-dd");
+    if (dd) dd.open = false;
+  }
+  refreshMaintenanceScopeUI();
+}
+
 function syncMaintenanceScopeFields() {
   const host = document.getElementById("maintenance-scope-fields");
   if (!host) return;
   host.innerHTML = "";
-  maintenanceScope.seriesIds.forEach((id) => {
-    const inp = document.createElement("input");
-    inp.type = "hidden";
-    inp.name = "series_ids";
-    inp.value = String(id);
-    host.appendChild(inp);
-  });
+  if (!maintenanceScope.allLibrary) {
+    maintenanceScope.seriesIds.forEach((id) => {
+      const inp = document.createElement("input");
+      inp.type = "hidden";
+      inp.name = "series_ids";
+      inp.value = String(id);
+      host.appendChild(inp);
+    });
+  }
   renderMaintenanceScopeChips();
+  const allEl = document.querySelector(".js-maintenance-scope-all");
+  if (allEl) allEl.checked = maintenanceScope.allLibrary;
+  const summary = document.querySelector(".js-maintenance-series-summary");
+  const dd = document.querySelector("details.js-maintenance-series-dd");
+  if (summary) {
+    if (maintenanceScope.allLibrary) {
+      summary.classList.add("pointer-events-none", "opacity-50");
+      summary.setAttribute("aria-disabled", "true");
+    } else {
+      summary.classList.remove("pointer-events-none", "opacity-50");
+      summary.removeAttribute("aria-disabled");
+    }
+  }
+  if (dd && maintenanceScope.allLibrary) dd.open = false;
 }
 
 function readMaintenanceActionChecks() {
@@ -219,37 +257,30 @@ function applyMaintenanceActionChecks() {
 function updateMaintenanceRunButton() {
   const btn = document.getElementById("maintenance-run-submit");
   const n = document.querySelectorAll(".js-maintenance-action:checked:not(:disabled)").length;
-  if (btn) btn.disabled = n === 0;
-  updateMaintenancePreviewButton();
+  if (btn) btn.disabled = n === 0 || !maintenanceScopeReady();
 }
 
-function updateMaintenancePreviewButton() {
-  const btn = document.getElementById("maintenance-preview-rename");
-  if (!btn) return;
+function applyEpisodeNamingSelected() {
   const applyEl = document.querySelector(
     '.js-maintenance-action[value="apply_episode_naming"]'
   );
-  const applyOn =
-    applyEl && applyEl.checked && !applyEl.disabled;
-  // Join tip stays on .btn.join-item; use aria-disabled (not :disabled) so seams + tip work.
-  if (applyOn) {
-    btn.removeAttribute("aria-disabled");
-    btn.classList.remove("cursor-not-allowed", "tooltip", "tooltip-top");
-    btn.removeAttribute("data-tip");
-  } else {
-    btn.setAttribute("aria-disabled", "true");
-    btn.classList.add("cursor-not-allowed", "tooltip", "tooltip-top");
-    btn.setAttribute("data-tip", "Select 'Apply episode format' to preview renames");
-  }
+  return !!(applyEl && applyEl.checked && !applyEl.disabled);
+}
+
+function closeMaintenanceRenamePreview() {
+  const toggle = document.getElementById("modal-maintenance-rename-preview");
+  if (toggle) toggle.checked = false;
 }
 
 function openMaintenanceRenamePreview() {
   const toggle = document.getElementById("modal-maintenance-rename-preview");
   const body = document.getElementById("maintenance-rename-preview-body");
   const form = document.getElementById("maintenance-run-form");
-  if (!toggle || !body || !form) return;
+  const cont = document.getElementById("maintenance-rename-preview-continue");
+  if (!toggle || !body || !form) return false;
   syncMaintenanceScopeFields();
   body.innerHTML = '<p class="text-sm opacity-60">Loading…</p>';
+  if (cont) cont.disabled = true;
   toggle.checked = true;
   const params = new URLSearchParams();
   const fd = new FormData(form);
@@ -268,14 +299,29 @@ function openMaintenanceRenamePreview() {
   })
     .then((res) => res.text())
     .then((html) => {
+      if (!toggle.checked) return;
       body.innerHTML = html;
+      if (cont) cont.disabled = false;
       if (window.lucide && typeof window.lucide.createIcons === "function") {
         window.lucide.createIcons();
       }
     })
     .catch(() => {
+      if (!toggle.checked) return;
       body.innerHTML = '<p class="text-sm text-error">Preview failed.</p>';
+      if (cont) cont.disabled = false;
     });
+  return true;
+}
+
+function startMaintenanceRunFlow() {
+  readMaintenanceActionChecks();
+  if (maintenanceSelectedActions.size === 0 || !maintenanceScopeReady()) return;
+  if (applyEpisodeNamingSelected()) {
+    openMaintenanceRenamePreview();
+    return;
+  }
+  openMaintenanceConfirm();
 }
 
 function refreshMaintenanceScopeUI() {
@@ -291,6 +337,7 @@ export function wireMaintenanceScope() {
 function selectedMaintenanceActionLabels() {
   readMaintenanceActionChecks();
   const order = [
+    "reset_metadata_from_info",
     "apply_episode_naming",
     "regenerate_nfos",
     "sync_files",
@@ -312,6 +359,7 @@ function openMaintenanceConfirm() {
   const externalBox = document.getElementById("maintenance-confirm-external");
   const externalText = document.getElementById("maintenance-confirm-external-text");
   const integrityBox = document.getElementById("maintenance-confirm-integrity");
+  const resetMetaBox = document.getElementById("maintenance-confirm-reset-meta");
   const form = document.getElementById("maintenance-run-form");
   const actionNames = selectedMaintenanceActionLabels();
   if (
@@ -324,7 +372,8 @@ function openMaintenanceConfirm() {
     !externalBox ||
     !externalText ||
     !form ||
-    actionNames.length === 0
+    actionNames.length === 0 ||
+    !maintenanceScopeReady()
   ) {
     return false;
   }
@@ -339,7 +388,12 @@ function openMaintenanceConfirm() {
     .join("");
   const nS = maintenanceScope.seriesIds.length;
   let lead = "";
-  if (nS > 0) {
+  if (maintenanceScope.allLibrary || nS === 0) {
+    lead = "Whole library:";
+    listEl.className =
+      "flex flex-col gap-1.5 w-full min-w-0 list-none p-0 m-0 max-h-60 overflow-y-auto mb-2";
+    listEl.innerHTML = maintenanceSeriesScopeRowHTML(null, "All series", false);
+  } else {
     lead = nS === 1 ? "1 series:" : nS + " series:";
     listEl.className =
       "flex flex-col gap-1.5 w-full min-w-0 list-none p-0 m-0 max-h-60 overflow-y-auto mb-2";
@@ -348,11 +402,6 @@ function openMaintenanceConfirm() {
         maintenanceSeriesScopeRowHTML(id, maintenanceScope.seriesTitles[i], false)
       )
       .join("");
-  } else {
-    lead = "Whole library:";
-    listEl.className =
-      "flex flex-col gap-1.5 w-full min-w-0 list-none p-0 m-0 max-h-60 overflow-y-auto mb-2";
-    listEl.innerHTML = maintenanceSeriesScopeRowHTML(null, "All series", false);
   }
   leadEl.textContent = lead;
   lucideRefreshMaintenance(listEl);
@@ -364,6 +413,13 @@ function openMaintenanceConfirm() {
       integrityBox.classList.remove("hidden");
     } else {
       integrityBox.classList.add("hidden");
+    }
+  }
+  if (resetMetaBox) {
+    if (maintenanceSelectedActions.has("reset_metadata_from_info")) {
+      resetMetaBox.classList.remove("hidden");
+    } else {
+      resetMetaBox.classList.add("hidden");
     }
   }
   toggle.checked = true;
@@ -457,10 +513,11 @@ export function bootMaintenance() {
         if (qEl) qEl.value = "";
         return;
       }
-      if (ev.target.closest("#maintenance-preview-rename")) {
-        const btn = document.getElementById("maintenance-preview-rename");
-        if (!btn || btn.getAttribute("aria-disabled") === "true") return;
-        openMaintenanceRenamePreview();
+      if (ev.target.closest("#maintenance-rename-preview-continue")) {
+        const cont = document.getElementById("maintenance-rename-preview-continue");
+        if (cont && cont.disabled) return;
+        closeMaintenanceRenamePreview();
+        openMaintenanceConfirm();
         return;
       }
       if (ev.target.closest("#maintenance-confirm-submit")) {
@@ -480,6 +537,10 @@ export function bootMaintenance() {
       const dd = ev.target;
       if (!(dd instanceof HTMLDetailsElement) || !dd.open) return;
       if (!dd.classList.contains("js-maintenance-series-dd")) return;
+      if (maintenanceScope.allLibrary) {
+        dd.open = false;
+        return;
+      }
       const qEl = dd.querySelector(".js-maintenance-series-q");
       ensureMaintenanceSeriesCatalog().then(() => {
         fillMaintenanceSeriesPickList(qEl ? qEl.value : "");
@@ -500,7 +561,12 @@ export function bootMaintenance() {
     });
     document.addEventListener("change", (ev) => {
       if (!onMaintenancePage()) return;
-      if (!ev.target || !ev.target.classList || !ev.target.classList.contains("js-maintenance-action")) {
+      if (!ev.target || !ev.target.classList) return;
+      if (ev.target.classList.contains("js-maintenance-scope-all")) {
+        setMaintenanceAllLibrary(ev.target.checked);
+        return;
+      }
+      if (!ev.target.classList.contains("js-maintenance-action")) {
         return;
       }
       readMaintenanceActionChecks();
@@ -515,9 +581,7 @@ export function bootMaintenance() {
         return;
       }
       ev.preventDefault();
-      readMaintenanceActionChecks();
-      if (maintenanceSelectedActions.size === 0) return;
-      openMaintenanceConfirm();
+      startMaintenanceRunFlow();
     });
   }
 }

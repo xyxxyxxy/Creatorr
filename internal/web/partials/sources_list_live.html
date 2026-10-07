@@ -1,0 +1,172 @@
+{{define "sources_list_live"}}
+<div id="sources-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
+     data-filter-total="{{.FilterTotal}}"
+     data-view-mode="{{.ViewMode}}"
+     data-list-mode="{{.ListMode}}"
+     data-loaded-through="{{.Load.Through}}"
+     data-through-clamped="{{if .Load.ThroughClamped}}1{{else}}0{{end}}"
+     data-loaded-count="{{.Load.LoadedCount}}"
+     data-series-id="{{.SeriesID}}"
+     data-bulk-mode="0">
+{{if and .ShowToolbar (or .Sources .FilterActive)}}
+{{template "list_view_toolbar" .SourceFilter}}
+{{end}}
+{{if not .Sources}}
+{{if .FilterActive}}
+{{template "list_empty" "No sources match the filters."}}
+{{else if eq .SeriesID 0}}
+{{template "list_empty" "No sources indexed yet."}}
+{{else}}
+{{template "list_empty" "No sources on this series yet."}}
+{{end}}
+{{else}}
+{{if .SourcesBulkMode}}{{template "sources_bulk_bar" .}}{{end}}
+{{if and .ShowToolbar (ne .ViewMode "table")}}{{template "list_load_controls" .}}{{end}}
+{{if eq .ViewMode "table"}}
+{{template "sources_table" .}}
+{{else}}
+<ul class="list bg-base-100 rounded-box border border-base-300" id="sources-list-rows">
+  {{template "sources_rows_inner" .}}
+  {{if and .ShowToolbar (eq .ListMode "infinite")}}{{template "list_infinite_sentinel" .}}{{end}}
+</ul>
+{{end}}
+{{if and .ShowToolbar (ne .ViewMode "table")}}{{template "list_load_controls" .}}{{end}}
+{{end}}
+{{if .ShowRowActions}}{{template "sources_row_modals" .}}{{end}}
+{{if .SourcesBulkMode}}{{template "sources_bulk_modals" .}}{{end}}
+</div>
+{{end}}
+
+{{define "sources_rows_inner"}}
+{{range .Sources}}
+{{template "sources_list_row" .}}
+{{end}}
+{{end}}
+
+{{define "sources_infinite_chunk"}}
+<div data-infinite-chunk>
+  {{template "sources_rows_inner" .}}
+  {{template "list_infinite_sentinel" .}}
+  {{if .ShowRowActions}}{{template "sources_row_modals" .}}{{end}}
+</div>
+{{end}}
+
+{{define "sources_list_row"}}
+<li class="list-row" data-source-id="{{.ID}}" style="--list-grid-cols: {{if .Selectable}}max-content {{end}}1fr{{if .ShowRowActions}} max-content{{end}}">
+  {{if .Selectable}}
+  <div class="self-center shrink-0 hidden" data-source-select-wrap>
+    <input type="checkbox" class="checkbox checkbox-sm js-source-select" value="{{.ID}}"
+           aria-label="Select source" />
+  </div>
+  {{end}}
+  <div class="list-col-grow min-w-0 self-center">
+    <div class="flex items-center gap-2 min-w-0">
+      {{if and .Label.Valid .Label.String}}
+      <a class="link link-hover font-medium min-w-0 truncate tooltip tooltip-top" href="/series/{{.SeriesID}}/sources/{{.ID}}" data-tip="{{.URL}}">{{.Label.String}}</a>
+      {{else}}
+      <a class="link link-hover font-medium break-all min-w-0" href="/series/{{.SeriesID}}/sources/{{.ID}}">{{displayURL .URL}}</a>
+      {{end}}
+    </div>
+    {{if .ShowSeries}}
+    <div class="text-xs opacity-60 truncate">
+      <a class="link link-hover" href="/series/{{.SeriesID}}">{{.SeriesTitle}}</a>
+    </div>
+    {{end}}
+    {{template "source_list_meta" .}}
+    {{template "source_stalled" .}}
+  </div>
+  {{if .ShowRowActions}}
+  <div class="self-center justify-self-end whitespace-nowrap" data-sources-row-actions>
+    <div class="join shrink-0">
+      {{template "source_scan_actions" .}}
+      <label for="modal-edit-source-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+        <i data-lucide="pencil" class="size-3.5"></i>
+      </label>
+      <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+        <i data-lucide="trash-2" class="size-3.5"></i>
+      </label>
+    </div>
+  </div>
+  {{end}}
+</li>
+{{end}}
+
+{{define "sources_table"}}
+{{/* Dot: sourcesListLiveData */}}
+<div data-list-table>
+  {{template "list_table_chrome" (dict
+    "Page" .Page
+    "Noun" "sources"
+    "Cols" .TableCols
+    "CookieName" .TableColsCookie
+  )}}
+  <div class="list-table-wrap rounded-box border border-base-300">
+    <table class="table table-sm list-table w-full">
+      <thead>
+        <tr>
+          {{if $.SourcesBulkMode}}<th class="w-0 hidden" data-source-select-wrap aria-hidden="true"></th>{{end}}
+          {{range .TableCols}}
+          {{template "list_table_th" (dict "Col" . "LiveTarget" $.Page.LiveTarget)}}
+          {{end}}
+          {{if .ShowRowActions}}<th class="w-0"></th>{{end}}
+        </tr>
+      </thead>
+      <tbody id="sources-list-rows">
+        {{range .Sources}}
+        <tr class="row-hover" data-source-id="{{.ID}}">
+          {{if $.SourcesBulkMode}}
+          <td class="hidden w-0 align-middle" data-source-select-wrap>
+            <input type="checkbox" class="checkbox checkbox-sm js-source-select" value="{{.ID}}"
+                   aria-label="Select source" />
+          </td>
+          {{end}}
+          {{$row := .}}
+          {{range $.TableCols}}
+          <td data-col="{{.Key}}" class="align-middle{{if not .Visible}} hidden{{end}}">
+            {{if eq .Key "series"}}
+            <a class="link link-hover" href="/series/{{$row.SeriesID}}">{{$row.SeriesTitle}}</a>
+            {{else if eq .Key "discovered"}}
+            {{template "source_discovered_cell" $row}}
+            {{else if eq .Key "name"}}
+            {{if and $row.Label.Valid $row.Label.String}}
+            <a class="link link-hover font-medium min-w-0 truncate" href="/series/{{$row.SeriesID}}/sources/{{$row.ID}}">{{$row.Label.String}}</a>
+            {{else}}
+            <span class="opacity-40">-</span>
+            {{end}}
+            {{template "source_stalled" $row}}
+            {{else if eq .Key "url"}}
+            <a class="link link-hover text-sm break-all min-w-0" href="/series/{{$row.SeriesID}}/sources/{{$row.ID}}">{{displayURL $row.URL}}</a>
+            {{else if eq .Key "domain"}}
+            {{if $row.DomainHost}}<span class="text-sm opacity-80">{{$row.DomainHost}}</span>{{else}}<span class="opacity-40">-</span>{{end}}
+            {{else if eq .Key "last_scanned"}}
+            {{if $row.LastScannedAgo}}
+            <span class="text-sm opacity-80 tabular-nums{{if $row.LastScannedTip}} tooltip tooltip-top{{end}}"{{if $row.LastScannedTip}} data-tip="{{$row.LastScannedTip}}"{{end}}>{{$row.LastScannedAgo}}</span>
+            {{else}}
+            <span class="opacity-40">never</span>
+            {{end}}
+            {{else if eq .Key "status"}}
+            {{template "source_status_cell" $row.StatusInd}}
+            {{end}}
+          </td>
+          {{end}}
+          {{if $.ShowRowActions}}
+          <td class="whitespace-nowrap text-end">
+            <div class="join shrink-0" data-sources-row-actions>
+              {{template "source_scan_actions" .}}
+              <label for="modal-edit-source-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+                <i data-lucide="pencil" class="size-3.5"></i>
+              </label>
+              <label for="modal-delete-source-{{.ID}}" class="btn btn-soft btn-error btn-xs btn-square join-item tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
+                <i data-lucide="trash-2" class="size-3.5"></i>
+              </label>
+            </div>
+          </td>
+          {{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{template "pagination" .Page}}
+</div>
+{{end}}

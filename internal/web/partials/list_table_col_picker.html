@@ -1,0 +1,24 @@
+{{define "list_table_col_picker"}}
+{{/* Dot: Cols []tableCol, CookieName string - place above the wrap so the menu is not clipped.
+     Opens right (leading edge): chrome parks this control left of the summary. */}}
+<div class="dropdown dropdown-bottom">
+  <div tabindex="0" role="button"
+       class="btn btn-ghost btn-square btn-sm tooltip tooltip-right"
+       aria-label="Table columns" data-tip="Columns">
+    <i data-lucide="settings-2" class="size-4" aria-hidden="true"></i>
+  </div>
+  <ul tabindex="0" class="dropdown-content menu z-[60] mt-1 p-2 shadow-lg bg-base-100 rounded-box border border-base-300 w-56"
+      data-list-table-cols
+      data-cols-cookie="{{.CookieName}}">
+    {{range .Cols}}
+    <li>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" class="checkbox checkbox-sm" data-table-col="{{.Key}}"
+               {{if .Visible}}checked{{end}} />
+        <span>{{.Label}}</span>
+      </label>
+    </li>
+    {{end}}
+  </ul>
+</div>
+{{end}}

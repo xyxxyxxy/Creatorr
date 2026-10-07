@@ -3,8 +3,11 @@ package web_test
 import (
 	"bytes"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,6 +19,7 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/db"
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/notify"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
 	"github.com/xyxxyxxy/Creatorr/internal/settings"
 	"github.com/xyxxyxxy/Creatorr/internal/web"
@@ -173,6 +177,15 @@ func TestSeriesListAudioQualityShowsBest(t *testing.T) {
 	if !strings.Contains(body, "modal-bulk-edit-series") || !strings.Contains(body, "modal-bulk-edit-series-metadata") {
 		t.Fatalf("missing bulk edit modals: %s", truncate(body, 500))
 	}
+	if !strings.Contains(body, "data-series-bulk-edit") || !strings.Contains(body, "data-series-bulk-metadata") {
+		t.Fatalf("missing series bulk Edit / Edit metadata (btn_labeled): %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, "data-series-bulk-monitor") || !strings.Contains(body, "data-series-bulk-unmonitor") {
+		t.Fatalf("missing series bulk Monitor/Unmonitor actions: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, `action="/actions/bulk-set-series-monitored"`) {
+		t.Fatalf("missing bulk set-series-monitored forms: %s", truncate(body, 500))
+	}
 	if !strings.Contains(body, "monitor-toggle-root") || !strings.Contains(body, "data-series-monitor-wrap") {
 		t.Fatalf("series list missing monitor AsButton wrap: %s", truncate(body, 400))
 	}
@@ -298,8 +311,24 @@ func TestOverviewRenders(t *testing.T) {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `href="/"`) || !strings.Contains(body, "Creatorr") {
-		t.Fatalf("missing brand link to overview: %s", truncate(body, 400))
+	if !strings.Contains(body, `id="notify-badge"`) || !strings.Contains(body, `badge-info`) {
+		t.Fatalf("empty notify badge should render info chrome: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, `id="notify-badge" class="badge badge-xs absolute top-1 right-1 hidden badge-info"`) {
+		t.Fatalf("zero unread notify badge must stay hidden info: %s", truncate(body, 400))
+	}
+	if _, err := notify.InsertNotification(d, notify.EventCookieInvalid, "cookie", "bad", 0, false, ""); err != nil {
+		t.Fatal(err)
+	}
+	rec2 := httptest.NewRecorder()
+	r.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec2.Code != 200 {
+		t.Fatalf("status %d: %s", rec2.Code, rec2.Body.String())
+	}
+	body2 := rec2.Body.String()
+	if !strings.Contains(body2, `id="notify-badge" class="badge badge-xs absolute top-1 right-1 badge-error"`) ||
+		!strings.Contains(body2, `>1</span>`) {
+		t.Fatalf("unread alert must SSR badge-error count: %s", truncate(body2, 500))
 	}
 	if strings.Contains(body, ">Overview</a>") {
 		t.Fatalf("overview should not be a nav menu item: %s", truncate(body, 400))
@@ -316,15 +345,84 @@ func TestOverviewRenders(t *testing.T) {
 	if !strings.Contains(body, "stat-title") || !strings.Contains(body, "On disk") {
 		t.Fatalf("missing stat blocks: %s", truncate(body, 400))
 	}
+	if !strings.Contains(body, "Downloaded / indexed") {
+		t.Fatalf("videos stat must show downloaded / indexed: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, "Most wanted") {
+		t.Fatalf("missing most wanted section: %s", truncate(body, 400))
+	}
 	if !strings.Contains(body, "Recent additions") {
 		t.Fatalf("missing recent additions section: %s", truncate(body, 400))
 	}
-	if strings.Contains(body, "Running tasks") {
-		t.Fatalf("running tasks section should hide when empty: %s", truncate(body, 400))
+	if !strings.Contains(body, "Recent tasks") || !strings.Contains(body, "No tasks.") {
+		t.Fatalf("recent tasks section must show empty state: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `id="tasks-list-live"`) || !strings.Contains(body, `data-list-mode="fixed"`) {
+		t.Fatalf("overview recent tasks must use locked tasks Explorer: %s", truncate(body, 600))
+	}
+	if !overviewBrowseHrefHas(body, map[string][]string{
+		"type": {"series"},
+		"sort": {"wanted"},
+		"view": {"gallery"},
+	}) {
+		t.Fatalf("most wanted Browse must open Browser Series wanted gallery: %s", truncate(body, 800))
+	}
+	if !overviewBrowseHrefHas(body, map[string][]string{
+		"type":   {"videos"},
+		"status": {"downloaded"},
+		"sort":   {"acquired"},
+		"view":   {"gallery"},
+	}) {
+		t.Fatalf("recent additions Browse must open Browser Videos downloaded/acquired gallery: %s", truncate(body, 800))
+	}
+	if !overviewBrowseHrefHas(body, map[string][]string{
+		"type":   {"tasks"},
+		"status": {queue.StatusDone, queue.StatusFailed, queue.StatusCancelled},
+		"sort":   {queue.TaskSortCreated},
+	}) {
+		t.Fatalf("empty overview Recent tasks Browse must open finished Browser Tasks filter: %s", truncate(body, 800))
+	}
+	if strings.Contains(body, `id="overview-recent-list"`) {
+		t.Fatalf("overview Recent must stay gallery, not list: %s", truncate(body, 400))
+	}
+	if strings.Contains(body, `id="overview-recent-gallery"`) &&
+		!strings.Contains(body, `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`) {
+		t.Fatalf("overview Recent gallery must match Browser Videos gallery grid: %s", truncate(body, 400))
+	}
+	// Empty library: Most wanted stays empty (no gallery grid to assert).
+
+	idxRecent := strings.Index(body, "Recent additions")
+	idxWanted := strings.Index(body, "Most wanted")
+	idxTasks := strings.Index(body, "Recent tasks")
+	if idxRecent < 0 || idxWanted < 0 || idxTasks < 0 || idxRecent >= idxWanted || idxWanted >= idxTasks {
+		t.Fatalf("overview order must be Recent additions, Most wanted, Recent tasks")
 	}
 }
 
-func TestOverviewShowsRunningTasks(t *testing.T) {
+func TestOverviewWantedGalleryMatchesSeriesGalleryGrid(t *testing.T) {
+	b, err := os.ReadFile("templates/overview.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(b)
+	start := strings.Index(body, `id="overview-wanted-gallery"`)
+	if start < 0 {
+		t.Fatal("overview-wanted-gallery missing")
+	}
+	tag := body[:start]
+	if i := strings.LastIndex(tag, "<ul"); i >= 0 {
+		tag = tag[i:]
+	}
+	want := `grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7`
+	if !strings.Contains(tag, want) {
+		t.Fatalf("Most wanted must use Browser Series gallery grid %q, got %q", want, tag)
+	}
+	if web.OverviewGalleryRow != 6 {
+		t.Fatalf("OverviewGalleryRow=%d want 6 (one lg series-gallery row)", web.OverviewGalleryRow)
+	}
+}
+
+func TestOverviewShowsRecentTasks(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -338,14 +436,14 @@ func TestOverviewShowsRunningTasks(t *testing.T) {
 
 	pendingID, err := q.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindScan, Domain: "example.com", Message: "queued only",
+		Kind:   queue.KindScan, Domain: "example.com", Message: "queued only",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	runningID, err := q.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindDownload, Domain: "cdn.example", Message: "Fetching",
+		Kind:   queue.KindDownload, Domain: "cdn.example", Message: "Fetching",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -365,11 +463,21 @@ func TestOverviewShowsRunningTasks(t *testing.T) {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Running tasks") {
-		t.Fatalf("missing running tasks section: %s", truncate(body, 400))
+	if !strings.Contains(body, "Recent tasks") {
+		t.Fatalf("missing recent tasks section: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, `data-overview-running-task="`+strconv.FormatInt(runningID, 10)+`"`) {
+	if !overviewBrowseHrefHas(body, map[string][]string{
+		"type":   {"tasks"},
+		"status": {queue.StatusPending, queue.StatusRunning},
+		"sort":   {queue.TaskSortQueue},
+	}) {
+		t.Fatalf("open overview Recent tasks Browse must open pending+running Browser Tasks: %s", truncate(body, 800))
+	}
+	if !strings.Contains(body, `id="task-row-`+strconv.FormatInt(runningID, 10)+`"`) {
 		t.Fatalf("missing running task row: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, `id="task-row-`+strconv.FormatInt(pendingID, 10)+`"`) {
+		t.Fatalf("queued task must appear in overview recent tasks: %s", truncate(body, 600))
 	}
 	if !strings.Contains(body, "download") || !strings.Contains(body, "cdn.example") {
 		t.Fatalf("missing kind/domain on running row: %s", truncate(body, 600))
@@ -377,16 +485,70 @@ func TestOverviewShowsRunningTasks(t *testing.T) {
 	if !strings.Contains(body, `href="/task/`+strconv.FormatInt(runningID, 10)+`"`) {
 		t.Fatalf("running row must link to task detail: %s", truncate(body, 600))
 	}
-	if strings.Contains(body, `data-overview-running-task="`+strconv.FormatInt(pendingID, 10)+`"`) {
-		t.Fatalf("pending task must not appear in running list")
-	}
 	if strings.Contains(body, "/actions/cancel-task") {
-		t.Fatalf("overview running list must not offer cancel")
+		t.Fatalf("overview recent tasks must not offer cancel")
 	}
-	idxRun := strings.Index(body, "Running tasks")
+	if strings.Contains(body, "list_view_toolbar") || strings.Contains(body, `aria-label="Task filters"`) {
+		t.Fatalf("overview recent tasks must omit Filter toolbar: %s", truncate(body, 600))
+	}
 	idxRecent := strings.Index(body, "Recent additions")
-	if idxRun < 0 || idxRecent < 0 || idxRun > idxRecent {
-		t.Fatalf("running tasks must appear above recent additions")
+	idxWanted := strings.Index(body, "Most wanted")
+	idxTasks := strings.Index(body, "Recent tasks")
+	if idxRecent < 0 || idxWanted < 0 || idxTasks < 0 || idxRecent >= idxWanted || idxWanted >= idxTasks {
+		t.Fatalf("overview order must be Recent additions, Most wanted, Recent tasks")
+	}
+
+	// Cap at 4 open tasks.
+	for i := 0; i < 5; i++ {
+		if _, err := q.Enqueue(queue.EnqueueParams{
+			Origin: queue.OriginManual,
+			Kind:   queue.KindScan, Domain: "example.com", Message: "extra " + strconv.Itoa(i),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status %d after extras: %s", rec.Code, rec.Body.String())
+	}
+	body = rec.Body.String()
+	if got := strings.Count(body, `id="task-row-`); got != web.OverviewTasksFixed {
+		t.Fatalf("overview recent tasks want %d rows, got %d", web.OverviewTasksFixed, got)
+	}
+
+	// Idle queues: fall back to newest finished.
+	if _, err := d.SQL.Exec(`UPDATE tasks SET status = ?`, queue.StatusDone); err != nil {
+		t.Fatal(err)
+	}
+	doneID, err := q.Enqueue(queue.EnqueueParams{
+		Origin: queue.OriginManual,
+		Kind:   queue.KindSyncFiles, Domain: "system", Message: "finished glance",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SQL.Exec(`UPDATE tasks SET status = ? WHERE id = ?`, queue.StatusDone, doneID); err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status %d when idle: %s", rec.Code, rec.Body.String())
+	}
+	body = rec.Body.String()
+	if !strings.Contains(body, `id="task-row-`+strconv.FormatInt(doneID, 10)+`"`) {
+		t.Fatalf("idle overview must show finished task: %s", truncate(body, 600))
+	}
+	if strings.Count(body, `id="task-row-`) > web.OverviewTasksFixed {
+		t.Fatalf("idle overview must still cap at %d rows", web.OverviewTasksFixed)
+	}
+	if !overviewBrowseHrefHas(body, map[string][]string{
+		"type":   {"tasks"},
+		"status": {queue.StatusDone, queue.StatusFailed, queue.StatusCancelled},
+		"sort":   {queue.TaskSortCreated},
+	}) {
+		t.Fatalf("idle overview Recent tasks Browse must open finished Browser Tasks filter: %s", truncate(body, 800))
 	}
 }
 
@@ -634,6 +796,15 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			}
 			continue
 		}
+		if path == "/history" {
+			if rec.Code != http.StatusFound {
+				t.Fatalf("/history want 302, got %d: %s", rec.Code, rec.Body.String())
+			}
+			if loc := rec.Header().Get("Location"); !strings.Contains(loc, "type=tasks") {
+				t.Fatalf("/history redirect=%q", loc)
+			}
+			continue
+		}
 		if rec.Code != 200 {
 			t.Fatalf("%s status %d: %s", path, rec.Code, rec.Body.String())
 		}
@@ -771,27 +942,18 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			continue
 		}
 		if path == "/history" {
-			body := rec.Body.String()
-			if !strings.Contains(body, `id="notifications"`) || !strings.Contains(body, "Finished tasks") {
-				t.Fatalf("/history missing notification/task sections")
-			}
-			if !strings.Contains(body, `name="origin"`) || !strings.Contains(body, "All origins") {
-				t.Fatalf("/history missing origin filter select")
-			}
-			if strings.Contains(body, `class="tooltip tooltip-top join-item"`) {
-				t.Fatalf("/history range clear must not wrap join-item around the button")
-			}
-			if !strings.Contains(body, `data-tip="Clear time range"`) || !strings.Contains(body, `input join-item tooltip tooltip-top`) {
-				t.Fatalf("/history range clear missing join-item tip on the control")
-			}
+			continue
 		}
 		if path == "/tasks" {
 			body := rec.Body.String()
 			if !strings.Contains(body, "interactive") || !strings.Contains(body, "Pausing a domain") {
 				t.Fatalf("/tasks missing interactive/pause note")
 			}
+			if !strings.Contains(body, `id="tasks-list-live"`) {
+				t.Fatalf("/tasks missing tasks-list-live")
+			}
 			if !strings.Contains(body, `data-scheduled-task`) || !strings.Contains(body, "download_wanted") || !strings.Contains(body, queue.KindSyncFiles) {
-				t.Fatalf("/tasks missing scheduled task rows on system lane")
+				t.Fatalf("/tasks missing scheduled task rows")
 			}
 			if !strings.Contains(body, `action="/actions/run-scheduled"`) || !strings.Contains(body, `data-tip="Queue now"`) {
 				t.Fatalf("/tasks missing queue-now on scheduled rows")
@@ -903,11 +1065,14 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, `action="/actions/maintenance-run"`) {
 				t.Fatalf("%s missing maintenance-run form", path)
 			}
-			if !strings.Contains(body, `id="maintenance-preview-rename"`) || !strings.Contains(body, "Preview renames") {
-				t.Fatalf("%s missing Preview renames", path)
+			if !strings.Contains(body, `id="maintenance-run-submit"`) || !strings.Contains(body, "Run selected") {
+				t.Fatalf("%s missing Run selected", path)
 			}
-			if !strings.Contains(body, `id="modal-maintenance-rename-preview"`) {
-				t.Fatalf("%s missing rename preview modal", path)
+			if strings.Contains(body, `id="maintenance-preview-rename"`) || strings.Contains(body, "Preview renames") {
+				t.Fatalf("%s still has standalone Preview renames", path)
+			}
+			if !strings.Contains(body, `id="modal-maintenance-rename-preview"`) || !strings.Contains(body, `id="maintenance-rename-preview-continue"`) {
+				t.Fatalf("%s missing rename preview Continue step", path)
 			}
 			if !strings.Contains(body, `id="maintenance-confirm-affected"`) || !strings.Contains(body, `id="maintenance-confirm-external"`) {
 				t.Fatalf("%s missing confirm affected/external chrome", path)
@@ -921,6 +1086,12 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "Refresh sidecars") {
 				t.Fatalf("%s missing refresh sidecars", path)
 			}
+			if !strings.Contains(body, "Danger zone") || !strings.Contains(body, `value="reset_metadata_from_info"`) {
+				t.Fatalf("%s missing danger zone reset metadata", path)
+			}
+			if !strings.Contains(body, `id="maintenance-confirm-reset-meta"`) {
+				t.Fatalf("%s missing reset metadata confirm alert", path)
+			}
 			if !strings.Contains(body, "File sync") || !strings.Contains(body, `value="sync_files"`) {
 				t.Fatalf("%s missing file sync", path)
 			}
@@ -929,6 +1100,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			}
 			if !strings.Contains(body, "maintenance-scope-chips") || !strings.Contains(body, "js-maintenance-series-dd") {
 				t.Fatalf("%s missing maintenance series scope picker", path)
+			}
+			if !strings.Contains(body, "js-maintenance-scope-all") || !strings.Contains(body, "All series") {
+				t.Fatalf("%s missing All series scope checkbox", path)
 			}
 			if strings.Contains(body, "modal-library-picker") || strings.Contains(body, "maintenance-scope-choose") {
 				t.Fatalf("%s still has removed library picker / Choose scope", path)
@@ -971,7 +1145,7 @@ func TestTaskDetailPage(t *testing.T) {
 
 	tid, err := q.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindScan, Domain: "system", Message: "scan",
+		Kind:   queue.KindScan, Domain: "system", Message: "scan",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1185,7 +1359,7 @@ func TestTaskDetailRenameEpisodesList(t *testing.T) {
 
 	tid, err := q.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindRenameEpisodes, Domain: queue.SystemDomain, Message: "Rename",
+		Kind:   queue.KindRenameEpisodes, Domain: queue.SystemDomain, Message: "Rename",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1248,7 +1422,7 @@ func TestSourceDetailPage(t *testing.T) {
 	_, _ = q.CancelAll()
 	tid, err := q.Enqueue(queue.EnqueueParams{
 		Origin: queue.OriginManual,
-		Kind: queue.KindScan, Domain: "example.com", Message: "Scan: indexed 1 videos",
+		Kind:   queue.KindScan, Domain: "example.com", Message: "Scan: indexed 1 videos",
 		SeriesID: ser.ID,
 		Payload:  map[string]any{"source_id": src.ID},
 	})
@@ -1357,8 +1531,22 @@ func TestStaticCSS(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("status %d", rec.Code)
 	}
-	if !bytes.Contains(rec.Body.Bytes(), []byte("--p")) && rec.Body.Len() < 1000 {
-		t.Fatalf("css too small: %d", rec.Body.Len())
+	css := rec.Body.Bytes()
+	if !bytes.Contains(css, []byte("--p")) && len(css) < 1000 {
+		t.Fatalf("css too small: %d", len(css))
+	}
+	// Filter/Sort/View menus sit in .input.join-item; open state must overlay
+	// (not grow the join) when keep-open uses .dropdown-open after HTMX.
+	for _, pin := range []string{
+		"js-list-toolbar-dd.dropdown-open",
+		"position:absolute!important",
+		".btn.btn-soft.btn-accent:is([type=checkbox],[type=radio]):checked",
+		".btn.btn-accent:not(.btn-soft):is([type=checkbox],[type=radio]):checked",
+		".js-list-toolbar-dd.input.is-bulk-on",
+	} {
+		if !bytes.Contains(css, []byte(pin)) {
+			t.Fatalf("app.css missing toolbar dropdown overlay pin %q", pin)
+		}
 	}
 }
 
@@ -1405,7 +1593,7 @@ func TestSetSeriesMonitoredHTMX(t *testing.T) {
 	}
 }
 
-func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
+func TestSeriesDetailHasMonitoredActionNotOnEditForm(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -1441,14 +1629,27 @@ func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if strings.Contains(body, "monitor-toggle-root") || strings.Contains(body, `action="/actions/set-series-monitored"`) {
-		t.Fatalf("series detail should not use bookmark monitor toggle: %s", truncate(body, 400))
+	if !strings.Contains(body, "monitor-toggle-root") || !strings.Contains(body, `action="/actions/set-series-monitored"`) {
+		t.Fatalf("series detail missing monitor action: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, `name="monitored"`) || !strings.Contains(body, "Monitored") {
-		t.Fatalf("series detail edit form missing monitored select: %s", truncate(body, 400))
+	// Detail BtnClass path: outline bookmark only (no green fill).
+	if idx := strings.Index(body, `data-tip="Unmonitor"`); idx >= 0 {
+		snip := body[idx:]
+		if len(snip) > 180 {
+			snip = snip[:180]
+		}
+		if strings.Contains(snip, "text-success") || strings.Contains(snip, "fill-current") {
+			t.Fatalf("series detail monitor btn must not use filled success icon: %s", snip)
+		}
 	}
-	if !strings.Contains(body, `<option value="1"`) || !strings.Contains(body, `<option value="0"`) {
-		t.Fatalf("series detail monitored should be Yes/No select: %s", truncate(body, 400))
+	if i := strings.Index(body, `id="modal-edit-series"`); i >= 0 {
+		edit := body[i:]
+		if j := strings.Index(edit, `id="modal-edit-series-metadata"`); j > 0 {
+			edit = edit[:j]
+		}
+		if strings.Contains(edit, `name="monitored"`) {
+			t.Fatalf("series detail edit form must not include monitored: %s", truncate(edit, 400))
+		}
 	}
 	if strings.Contains(body, "delivery-mode-join") {
 		t.Fatalf("series detail should use delivery select, not radio join: %s", truncate(body, 400))
@@ -1456,14 +1657,500 @@ func TestSeriesDetailHasMonitoredOnEditForm(t *testing.T) {
 	if !strings.Contains(body, `name="delivery_mode"`) {
 		t.Fatalf("series detail missing delivery select: %s", truncate(body, 400))
 	}
+	if strings.Contains(body, "data-video-bulk-mode") || strings.Contains(body, "modal-bulk-edit-videos-metadata") {
+		t.Fatalf("series detail Videos glance must omit multi-select bulk: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, "Browse all") || !strings.Contains(body, `data-view-mode="gallery"`) {
+		t.Fatalf("series detail Videos glance missing Browse all / locked gallery: %s", truncate(body, 500))
+	}
+}
+
+func TestSeriesDetailImportRowFiltersVideos(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
+		SeriesID:   ser.ID,
+		Title:      "Imported",
+		UploadDate: "2024-01-02T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 400))
+	}
+	body := rec.Body.String()
+	// url.Values.Encode sorts keys; html/template escapes & in attrs.
+	wantHref := `/browser?series=` + itoa(ser.ID) + `&amp;sort=acquired&amp;source=import&amp;type=videos`
+	importIdx := strings.Index(body, `aria-label="Show imported videos"`)
+	if importIdx < 0 {
+		t.Fatalf("Import row missing: %s", truncate(body, 600))
+	}
+	// Anchor opens before aria-label; grab a window that includes href=.
+	start := importIdx - 200
+	if start < 0 {
+		start = 0
+	}
+	chunk := body[start:min(importIdx+80, len(body))]
+	if !strings.Contains(chunk, `href="`+wantHref+`"`) {
+		t.Fatalf("Import row missing Browse href: %s", truncate(chunk, 400))
+	}
+	if strings.Contains(chunk, `hx-get=`) || strings.Contains(chunk, `hx-target=`) {
+		t.Fatalf("Import row must be a plain Browser link: %s", truncate(chunk, 400))
+	}
+	liveIdx := strings.Index(body, `id="sources-list-live"`)
+	if liveIdx < 0 || importIdx < liveIdx {
+		t.Fatalf("Import row should sit after Sources Explorer (live=%d import=%d)", liveIdx, importIdx)
+	}
+}
+
+func TestSeriesVideosGlanceOneGalleryRow(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < web.SeriesVideoGlanceSize+1; i++ {
+		if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
+			SeriesID:   ser.ID,
+			Title:      "V" + itoa(int64(i)),
+			UploadDate: "2024-01-02T00:00:00Z",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID)+"?q=test&view=list&page=2", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 400))
+	}
+	body := rec.Body.String()
+	liveStart := strings.Index(body, `id="series-videos-live"`)
+	if liveStart < 0 {
+		t.Fatal("series Videos live missing")
+	}
+	// Next major section after Videos (Notes or Files); avoid matching data-*-id=.
+	liveEndRel := strings.Index(body[liveStart:], `id="files-list-live"`)
+	if liveEndRel < 0 {
+		liveEndRel = strings.Index(body[liveStart:], `>Notes<`)
+	}
+	if liveEndRel < 0 {
+		liveEndRel = len(body) - liveStart
+	}
+	live := body[liveStart : liveStart+liveEndRel]
+	if strings.Contains(live, `aria-label="Video filters"`) || strings.Contains(live, `aria-label="Active filters"`) {
+		t.Fatalf("series Videos glance must omit filter bar: %s", truncate(live, 800))
+	}
+	if strings.Contains(live, `data-lucide="chevron-first"`) || strings.Contains(live, `data-list-mode="paginated"`) {
+		t.Fatalf("series Videos glance must not paginate: %s", truncate(live, 600))
+	}
+	if !strings.Contains(live, `data-view-mode="gallery"`) || !strings.Contains(live, `data-list-mode="fixed"`) {
+		t.Fatalf("series Videos glance must be fixed gallery: %s", truncate(live, 400))
+	}
+	if !strings.Contains(live, `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`) {
+		t.Fatalf("series Videos glance missing Browser Videos gallery grid: %s", truncate(live, 400))
+	}
+	browse := `/browser?series=` + itoa(ser.ID) + `&amp;sort=acquired&amp;type=videos&amp;view=gallery`
+	if !strings.Contains(live, `Browse all`) || !strings.Contains(live, `href="`+browse+`"`) {
+		t.Fatalf("series Videos missing Browse all: %s", truncate(live, 600))
+	}
+	rowsStart := strings.Index(live, `id="series-videos-rows"`)
+	if rowsStart < 0 {
+		t.Fatal("series Videos rows missing")
+	}
+	rowsEnd := strings.Index(live[rowsStart:], `</ul>`)
+	if rowsEnd < 0 {
+		t.Fatal("series Videos rows unclosed")
+	}
+	rowsChunk := live[rowsStart : rowsStart+rowsEnd]
+	vidPrefix := `/series/` + itoa(ser.ID) + `/videos/`
+	if got := strings.Count(rowsChunk, vidPrefix); got != web.SeriesVideoGlanceSize {
+		t.Fatalf("series Videos glance cards=%d want %d", got, web.SeriesVideoGlanceSize)
+	}
+}
+
+func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	videoTotal := web.InfiniteChunkSize + 5
+	for i := 0; i < videoTotal; i++ {
+		if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
+			SeriesID:   ser.ID,
+			Title:      "Ep " + itoa(int64(i+1)),
+			UploadDate: "2024-01-02T00:00:00Z",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	// Infinite list on Browser Videos: first chunk + sentinel.
+	req := httptest.NewRequest(http.MethodGet, "/browser?type=videos&view=list", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("list status %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-list-mode="infinite"`) {
+		t.Fatalf("missing infinite mode: %s", truncate(body, 400))
+	}
+	if !strings.Contains(body, `id="videos-list-infinite"`) {
+		t.Fatalf("missing sentinel: %s", truncate(body, 400))
+	}
+	if strings.Contains(body, `data-lucide="chevron-first"`) {
+		t.Fatalf("pager should not show for infinite list")
+	}
+	if got := strings.Count(body, `data-video-id="`); got != web.InfiniteChunkSize {
+		t.Fatalf("first paint rows=%d want %d", got, web.InfiniteChunkSize)
+	}
+	if got := strings.Count(body, `class="skeleton`); got < 5 {
+		t.Fatalf("expected next-chunk skeletons in sentinel, got %d: %s", got, truncate(body, 400))
+	}
+
+	// Append chunk page=2 via Explorer browse.
+	req = httptest.NewRequest(http.MethodGet, "/explorer/browse?type=videos&at=browser&view=list&page=2", nil)
+	req.Header.Set("HX-Target", "videos-list-infinite")
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("append status %d", rec.Code)
+	}
+	chunk := rec.Body.String()
+	if !strings.Contains(chunk, `data-infinite-chunk`) {
+		t.Fatalf("missing chunk wrapper: %s", truncate(chunk, 300))
+	}
+	if got := strings.Count(chunk, `data-video-id="`); got != 5 {
+		// videoTotal, first InfiniteChunkSize, page 2 has the remainder
+		t.Fatalf("append rows=%d want 5: %s", got, truncate(chunk, 300))
+	}
+
+	// through=2 full live returns all when total fits in two chunks.
+	req = httptest.NewRequest(http.MethodGet, "/browser?type=videos&view=list&through=2", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	if got := strings.Count(body, `data-video-id="`); got != videoTotal {
+		t.Fatalf("through=2 rows=%d want %d", got, videoTotal)
+	}
+
+	// Refresh clamp: through=20 → max 100, but we only have 25.
+	req = httptest.NewRequest(http.MethodGet, "/browser?type=videos&view=list&through=20", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	if !strings.Contains(body, `data-through-clamped="1"`) {
+		t.Fatalf("expected clamp flag: %s", truncate(body, 400))
+	}
+
+	// Table: paginated, pager when enough pages, no sentinel.
+	req = httptest.NewRequest(http.MethodGet, "/browser?type=videos&view=table", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	if !strings.Contains(body, `data-list-table`) {
+		t.Fatalf("table missing: %s", truncate(body, 300))
+	}
+	if strings.Contains(body, `id="videos-list-infinite"`) {
+		t.Fatalf("table must not have infinite sentinel")
+	}
+	if got := strings.Count(body, `data-video-id="`); got != web.VideoPageSize {
+		t.Fatalf("table page rows=%d want %d", got, web.VideoPageSize)
+	}
+	if !strings.Contains(body, `data-lucide="chevron-first"`) {
+		t.Fatalf("table missing pager")
+	}
+
+	// Series detail videos: locked paginated glance (covered by TestSeriesVideosGlanceLockedList).
+	req = httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID), nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	if strings.Contains(body, `id="series-videos`) && strings.Contains(body, `-infinite"`) {
+		t.Fatalf("series detail must not infinite-scroll videos")
+	}
+
+	// Series list infinite.
+	req = httptest.NewRequest(http.MethodGet, "/series?view=list", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	if !strings.Contains(body, `data-list-mode="infinite"`) {
+		t.Fatalf("series list missing infinite: %s", truncate(body, 300))
+	}
+
+	// Overview fixed.
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	body = rec.Body.String()
+	if !strings.Contains(body, `data-list-mode="fixed"`) {
+		t.Fatalf("overview recent missing fixed mode")
+	}
+}
+
+func TestListInfiniteJSDuplicateIDPin(t *testing.T) {
+	b, err := os.ReadFile("ui/src/js/list_infinite.js")
+	if err != nil {
+		// Test cwd may be package dir.
+		b, err = os.ReadFile("internal/web/ui/src/js/list_infinite.js")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "duplicate data-video-id") {
+		t.Fatal("missing duplicate-id string-guard pin in list_infinite.js")
+	}
+}
+
+func TestSeriesAndVideosTableView(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
+		SeriesID:   ser.ID,
+		Title:      "Ep One",
+		UploadDate: "2024-01-02T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	for _, path := range []string{"/series?view=table", "/browser?type=videos&view=table"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("%s status %d: %s", path, rec.Code, truncate(rec.Body.String(), 300))
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, `data-list-table`) || !strings.Contains(body, `data-list-table-cols`) {
+			t.Fatalf("%s missing table chrome: %s", path, truncate(body, 400))
+		}
+		wantSummary := "1 series"
+		if strings.Contains(path, "videos") {
+			wantSummary = "1 video"
+		}
+		if !strings.Contains(body, wantSummary) {
+			t.Fatalf("%s missing table summary %q: %s", path, wantSummary, truncate(body, 400))
+		}
+		if strings.Contains(path, "type=videos") {
+			if !strings.Contains(body, `list-table-sticky-end`) {
+				t.Fatalf("%s missing sticky Actions column: %s", path, truncate(body, 400))
+			}
+		}
+		if !strings.Contains(body, `data-table-col="title"`) {
+			t.Fatalf("%s missing title column picker: %s", path, truncate(body, 400))
+		}
+	}
+}
+
+func TestSeriesTableHeaderSortDownloaded(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	if _, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/series?view=table&sort=downloaded", nil)
+	req.AddCookie(&http.Cookie{Name: "creatorr_cols_series", Value: "title,downloaded,monitored"})
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 300))
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-col="downloaded"`) {
+		t.Fatalf("missing downloaded column: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, `aria-sort="descending"`) {
+		t.Fatalf("active downloaded sort should set aria-sort: %s", truncate(body, 800))
+	}
+	if !strings.Contains(body, `class="list-table-sort-link"`) || !strings.Contains(body, `sort=downloaded`) {
+		t.Fatalf("want whole-cell sort link for downloaded: %s", truncate(body, 800))
+	}
+	if !strings.Contains(body, `data-lucide="arrow-down"`) {
+		t.Fatalf("active downloaded sort should show down arrow: %s", truncate(body, 800))
+	}
+	if !strings.Contains(body, `data-lucide="arrow-up-down"`) {
+		t.Fatalf("inactive sortable headers should show up-down cue: %s", truncate(body, 800))
+	}
+	// Monitored has no SortOpt: plain th label, no sort link on that col.
+	monIdx := strings.Index(body, `data-col="monitored"`)
+	if monIdx < 0 {
+		t.Fatal("missing monitored column")
+	}
+	monChunk := body[monIdx:min(monIdx+200, len(body))]
+	if strings.Contains(monChunk, `list-table-sort-link`) {
+		t.Fatalf("monitored header must stay plain: %s", monChunk)
+	}
+}
+
+func TestVideosPageHasBulkSelect(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	seedHandler(t, d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Demo", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://example.com/c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
+		SeriesID:   ser.ID,
+		Title:      "Ep One",
+		UploadDate: "2024-01-02T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	legacy := httptest.NewRecorder()
+	r.ServeHTTP(legacy, httptest.NewRequest(http.MethodGet, "/videos?view=gallery", nil))
+	if legacy.Code != http.StatusMovedPermanently {
+		t.Fatalf("/videos status %d want 301", legacy.Code)
+	}
+	if loc := legacy.Header().Get("Location"); loc != "/browser?type=videos&view=gallery" {
+		t.Fatalf("/videos Location=%q", loc)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/browser?type=videos", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, `href="/videos"`) {
+		t.Fatalf("nav must not link to /videos: %s", truncate(body, 400))
+	}
 	if !strings.Contains(body, "data-video-bulk-mode") {
-		t.Fatalf("series detail missing video multi-select toggle: %s", truncate(body, 500))
+		t.Fatalf("Browser Videos missing video multi-select toggle: %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, "data-video-bulk-refresh") || !strings.Contains(body, "data-video-bulk-metadata") {
+		t.Fatalf("Browser Videos missing Refresh/Edit metadata (btn_labeled): %s", truncate(body, 500))
 	}
 	if !strings.Contains(body, "modal-bulk-edit-videos-metadata") || !strings.Contains(body, "modal-bulk-delete-videos") {
-		t.Fatalf("series detail missing video bulk modals: %s", truncate(body, 500))
+		t.Fatalf("Browser Videos missing video bulk modals: %s", truncate(body, 500))
 	}
 	if !strings.Contains(body, `action="/actions/bulk-want-videos"`) {
-		t.Fatalf("series detail missing bulk want form: %s", truncate(body, 400))
+		t.Fatalf("Browser Videos missing bulk want form: %s", truncate(body, 400))
+	}
+	if strings.Contains(body, `name="series_id"`) && strings.Contains(body, `id="form-bulk-want-videos"`) {
+		// Library-wide bulk forms omit series_id; series detail still includes it.
+		wantFormStart := strings.Index(body, `id="form-bulk-want-videos"`)
+		wantFormEnd := strings.Index(body[wantFormStart:], "</form>")
+		if wantFormStart >= 0 && wantFormEnd > 0 {
+			chunk := body[wantFormStart : wantFormStart+wantFormEnd]
+			if strings.Contains(chunk, `name="series_id"`) {
+				t.Fatalf("Browser Videos bulk want form should omit series_id: %s", truncate(chunk, 300))
+			}
+		}
+	}
+
+	idsReq := httptest.NewRequest(http.MethodGet, "/videos/ids", nil)
+	idsRec := httptest.NewRecorder()
+	r.ServeHTTP(idsRec, idsReq)
+	if idsRec.Code != 200 {
+		t.Fatalf("videos/ids status %d: %s", idsRec.Code, idsRec.Body.String())
+	}
+	if !strings.Contains(idsRec.Body.String(), `"ids"`) {
+		t.Fatalf("videos/ids missing ids: %s", truncate(idsRec.Body.String(), 200))
 	}
 }
 
@@ -1504,40 +2191,60 @@ func TestSeriesSourceScanButtons(t *testing.T) {
 		}
 		return rec.Body.String()
 	}
-	assertQueued := func(body string) {
+	assertScanQueued := func(body string) {
 		t.Helper()
 		if !strings.Contains(body, `aria-label="Scan for new videos" aria-disabled="true"`) {
 			t.Fatalf("scan button should stay disabled while a scan is queued: %s", truncate(body, 600))
 		}
-		if !strings.Contains(body, `aria-label="Start full scan" aria-disabled="true"`) {
-			t.Fatalf("full scan button should stay disabled while a scan is queued: %s", truncate(body, 600))
+		if strings.Contains(body, `aria-label="Start full scan"`) || strings.Contains(body, `/actions/full-rescan-source`) {
+			t.Fatalf("list quick actions must not offer Full scan: %s", truncate(body, 600))
 		}
 	}
-	assertQueued(get(seriesPath))
+	assertScanQueued(get(seriesPath))
 
 	if _, err := d.SQL.Exec(`DELETE FROM tasks WHERE kind = 'scan'`); err != nil {
 		t.Fatal(err)
+	}
+	incomplete := get(seriesPath)
+	// html/template escapes apostrophes in attributes (&#39;).
+	if !strings.Contains(incomplete, `data-tip="Finish Full scan on the source page first"`) ||
+		!strings.Contains(incomplete, `aria-label="Scan for new videos" aria-disabled="true"`) {
+		t.Fatalf("tip Scan should stay visible and disabled until full scan finishes: %s", truncate(incomplete, 600))
+	}
+	if strings.Contains(incomplete, `aria-label="Start full scan"`) || strings.Contains(incomplete, `/actions/full-rescan-source`) {
+		t.Fatalf("list quick actions must not offer Full scan: %s", truncate(incomplete, 600))
 	}
 	if err := lib.MarkFullScanDone(src.ID); err != nil {
 		t.Fatal(err)
 	}
 	idle := get(seriesPath)
+	wantScan := `aria-label="Scan for new videos"`
 	wantBtn := `class="btn btn-xs btn-square join-item tooltip tooltip-top"`
-	if strings.Count(idle, wantBtn) < 2 || strings.Contains(idle, `aria-label="Scan for new videos" aria-disabled="true"`) {
-		t.Fatalf("idle scan buttons should be secondary and enabled: %s", truncate(idle, 600))
+	if !strings.Contains(idle, wantBtn) || strings.Contains(idle, `aria-label="Scan for new videos" aria-disabled="true"`) || !strings.Contains(idle, wantScan) {
+		t.Fatalf("idle tip Scan should be a joined tip host and enabled: %s", truncate(idle, 600))
 	}
 	wantEdit := `class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit"`
 	if !strings.Contains(idle, wantEdit) {
-		t.Fatalf("edit button should be a plain button: %s", truncate(idle, 800))
+		t.Fatalf("edit button should match Files join tip style: %s", truncate(idle, 800))
 	}
 
 	if _, err := lib.FullRescanSource(src.ID); err != nil {
 		t.Fatal(err)
 	}
-	assertQueued(get(seriesPath))
+	assertScanQueued(get(seriesPath))
+	oob := get(seriesPath + "/task-indicators")
+	if strings.Contains(oob, "can't evaluate field") || !strings.Contains(oob, "source-scan-actions-") {
+		t.Fatalf("task-indicators OOB must render source_scan_actions: %s", truncate(oob, 600))
+	}
+	if strings.Contains(oob, `aria-label="Start full scan"`) || strings.Contains(oob, `/actions/full-rescan-source`) {
+		t.Fatalf("OOB source_scan_actions must not offer Full scan: %s", truncate(oob, 600))
+	}
 	detail := get(seriesPath + "/sources/" + itoa(src.ID))
-	if strings.Count(detail, `class="btn btn-outline" disabled`) < 2 || !strings.Contains(detail, `for="modal-edit-source" class="btn btn-outline"`) {
+	if strings.Count(detail, `class="btn" disabled`) < 2 || !strings.Contains(detail, `for="modal-edit-source" class="btn"`) {
 		t.Fatalf("source detail should keep Scan and Full scan disabled: %s", truncate(detail, 800))
+	}
+	if !strings.Contains(detail, `/actions/full-rescan-source`) {
+		t.Fatalf("source detail must keep Full scan action: %s", truncate(detail, 800))
 	}
 	settingsAt := strings.Index(detail, ">Settings</span>")
 	statusAt := strings.Index(detail, ">Status</span>")
@@ -1683,6 +2390,52 @@ func TestActionAddSeriesURLRequiresTitleWithoutDraft(t *testing.T) {
 	list, _ := lib.ListSeries()
 	if len(list) != 0 {
 		t.Fatalf("should not create series without title/draft, got %d", len(list))
+	}
+}
+
+// overviewBrowseHrefHas reports whether body contains an href="/browser?…" whose
+// query includes every want key/value (order-insensitive; multi status ok).
+func overviewBrowseHrefHas(body string, want map[string][]string) bool {
+	const prefix = `href="/browser?`
+	for {
+		i := strings.Index(body, prefix)
+		if i < 0 {
+			return false
+		}
+		start := i + len(`href="`)
+		end := strings.IndexByte(body[start:], '"')
+		if end < 0 {
+			return false
+		}
+		raw := html.UnescapeString(body[start : start+end])
+		u, err := url.Parse(raw)
+		if err != nil {
+			body = body[start+1:]
+			continue
+		}
+		q := u.Query()
+		ok := true
+		for k, vals := range want {
+			got := q[k]
+			have := map[string]int{}
+			for _, g := range got {
+				have[g]++
+			}
+			for _, v := range vals {
+				if have[v] == 0 {
+					ok = false
+					break
+				}
+				have[v]--
+			}
+			if !ok {
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+		body = body[start+1:]
 	}
 }
 

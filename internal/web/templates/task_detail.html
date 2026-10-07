@@ -8,7 +8,7 @@
   </div>
   {{if .Live}}
   <div class="flex-none flex items-center flex-wrap gap-2 min-w-0">
-    <span class="text-xs opacity-60 truncate min-w-0 max-w-[12rem] sm:max-w-xs text-right" data-task-message>{{if eq .Item.Status "pending"}}Queued{{else if .Item.Message}}{{.Item.Message}}{{else}}{{template "empty_value"}}{{end}}</span>
+    <span class="text-xs truncate min-w-0 max-w-[12rem] sm:max-w-xs text-right{{if eq .Item.Status "failed"}} text-error{{else}} opacity-60{{end}}" data-task-message>{{if eq .Item.Status "pending"}}Queued{{else if .Item.Message}}{{.Item.Message}}{{else}}{{template "empty_value"}}{{end}}</span>
     <div class="w-24 sm:w-32 shrink-0" data-task-progress-wrap>
       {{if eq .Item.Status "pending"}}
       <progress data-task-progress class="progress progress-secondary w-full" value="0" max="100" aria-label="pending"></progress>
@@ -109,7 +109,7 @@
   {{if eq .Item.Status "pending"}}
   <tr><th class="w-40">Message</th><td class="text-sm whitespace-normal break-words" data-task-message>Queued</td></tr>
   {{else if .Item.Message}}
-  <tr><th class="w-40">Message</th><td class="text-sm whitespace-normal break-words" data-task-message>{{.Item.Message}}</td></tr>
+  <tr><th class="w-40">Message</th><td class="text-sm whitespace-normal break-words{{if eq .Item.Status "failed"}} text-error{{end}}" data-task-message>{{.Item.Message}}</td></tr>
   {{else}}
   {{template "detail_row" (dict "Label" "Message" "TdClass" "text-sm whitespace-normal break-words")}}
   {{end}}
@@ -151,7 +151,7 @@
         </span>
         {{else if eq .State "wanted"}}
         <span class="inline-flex tooltip tooltip-top text-warning" data-tip="{{.StatusTip}}" aria-label="{{.StatusTip}}">
-          <i data-lucide="download" class="size-4"></i>
+          <i data-lucide="circle-dashed" class="size-4"></i>
         </span>
         {{else}}
         {{template "status_badge" .State}}
@@ -231,7 +231,7 @@
 <section class="list-panel card bg-base-100 border border-base-300 mb-4">
   <div class="card-body gap-3">
     {{if .RenameList.Planned}}
-    {{template "list_header" (dict "level" "section" "title" "Planned renames" "help" "Dry-run of paths this task would change (same as Maintenance Preview renames).")}}
+    {{template "list_header" (dict "level" "section" "title" "Planned renames" "help" "Dry-run of paths this task would change (same as Maintenance Apply episode format preview).")}}
     <p class="text-sm">
       {{if eq .RenameList.Total 0}}
       No packed episodes in this scope would rename.

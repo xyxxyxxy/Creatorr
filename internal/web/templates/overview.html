@@ -17,8 +17,8 @@
       <i data-lucide="square-play" class="size-8"></i>
     </div>
     <div class="stat-title">Videos</div>
-    <div class="stat-value">{{.VideoCount}}</div>
-    <div class="stat-desc">Indexed across all series</div>
+    <div class="stat-value">{{.DownloadedCount}} / {{.VideoCount}}</div>
+    <div class="stat-desc">Downloaded / indexed</div>
   </div>
   <div class="stat">
     <div class="stat-figure text-accent">
@@ -30,43 +30,47 @@
   </div>
 </div>
 
-{{if .RunningTasks}}
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Running tasks" "icon" "loader-circle" "help" "Tasks currently in progress across all queues (system + domains).")}}
-<ul class="list bg-base-100 rounded-box border border-base-300">
-  {{range .RunningTasks}}
-  {{template "overview_running_task_row" .}}
-  {{end}}
-</ul>
-{{template "list_panel_end"}}
-{{end}}
-
-{{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Recent additions" "icon" "square-play" "help" "Latest downloaded videos across all series.")}}
+{{template "list_header" (dict "level" "section" "title" "Recent additions" "icon" "square-play" "help" "Latest downloaded videos." "add_href" .VideosBrowseHref "add_label" "Browse all" "add_class" "btn")}}
+<div data-list-mode="fixed">
 {{if not .RecentVideos}}
 {{template "list_empty" "No downloaded videos yet."}}
 {{else}}
-<ul class="list bg-base-100 rounded-box border border-base-300">
+<ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" id="overview-recent-gallery">
   {{range .RecentVideos}}
-  {{template "video_list_row" (dict
+  {{template "video_gallery_card" (dict
     "ID" .ID
     "Title" .Title
     "Status" .Status
-    "StatusLabel" .StatusLabel
-    "UploadDate" .UploadDate
-    "SizeLabel" .SizeLabel
-    "ResolutionLabel" .ResolutionLabel
     "DurationLabel" .DurationLabel
-    "MediaTypeLabel" .MediaTypeLabel
     "ThumbURL" .ThumbURL
     "SeriesID" .SeriesID
-    "SeriesTitle" (index $.SeriesTitles .SeriesID)
-    "PackRoleBadge" .PackRoleBadge
     "NoActions" true
   )}}
   {{end}}
 </ul>
 {{end}}
+</div>
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Most wanted" "icon" "tv" "help" "Series with the most open wanted videos." "add_href" .SeriesBrowseHref "add_label" "Browse all" "add_class" "btn")}}
+<div data-list-mode="fixed">
+{{if not .WantedSeries}}
+{{template "list_empty" "No series yet."}}
+{{else}}
+<ul class="grid gap-3 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7" id="overview-wanted-gallery">
+  {{range .WantedSeries}}
+  {{template "series_gallery_card" .}}
+  {{end}}
+</ul>
+{{end}}
+</div>
+{{template "list_panel_end"}}
+
+{{template "list_panel"}}
+{{template "list_header" (dict "level" "section" "title" "Recent tasks" "icon" "list-ordered" "help" "Open tasks first, or the last finished when idle." "add_href" .TasksLive.BrowseHref "add_label" "Browse all" "add_class" "btn")}}
+{{template "tasks_list_live" .TasksLive}}
 {{template "list_panel_end"}}
 
 {{template "add_series_modal" .}}

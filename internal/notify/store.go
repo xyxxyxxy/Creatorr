@@ -14,12 +14,13 @@ import (
 // Channel is one notification target with subscribed events.
 // Apprise channels are rows in notification_channels; the Creatorr in-app channel is virtual.
 type Channel struct {
-	ID        int64    `json:"id"`
-	Name      string   `json:"name"`
-	URL       string   `json:"url"`
-	Events    []string `json:"events"`
-	CreatedAt string   `json:"created_at"`
-	UpdatedAt string   `json:"updated_at"`
+	ID               int64    `json:"id"`
+	Name             string   `json:"name"`
+	URL              string   `json:"url"`
+	Events           []string `json:"events"`
+	MarkExternalRead bool     `json:"mark_external_read"`
+	CreatedAt        string   `json:"created_at"`
+	UpdatedAt        string   `json:"updated_at"`
 }
 
 // List returns the fixed in-app channel first, then Apprise channels by id.
@@ -29,7 +30,7 @@ func List(database *db.DB) ([]Channel, error) {
 		return out, nil
 	}
 	rows, err := database.SQL.Query(`
-		SELECT id, name, url, events, created_at, updated_at
+		SELECT id, name, url, events, mark_external_read, created_at, updated_at
 		FROM notification_channels ORDER BY id
 	`)
 	if err != nil {
@@ -57,7 +58,7 @@ func Get(database *db.DB, id int64) (Channel, error) {
 		return c, fmt.Errorf("notify channel not found")
 	}
 	row := database.SQL.QueryRow(`
-		SELECT id, name, url, events, created_at, updated_at
+		SELECT id, name, url, events, mark_external_read, created_at, updated_at
 		FROM notification_channels WHERE id = ?
 	`, id)
 	c, rawJSON, err := scanChannel(row)
@@ -89,7 +90,8 @@ func ListForEvent(database *db.DB, event string) ([]Channel, error) {
 
 // Upsert inserts (id<=0) or updates an Apprise channel. Validates Apprise URL and events.
 // The Creatorr in-app channel cannot be created or updated.
-func Upsert(database *db.DB, id int64, name, rawURL string, events []string) (int64, error) {
+// markExternalRead: when true, successful Apprise delivery marks the in-app row read.
+func Upsert(database *db.DB, id int64, name, rawURL string, events []string, markExternalRead bool) (int64, error) {
 	if database == nil {
 		return 0, fmt.Errorf("database required")
 	}
@@ -122,11 +124,15 @@ func Upsert(database *db.DB, id int64, name, rawURL string, events []string) (in
 	}
 	name = strings.TrimSpace(name)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	mark := 0
+	if markExternalRead {
+		mark = 1
+	}
 	if id > 0 {
 		res, err := database.SQL.Exec(`
-			UPDATE notification_channels SET name = ?, url = ?, events = ?, updated_at = ?
+			UPDATE notification_channels SET name = ?, url = ?, events = ?, mark_external_read = ?, updated_at = ?
 			WHERE id = ?
-		`, name, rawURL, string(evJSON), now, id)
+		`, name, rawURL, string(evJSON), mark, now, id)
 		if err != nil {
 			return 0, err
 		}
@@ -137,9 +143,9 @@ func Upsert(database *db.DB, id int64, name, rawURL string, events []string) (in
 		return id, nil
 	}
 	res, err := database.SQL.Exec(`
-		INSERT INTO notification_channels (name, url, events, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)
-	`, name, rawURL, string(evJSON), now, now)
+		INSERT INTO notification_channels (name, url, events, mark_external_read, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, name, rawURL, string(evJSON), mark, now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -175,9 +181,11 @@ type rowScanner interface {
 func scanChannel(row rowScanner) (Channel, string, error) {
 	var c Channel
 	var evJSON string
-	if err := row.Scan(&c.ID, &c.Name, &c.URL, &evJSON, &c.CreatedAt, &c.UpdatedAt); err != nil {
+	var mark int
+	if err := row.Scan(&c.ID, &c.Name, &c.URL, &evJSON, &mark, &c.CreatedAt, &c.UpdatedAt); err != nil {
 		return c, "", err
 	}
+	c.MarkExternalRead = mark != 0
 	if err := json.Unmarshal([]byte(evJSON), &c.Events); err != nil {
 		return c, evJSON, fmt.Errorf("notify channel %d events: %w", c.ID, err)
 	}

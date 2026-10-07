@@ -84,6 +84,40 @@
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
 
+<input type="checkbox" id="modal-bulk-monitor-series" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-bulk-monitor-title>Monitor series</h3>
+    <p class="text-sm mb-4">Turn monitoring on for the selected series. Scheduled tip scans and download-wanted will include them.</p>
+    <form method="post" action="/actions/bulk-set-series-monitored" id="form-bulk-monitor-series">
+      <input type="hidden" name="monitored" value="1" />
+      <div data-bulk-series-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-monitor-series" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Monitor</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
+<input type="checkbox" id="modal-bulk-unmonitor-series" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-bulk-unmonitor-title>Unmonitor series</h3>
+    <p class="text-sm mb-4">Turn monitoring off for the selected series. Manual scan and Download now still run.</p>
+    <form method="post" action="/actions/bulk-set-series-monitored" id="form-bulk-unmonitor-series">
+      <input type="hidden" name="monitored" value="0" />
+      <div data-bulk-series-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-unmonitor-series" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Unmonitor</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
 <input type="checkbox" id="modal-bulk-delete-series" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box">

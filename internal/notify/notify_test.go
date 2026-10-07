@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	apprise "github.com/unraid/apprise-go"
 	"github.com/xyxxyxxy/Creatorr/internal/db"
@@ -146,14 +147,14 @@ func TestChannelCRUDAndSendEvent(t *testing.T) {
 	})
 	defer notify.SetSendFnForTest(old)
 
-	id, err := notify.Upsert(d, 0, "alerts", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventCookieInvalid})
+	id, err := notify.Upsert(d, 0, "alerts", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventCookieInvalid}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if id <= 0 {
 		t.Fatal("id")
 	}
-	_, err = notify.Upsert(d, 0, "other", "discord://222222222222222222/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventDownloadDigest})
+	_, err = notify.Upsert(d, 0, "other", "discord://222222222222222222/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventDownloadDigest}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,8 +169,12 @@ func TestChannelCRUDAndSendEvent(t *testing.T) {
 	if err != nil || len(items) != 1 {
 		t.Fatalf("items=%v err=%v", items, err)
 	}
-	if !items[0].ExternalOK || !items[0].Unread() {
-		t.Fatalf("cookie with channel: want external_ok + still unread: %#v", items[0])
+	if !items[0].ExternalOK || items[0].Unread() {
+		t.Fatalf("cookie with channel: want external_ok + read (default mark_external_read): %#v", items[0])
+	}
+	got, err := notify.Get(d, id)
+	if err != nil || !got.MarkExternalRead {
+		t.Fatalf("MarkExternalRead default: %#v err=%v", got, err)
 	}
 
 	if err := notify.DownloadDigest(context.Background(), d, []notify.DigestItem{
@@ -197,13 +202,39 @@ func TestChannelCRUDAndSendEvent(t *testing.T) {
 	}
 }
 
+func TestMarkExternalReadOffKeepsUnread(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "mark-off.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	taskID := seedTask(t, d)
+	old := notify.SetSendFnForTest(func(urls []string, title, body string, nt apprise.NotifyType) error {
+		return nil
+	})
+	defer notify.SetSendFnForTest(old)
+	if _, err := notify.Upsert(d, 0, "alerts", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventCookieInvalid}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := notify.CookieInvalid(context.Background(), d, taskID, "example.com", "bad cookie"); err != nil {
+		t.Fatal(err)
+	}
+	items, err := notify.ListNotifications(d, notify.ListFilter{}, 10, 0)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%v err=%v", items, err)
+	}
+	if !items[0].ExternalOK || !items[0].Unread() {
+		t.Fatalf("mark_external_read off: want external_ok + unread: %#v", items[0])
+	}
+}
+
 func TestInAppChannelReadOnly(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "inapp.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
-	_, err = notify.Upsert(d, 0, "x", notify.InAppURL, notify.AllEvents)
+	_, err = notify.Upsert(d, 0, "x", notify.InAppURL, notify.AllEvents, true)
 	if err == nil {
 		t.Fatal("expected upsert reject")
 	}
@@ -225,7 +256,7 @@ func TestListForEventAllSubscription(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
-	id, err := notify.Upsert(d, 0, "everything", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventAll})
+	id, err := notify.Upsert(d, 0, "everything", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventAll}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,6 +437,9 @@ func TestSendEventNoChannelsStillRecords(t *testing.T) {
 	if err != nil || uc != 1 {
 		t.Fatalf("unread=%d err=%v", uc, err)
 	}
+	if _, hasAlert, err := notify.UnreadBadge(d); err != nil || !hasAlert {
+		t.Fatalf("alert unread must set hasAlert: hasAlert=%v err=%v", hasAlert, err)
+	}
 }
 
 func TestSendEventErrorRequiresTaskID(t *testing.T) {
@@ -430,7 +464,7 @@ func TestYtDlpFailedExternalFailStaysUnread(t *testing.T) {
 		return context.DeadlineExceeded
 	})
 	defer notify.SetSendFnForTest(old)
-	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventYtDlpFailed}); err != nil {
+	if _, err := notify.Upsert(d, 0, "t", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventYtDlpFailed}, true); err != nil {
 		t.Fatal(err)
 	}
 	_ = notify.YtDlpFailed(context.Background(), d, taskID, "example.com", "boom")
@@ -586,15 +620,15 @@ func TestListNotificationsByLevel(t *testing.T) {
 	if err := notify.YtDlpFailed(context.Background(), d, taskID, "example.com", "boom"); err != nil {
 		t.Fatal(err)
 	}
-	info, err := notify.ListNotifications(d, notify.ListFilter{Level: notify.LevelInfo}, 10, 0)
+	info, err := notify.ListNotifications(d, notify.ListFilter{Levels: []string{notify.LevelInfo}}, 10, 0)
 	if err != nil || len(info) != 1 || info[0].Event != notify.EventDownloadDigest {
 		t.Fatalf("info=%v err=%v", info, err)
 	}
-	warn, err := notify.ListNotifications(d, notify.ListFilter{Level: notify.LevelWarning}, 10, 0)
+	warn, err := notify.ListNotifications(d, notify.ListFilter{Levels: []string{notify.LevelWarning}}, 10, 0)
 	if err != nil || len(warn) != 1 || warn[0].Event != notify.EventPOTProvider {
 		t.Fatalf("warn=%v err=%v", warn, err)
 	}
-	alert, err := notify.ListNotifications(d, notify.ListFilter{Level: notify.LevelAlert}, 10, 0)
+	alert, err := notify.ListNotifications(d, notify.ListFilter{Levels: []string{notify.LevelAlert}}, 10, 0)
 	if err != nil || len(alert) != 1 || alert[0].Event != notify.EventYtDlpFailed {
 		t.Fatalf("alert=%v err=%v", alert, err)
 	}
@@ -631,6 +665,9 @@ func TestPOTProviderWarningUnread(t *testing.T) {
 	if !items[0].Unread() {
 		t.Fatal("want unread")
 	}
+	if n, hasAlert, err := notify.UnreadBadge(d); err != nil || n != 1 || hasAlert {
+		t.Fatalf("warning unread must bump badge without alert color: count=%d hasAlert=%v err=%v", n, hasAlert, err)
+	}
 	if _, err := notify.MarkAllRead(d); err != nil {
 		t.Fatal(err)
 	}
@@ -652,7 +689,7 @@ func TestLiveSkippedInfoWithTaskID(t *testing.T) {
 		return nil
 	})
 	defer notify.SetSendFnForTest(old)
-	if _, err := notify.Upsert(d, 0, "ap", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventLiveSkipped}); err != nil {
+	if _, err := notify.Upsert(d, 0, "ap", "discord://111111111111111111/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN012345", []string{notify.EventLiveSkipped}, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -680,5 +717,71 @@ func TestLiveSkippedInfoWithTaskID(t *testing.T) {
 	}
 	if !strings.Contains(items[0].Body, "Series / On air") {
 		t.Fatalf("body=%q", items[0].Body)
+	}
+}
+
+func TestMarkInfoUnread(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "info-unread.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	id, err := notify.InsertNotification(d, notify.EventDownloadDigest, "Digest", "body", 0, false, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := notify.GetNotification(d, id)
+	if err != nil || n.Unread() {
+		t.Fatalf("want stored read: %#v err=%v", n, err)
+	}
+	if err := notify.MarkUnread(d, id); err != nil {
+		t.Fatal(err)
+	}
+	n, err = notify.GetNotification(d, id)
+	if err != nil || !n.Unread() {
+		t.Fatalf("want unread after MarkUnread: %#v err=%v", n, err)
+	}
+	if badge, hasAlert, err := notify.UnreadBadge(d); err != nil || badge != 1 || hasAlert {
+		t.Fatalf("info unread must bump badge without alert color: count=%d hasAlert=%v err=%v", badge, hasAlert, err)
+	}
+	unread, err := notify.ListNotifications(d, notify.ListFilter{UnreadOnly: true}, 10, 0)
+	if err != nil || len(unread) != 1 || unread[0].ID != id {
+		t.Fatalf("Unread filter should include info: %v err=%v", unread, err)
+	}
+	if _, err := notify.MarkUnreadMany(d, []int64{id}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := notify.MarkReadMany(d, []int64{id}); err != nil || n != 1 {
+		t.Fatalf("MarkReadMany n=%d err=%v", n, err)
+	}
+	n, err = notify.GetNotification(d, id)
+	if err != nil || n.Unread() {
+		t.Fatalf("want read after MarkReadMany: %#v err=%v", n, err)
+	}
+}
+
+func TestListNotificationsQ(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "nq.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	keep, err := notify.InsertNotification(d, notify.EventCookieInvalid, "unique-alpha-title", "body-a", 0, false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := notify.InsertNotification(d, notify.EventRateLimited, "other", "beta-body", 0, false, ""); err != nil {
+		t.Fatal(err)
+	}
+	items, err := notify.ListNotifications(d, notify.ListFilter{Q: "unique-alpha"}, 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != keep {
+		t.Fatalf("want keep id %d, got %#v", keep, items)
+	}
+	n, err := notify.CountNotifications(d, notify.ListFilter{Q: "unique-alpha"})
+	if err != nil || n != 1 {
+		t.Fatalf("count=%d err=%v", n, err)
 	}
 }

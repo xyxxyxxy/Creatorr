@@ -1,0 +1,109 @@
+{{define "video_table"}}
+{{/* Dot: Videos []seriesVideoRow, TableCols, TableColsCookie, BulkEditBusy,
+     SeriesTitles? map, ShowSeries bool, LiveTarget, Select bool, Page PageInfo */}}
+<div data-list-table>
+  {{template "list_table_chrome" (dict
+    "Page" .Page
+    "Noun" "videos"
+    "NounOne" "video"
+    "Cols" .TableCols
+    "CookieName" .TableColsCookie
+  )}}
+  {{/* overflow-x + sticky Title/Actions: input.css [data-list-table]. */}}
+  <div class="list-table-wrap rounded-box border border-base-300">
+    <table class="table table-sm list-table w-full">
+      <thead>
+        <tr>
+          {{if .Select}}
+          <th class="w-0 hidden" data-video-select-wrap aria-hidden="true"></th>
+          {{end}}
+          {{range .TableCols}}
+          {{template "list_table_th" (dict "Col" . "LiveTarget" $.LiveTarget)}}
+          {{end}}
+          <th class="list-table-sticky-end text-end whitespace-nowrap">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="{{if .RowsID}}{{.RowsID}}{{else}}videos-list-rows{{end}}">
+        {{range .Videos}}
+        <tr class="row-hover"{{if $.Select}} data-video-id="{{.ID}}"{{end}}>
+          {{if $.Select}}
+          <td class="hidden w-0 align-middle" data-video-select-wrap>
+            <input type="checkbox" class="checkbox checkbox-sm js-video-select" value="{{.ID}}"
+                   aria-label="Select video"
+                   {{if $.BulkEditBusy}}disabled{{end}} />
+          </td>
+          {{end}}
+          {{$row := .}}
+          {{range $.TableCols}}
+          <td data-col="{{.Key}}" class="align-middle{{if not .Visible}} hidden{{end}}">
+            {{if eq .Key "title"}}
+            <div class="flex items-center gap-2 min-w-0 max-w-sm">
+              <span class="shrink-0">{{template "task_indicator" $row.TaskInd}}</span>
+              <a class="link link-hover font-medium truncate{{if eq $row.Status "ignored"}} opacity-40{{end}}"
+                 href="/series/{{$row.SeriesID}}/videos/{{$row.ID}}">{{$row.Title}}</a>
+            </div>
+            {{else if eq .Key "series"}}
+            {{with $title := index $.SeriesTitles $row.SeriesID}}
+            <a class="link link-hover truncate" href="/series/{{$row.SeriesID}}">{{$title}}</a>
+            {{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "status"}}
+            {{if and $row.StatusLabel (ne $row.Status "downloaded")}}{{$row.StatusLabel}}{{else if eq $row.Status "downloaded"}}Downloaded{{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "upload"}}
+            {{if $row.UploadDate.Valid}}<time datetime="{{$row.UploadDate.String}}" data-local-time>{{$row.UploadDate.String}}</time>{{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "duration"}}
+            {{if $row.DurationLabel}}{{$row.DurationLabel}}{{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "resolution"}}
+            {{if $row.ResolutionLabel}}{{$row.ResolutionLabel}}{{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "size"}}
+            {{if and $row.SizeLabel (ne $row.SizeLabel "-")}}{{$row.SizeLabel}}{{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "media"}}
+            {{if and $row.MediaTypeLabel (ne $row.MediaTypeLabel "-")}}{{$row.MediaTypeLabel}}{{else}}{{template "empty_value"}}{{end}}
+            {{else if eq .Key "kind"}}
+            {{if $row.PackRoleBadge}}<span class="badge badge-secondary badge-sm">{{$row.PackRoleBadge}}</span>{{else}}{{template "empty_value"}}{{end}}
+            {{end}}
+          </td>
+          {{end}}
+          <td class="list-table-sticky-end align-middle text-end">
+            {{/* Tip host must be a child, never the td (docs/ui.md Tooltips). */}}
+            <div class="inline-flex justify-end max-w-full" data-video-row-actions>
+            {{if $row.Deleting}}
+            <span class="text-xs opacity-60">Queued for deletion</span>
+            {{else}}
+            {{$wantIgnore := dict
+              "VideoID" $row.ID
+              "SeriesID" $row.SeriesID
+              "Status" $row.Status
+              "DomainActive" $row.DomainActive
+              "DomainDisabledTitle" $row.DomainDisabledTitle
+              "DownloadRunning" $row.DownloadRunning
+              "KeepScroll" true
+              "LiveSwap" true
+              "LiveTarget" $.LiveTarget
+              "FormClass" "contents"
+              "Icons" true
+              "DeferModal" true
+              "Class" "btn btn-square btn-xs join-item"
+              "DeleteClass" "btn btn-soft btn-error btn-square btn-xs"
+            }}
+            <div class="join justify-end">
+              {{if ne $row.Status "downloaded"}}
+              {{template "clear_download_error_button" $wantIgnore}}
+              {{template "want_ignore_button" $wantIgnore}}
+              {{else}}
+              {{template "want_ignore_button" $wantIgnore}}
+              {{end}}
+            </div>
+            {{if eq $row.Status "downloaded"}}
+            {{template "delete_video_modal" $wantIgnore}}
+            {{end}}
+            {{end}}
+            </div>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{template "pagination" .Page}}
+</div>
+{{end}}

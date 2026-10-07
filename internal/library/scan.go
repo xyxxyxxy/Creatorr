@@ -136,9 +136,9 @@ func (s *Store) EnqueueFullScansForSeries(seriesID int64) (count int, firstTaskI
 	return count, firstTaskID, nil
 }
 
-// EnqueueScansForSeries enqueues tip Scan for feed sources with full scan done.
-// Manual / series kick: allowed even when scan_cron is never and when series is
-// unmonitored (scheduled tip Scan stays gated in EnqueueScansDue).
+// EnqueueScansForSeries enqueues tip Scan for sources with a Scan schedule and
+// full scan done. Schedule-Never sources are skipped (per-source tip Scan still OK).
+// Series monitored is not required (scheduled tip Scan stays gated in EnqueueScansDue).
 func (s *Store) EnqueueScansForSeries(seriesID int64) (count int, firstTaskID int64, err error) {
 	if s.Queue == nil {
 		return 0, 0, fmt.Errorf("%w: queue not configured", ErrInvalid)
@@ -155,7 +155,7 @@ func (s *Store) EnqueueScansForSeries(seriesID int64) (count int, firstTaskID in
 	}
 	var eligible int
 	for _, src := range sources {
-		if src.IsSingle() || !src.FullScanDone {
+		if src.ScanCronNever() || !src.FullScanDone {
 			continue
 		}
 		ok, err := s.sourceDomainActive(src)
@@ -180,7 +180,7 @@ func (s *Store) EnqueueScansForSeries(seriesID int64) (count int, firstTaskID in
 	}
 	if count == 0 {
 		if eligible == 0 {
-			return 0, 0, fmt.Errorf("%w: no indexed feed sources ready for Scan", ErrInvalid)
+			return 0, 0, fmt.Errorf("%w: no sources with a Scan schedule ready", ErrInvalid)
 		}
 		return 0, 0, fmt.Errorf("%w: scan already queued", ErrConflict)
 	}
@@ -204,9 +204,6 @@ func (s *Store) EnqueueScanSource(sourceID int64, origin string) (int64, error) 
 	}
 	if !domOK {
 		return 0, fmt.Errorf("%w: domain inactive", ErrInvalid)
-	}
-	if src.IsSingle() && src.FullScanDone {
-		return 0, fmt.Errorf("%w: single source skips Scan; use Restart full scan", ErrInvalid)
 	}
 	busy, err := s.HasActiveScanForSource(sourceID)
 	if err != nil {

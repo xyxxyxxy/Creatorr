@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/xyxxyxxy/Creatorr/internal/library/integrity"
 )
 
 // VideoSizeBytes returns size_bytes for the video media file, or ok=false when unset/missing.
@@ -153,14 +155,41 @@ func (s *Store) VideoJSONPathMap(videoIDs []int64) (map[int64]string, error) {
 	return out, rows.Err()
 }
 
-// VideoFile is one row from the files table for a video.
+// VideoFile is one row from the files table (video-scoped or series-meta).
 type VideoFile struct {
-	ID          int64
-	Path        string
-	Kind        string
-	AcquiredAt  string
-	SizeBytes   sql.NullInt64
-	ContentHash sql.NullString
+	ID                   int64
+	SeriesID             int64
+	VideoID              sql.NullInt64
+	Path                 string
+	Kind                 string
+	AcquiredAt           string
+	SizeBytes            sql.NullInt64
+	ContentHash          sql.NullString
+	ContentHashCheckedAt sql.NullString
+	ContentHashOkAt      sql.NullString
+}
+
+const videoFileSelectCols = `id, COALESCE(series_id, 0), video_id, path, kind, acquired_at, size_bytes, content_hash, content_hash_checked_at, content_hash_ok_at`
+
+func scanVideoFile(scan func(dest ...any) error) (VideoFile, error) {
+	var f VideoFile
+	err := scan(&f.ID, &f.SeriesID, &f.VideoID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes, &f.ContentHash, &f.ContentHashCheckedAt, &f.ContentHashOkAt)
+	return f, err
+}
+
+// IsSeriesMeta reports a series-folder metadata row (no video_id).
+func (f VideoFile) IsSeriesMeta() bool {
+	return !f.VideoID.Valid || f.VideoID.Int64 <= 0
+}
+
+// Missing reports size_bytes sentinel for known-missing on disk.
+func (f VideoFile) Missing() bool {
+	return f.SizeBytes.Valid && f.SizeBytes.Int64 == sidecarMissingSizeSentinel
+}
+
+// IntegrityFailed reports derived failed from stamps.
+func (f VideoFile) IntegrityFailed() bool {
+	return FileIntegrityDerived(nullStr(f.ContentHashCheckedAt), nullStr(f.ContentHashOkAt)) == integrity.FileIntegrityFailed
 }
 
 // SidecarKinds are known non-media companion roles (not packed video media).
@@ -171,7 +200,7 @@ var SidecarKinds = map[string]bool{
 // ListVideoMediaFiles returns kind=video rows for a video.
 func (s *Store) ListVideoMediaFiles(videoID int64) ([]VideoFile, error) {
 	rows, err := s.DB.SQL.Query(`
-		SELECT id, path, kind, acquired_at, size_bytes, content_hash
+		SELECT `+videoFileSelectCols+`
 		FROM files
 		WHERE video_id = ? AND kind = 'video'
 		ORDER BY path
@@ -182,8 +211,8 @@ func (s *Store) ListVideoMediaFiles(videoID int64) ([]VideoFile, error) {
 	defer func() { _ = rows.Close() }()
 	var out []VideoFile
 	for rows.Next() {
-		var f VideoFile
-		if err := rows.Scan(&f.ID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes, &f.ContentHash); err != nil {
+		f, err := scanVideoFile(rows.Scan)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, f)
@@ -342,7 +371,7 @@ func (s *Store) videoMediaStemContext(videoID int64) (mediaPath string, mediaBas
 
 func (s *Store) listVideoFilesByPath(videoID int64) (map[string]VideoFile, error) {
 	rows, err := s.DB.SQL.Query(`
-		SELECT id, path, kind, acquired_at, size_bytes, content_hash
+		SELECT `+videoFileSelectCols+`
 		FROM files WHERE video_id = ?
 	`, videoID)
 	if err != nil {
@@ -351,8 +380,8 @@ func (s *Store) listVideoFilesByPath(videoID int64) (map[string]VideoFile, error
 	defer func() { _ = rows.Close() }()
 	out := map[string]VideoFile{}
 	for rows.Next() {
-		var f VideoFile
-		if err := rows.Scan(&f.ID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes, &f.ContentHash); err != nil {
+		f, err := scanVideoFile(rows.Scan)
+		if err != nil {
 			return nil, err
 		}
 		f.Path = strings.TrimSpace(f.Path)
@@ -367,12 +396,27 @@ func (s *Store) listVideoFilesByPath(videoID int64) (map[string]VideoFile, error
 // GetVideoFile loads one files row for a video (any kind).
 func (s *Store) GetVideoFile(videoID, fileID int64) (*VideoFile, error) {
 	row := s.DB.SQL.QueryRow(`
-		SELECT id, path, kind, acquired_at, size_bytes, content_hash
+		SELECT `+videoFileSelectCols+`
 		FROM files
 		WHERE id = ? AND video_id = ?
 	`, fileID, videoID)
-	var f VideoFile
-	err := row.Scan(&f.ID, &f.Path, &f.Kind, &f.AcquiredAt, &f.SizeBytes, &f.ContentHash)
+	f, err := scanVideoFile(row.Scan)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+// GetFile loads one files row by id (video or series-meta).
+func (s *Store) GetFile(fileID int64) (*VideoFile, error) {
+	row := s.DB.SQL.QueryRow(`
+		SELECT `+videoFileSelectCols+`
+		FROM files WHERE id = ?
+	`, fileID)
+	f, err := scanVideoFile(row.Scan)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -447,8 +491,9 @@ func (s *Store) RegisterFileKind(videoID int64, path, kind string) error {
 	acquired := nowRFC3339()
 	_, _ = s.DB.SQL.Exec(`DELETE FROM files WHERE video_id = ? AND kind = ?`, videoID, kind)
 	_, err := s.DB.SQL.Exec(`
-		INSERT INTO files (video_id, path, kind, acquired_at, size_bytes) VALUES (?, ?, ?, ?, NULL)
-	`, videoID, path, kind, acquired)
+		INSERT INTO files (series_id, video_id, path, kind, acquired_at, size_bytes)
+		SELECT v.series_id, v.id, ?, ?, ?, NULL FROM videos v WHERE v.id = ?
+	`, path, kind, acquired, videoID)
 	return err
 }
 

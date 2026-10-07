@@ -290,7 +290,7 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		sched, err := parseFeedScanCron(r, "@weekly")
+		sched, err := parseFeedScanCron(r, "")
 		if err != nil {
 			redirErr(err.Error())
 			return
@@ -307,7 +307,7 @@ func (h *Handler) actionAddSeries(w http.ResponseWriter, r *http.Request) {
 			SourceURL:          sourceURL,
 			RootID:             rootID,
 			QualityProfileID:   qpID,
-			Monitored:          r.FormValue("monitored") == "1",
+			Monitored:          true,
 			DeliveryMode:       delivery,
 			FullScanLimit:      fullScanLimit,
 			ScanCron:           scanCron,

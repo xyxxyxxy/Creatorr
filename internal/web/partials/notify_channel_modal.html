@@ -2,7 +2,7 @@
 {{/*
   Add/edit Apprise notify channel.
   Mode: "add" | "edit"
-  Expects: Redirect, Name, URL, Events ([]string selected), EventGroups ([]{Level,Label,Icon,IconClass,Options}), ID (edit)
+  Expects: Redirect, Name, URL, Events ([]string selected), EventGroups ([]{Level,Label,Icon,IconClass,Options}), MarkExternalRead (bool), ID (edit)
   Optional: URLError (string - daisyUI validator message on URL)
 */}}
 {{$edit := eq .Mode "edit"}}
@@ -13,6 +13,7 @@
 {{$formID := printf "%s-form" $id}}
 {{$allChecked := false}}
 {{range $.Events}}{{if eq . "all"}}{{$allChecked = true}}{{end}}{{end}}
+{{$markExternalRead := .MarkExternalRead}}
 <input type="checkbox" id="{{$id}}" class="modal-toggle" {{if .URLError}}checked{{end}} />
 <div class="modal">
   <div class="modal-box max-w-lg">
@@ -71,6 +72,13 @@
         </fieldset>
         {{end}}
       </div>
+
+      <fieldset class="fieldset">
+        <label class="label cursor-pointer justify-start gap-2 items-start">
+          <input type="checkbox" name="mark_external_read" value="1" class="checkbox checkbox-sm mt-0.5" {{if $markExternalRead}}checked{{end}} />
+          <span class="label-text whitespace-normal">Mark externally sent notifications as read in-app</span>
+        </label>
+      </fieldset>
 
       <div class="modal-action items-center flex-wrap">
         <label for="{{$id}}" class="btn">Cancel</label>

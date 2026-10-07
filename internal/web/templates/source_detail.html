@@ -13,51 +13,30 @@
     </h1>
     <p class="text-xs opacity-60 break-all">
       yt-dlp
-      · {{if eq .Source.Kind "single"}}single{{else}}feed{{end}}
       · {{.VideoCount}} video(s)
     </p>
   </div>
   <div class="flex-none flex flex-wrap gap-2 items-center">
-    {{if and (ne .Source.Kind "single") (or .Source.FullScanDone .ScanActive)}}
-    {{$scanOff := or .ScanActive (not .DomainActive)}}
+    {{$scanOff := or .ScanActive (not .DomainActive) (not .Source.FullScanDone)}}
     {{$tipScan := "Scan for new videos"}}
-    {{if .ScanActive}}{{$tipScan = "'Scan' already queued or running"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{end}}
+    {{if .ScanActive}}{{$tipScan = "Scan already queued or running"}}{{else if not .DomainActive}}{{$tipScan = .DomainDisabledTitle}}{{if not $tipScan}}{{$tipScan = "Domain is inactive. Activate under Settings → Queue / Domains."}}{{end}}{{else if not .Source.FullScanDone}}{{$tipScan = "Finish Full scan first"}}{{end}}
     <form method="post" action="/actions/scan-source">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <span class="tooltip tooltip-top inline-flex" data-tip="{{$tipScan}}">
-        <button type="submit" class="btn btn-outline" {{if $scanOff}}disabled{{end}}>
-          <i data-lucide="scan-line" class="size-4"></i>
-          Scan
-        </button>
-      </span>
+      {{template "btn_labeled" (dict "Type" "submit" "Icon" "scan-line" "Label" "Scan" "Disabled" $scanOff "Tip" $tipScan)}}
     </form>
-    {{end}}
-    {{if .HasRetryable}}
-    <label for="modal-retry-source" class="btn btn-primary tooltip tooltip-top" data-tip="Clear download errors on this source and put videos back to wanted">
-      <i data-lucide="rotate-ccw" class="size-4"></i>
-      Retry
-    </label>
-    {{end}}
     {{$fullOff := or .ScanActive (not .DomainActive)}}
-    {{$tipFull := "Start 'Full scan'"}}
-    {{if .ScanActive}}{{$tipFull = "'Full scan' already queued or running"}}{{else if not .DomainActive}}{{$tipFull = .DomainDisabledTitle}}{{if not $tipFull}}{{$tipFull = "Domain is inactive. Activate under 'Settings → Queue / Domains'."}}{{end}}{{else if .Source.FullScanDone}}{{$tipFull = "Start 'Full scan'. Keeps videos; adds new findings."}}{{end}}
+    {{$tipFull := "Start Full scan"}}
+    {{if .ScanActive}}{{$tipFull = "Full scan already queued or running"}}{{else if not .DomainActive}}{{$tipFull = .DomainDisabledTitle}}{{if not $tipFull}}{{$tipFull = "Domain is inactive. Activate under Settings → Queue / Domains."}}{{end}}{{else if .Source.FullScanDone}}{{$tipFull = "Start Full scan. Keeps videos; adds new findings."}}{{end}}
     <form method="post" action="/actions/full-rescan-source">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
       <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <span class="tooltip tooltip-top inline-flex" data-tip="{{$tipFull}}">
-        <button type="submit" class="btn btn-outline" {{if $fullOff}}disabled{{end}}>
-          <i data-lucide="scan-text" class="size-4"></i>
-          Full scan
-        </button>
-      </span>
+      {{template "btn_labeled" (dict "Type" "submit" "Icon" "scan-text" "Label" "Full scan" "Disabled" $fullOff "Tip" $tipFull)}}
     </form>
-    <label for="modal-edit-source" class="btn btn-outline">
-      <i data-lucide="pencil" class="size-4"></i>
-      Edit
-    </label>
+    {{template "btn_labeled" (dict "Type" "label" "For" "modal-edit-source" "Icon" "pencil" "Label" "Edit")}}
+
     <label for="modal-delete-source" class="btn btn-soft btn-error btn-square tooltip tooltip-top" data-tip="Delete" aria-label="Delete">
       <i data-lucide="trash-2" class="size-4"></i>
     </label>
@@ -77,7 +56,6 @@
   {{else}}
   {{template "detail_row" (dict "Label" "Name" "EmptyText" "-")}}
   {{end}}
-  {{if ne .Source.Kind "single"}}
   <tr><th class="w-40">Scan</th><td class="text-sm">{{.ScanCronLabel}}</td></tr>
   {{if gt .Source.FullScanLimit 0}}
   <tr><th class="w-40">Full scan limit</th><td>{{.Source.FullScanLimit}}</td></tr>
@@ -95,7 +73,6 @@
   {{template "detail_row" (dict "Label" "Title exclude" "TdClass" "font-mono text-xs break-all")}}
   {{end}}
   <tr><th class="w-40">Discovered video status</th><td>{{if .Source.IndexAsIgnored}}Ignored - new videos stay ignored until manually set to wanted{{else}}Wanted{{end}}</td></tr>
-  {{end}}
 </tbody>
 {{template "list_table_end"}}
   </div>
@@ -106,7 +83,6 @@
 {{template "list_header" (dict "level" "section" "title" "Status")}}
 {{template "list_table"}}
 <tbody>
-  <tr><th class="w-40">Kind</th><td>{{if eq .Source.Kind "single"}}single{{else}}feed{{end}}</td></tr>
   <tr><th class="w-40">Tool</th><td class="font-mono text-xs">yt-dlp</td></tr>
   <tr><th class="w-40">Domain</th><td class="font-mono text-xs">{{.DomainHost}}{{if not .DomainActive}} <span class="badge badge-warning badge-sm">inactive</span>{{end}}</td></tr>
   {{if .HasScanned}}
@@ -134,6 +110,7 @@
 {{if not .History}}
 {{template "list_empty" "No history for this source yet."}}
 {{else}}
+{{template "pagination" .HistoryPage}}
 {{/* table-fixed: long Message truncates instead of widening the page */}}
 <div class="list-table-wrap rounded-box border border-base-300">
   <table class="table table-sm list-table w-full table-fixed">
@@ -158,7 +135,7 @@
 <input type="checkbox" id="modal-edit-source" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box max-w-xl">
-    <h3 class="font-bold text-lg mb-2">Edit {{if eq .Source.Kind "single"}}single{{else}}feed{{end}}</h3>
+    <h3 class="font-bold text-lg mb-2">Edit source</h3>
         <form method="post" action="/actions/update-source" class="space-y-2">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="source_id" value="{{.Source.ID}}" />
@@ -174,14 +151,11 @@
         <legend class="fieldset-legend">Name (optional)</legend>
         <input name="label" class="input w-full" value="{{if .Source.Label.Valid}}{{.Source.Label.String}}{{end}}" />
       </fieldset>
-      {{if ne .Source.Kind "single"}}
       {{template "scan_cron_field" (dict
         "Value" .Source.ScanCron
         "ID" "edit-source-scan-cron"
         "CronDescriptors" .ScanCronDescriptors
       )}}
-      {{end}}
-      {{if ne .Source.Kind "single"}}
       {{template "source_filter_fields" (dict
         "FullScanLimit" .Source.FullScanLimit
         "FullScanLimitID" "edit-source-full-scan-limit"
@@ -191,7 +165,6 @@
         "TitleRegexpExclude" .Source.TitleRegexpExclude
         "TitleRegexpExcludeID" "edit-source-title-exclude"
       )}}
-      {{end}}
       {{template "source_default_metadata" (dict
         "Source" .Source
         "Suggestions" .MetaSuggestions
@@ -225,26 +198,6 @@
   </div>
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
-
-{{if .HasRetryable}}
-<input type="checkbox" id="modal-retry-source" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Retry download errors</h3>
-    <p class="text-sm mb-4">Set wanted_download_error / wanted_archive videos back to wanted for this source. Cancels pending Web Archive downloads. Does not enqueue downloads.</p>
-    <form method="post" action="/actions/retry-source-errors">
-      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
-      <input type="hidden" name="source_id" value="{{.Source.ID}}" />
-      <input type="hidden" name="redirect" value="{{.SelfPath}}" />
-      <div class="modal-action">
-        <label for="modal-retry-source" class="btn modal-cancel">Cancel</label>
-        <button type="submit" class="btn btn-primary">Retry</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-{{end}}
 
 {{template "foot" .}}
 {{end}}

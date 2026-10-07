@@ -14,7 +14,9 @@ func (s *Server) ListNotifications(w http.ResponseWriter, r *http.Request, param
 		f.Event = string(*params.Event)
 	}
 	if params.Level != nil {
-		f.Level = string(*params.Level)
+		if lv := string(*params.Level); lv != "" {
+			f.Levels = []string{lv}
+		}
 	}
 	if params.UnreadOnly != nil {
 		f.UnreadOnly = *params.UnreadOnly
@@ -48,12 +50,12 @@ func (s *Server) GetNotification(w http.ResponseWriter, r *http.Request, id gen.
 }
 
 func (s *Server) GetNotificationUnreadCount(w http.ResponseWriter, r *http.Request) {
-	n, err := notify.CountUnread(s.Queue.DB)
+	n, hasAlert, err := notify.UnreadBadge(s.Queue.DB)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "count unread failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, gen.NotificationUnreadCount{Count: n})
+	writeJSON(w, http.StatusOK, gen.NotificationUnreadCount{Count: n, HasAlert: hasAlert})
 }
 
 func (s *Server) MarkNotificationRead(w http.ResponseWriter, r *http.Request, id gen.TaskId) {
@@ -78,12 +80,12 @@ func (s *Server) MarkAllNotificationsRead(w http.ResponseWriter, r *http.Request
 		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "mark all read failed", err.Error())
 		return
 	}
-	uc, err := notify.CountUnread(s.Queue.DB)
+	uc, hasAlert, err := notify.UnreadBadge(s.Queue.DB)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, apperrors.CodeInternal, "count unread failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, gen.NotificationUnreadCount{Count: uc})
+	writeJSON(w, http.StatusOK, gen.NotificationUnreadCount{Count: uc, HasAlert: hasAlert})
 }
 
 func mapNotification(n notify.Notification) gen.Notification {

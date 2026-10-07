@@ -37,7 +37,8 @@ func (h *Handler) actionUpsertNotifyChannel(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	events := r.Form["events"]
-	_, err := notify.Upsert(h.Queue.DB, id, r.FormValue("name"), r.FormValue("url"), events)
+	markExternalRead := r.FormValue("mark_external_read") == "1"
+	_, err := notify.Upsert(h.Queue.DB, id, r.FormValue("name"), r.FormValue("url"), events, markExternalRead)
 	if err != nil {
 		if htmx {
 			h.writeNotifyURLFieldError(w, r, err.Error())

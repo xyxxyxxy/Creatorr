@@ -62,16 +62,15 @@ function syncSeriesBulkUI() {
   const modeBtn = live.querySelector("[data-series-bulk-mode]");
   if (modeBtn) {
     modeBtn.setAttribute("aria-pressed", seriesBulkMode ? "true" : "false");
-    modeBtn.classList.toggle("btn-primary", seriesBulkMode);
-    modeBtn.classList.toggle("btn-active", seriesBulkMode);
-    modeBtn.setAttribute("data-tip", seriesBulkMode ? "Exit multi-select" : "Multi-select");
+    const wrap = modeBtn.closest(".js-list-toolbar-dd");
+    if (wrap) wrap.classList.toggle("is-bulk-on", seriesBulkMode);
     modeBtn.setAttribute("aria-label", seriesBulkMode ? "Exit multi-select" : "Multi-select");
   }
   live.querySelectorAll("[data-series-select-wrap]").forEach((wrap) => {
     wrap.classList.toggle("hidden", !seriesBulkMode);
   });
   live.querySelectorAll("[data-series-monitor-wrap]").forEach((wrap) => {
-    wrap.classList.toggle("hidden", false);
+    wrap.classList.remove("hidden");
     const disabled = seriesBulkMode || seriesBulkBusy();
     wrap.querySelectorAll("button, input, .monitor-toggle").forEach((el) => {
       if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement) {
@@ -84,32 +83,52 @@ function syncSeriesBulkUI() {
     wrap.classList.toggle("pointer-events-none", disabled);
     wrap.classList.toggle("opacity-40", disabled);
   });
-  live.querySelectorAll("#series-list-rows > .list-row[data-series-id]").forEach((row) => {
+  live.querySelectorAll("#series-list-rows > [data-series-id]").forEach((row) => {
     row.classList.toggle("cursor-pointer", seriesBulkMode);
     const id = row.getAttribute("data-series-id");
-    row.classList.toggle("bg-base-200", seriesBulkMode && seriesBulkSelected.has(id));
-    row.classList.toggle("rounded-none", seriesBulkMode && seriesBulkSelected.has(id));
-    // Bulk: checkbox|media|grow|monitor. Normal: media|grow|monitor.
-    if (seriesBulkMode) {
-      row.style.setProperty("--list-grid-cols", "max-content minmax(0, auto) 1fr max-content");
+    const selected = seriesBulkMode && seriesBulkSelected.has(id);
+    const isCard = row.classList.contains("card");
+    row.classList.toggle("bg-base-200", selected && !isCard);
+    // Cards: accent outline (poster fills the face; bg fill is almost invisible).
+    //! pin: selected card outline outline-accent
+    row.classList.toggle("outline", selected && isCard);
+    row.classList.toggle("outline-2", selected && isCard);
+    row.classList.toggle("outline-offset-2", selected && isCard);
+    row.classList.toggle("outline-accent", selected && isCard);
+    if (row.classList.contains("list-row")) {
+      row.classList.toggle("rounded-none", selected);
+      // Bulk: checkbox|media|grow|monitor. Normal: media|grow|monitor.
+      if (seriesBulkMode) {
+        row.style.setProperty("--list-grid-cols", "max-content minmax(0, auto) 1fr max-content");
+      } else {
+        row.style.setProperty("--list-grid-cols", "minmax(0, auto) 1fr max-content");
+      }
+      // Title stays plain text in multi-select (row click toggles; no link chrome).
+      row.querySelectorAll(".list-col-grow a[href]").forEach((a) => {
+        a.classList.toggle("link", !seriesBulkMode);
+        a.classList.toggle("link-hover", !seriesBulkMode);
+      });
     } else {
-      row.style.setProperty("--list-grid-cols", "minmax(0, auto) 1fr max-content");
+      // Thumb card: whole card click toggles; strip title link chrome in bulk.
+      row.querySelectorAll(".card-body a[href]").forEach((a) => {
+        a.classList.toggle("link", !seriesBulkMode);
+        a.classList.toggle("link-hover", !seriesBulkMode);
+      });
     }
-    // Title stays plain text in multi-select (row click toggles; no link chrome).
-    row.querySelectorAll(".list-col-grow a[href]").forEach((a) => {
-      a.classList.toggle("link", !seriesBulkMode);
-      a.classList.toggle("link-hover", !seriesBulkMode);
-    });
   });
   const bar = live.querySelector("[data-series-bulk-bar]");
   if (bar) {
     bar.classList.toggle("hidden", !seriesBulkMode);
+    const wrap = document.getElementById("series-bulk-bar-wrap");
+    if (wrap) wrap.classList.toggle("hidden", !seriesBulkMode);
     const n = seriesBulkSelected.size;
     const m = seriesBulkFilterTotal();
     const countEl = bar.querySelector("[data-series-bulk-count]");
     if (countEl) countEl.textContent = n + "/" + m;
     const busy = seriesBulkBusy();
-    bar.querySelectorAll("[data-series-bulk-edit], [data-series-bulk-metadata], [data-series-bulk-delete]").forEach((btn) => {
+    bar.querySelectorAll(
+      "[data-series-bulk-monitor], [data-series-bulk-unmonitor], [data-series-bulk-edit], [data-series-bulk-metadata], [data-series-bulk-delete]"
+    ).forEach((btn) => {
       btn.disabled = busy || n === 0;
     });
     const selectAllBtn = bar.querySelector("[data-series-select-all-matching]");
@@ -177,7 +196,7 @@ export function resetBulkMetadataForm(form) {
 
 function resetBulkSettingsForm(form) {
   if (!form) return;
-  form.querySelectorAll('select[name="delivery_mode"], select[name="monitored"], select[name="root_id"]').forEach((el) => {
+  form.querySelectorAll('select[name="delivery_mode"], select[name="root_id"]').forEach((el) => {
     el.value = "";
   });
   const qp = form.querySelector("[data-quality-profile-select]") || form.querySelector('select[name="quality_profile_id"]');
@@ -281,9 +300,6 @@ async function hydrateBulkSettingsForm() {
     if (data.delivery_mode && data.delivery_mode.same && data.delivery_mode.value) {
       setSelect("delivery_mode", data.delivery_mode.value);
     }
-    if (data.monitored && data.monitored.same) {
-      setSelect("monitored", data.monitored.value ? "1" : "0");
-    }
     if (data.root_id && data.root_id.same && data.root_id.value) {
       setSelect("root_id", data.root_id.value);
     }
@@ -302,11 +318,41 @@ async function hydrateBulkSettingsForm() {
   }
 }
 
+/** Confirm modal only when selection exceeds this (≤5 submit immediately). */
+const SERIES_BULK_CONFIRM_AFTER = 5;
+
+function submitSeriesBulkForm(formId) {
+  fillSeriesBulkIDs(document);
+  const form = document.getElementById(formId);
+  if (form) form.requestSubmit();
+}
+
 function runSeriesBulkAction(action) {
   if (!seriesBulkMode || seriesBulkBusy() || seriesBulkSelected.size === 0) return;
   const n = seriesBulkSelected.size;
   const m = seriesBulkFilterTotal();
   fillSeriesBulkIDs(document);
+  const needConfirm = n > SERIES_BULK_CONFIRM_AFTER;
+  if (action === "monitor") {
+    if (!needConfirm) {
+      submitSeriesBulkForm("form-bulk-monitor-series");
+      return;
+    }
+    const title = document.querySelector("[data-bulk-monitor-title]");
+    if (title) title.textContent = "Monitor " + n + "/" + m + " series";
+    openSeriesBulkModal("modal-bulk-monitor-series");
+    return;
+  }
+  if (action === "unmonitor") {
+    if (!needConfirm) {
+      submitSeriesBulkForm("form-bulk-unmonitor-series");
+      return;
+    }
+    const title = document.querySelector("[data-bulk-unmonitor-title]");
+    if (title) title.textContent = "Unmonitor " + n + "/" + m + " series";
+    openSeriesBulkModal("modal-bulk-unmonitor-series");
+    return;
+  }
   if (action === "edit") {
     const title = document.querySelector("[data-bulk-edit-title]");
     if (title) title.textContent = "Edit " + n + "/" + m + " series";
@@ -337,6 +383,11 @@ async function selectAllMatchingSeries() {
   seriesBulkSelected.clear();
   ids.forEach((id) => seriesBulkSelected.add(String(id)));
   restoreSeriesBulkCheckboxes();
+}
+
+/** Re-apply selected Set to checkboxes after infinite append or keep-depth live swap. */
+export function refreshSeriesBulkAfterDOM() {
+  syncSeriesBulkUI();
 }
 
 export function bootSeriesBulk() {
@@ -385,8 +436,12 @@ export function bootSeriesBulk() {
       return;
     }
     if (seriesBulkMode) {
-      const row = ev.target.closest("#series-list-rows > .list-row[data-series-id]");
-      if (row && !ev.target.closest(".js-series-select, [data-series-select-wrap]")) {
+      //! pin: thumb+list bulk click #series-list-rows > [data-series-id]
+      const row = ev.target.closest("#series-list-rows > [data-series-id]");
+      if (
+        row &&
+        !ev.target.closest(".js-series-select, [data-series-select-wrap], [data-series-monitor-wrap]")
+      ) {
         ev.preventDefault();
         const id = row.getAttribute("data-series-id");
         if (id) toggleSeriesBulkID(id);
@@ -401,6 +456,18 @@ export function bootSeriesBulk() {
       selectAllMatchingSeries()
         .catch(() => {})
         .finally(() => syncSeriesBulkUI());
+      return;
+    }
+    const monitor = ev.target.closest("[data-series-bulk-monitor]");
+    if (monitor) {
+      ev.preventDefault();
+      runSeriesBulkAction("monitor");
+      return;
+    }
+    const unmonitor = ev.target.closest("[data-series-bulk-unmonitor]");
+    if (unmonitor) {
+      ev.preventDefault();
+      runSeriesBulkAction("unmonitor");
       return;
     }
     const edit = ev.target.closest("[data-series-bulk-edit]");
@@ -434,11 +501,14 @@ export function bootSeriesBulk() {
     syncSeriesBulkUI();
   });
 
-  document.body.addEventListener("htmx:afterSwap", (ev) => {
+  // afterSettle: HTMX class settle restores response `hidden` on id'd bulk bar.
+  const onSeriesBulkLiveSwap = (ev) => {
     const target = ev.detail && ev.detail.target;
     if (!target || target.id !== "series-list-live") return;
     restoreSeriesBulkCheckboxes();
-  });
+  };
+  document.body.addEventListener("htmx:afterSwap", onSeriesBulkLiveSwap);
+  document.body.addEventListener("htmx:afterSettle", onSeriesBulkLiveSwap);
 
   if (onSeriesListPage()) {
     restoreSeriesBulkCheckboxes();

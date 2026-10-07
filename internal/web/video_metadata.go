@@ -447,3 +447,45 @@ func (h *Handler) actionRefreshSidecarsVideo(w http.ResponseWriter, r *http.Requ
 	}
 	http.Redirect(w, r, appendQuery(redir, "ok=refresh-sidecars"), http.StatusSeeOther)
 }
+
+func (h *Handler) actionCheckFileHash(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
+	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
+	fid, _ := strconv.ParseInt(r.FormValue("file_id"), 10, 64)
+	redir := r.FormValue("redirect")
+	if redir == "" {
+		if vid > 0 {
+			redir = fmt.Sprintf("/series/%d/videos/%d/files/%d", sid, vid, fid)
+		} else {
+			redir = fmt.Sprintf("/series/%d", sid)
+		}
+	}
+	f, gerr := h.Library.GetFile(fid)
+	if gerr != nil {
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(gerr.Error())), http.StatusSeeOther)
+		return
+	}
+	if f.IsSeriesMeta() {
+		_, err := h.Library.EnqueueSeriesMetaFileHashCheck(fid)
+		if err != nil {
+			http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, appendQuery(redir, "ok=check-file-hash"), http.StatusSeeOther)
+		return
+	}
+	if vid <= 0 && f.VideoID.Valid {
+		vid = f.VideoID.Int64
+	}
+	if err := h.errIfVideoDeleting(vid); err != nil {
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
+		return
+	}
+	_, err := h.Library.EnqueueFileHashCheck(vid, fid)
+	if err != nil {
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, appendQuery(redir, "ok=check-file-hash"), http.StatusSeeOther)
+}

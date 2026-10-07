@@ -32,7 +32,8 @@ func TestSeriesWarnLevels(t *testing.T) {
 		t.Fatal(err)
 	}
 	src, err := s.AddSource(ser.ID, library.AddSourceParams{
-		URL: "https://www.example.com/c/w", Kind: library.SourceKindFeed,
+		URL:      "https://www.example.com/c/w",
+		ScanCron: "@weekly",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +45,7 @@ func TestSeriesWarnLevels(t *testing.T) {
 	if err := s.ResetFullScan(src.ID); err != nil {
 		t.Fatal(err)
 	}
-	// Default feed cron is non-empty; scheduled incomplete does not escalate.
+	// Scheduled source (weekly cron): incomplete backfill does not escalate.
 	lvl, err := s.SeriesWarnLevel(ser.ID)
 	if err != nil {
 		t.Fatal(err)

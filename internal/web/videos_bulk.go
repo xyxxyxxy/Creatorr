@@ -35,6 +35,57 @@ func parseVideoIDList(r *http.Request) []int64 {
 	return out
 }
 
+func preferVideosList(r *http.Request) bool {
+	ref := r.Header.Get("Referer")
+	if ref == "" {
+		return false
+	}
+	u, err := url.Parse(ref)
+	if err != nil || u == nil {
+		return false
+	}
+	path := strings.TrimSuffix(u.Path, "/")
+	if path == "/videos" {
+		return true
+	}
+	if path == "/browser" && u.Query().Get("type") == explorerTypeVideos {
+		return true
+	}
+	return false
+}
+
+func videosListRedirect(r *http.Request, okKey, detail, errMsg string) string {
+	q := url.Values{}
+	if ref := r.Header.Get("Referer"); ref != "" {
+		if u, err := url.Parse(ref); err == nil && u != nil {
+			for k, vs := range u.Query() {
+				switch k {
+				case "ok", "detail", "err", "n":
+					continue
+				}
+				for _, v := range vs {
+					q.Add(k, v)
+				}
+			}
+		}
+	}
+	q.Set("type", explorerTypeVideos)
+	if okKey != "" {
+		q.Set("ok", okKey)
+	}
+	if detail != "" {
+		q.Set("detail", detail)
+	}
+	if errMsg != "" {
+		q.Set("err", errMsg)
+	}
+	enc := q.Encode()
+	if enc == "" {
+		return "/browser?type=videos"
+	}
+	return "/browser?" + enc
+}
+
 func seriesVideosRedirect(seriesID int64, r *http.Request, okKey, detail, errMsg string) string {
 	q := url.Values{}
 	if okKey != "" {
@@ -46,13 +97,11 @@ func seriesVideosRedirect(seriesID int64, r *http.Request, okKey, detail, errMsg
 	if errMsg != "" {
 		q.Set("err", errMsg)
 	}
-	// Preserve list filters from Referer query when present.
+	// Series Videos glance only keeps ?page=.
 	if ref := r.Header.Get("Referer"); ref != "" {
 		if u, err := url.Parse(ref); err == nil && u != nil {
-			for _, k := range []string{"q", "status", "source", "year", "page", "from", "to"} {
-				if v := u.Query().Get(k); v != "" && q.Get(k) == "" {
-					q.Set(k, v)
-				}
+			if v := u.Query().Get("page"); v != "" && q.Get("page") == "" {
+				q.Set("page", v)
 			}
 		}
 	}
@@ -64,88 +113,98 @@ func seriesVideosRedirect(seriesID int64, r *http.Request, okKey, detail, errMsg
 	return path + "?" + enc
 }
 
+// videoBulkRedirect sends the operator back to /videos or series detail after a bulk action.
+func videoBulkRedirect(r *http.Request, seriesID int64, okKey, detail, errMsg string) string {
+	if preferVideosList(r) || seriesID <= 0 {
+		return videosListRedirect(r, okKey, detail, errMsg)
+	}
+	return seriesVideosRedirect(seriesID, r, okKey, detail, errMsg)
+}
+
 func (h *Handler) actionBulkWantVideos(w http.ResponseWriter, r *http.Request) {
 	ids := parseVideoIDList(r)
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if len(ids) == 0 || sid <= 0 {
-		http.Redirect(w, r, "/series?err="+urlQuery("select at least one video"), http.StatusSeeOther)
+	if len(ids) == 0 {
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", "select at least one video"), http.StatusSeeOther)
 		return
 	}
 	updated, skipped, err := h.Library.WantVideosBulk(ids)
 	if err != nil {
-		http.Redirect(w, r, seriesVideosRedirect(sid, r, "", "", err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", err.Error()), http.StatusSeeOther)
 		return
 	}
 	ok := "bulk_want"
-	if ser, serr := h.Library.GetSeries(sid, false); serr == nil && !ser.Monitored {
-		ok = "bulk_want_unmonitored"
+	if sid > 0 {
+		if ser, serr := h.Library.GetSeries(sid, false); serr == nil && !ser.Monitored {
+			ok = "bulk_want_unmonitored"
+		}
 	}
 	msg := "updated=" + strconv.Itoa(updated)
 	if skipped > 0 {
 		msg += " skipped=" + strconv.Itoa(skipped)
 	}
-	http.Redirect(w, r, seriesVideosRedirect(sid, r, ok, msg, ""), http.StatusSeeOther)
+	http.Redirect(w, r, videoBulkRedirect(r, sid, ok, msg, ""), http.StatusSeeOther)
 }
 
 func (h *Handler) actionBulkClearVideoDownloadErrors(w http.ResponseWriter, r *http.Request) {
 	ids := parseVideoIDList(r)
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if len(ids) == 0 || sid <= 0 {
-		http.Redirect(w, r, "/series?err="+urlQuery("select at least one video"), http.StatusSeeOther)
+	if len(ids) == 0 {
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", "select at least one video"), http.StatusSeeOther)
 		return
 	}
 	updated, _, err := h.Library.ClearVideoDownloadErrorsBulk(ids)
 	if err != nil {
-		http.Redirect(w, r, seriesVideosRedirect(sid, r, "", "", err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", err.Error()), http.StatusSeeOther)
 		return
 	}
-	redir := seriesVideosRedirect(sid, r, "clear-error", "", "")
+	redir := videoBulkRedirect(r, sid, "clear-error", "", "")
 	http.Redirect(w, r, appendQuery(redir, "n="+strconv.Itoa(updated)), http.StatusSeeOther)
 }
 
 func (h *Handler) actionBulkIgnoreVideos(w http.ResponseWriter, r *http.Request) {
 	ids := parseVideoIDList(r)
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if len(ids) == 0 || sid <= 0 {
-		http.Redirect(w, r, "/series?err="+urlQuery("select at least one video"), http.StatusSeeOther)
+	if len(ids) == 0 {
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", "select at least one video"), http.StatusSeeOther)
 		return
 	}
 	updated, skipped, err := h.Library.IgnoreVideosBulk(ids)
 	if err != nil {
-		http.Redirect(w, r, seriesVideosRedirect(sid, r, "", "", err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", err.Error()), http.StatusSeeOther)
 		return
 	}
 	msg := "updated=" + strconv.Itoa(updated)
 	if skipped > 0 {
 		msg += " skipped=" + strconv.Itoa(skipped)
 	}
-	http.Redirect(w, r, seriesVideosRedirect(sid, r, "bulk_ignore", msg, ""), http.StatusSeeOther)
+	http.Redirect(w, r, videoBulkRedirect(r, sid, "bulk_ignore", msg, ""), http.StatusSeeOther)
 }
 
 func (h *Handler) actionBulkRefreshSidecarsVideos(w http.ResponseWriter, r *http.Request) {
 	ids := parseVideoIDList(r)
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if len(ids) == 0 || sid <= 0 {
-		http.Redirect(w, r, "/series?err="+urlQuery("select at least one video"), http.StatusSeeOther)
+	if len(ids) == 0 {
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", "select at least one video"), http.StatusSeeOther)
 		return
 	}
 	queued, skipped, err := h.Library.EnqueueRefreshSidecarsVideosBulk(ids)
 	if err != nil {
-		http.Redirect(w, r, seriesVideosRedirect(sid, r, "", "", err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", err.Error()), http.StatusSeeOther)
 		return
 	}
 	msg := "queued=" + strconv.Itoa(queued)
 	if skipped > 0 {
 		msg += " skipped=" + strconv.Itoa(skipped)
 	}
-	http.Redirect(w, r, seriesVideosRedirect(sid, r, "bulk_refresh_sidecars", msg, ""), http.StatusSeeOther)
+	http.Redirect(w, r, videoBulkRedirect(r, sid, "bulk_refresh_sidecars", msg, ""), http.StatusSeeOther)
 }
 
 func (h *Handler) actionBulkEditVideosMetadata(w http.ResponseWriter, r *http.Request) {
 	ids := parseVideoIDList(r)
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if len(ids) == 0 || sid <= 0 {
-		http.Redirect(w, r, "/series?err="+urlQuery("select at least one video"), http.StatusSeeOther)
+	if len(ids) == 0 {
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", "select at least one video"), http.StatusSeeOther)
 		return
 	}
 	p := library.BulkEditVideosParams{VideoIDs: ids}
@@ -172,25 +231,25 @@ func (h *Handler) actionBulkEditVideosMetadata(w http.ResponseWriter, r *http.Re
 	}
 	tid, err := h.Library.EnqueueBulkEditVideos(p)
 	if err != nil {
-		http.Redirect(w, r, seriesVideosRedirect(sid, r, "", "", err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, seriesVideosRedirect(sid, r, "bulk_edit_queued", "task="+strconv.FormatInt(tid, 10), ""), http.StatusSeeOther)
+	http.Redirect(w, r, videoBulkRedirect(r, sid, "bulk_edit_queued", "task="+strconv.FormatInt(tid, 10), ""), http.StatusSeeOther)
 }
 
 func (h *Handler) actionBulkDeleteVideos(w http.ResponseWriter, r *http.Request) {
 	ids := parseVideoIDList(r)
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	if len(ids) == 0 || sid <= 0 {
-		http.Redirect(w, r, "/series?err="+urlQuery("select at least one video"), http.StatusSeeOther)
+	if len(ids) == 0 {
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", "select at least one video"), http.StatusSeeOther)
 		return
 	}
 	tid, _, _, err := h.Library.EnqueueBulkDeleteVideos(ids)
 	if err != nil {
-		http.Redirect(w, r, seriesVideosRedirect(sid, r, "", "", err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, seriesVideosRedirect(sid, r, "bulk_delete_queued", "task="+strconv.FormatInt(tid, 10), ""), http.StatusSeeOther)
+	http.Redirect(w, r, videoBulkRedirect(r, sid, "bulk_delete_queued", "task="+strconv.FormatInt(tid, 10), ""), http.StatusSeeOther)
 }
 
 func (h *Handler) seriesVideoIDsJSON(w http.ResponseWriter, r *http.Request) {
@@ -202,6 +261,21 @@ func (h *Handler) seriesVideoIDsJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := parseSeriesVideoListFilter(r, ser.Sources)
 	ids, err := h.Library.ListVideoIDsFiltered(sid, filter)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if ids == nil {
+		ids = []int64{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ids": ids})
+}
+
+func (h *Handler) videosIDsJSON(w http.ResponseWriter, r *http.Request) {
+	filter := parseVideoListFilter(r, nil, true)
+	ids, err := h.Library.ListVideoIDsFiltered(0, filter)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return

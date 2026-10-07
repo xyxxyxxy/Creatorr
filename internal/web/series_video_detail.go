@@ -11,7 +11,6 @@ import (
 	"github.com/xyxxyxxy/Creatorr/internal/domains"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
 	"github.com/xyxxyxxy/Creatorr/internal/queue"
-	"github.com/xyxxyxxy/Creatorr/internal/settings"
 )
 
 func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +45,6 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 	histTimeline := videoHistoryGroupsToTimeline(groupVideoHistoryByTask(histViews))
 	t, _ := h.Queue.ActiveTaskForVideo(vid)
 	statusTask, _ := h.Queue.ActiveNonIntegrityTaskForVideo(vid)
-	integrityTask, _ := h.Queue.IntegrityTaskLinkForVideo(vid)
 	dlRunning := deliveryTaskActive(t) && t.Status == queue.StatusRunning
 	deliveryQueued := deliveryTaskActive(t)
 	deleting := taskIsFileDelete(t)
@@ -55,12 +53,6 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		statusTaskID = statusTask.ID
 		statusTaskKind = statusTask.Kind
 		statusTaskPrefix = activeTaskLinkPrefix(statusTask.Status)
-	}
-	integrityTaskID, integrityTaskKind, integrityTaskPrefix := int64(0), "", ""
-	if integrityTask != nil {
-		integrityTaskID = integrityTask.ID
-		integrityTaskKind = integrityTask.Kind
-		integrityTaskPrefix = activeTaskLinkPrefix(integrityTask.Status)
 	}
 	detailRows := videoDetailRows(video)
 	mediaResolution := ""
@@ -81,6 +73,20 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	fileRows := videoAllFileViews(h.Library, sid, vid)
 	mediaRaw, mediaAudio, hasMediaPlay := videoMediaPlay(fileRows, sid, vid, ser.IsAudio())
+	qFiles := r.URL.Query()
+	qFiles.Set("type", explorerTypeFiles)
+	qFiles.Set("at", explorerAtVideoDet)
+	qFiles.Set("series_id", strconv.FormatInt(sid, 10))
+	qFiles.Set("video_id", strconv.FormatInt(vid, 10))
+	for _, k := range []string{"q", "kind", "status", "sort", "dir", "view", "page"} {
+		qFiles.Del(k)
+	}
+	filesReq := cloneRequestQuery(r, qFiles)
+	filesLive, filesErr := h.loadFilesListLive(w, filesReq)
+	if filesErr != nil {
+		http.Error(w, filesErr.Error(), 500)
+		return
+	}
 	metaForm := h.buildVideoMetadataView(ser, video)
 	if tidStr := r.URL.Query().Get("meta_prefetch"); tidStr != "" {
 		if tid, err := strconv.ParseInt(tidStr, 10, 64); err == nil && tid > 0 {
@@ -127,7 +133,6 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		resolvedSourceURL = library.DownloadURL(video.SourceURL.String, video.RemoteID)
 	}
 	hasSourceURL := video.SourceURL.Valid && strings.TrimSpace(video.SourceURL.String) != ""
-	integrityInd := h.integrityIndicatorForVideo(ser, video, now)
 	render(w, "video_detail", struct {
 		pageBase
 		Series              *library.Series
@@ -142,20 +147,16 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		MediaFPS            string
 		MediaRemux          string
 		MediaDuration       string
-		Files               []videoFileView
+		FilesLive           filesListLiveData
 		DetailRows          []videoDetailRow
 		History             []taskStageView
 		HistoryPage         PageInfo
 		ErrorHistoryID      int64
 		TaskInd             taskIndicatorView
-		IntegrityInd        integrityIndicatorView
 		StatusTaskID        int64
 		StatusTaskKind      string
 		StatusTaskPrefix    string
 		StatusLabel         string
-		IntegrityTaskID     int64
-		IntegrityTaskKind   string
-		IntegrityTaskPrefix string
 		DownloadRunning     bool
 		DeliveryQueued      bool
 		DomainActive        bool
@@ -177,20 +178,16 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		MediaFPS:            mediaFPS,
 		MediaRemux:          mediaRemux,
 		MediaDuration:       mediaDuration,
-		Files:               fileRows,
+		FilesLive:           filesLive,
 		DetailRows:          detailRows,
 		History:             histTimeline,
 		HistoryPage:         histPageInfo,
 		ErrorHistoryID:      errorHistoryID,
 		TaskInd:             h.videoIndicator(vid, t, video.Status),
-		IntegrityInd:        integrityInd,
 		StatusTaskID:        statusTaskID,
 		StatusTaskKind:      statusTaskKind,
 		StatusTaskPrefix:    statusTaskPrefix,
 		StatusLabel:         videoStatusLabel(video.Status),
-		IntegrityTaskID:     integrityTaskID,
-		IntegrityTaskKind:   integrityTaskKind,
-		IntegrityTaskPrefix: integrityTaskPrefix,
 		DownloadRunning:     dlRunning,
 		DeliveryQueued:      deliveryQueued,
 		DomainActive:        dAct,
@@ -199,25 +196,4 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		HasPackAnchor:       metaForm.HasPackAnchor,
 		MetaForm:            metaForm,
 	})
-}
-
-// integrityIndicatorForVideo loads profile / hash / cron / last-check for the Status chip.
-func (h *Handler) integrityIndicatorForVideo(ser *library.Series, video *library.Video, now time.Time) integrityIndicatorView {
-	verifyMedia := false
-	if ser != nil {
-		if p, err := h.Library.GetProfile(ser.QualityProfileID); err == nil && p != nil {
-			verifyMedia = p.VerifyMedia
-		}
-	}
-	hasHash, _ := h.Library.VideoMediaHasContentHash(video.ID)
-	cron := ""
-	if h.Queue != nil && h.Queue.DB != nil {
-		cron, _ = settings.Get(h.Queue.DB, settings.KeyIntegrityCheckCron)
-	}
-	lastAt := ""
-	if t, ok, err := h.Library.LastIntegrityCheckAt(video.ID); err == nil && ok {
-		lastAt = t.UTC().Format(time.RFC3339)
-	}
-	state := integrityIndicatorState(video.Status, verifyMedia, hasHash, integrityScheduleOn(cron))
-	return buildIntegrityIndicatorView(state, video.Status, verifyMedia, lastAt, now)
 }

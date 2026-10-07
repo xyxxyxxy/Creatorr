@@ -82,7 +82,21 @@ func TestEditSourceScanCronOffDefaultsWeekly(t *testing.T) {
 	if strings.Contains(tag, ` name="scan_cron"`) {
 		t.Fatalf("disabled scan cron must not submit the visible never value: %s", tag)
 	}
-	if !strings.Contains(body, `id="add-source-scan-cron"`) || !strings.Contains(body, `value="@weekly"`) {
-		t.Fatal("add source scan cron should still default to @weekly")
+	addID := `id="add-source-scan-cron"`
+	j := strings.Index(body, addID)
+	if j < 0 {
+		t.Fatal("missing add source scan cron field")
+	}
+	addTag := body[strings.LastIndex(body[:j], "<input"):]
+	if k := strings.Index(addTag, ">"); k >= 0 {
+		addTag = addTag[:k]
+	}
+	for _, want := range []string{`value="never"`, `disabled`, `data-cron-default="@weekly"`} {
+		if !strings.Contains(addTag, want) {
+			t.Fatalf("add source scan cron should default to Never (missing %s): %s", want, addTag)
+		}
+	}
+	if strings.Contains(body, "modal-add-single") || !strings.Contains(body, "Add source") {
+		t.Fatal("expected a single Add source modal")
 	}
 }

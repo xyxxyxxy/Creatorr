@@ -34,15 +34,16 @@ type Task struct {
 	Detail       string   // structured outcome JSON for History
 	Commands     []string // shell-formatted external argv lines (yt-dlp/ffmpeg/…)
 	Logs         []string // progress lines (live buffer or persisted on failed)
-	Progress     sql.NullFloat64
-	Domain       string
-	QueueSeq     int64
-	Origin       string
-	ParentTaskID sql.NullInt64
-	CreatedAt    string
-	StartedAt    sql.NullString
-	FinishedAt   sql.NullString
-	QueuePos     int // pending only: 1 = next to claim in domain; 0 when running
+	Progress       sql.NullFloat64
+	InterruptCount int // restart requeues; 0 when never interrupted
+	Domain         string
+	QueueSeq       int64
+	Origin         string
+	ParentTaskID   sql.NullInt64
+	CreatedAt      string
+	StartedAt      sql.NullString
+	FinishedAt     sql.NullString
+	QueuePos       int // pending only: 1 = next to claim in domain; 0 when running
 }
 
 // Store wraps queue operations.

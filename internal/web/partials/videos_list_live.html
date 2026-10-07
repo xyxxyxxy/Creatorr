@@ -1,0 +1,158 @@
+{{define "videos_live"}}
+<div id="videos-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
+     data-filter-total="{{.FilterTotal}}"
+     data-bulk-busy="{{if .BulkEditBusy}}1{{else}}0{{end}}"
+     data-bulk-mode="0"
+     data-view-mode="{{.ViewMode}}"
+     data-list-mode="{{.ListMode}}"
+     data-loaded-through="{{.Load.Through}}"
+     data-through-clamped="{{if .Load.ThroughClamped}}1{{else}}0{{end}}"
+     data-loaded-count="{{.Load.LoadedCount}}">
+{{template "list_view_toolbar" .VideoFilter}}
+{{if not .Videos}}
+{{if .FilterActive}}
+{{template "list_empty" "No videos match the filters."}}
+{{else}}
+{{template "list_empty" "No videos indexed yet."}}
+{{end}}
+{{else}}
+{{template "video_bulk_bar" (dict
+  "FilterTotal" .FilterTotal
+  "BulkEditBusy" .BulkEditBusy
+  "ShowSelectAll" .ShowSelectAll
+)}}
+{{if ne .ViewMode "table"}}{{template "list_load_controls" .}}{{end}}
+{{if or (eq .ViewMode "cards") (eq .ViewMode "gallery")}}
+<ul class="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" id="videos-list-rows">
+  {{template "videos_rows_inner" .}}
+  {{if eq .ListMode "infinite"}}{{template "list_infinite_sentinel" .}}{{end}}
+</ul>
+{{else if eq .ViewMode "table"}}
+{{template "video_table" (dict
+  "Videos" .Videos
+  "TableCols" .TableCols
+  "TableColsCookie" .TableColsCookie
+  "BulkEditBusy" .BulkEditBusy
+  "SeriesTitles" .SeriesTitles
+  "Select" true
+  "LiveTarget" "videos-list-live"
+  "RowsID" "videos-list-rows"
+  "Page" .Page
+)}}
+{{else}}
+<ul class="list bg-base-100 rounded-box border border-base-300" id="videos-list-rows">
+  {{template "videos_rows_inner" .}}
+  {{if eq .ListMode "infinite"}}{{template "list_infinite_sentinel" .}}{{end}}
+</ul>
+{{end}}
+{{if ne .ViewMode "table"}}{{template "list_load_controls" .}}{{end}}
+{{end}}
+{{range .Videos}}
+{{if .DownloadRunning}}
+<input type="checkbox" id="modal-ignore-video-{{.ID}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Ignore video</h3>
+    <p class="text-sm mb-4">A download task is in progress for <strong>{{.Title}}</strong>. Ignore and cancel it?</p>
+    <form method="post" action="/actions/ignore-video" class="inline" hx-post="/actions/ignore-video" hx-target="#videos-list-live" hx-swap="outerHTML">
+      <input type="hidden" name="video_id" value="{{.ID}}" />
+      <input type="hidden" name="series_id" value="{{.SeriesID}}" />
+      <div class="modal-action">
+        <label for="modal-ignore-video-{{.ID}}" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-warning">Ignore and cancel task</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+{{end}}
+</div>
+{{end}}
+
+{{define "videos_rows_inner"}}
+{{if eq .ViewMode "cards"}}
+  {{range .Videos}}
+  {{template "video_card" (dict
+    "ID" .ID
+    "Title" .Title
+    "Status" .Status
+    "UploadDate" .UploadDate
+    "ResolutionLabel" .ResolutionLabel
+    "DurationLabel" .DurationLabel
+    "ThumbURL" .ThumbURL
+    "TaskInd" .TaskInd
+    "DownloadRunning" .DownloadRunning
+    "DeliveryQueued" .DeliveryQueued
+    "Deleting" .Deleting
+    "DomainActive" .DomainActive
+    "DomainDisabledTitle" .DomainDisabledTitle
+    "SeriesID" .SeriesID
+    "SeriesTitle" (index $.SeriesTitles .SeriesID)
+    "ShowSeries" true
+    "KeepScroll" true
+    "LiveSwap" true
+    "LiveTarget" "videos-list-live"
+    "Select" true
+    "BulkEditBusy" $.BulkEditBusy
+  )}}
+  {{end}}
+{{else if eq .ViewMode "gallery"}}
+  {{range .Videos}}
+  {{template "video_gallery_card" (dict
+    "ID" .ID
+    "Title" .Title
+    "Status" .Status
+    "UploadDate" .UploadDate
+    "DurationLabel" .DurationLabel
+    "ThumbURL" .ThumbURL
+    "DownloadRunning" .DownloadRunning
+    "Deleting" .Deleting
+    "DomainActive" .DomainActive
+    "DomainDisabledTitle" .DomainDisabledTitle
+    "SeriesID" .SeriesID
+    "KeepScroll" true
+    "LiveSwap" true
+    "LiveTarget" "videos-list-live"
+    "Select" true
+    "BulkEditBusy" $.BulkEditBusy
+  )}}
+  {{end}}
+{{else}}
+  {{range .Videos}}
+  {{template "video_list_row" (dict
+    "ID" .ID
+    "Title" .Title
+    "Status" .Status
+    "UploadDate" .UploadDate
+    "SizeLabel" .SizeLabel
+    "ResolutionLabel" .ResolutionLabel
+    "DurationLabel" .DurationLabel
+    "MediaTypeLabel" .MediaTypeLabel
+    "ThumbURL" .ThumbURL
+    "TaskInd" .TaskInd
+    "DownloadRunning" .DownloadRunning
+    "DeliveryQueued" .DeliveryQueued
+    "Deleting" .Deleting
+    "DomainActive" .DomainActive
+    "DomainDisabledTitle" .DomainDisabledTitle
+    "SeriesID" .SeriesID
+    "SeriesTitle" (index $.SeriesTitles .SeriesID)
+    "PackRoleBadge" .PackRoleBadge
+    "KeepScroll" true
+    "LiveSwap" true
+    "LiveTarget" "videos-list-live"
+    "FormClass" "inline"
+    "Select" true
+    "BulkEditBusy" $.BulkEditBusy
+  )}}
+  {{end}}
+{{end}}
+{{end}}
+
+{{define "videos_infinite_chunk"}}
+<div data-infinite-chunk>
+  {{template "videos_rows_inner" .}}
+  {{template "list_infinite_sentinel" .}}
+</div>
+{{end}}

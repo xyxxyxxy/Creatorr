@@ -293,10 +293,10 @@ paths:
     get:
       tags: [history]
       operationId: getNotificationUnreadCount
-      summary: Unread alert notification count
+      summary: Unread notification badge count
       responses:
         "200":
-          description: Count of unread alert notifications
+          description: Total unread count; has_alert is true when any unread alert is present
           content:
             application/json:
               schema:
@@ -671,7 +671,14 @@ paths:
           required: false
           schema:
             type: string
-          description: Title substring (case-insensitive)
+          description: Substring against q_field (default title; case-insensitive)
+        - name: q_field
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [title, sorttitle, originaltitle, plot, tagline, notes]
+          description: Text search column (default title)
         - name: root
           in: query
           required: false
@@ -696,6 +703,74 @@ paths:
           schema:
             type: string
             enum: [monitored, unmonitored, complete, incomplete, has_errors]
+        - name: studio
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: country
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: mpaa
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: year
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Premiered UTC calendar year
+        - name: genre
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: actor
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: empty
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: Presence empty fields (plot, genres, …)
+        - name: not_empty
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: Presence filled fields
       responses:
         "200":
           description: Matching series ids (title order)
@@ -1062,7 +1137,13 @@ paths:
           required: false
           schema:
             type: string
-          description: Title substring (case-insensitive)
+          description: Substring against q_field (default title; case-insensitive)
+        - name: q_field
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [title, sorttitle, originaltitle, plot, tagline, notes]
         - name: status
           in: query
           required: false
@@ -1080,7 +1161,90 @@ paths:
           required: false
           schema:
             type: string
-          description: UTC calendar year, or unknown
+          description: UTC calendar year of upload_date
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Pack role filter (regular, any special, or a special kind)
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Upload date from (inclusive UTC day, YYYY-MM-DD)
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Upload date to (inclusive UTC day, YYYY-MM-DD)
+        - name: studio
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: country
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: mpaa
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: media_type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: genre
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: actor
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: empty
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: not_empty
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
       responses:
         "200":
           description: Matching video ids (list order)
@@ -2163,11 +2327,15 @@ components:
 
     NotificationUnreadCount:
       type: object
-      required: [count]
+      required: [count, has_alert]
       properties:
         count:
           type: integer
           minimum: 0
+          description: Total unread notifications (all levels)
+        has_alert:
+          type: boolean
+          description: True when at least one unread alert is present (nav badge uses error color)
 
     SettingEntry:
       type: object
@@ -2398,7 +2566,7 @@ components:
 
     Source:
       type: object
-      required: [id, series_id, url, kind, monitored]
+      required: [id, series_id, url, scan_cron]
       properties:
         id:
           type: integer
@@ -2412,13 +2580,11 @@ components:
           type: string
           nullable: true
           description: Optional display name for the source (UI shows as Name)
-        kind:
+        scan_cron:
           type: string
-          enum: [feed, single]
-          description: feed = channel/playlist (catch-up); single = one video URL (index once, no catch-up)
-        monitored:
-          type: boolean
-          description: Included in series scans when true (always true for kind=single; UI hides the toggle)
+          description: >
+            Recurring tip Scan schedule (cron or @hourly…@monthly). Empty string = Never
+            (no recurring tip; manual tip Scan still allowed after first full scan).
         title_regexp_include:
           type: string
           nullable: true
@@ -2435,7 +2601,7 @@ components:
           type: integer
           description: >
             Cap playlist entries on full scan (yt-dlp --playlist-end). 0 = unlimited.
-            Ignored for kind=single. Tip Scan is uncapped.
+            Tip Scan is uncapped.
         last_error_code:
           type: string
           nullable: true
@@ -2467,7 +2633,7 @@ components:
             type: string
           description: >
             Default tags SoftFilled onto videos. Create always seeds the source domain;
-            single sources keep the domain tag locked on update.
+            editable on update.
         actors:
           type: array
           items:
@@ -2488,14 +2654,10 @@ components:
         label:
           type: string
           description: Optional display name for the source (UI shows as Name)
-        kind:
+        scan_cron:
           type: string
-          enum: [feed, single]
-          default: feed
-          description: feed = channel/playlist; single = one video URL (forces monitored; full_scan_limit ignored)
-        monitored:
-          type: boolean
-          default: true
+          description: >
+            Recurring tip Scan schedule. Omit, empty, or never = Never (no Go weekly inject).
         title_regexp_include:
           type: string
           description: Empty = no include filter; invalid patterns rejected
@@ -2513,9 +2675,11 @@ components:
           type: string
           nullable: true
           description: Optional display name for the source (UI shows as Name); null or empty clears
-        monitored:
-          type: boolean
-          description: Ignored for kind=single (always monitored)
+        scan_cron:
+          type: string
+          nullable: true
+          description: >
+            Recurring tip Scan schedule. Empty or never = Never. Null = leave unchanged.
         title_regexp_include:
           type: string
           nullable: true
@@ -2527,7 +2691,7 @@ components:
         full_scan_limit:
           type: integer
           nullable: true
-          description: Cap full-scan playlist entries; 0 = unlimited; ignored for kind=single
+          description: Cap full-scan playlist entries; 0 = unlimited
         studio:
           type: string
           nullable: true
@@ -2549,8 +2713,7 @@ components:
           nullable: true
           items:
             type: string
-          description: >
-            Replaces the full tags list when present. Single sources always re-ensure the domain tag.
+          description: Replaces the full tags list when present
         actors:
           type: array
           nullable: true
@@ -2916,7 +3079,7 @@ components:
           description: Defaults to source URL or Untitled series
         source_url:
           type: string
-          description: Optional first source; empty = oneshot series with no feeds yet
+          description: Optional first source; empty = series with no source yet
         root_id:
           type: integer
           format: int64
@@ -2926,7 +3089,11 @@ components:
         monitored:
           type: boolean
           default: true
-          description: Applied to the optional first source
+          description: Series monitored flag
+        scan_cron:
+          type: string
+          description: >
+            First-source Scan schedule when source_url is set. Omit, empty, or never = Never.
         full_scan_limit:
           type: integer
           description: Full-scan playlist cap for first source; 0 = unlimited

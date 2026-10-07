@@ -40,7 +40,7 @@ func (s *Store) SeriesWarnLevels(seriesIDs []int64) (map[int64]SeriesWarnLevel, 
 	ph := sqlIntPlaceholders(len(args))
 
 	rows, err := s.DB.SQL.Query(`
-		SELECT id, series_id, full_scan_done, kind, COALESCE(scan_cron, '')
+		SELECT id, series_id, full_scan_done, COALESCE(scan_cron, '')
 		FROM sources
 		WHERE series_id IN (`+ph+`)
 	`, args...)
@@ -51,8 +51,8 @@ func (s *Store) SeriesWarnLevels(seriesIDs []int64) (map[int64]SeriesWarnLevel, 
 	for rows.Next() {
 		var srcID, seriesID int64
 		var done int
-		var kind, scanCron string
-		if err := rows.Scan(&srcID, &seriesID, &done, &kind, &scanCron); err != nil {
+		var scanCron string
+		if err := rows.Scan(&srcID, &seriesID, &done, &scanCron); err != nil {
 			return nil, err
 		}
 		if done != 0 {
@@ -61,8 +61,9 @@ func (s *Store) SeriesWarnLevels(seriesIDs []int64) (map[int64]SeriesWarnLevel, 
 		if activeScanSources[srcID] {
 			continue
 		}
-		// Scheduled feeds resume via tip cron; do not escalate to series status.
-		if kind != SourceKindSingle && strings.TrimSpace(scanCron) != "" {
+		// Sources with a Scan schedule resume via tip cron; do not escalate.
+		cron := strings.TrimSpace(scanCron)
+		if cron != "" && !strings.EqualFold(cron, "never") {
 			continue
 		}
 		if out[seriesID] == SeriesWarnNone {
@@ -100,10 +101,22 @@ func (s *Store) SeriesWarnLevels(seriesIDs []int64) (map[int64]SeriesWarnLevel, 
 	for seriesID := range scanErrSeries {
 		out[seriesID] = SeriesWarnError
 	}
+
+	// Hard series rollup: any derived-failed files row (series-meta or video files).
+	fileFails, err := s.SeriesFailedIntegrityFileCounts(argsToInt64(args))
+	if err != nil {
+		return nil, err
+	}
+	for seriesID, n := range fileFails {
+		if n > 0 {
+			out[seriesID] = SeriesWarnError
+		}
+	}
 	return out, nil
 }
 
 // SeriesVideoErrorFlagsMap returns error flags per series ID (missing keys = no errors).
+// HasVerifyFailed also covers series-meta / any derived-failed files row (hard series rollup).
 func (s *Store) SeriesVideoErrorFlagsMap(seriesIDs []int64) (map[int64]SeriesVideoErrorFlags, error) {
 	out := make(map[int64]SeriesVideoErrorFlags, len(seriesIDs))
 	if len(seriesIDs) == 0 {
@@ -144,7 +157,25 @@ func (s *Store) SeriesVideoErrorFlagsMap(seriesIDs []int64) (map[int64]SeriesVid
 			VerifyFailedCount:  verifyErr,
 		}
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	fileFails, err := s.SeriesFailedIntegrityFileCounts(argsToInt64(args))
+	if err != nil {
+		return nil, err
+	}
+	for seriesID, n := range fileFails {
+		if n <= 0 {
+			continue
+		}
+		cur := out[seriesID]
+		cur.HasVerifyFailed = true
+		if n > cur.VerifyFailedCount {
+			cur.VerifyFailedCount = n
+		}
+		out[seriesID] = cur
+	}
+	return out, nil
 }
 
 // CountSeriesWithError returns how many series have SeriesWarnError health

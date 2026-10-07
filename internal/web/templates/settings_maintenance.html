@@ -21,6 +21,9 @@
     <div id="maintenance-confirm-integrity" class="alert alert-info text-sm mb-3 hidden" role="status">
       <span id="maintenance-confirm-integrity-text">'Integrity check' only covers series whose quality profile has 'File integrity' enabled. Other selected actions are unchanged.</span>
     </div>
+    <div id="maintenance-confirm-reset-meta" class="alert alert-error text-sm mb-3 hidden" role="status">
+      <span id="maintenance-confirm-reset-meta-text">'Reset metadata from info.json' overwrites video Metadata from packed info.json and clears fields not present there. Operator notes stay. Episode NFO is rewritten; Apply episode format may be queued. This cannot be undone.</span>
+    </div>
     <div class="modal-action">
       <label for="modal-maintenance-confirm" class="btn modal-cancel">Cancel</label>
       <button type="button" class="btn btn-warning" id="maintenance-confirm-submit">Run</button>
@@ -37,7 +40,8 @@
       <p class="text-sm opacity-60">Loading…</p>
     </div>
     <div class="modal-action shrink-0 mt-0">
-      <label for="modal-maintenance-rename-preview" class="btn modal-cancel">Close</label>
+      <label for="modal-maintenance-rename-preview" class="btn modal-cancel">Cancel</label>
+      <button type="button" class="btn btn-primary" id="maintenance-rename-preview-continue">Continue</button>
     </div>
   </div>
   <div class="modal-backdrop" aria-hidden="true"></div>

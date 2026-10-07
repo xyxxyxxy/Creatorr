@@ -10,7 +10,32 @@
   "help2" "Pausing a domain stops pending tasks from getting started. Some interactive tasks, like fetching metadata for a form, will still start immediately on paused domains."
 )}}
 {{template "list_panel_end"}}
-<div id="tasks-live">
+{{template "tasks_lanes_live" .}}
+{{range .Lanes}}
+{{if .ShowCancelPending}}
+<input type="checkbox" id="modal-cancel-domain-{{.Domain}}" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2">Cancel pending - {{.Domain}}</h3>
+    <p class="text-sm mb-4">Cancels pending tasks for this domain only. Running tasks keep going.</p>
+    <form method="post" action="/actions/cancel-domain-tasks">
+      <input type="hidden" name="domain" value="{{.Domain}}" />
+      <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
+      <div class="modal-action">
+        <label for="modal-cancel-domain-{{.Domain}}" class="btn modal-cancel">Keep</label>
+        <button type="submit" class="btn btn-error">Cancel pending</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+{{end}}
+{{end}}
+{{template "foot" .}}
+{{end}}
+
+{{define "tasks_lanes_live"}}
+<div id="tasks-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}>
   {{range .Lanes}}
   {{template "list_panel"}}
   <div class="list-header">
@@ -86,7 +111,7 @@
             </span>
             </span>
             <div class="join shrink-0" data-lane-stable-actions="{{.Domain}}:history">
-              <a class="btn btn-square join-item tooltip tooltip-top" href="/history?domain={{urlquery .Domain}}#tasks" data-tip="History" aria-label="History">
+              <a class="btn btn-square join-item tooltip tooltip-top" href="/browser?type=tasks&domain={{urlquery .Domain}}" data-tip="Browser Tasks" aria-label="Browser Tasks">
                 <i data-lucide="history" class="size-4"></i>
               </a>
               {{if and .CanPause (not .Paused)}}
@@ -180,6 +205,7 @@
     </div>
   </div>
   {{if or .Tasks .ScheduledTasks}}
+  {{template "pagination" .Page}}
   <ul class="list bg-base-100 rounded-box border border-base-300 mt-1">
     {{range .ScheduledTasks}}{{template "scheduled_task_row" .}}{{end}}
     {{range .Tasks}}{{template "task_row" .}}{{end}}
@@ -189,25 +215,4 @@
   {{template "list_panel_end"}}
   {{end}}
 </div>
-{{range .Lanes}}
-{{if .ShowCancelPending}}
-<input type="checkbox" id="modal-cancel-domain-{{.Domain}}" class="modal-toggle" />
-<div class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg mb-2">Cancel pending - {{.Domain}}</h3>
-    <p class="text-sm mb-4">Cancels pending tasks for this domain only. Running tasks keep going.</p>
-    <form method="post" action="/actions/cancel-domain-tasks">
-      <input type="hidden" name="domain" value="{{.Domain}}" />
-      <input type="hidden" name="redirect" value="/tasks" data-keep-scroll-redirect />
-      <div class="modal-action">
-        <label for="modal-cancel-domain-{{.Domain}}" class="btn modal-cancel">Keep</label>
-        <button type="submit" class="btn btn-error">Cancel pending</button>
-      </div>
-    </form>
-  </div>
-  <div class="modal-backdrop" aria-hidden="true"></div>
-</div>
-{{end}}
-{{end}}
-{{template "foot" .}}
 {{end}}

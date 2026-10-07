@@ -15,38 +15,21 @@
   <div class="flex-none flex flex-wrap gap-2 items-center">
     {{if .Deleting}}
     <span class="text-xs opacity-60">Queued for deletion</span>
-    <label for="modal-edit-video-metadata" class="btn btn-outline btn-disabled" aria-disabled="true">
-      <i data-lucide="file-pen" class="size-4"></i>
-      Edit metadata
-    </label>
-    <button type="button" class="btn btn-outline btn-disabled" aria-disabled="true" disabled>
-      <i data-lucide="refresh-cw" class="size-4"></i>
-      Refresh sidecars
-    </button>
+    {{template "btn_labeled" (dict "Type" "label" "For" "modal-edit-video-metadata" "Icon" "file-pen" "Label" "Edit metadata" "Disabled" true)}}
+    {{template "btn_labeled" (dict "Icon" "refresh-cw" "Label" "Refresh sidecars" "Disabled" true)}}
     {{else}}
-    <label for="modal-edit-video-metadata" class="btn btn-outline">
-      <i data-lucide="file-pen" class="size-4"></i>
-      Edit metadata
-    </label>
+    {{template "btn_labeled" (dict "Type" "label" "For" "modal-edit-video-metadata" "Icon" "file-pen" "Label" "Edit metadata")}}
     {{$canRefreshSidecars := and .HasPackAnchor .DomainActive}}
     <form method="post" action="/actions/refresh-sidecars-video" class="inline">
       <input type="hidden" name="video_id" value="{{.Video.ID}}" />
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <input type="hidden" name="redirect" value="/series/{{.Series.ID}}/videos/{{.Video.ID}}" />
       {{if $canRefreshSidecars}}
-      <button type="submit" class="btn btn-outline">
-        <i data-lucide="refresh-cw" class="size-4"></i>
-        Refresh sidecars
-      </button>
+      {{template "btn_labeled" (dict "Type" "submit" "Icon" "refresh-cw" "Label" "Refresh sidecars")}}
       {{else}}
       {{$sideTip := "Needs packed media on disk"}}
       {{if and .HasPackAnchor (not .DomainActive)}}{{$sideTip = .DomainDisabledTitle}}{{end}}
-      <span class="tooltip tooltip-bottom" data-tip="{{$sideTip}}">
-        <button type="submit" class="btn btn-outline btn-disabled" disabled aria-label="Refresh sidecars">
-          <i data-lucide="refresh-cw" class="size-4"></i>
-          Refresh sidecars
-        </button>
-      </span>
+      {{template "btn_labeled" (dict "Type" "submit" "Icon" "refresh-cw" "Label" "Refresh sidecars" "Disabled" true "Tip" $sideTip "TipClass" "tooltip-bottom")}}
       {{end}}
     </form>
     {{$delivery := dict
@@ -124,7 +107,10 @@
 <img class="w-full aspect-video object-cover rounded-box border border-base-300 bg-base-200" src="{{.ThumbURL}}" alt="" />
 <p class="text-sm opacity-60">No video</p>
 {{else}}
-{{template "list_empty" "No video"}}
+<div class="w-full aspect-video rounded-box border border-base-300 bg-base-200 flex items-center justify-center" role="img" aria-label="No video">
+  <i data-lucide="square-play" class="thumb-placeholder-icon opacity-40" aria-hidden="true"></i>
+</div>
+<p class="text-sm opacity-60">No video</p>
 {{end}}
 {{if or .MediaResolution .MediaFPS .MediaRemux .MediaDuration}}
 <div class="flex items-baseline justify-between gap-3 text-sm tabular-nums">
@@ -152,9 +138,9 @@
   <tr><th class="w-40">Source URL</th><td class="opacity-60 text-xs break-all">none</td></tr>
   {{end}}
   {{if .Video.UploadDate.Valid}}
-  <tr><th class="w-40">Upload date</th><td>{{template "local_time" .Video.UploadDate.String}}</td></tr>
+  <tr><th class="w-40">Uploaded</th><td>{{template "local_time" .Video.UploadDate.String}}</td></tr>
   {{else}}
-  <tr><th class="w-40">Upload date</th><td class="opacity-60">none</td></tr>
+  <tr><th class="w-40">Uploaded</th><td class="opacity-60">none</td></tr>
   {{end}}
   {{if .Video.MediaType}}
   <tr><th class="w-40">Media type</th><td>{{.Video.MediaType}}</td></tr>
@@ -179,18 +165,6 @@
     </td>
   </tr>
   <tr>
-    <th class="w-40">File integrity</th>
-    <td>
-      <div class="inline-flex items-center gap-2 flex-nowrap whitespace-nowrap">
-        {{template "integrity_indicator" .IntegrityInd}}
-        {{if .IntegrityTaskID}}
-        <span class="text-xs opacity-60">{{.IntegrityTaskPrefix}}</span>
-        <a class="link link-hover text-xs" href="/task/{{.IntegrityTaskID}}">{{.IntegrityTaskKind}}</a>
-        {{end}}
-      </div>
-    </td>
-  </tr>
-	<tr>
     <th class="w-40">Acquired</th>
     <td>
       {{if .Video.AcquiredAt.Valid}}{{template "local_time" .Video.AcquiredAt.String}}{{else}}<span class="opacity-60">none</span>{{end}}
@@ -219,57 +193,7 @@
 
 {{template "list_panel"}}
 {{template "list_header" (dict "level" "section" "title" "Files" "icon" "files")}}
-{{if not .Files}}
-{{template "list_empty" "No files"}}
-{{else}}
-{{template "list_table"}}
-<thead><tr><th>Type</th><th>File</th><th>Size</th><th class="w-14"></th></tr></thead>
-<tbody>
-  {{range .Files}}
-  <tr>
-    <td class="whitespace-nowrap">
-      <span class="inline-flex items-center gap-1.5">
-        {{if .Missing}}
-        <span class="tooltip tooltip-top inline-flex shrink-0" data-tip="file missing" aria-label="file missing">
-          <i data-lucide="file-exclamation-point" class="size-4 text-warning"></i>
-        </span>
-        {{else}}
-        <i data-lucide="{{.Icon}}" class="size-4 shrink-0 opacity-70"></i>
-        {{end}}
-        <span>{{.KindLabel}}</span>
-      </span>
-    </td>
-    <td class="text-sm break-all">
-      {{if .Missing}}
-      <span class="tooltip tooltip-top inline-flex max-w-full" data-tip="{{.Path}}">
-        <code class="text-xs opacity-60">{{.Name}}</code>
-      </span>
-      {{else if .ViewHref}}
-      <a class="link link-hover" href="{{.ViewHref}}">
-        <code class="text-xs">{{.Name}}</code>
-      </a>
-      {{else}}
-      <code class="text-xs">{{.Name}}</code>
-      {{end}}
-    </td>
-    <td class="text-xs whitespace-nowrap tabular-nums">{{if eq .SizeLabel "-"}}{{template "empty_value"}}{{else}}{{.SizeLabel}}{{end}}</td>
-    <td class="text-right">
-      {{if .CanDelete}}
-      <label for="modal-delete-sidecar-{{.ID}}" class="btn btn-soft btn-error btn-square btn-sm tooltip tooltip-top" data-tip="Delete" aria-label="Delete {{.Name}}">
-        <i data-lucide="trash-2" class="size-4" aria-hidden="true"></i>
-      </label>
-      {{end}}
-    </td>
-  </tr>
-  {{end}}
-</tbody>
-{{template "list_table_end"}}
-{{range .Files}}
-{{if .CanDelete}}
-{{template "delete_sidecar_modal" (dict "FileID" .ID "SeriesID" $.Series.ID "VideoID" $.Video.ID "Name" .Name "KindLabel" .KindLabel)}}
-{{end}}
-{{end}}
-{{end}}
+{{template "files_list_live" .FilesLive}}
 {{template "list_panel_end"}}
 
 {{template "list_panel"}}
@@ -278,6 +202,7 @@
 {{if not .History}}
 {{template "list_empty" "No history yet."}}
 {{else}}
+{{template "pagination" .HistoryPage}}
 {{template "timeline_vertical" .History}}
 {{template "pagination" .HistoryPage}}
 {{end}}

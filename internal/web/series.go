@@ -34,7 +34,6 @@ func editSeriesSettingsFields(ser *library.Series, roots []library.RootFolder, p
 		"TitleInfo":          "Changing the title updates Creatorr and renames the on-disk series folder immediately. Episode filenames that include the series name are not rewritten until you run 'Apply episode format' under 'Settings → Library'.",
 		"TitleDisabled":      busy,
 		"TitleDisabledTitle": seriesFolderLockTip,
-		"Monitored":          ser.Monitored,
 		"Roots":              roots,
 		"RootID":             ser.RootID,
 		"RootInfo":           "Where downloads and series NFO/art are written. Changing root moves the series folder on disk.",
@@ -69,7 +68,11 @@ func activeTaskLinkPrefix(status string) string {
 }
 
 func (h *Handler) seriesList(w http.ResponseWriter, r *http.Request) {
-	live, err := h.loadSeriesListLive(r)
+	if r.Header.Get("HX-Target") == "series-list-infinite" {
+		h.renderSeriesInfiniteChunk(w, r)
+		return
+	}
+	live, err := h.loadSeriesListLive(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -196,7 +199,6 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		DomainDisabledTitle string
 		ScanCronLabel       string
 		StatusInd           sourceStatusView
-		HasRetryable        bool
 		VideoCount          int
 		LastScannedAgo      string
 		LastScannedAt       string
@@ -226,7 +228,6 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 			disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
 		}
 		best := pickBestTask(bySource[src.ID])
-		retryable, _ := h.Library.SourceHasRetryableVideos(src.ID)
 		summary, lastAt, errMsg, errCode, taskID, hasScanned, hasError := sourceStatusFields(h.Library, src.ID, now)
 		tipAt, _ := h.Library.LatestTipScannedAt(src.ID)
 		cronLabel := cronexpr.DescribeScan(src.ScanCron)
@@ -245,27 +246,40 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 			ScanActive: active, FullScanStalled: stalled,
 			DomainHost: host, DomainActive: dAct, DomainDisabledTitle: disTitle,
 			ScanCronLabel: cronLabel,
-			StatusInd:     statusInd, HasRetryable: retryable, VideoCount: vcounts[src.ID],
+			StatusInd: statusInd, VideoCount: vcounts[src.ID],
 			LastScannedAgo: scannedAgo, LastScannedAt: lastAt, LastHistoryID: taskID,
 			StatusSummary: summary, ErrorMessage: errMsg, HasScanned: hasScanned, HasError: hasError,
 		})
 	}
-	pageSrc, sourcesPage := SlicePage(r, "sources_page", srcRows)
+	pageSrc := srcRows
+	qSrc := r.URL.Query()
+	qSrc.Set("type", explorerTypeSources)
+	qSrc.Set("at", explorerAtSeriesDetail)
+	qSrc.Set("series_id", strconv.FormatInt(id, 10))
+	// Series detail URL carries video list filters; drop them for Sources Explorer.
+	for _, k := range []string{
+		"source", "q", "q_field", "from", "to", "year", "status",
+		"empty", "not_empty", "sort", "dir", "view", "page",
+	} {
+		qSrc.Del(k)
+	}
+	sourcesReq := cloneRequestQuery(r, qSrc)
+	sourcesLive, sourcesErr := h.loadSourcesListLive(w, sourcesReq)
+	if sourcesErr != nil {
+		http.Error(w, sourcesErr.Error(), 500)
+		return
+	}
 
-	videosLive, listErr := h.loadSeriesVideosLive(r, ser, byVideo)
+	videosLive, listErr := h.loadSeriesVideosLive(w, r, ser, byVideo)
 	if listErr != nil {
 		http.Error(w, listErr.Error(), 500)
 		return
 	}
-	filter := parseSeriesVideoListFilter(r, ser.Sources)
 	sourceURLs := make([]string, 0, len(ser.Sources))
 	for _, src := range ser.Sources {
 		sourceURLs = append(sourceURLs, src.URL)
 	}
 	indicatorsQ := fmt.Sprintf("/series/%d/task-indicators", id)
-	if q := seriesVideoFilterQuery(filter, videosLive.VideosPage.Page); q != "" {
-		indicatorsQ += "?" + q
-	}
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
 	folderRenameBusy, _ := h.Library.SeriesHasBlockingTasks(id)
@@ -302,19 +316,36 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 	nullImportCount, _ := h.Library.CountVideosWithNullSource(id)
 	downloadErrorCount, _ := h.Library.CountSeriesDownloadErrors(id)
 	metaForm = h.withMetaSuggestions(metaForm)
-	metaFiles := seriesMetaFileViews(h.Library, ser)
 	videoTotal, _ := h.Library.CountVideos(id)
+	qFiles := r.URL.Query()
+	qFiles.Set("type", explorerTypeFiles)
+	qFiles.Set("at", explorerAtSeriesDetail)
+	qFiles.Set("series_id", strconv.FormatInt(id, 10))
+	for _, k := range []string{
+		"source", "q", "q_field", "from", "to", "year", "status",
+		"empty", "not_empty", "sort", "dir", "view", "page", "kind", "status", "video_id",
+	} {
+		qFiles.Del(k)
+	}
+	qFiles.Set("kind", library.FileKindScopeSeries)
+	filesReq := cloneRequestQuery(r, qFiles)
+	filesLive, filesErr := h.loadFilesListLive(w, filesReq)
+	if filesErr != nil {
+		http.Error(w, filesErr.Error(), 500)
+		return
+	}
 	editSettings := editSeriesSettingsFields(ser, roots, profiles, folderRenameBusy, false)
 	render(w, "series_detail", struct {
 		pageBase
 		Series              *library.Series
 		Sources             []sourceRow
-		SourcesPage         PageInfo
+		SourcesLive         sourcesListLiveData
+		FilesLive           filesListLiveData
 		SourceURLs          []string
 		ImportNullCount     int
+		ImportedVideosHref  string
 		VideosLive          seriesVideosLiveData
 		HasVideos           bool
-		MetaFiles           []seriesMetaFileView
 		CanScan             bool
 		ScanBlocked         string
 		SeriesInd           taskIndicatorView
@@ -327,18 +358,20 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		EditSettings        map[string]any
 		MetaForm            seriesMetadataView
 		PackRoleOptions     []struct{ Value, Label string }
+		NewSource           library.Source // empty defaults for the Add source modal
 		Deleting            bool
 		DownloadErrorCount  int
 	}{
 		pageBase:            newPage(ser.Title, "series", flashFromQuery(r)),
 		Series:              ser,
 		Sources:             pageSrc,
-		SourcesPage:         sourcesPage,
+		SourcesLive:         sourcesLive,
+		FilesLive:           filesLive,
 		SourceURLs:          sourceURLs,
 		ImportNullCount:     nullImportCount,
+		ImportedVideosHref:  seriesImportedVideosBrowseHref(id),
 		VideosLive:          videosLive,
 		HasVideos:           videoTotal > 0,
-		MetaFiles:           metaFiles,
 		CanScan:             canScan && !seriesDeleting,
 		ScanBlocked:         blocked,
 		SeriesInd:           seriesInd,
@@ -366,11 +399,8 @@ func (h *Handler) seriesTaskIndicators(w http.ResponseWriter, r *http.Request) {
 	activeTasks, _ := h.Queue.ListActiveForSeries(id)
 	seriesTasks, bySource, byVideo := seriesActivityMaps(activeTasks)
 	h.mergeFileDeleteForSeries(id, &seriesTasks, byVideo)
-	filter := parseSeriesVideoListFilter(r, ser.Sources)
-	videoPage := ParsePage(r, "page")
-	videoTotal, _ := h.Library.CountVideosFiltered(id, filter)
-	videosPageInfo := NewPageInfoSize(r, "page", videoPage, videoTotal, VideoPageSize)
-	pageVids, _ := h.Library.ListVideosPageFiltered(id, filter, VideoPageSize, OffsetSize(videosPageInfo.Page, VideoPageSize))
+	filter := seriesVideosGlanceFilter()
+	pageVids, _ := h.Library.ListVideosPageFiltered(id, filter, SeriesVideoGlanceSize, 0)
 
 	vidIDs := map[int64]struct{}{}
 	for _, v := range pageVids {
@@ -410,9 +440,11 @@ func (h *Handler) seriesTaskIndicators(w http.ResponseWriter, r *http.Request) {
 		HasScanned          bool
 		HasError            bool
 		StatusInd           sourceStatusView
+		Redirect            string // post-scan return; required by source_scan_actions
 		OOB                 bool
 	}
 	srcLive := make([]sourceLive, 0, len(ser.Sources))
+	redir := fmt.Sprintf("/series/%d", id)
 	for _, src := range ser.Sources {
 		active, _ := h.Library.HasActiveScanForSource(src.ID)
 		stalled := !src.FullScanDone && !active
@@ -437,7 +469,7 @@ func (h *Handler) seriesTaskIndicators(w http.ResponseWriter, r *http.Request) {
 			ScanActive: active, FullScanStalled: stalled, LastHistoryID: taskID, LastScannedAt: lastAt,
 			DomainActive: dAct, DomainDisabledTitle: disTitle,
 			StatusSummary: summary, ErrorMessage: errMsg, HasScanned: hasScanned, HasError: hasError,
-			StatusInd: statusInd, OOB: true,
+			StatusInd: statusInd, Redirect: redir, OOB: true,
 		})
 	}
 
@@ -488,7 +520,6 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 	if !dAct {
 		disTitle = "Domain " + host + " is inactive. Activate it under 'Settings → Queue / Domains'."
 	}
-	retryable, _ := h.Library.SourceHasRetryableVideos(src.ID)
 	videoTotal, _ := h.Library.CountVideosForSource(src.ID)
 
 	histTotal, err := h.Library.CountSourceHistory(src.ID)
@@ -538,7 +569,6 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 		ScanActive          bool
 		ScanCronLabel       string
 		ScanCronDescriptors []string
-		HasRetryable        bool
 		VideoCount          int
 		CookieSmart         domains.CookieSmartDisplay
 		History             []videoHistoryView
@@ -564,7 +594,6 @@ func (h *Handler) sourceDetail(w http.ResponseWriter, r *http.Request) {
 		ScanActive:          scanActive,
 		ScanCronLabel:       cronLabel,
 		ScanCronDescriptors: scanCronDescriptors(),
-		HasRetryable:        retryable,
 		VideoCount:          videoTotal,
 		CookieSmart:         cookieSmart,
 		History:             histViews,
@@ -596,7 +625,7 @@ func createdAgoPairShort(createdAt string, now time.Time) (absolute, ago string)
 	return absolute, ago
 }
 
-// createdAgoPairCompact is like createdAgoPair but uses compact units ("1 h 2 min").
+// createdAgoPairCompact is like createdAgoPair but uses compact units ("1 h 2 min ago").
 func createdAgoPairCompact(createdAt string, now time.Time) (absolute, ago string) {
 	absolute = createdAt
 	ago = createdAt

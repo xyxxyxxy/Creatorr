@@ -1,0 +1,26 @@
+{{define "list_table_chrome"}}
+{{/* Dot: Page PageInfo, Noun string (plural), NounOne? string (singular when Total=1),
+     Cols []tableCol, CookieName string.
+     One row above the wrap: Columns then dataset summary left; pager right when
+     multi-page (menu not clipped). Bottom pager stays via "pagination" below. */}}
+{{$noun := .Noun}}{{if and (eq .Page.Total 1) .NounOne}}{{$noun = .NounOne}}{{end}}
+<div class="flex flex-wrap items-center justify-between gap-2 my-3">
+  <div class="flex items-center gap-2 min-w-0">
+    {{template "list_table_col_picker" (dict "Cols" .Cols "CookieName" .CookieName)}}
+    <p class="text-sm opacity-60 tabular-nums min-w-0 truncate">
+      {{if and (gt .Page.Total 0) (eq .Page.From 1) (eq .Page.To .Page.Total)}}
+      {{.Page.Total}} {{$noun}}
+      {{else if gt .Page.Total 0}}
+      {{.Page.From}}-{{.Page.To}} of {{.Page.Total}} {{$noun}}
+      {{else}}
+      0 {{.Noun}}
+      {{end}}
+    </p>
+  </div>
+  {{if .Page.Show}}
+  <div class="shrink-0">
+    {{template "pagination_join" .Page}}
+  </div>
+  {{end}}
+</div>
+{{end}}

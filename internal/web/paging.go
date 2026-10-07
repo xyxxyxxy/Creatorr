@@ -6,14 +6,8 @@ import (
 	"strconv"
 )
 
-// PageSize is the default page length for admin list tables.
-const PageSize = 50
-
-// VideoPageSize is the page length for series/source video lists (taller rows with thumbs).
-const VideoPageSize = 20
-
-// SeriesPageSize is the page length for the /series media list.
-const SeriesPageSize = 20
+// PageSize is the default page length for paginated admin list tables.
+const PageSize = 20
 
 // HistoryPageSize is the page length for /history Notifications and Tasks tables.
 const HistoryPageSize = 20

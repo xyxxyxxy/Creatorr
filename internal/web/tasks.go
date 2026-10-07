@@ -18,14 +18,16 @@ type taskView struct {
 	Position    int
 	Status      string
 	Kind        string
-	Domain      string // set for cross-domain overview list
+	Domain      string // set for cross-domain overview / Browser list
 	SeriesID    int64
 	SeriesTitle string
 	VideoID     int64
 	VideoTitle  string
 	Message     string
 	Progress    *float64
-	LanePaused  bool // domain soft-pause: pending bars use warning
+	LanePaused  bool   // domain soft-pause: pending bars use warning
+	Redirect    string // form redirect; empty = /tasks
+	NoActions   bool   // hide To front / Cancel (Overview locked glance)
 }
 
 type laneView struct {
@@ -302,7 +304,7 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		pageTasks, pageInfo := SlicePageSize(r, lanePageParam(d), lv.Tasks, TaskPageSize)
-		pageInfo.LiveTarget = "tasks-live"
+		pageInfo.LiveTarget = "tasks-list-live"
 		lv.Tasks = pageTasks
 		lv.Page = pageInfo
 		lanes = append(lanes, *lv)
@@ -323,15 +325,22 @@ func (h *Handler) tasks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	render(w, "tasks", struct {
+	data := struct {
 		pageBase
 		Lanes           []laneView
 		FlareConfigured bool
+		OOB             bool
 	}{
 		pageBase:        newPage("Tasks", "tasks", flashFromQuery(r)),
 		Lanes:           lanes,
 		FlareConfigured: flareOK,
-	})
+	}
+	// HTMX panel refresh: return lanes fragment only.
+	if r.Header.Get("HX-Request") != "" && r.Header.Get("HX-Target") == "tasks-list-live" {
+		render(w, "tasks_lanes_live", data)
+		return
+	}
+	render(w, "tasks", data)
 }
 
 func (h *Handler) actionRunScheduled(w http.ResponseWriter, r *http.Request) {
@@ -434,5 +443,3 @@ func (h *Handler) actionRunScheduled(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
-
-// lanePageParam is the /tasks pager query key for one domain lane (p_example_com).

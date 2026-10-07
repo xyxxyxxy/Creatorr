@@ -1,0 +1,32 @@
+{{define "btn_labeled"}}
+{{/* Labeled page-navbar / bulk-bar action (icon + text). Default btn; not primary/secondary/outline.
+     Required: Icon, Label
+     Optional: Type (label|button|submit; default button), For (label target),
+               Disabled, Tip, TipClass (default tooltip-top), AriaLabel,
+               Data (suffix for data-* boolean attr, e.g. "video-bulk-refresh"),
+               Class (extra classes after btn).
+     Disabled: labels get btn-disabled + aria-disabled; buttons/submits get
+     the disabled attribute only so bulk JS can re-enable via .disabled. */}}
+{{$type := .Type}}{{if not $type}}{{$type = "button"}}{{end}}
+{{$aria := .AriaLabel}}{{if not $aria}}{{$aria = .Label}}{{end}}
+{{$tipClass := .TipClass}}{{if not $tipClass}}{{$tipClass = "tooltip-top"}}{{end}}
+{{$class := "btn"}}{{if and .Disabled (eq $type "label")}}{{$class = printf "%s btn-disabled" $class}}{{end}}{{if .Class}}{{$class = printf "%s %s" $class .Class}}{{end}}
+{{if .Tip}}<span class="tooltip {{$tipClass}} inline-flex" data-tip="{{.Tip}}">{{end}}
+{{if eq $type "label"}}
+<label{{if .For}} for="{{.For}}"{{end}} class="{{$class}}"{{if .Disabled}} aria-disabled="true"{{end}} aria-label="{{$aria}}"{{if .Data}} {{boolDataAttr .Data}}{{end}}>
+  <i data-lucide="{{.Icon}}" class="size-4"></i>
+  {{.Label}}
+</label>
+{{else if eq $type "submit"}}
+<button type="submit" class="{{$class}}"{{if .Disabled}} disabled{{end}} aria-label="{{$aria}}"{{if .Data}} {{boolDataAttr .Data}}{{end}}>
+  <i data-lucide="{{.Icon}}" class="size-4"></i>
+  {{.Label}}
+</button>
+{{else}}
+<button type="button" class="{{$class}}"{{if .Disabled}} disabled{{end}} aria-label="{{$aria}}"{{if .Data}} {{boolDataAttr .Data}}{{end}}>
+  <i data-lucide="{{.Icon}}" class="size-4"></i>
+  {{.Label}}
+</button>
+{{end}}
+{{if .Tip}}</span>{{end}}
+{{end}}

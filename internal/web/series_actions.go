@@ -36,11 +36,6 @@ func (h *Handler) actionUpdateSeries(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
 		return
 	}
-	monitored := r.FormValue("monitored") == "1"
-	if err := h.Library.SetSeriesMonitored(sid, monitored); err != nil {
-		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
 	ok := "updated"
 	if out.MoveQueued {
 		ok = "series-rename"
@@ -51,41 +46,30 @@ func (h *Handler) actionUpdateSeries(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) actionAddSource(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	kind := r.FormValue("kind")
-	scanCron := ""
-	if kind != library.SourceKindSingle {
-		c, err := parseFeedScanCron(r, "@weekly")
-		if err != nil {
-			http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-			return
-		}
-		scanCron = c
+	scanCron, err := parseFeedScanCron(r, "")
+	if err != nil {
+		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
+		return
 	}
-	titleInclude := ""
-	titleExclude := ""
-	indexAsIgnored := false
-	fullScanLimit := 0
-	if kind != library.SourceKindSingle {
-		titleInclude = strings.TrimSpace(r.FormValue("title_regexp_include"))
-		titleExclude = strings.TrimSpace(r.FormValue("title_regexp_exclude"))
-		indexAsIgnored = r.FormValue("index_as_ignored") == "1"
-		var err error
-		fullScanLimit, err = parseFullScanLimitForm(r)
-		if err != nil {
-			http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
-			return
-		}
+	fullScanLimit, err := parseFullScanLimitForm(r)
+	if err != nil {
+		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
+		return
 	}
-	_, err := h.Library.AddSource(sid, library.AddSourceParams{
+	src, err := h.Library.AddSource(sid, library.AddSourceParams{
 		URL:                strings.TrimSpace(r.FormValue("url")),
 		Label:              strings.TrimSpace(r.FormValue("label")),
-		Kind:               kind,
 		ScanCron:           scanCron,
-		IndexAsIgnored:     indexAsIgnored,
-		TitleRegexpInclude: titleInclude,
-		TitleRegexpExclude: titleExclude,
+		IndexAsIgnored:     r.FormValue("index_as_ignored") == "1",
+		TitleRegexpInclude: strings.TrimSpace(r.FormValue("title_regexp_include")),
+		TitleRegexpExclude: strings.TrimSpace(r.FormValue("title_regexp_exclude")),
 		FullScanLimit:      fullScanLimit,
 	})
+	if err == nil {
+		// AddSourceParams has no default metadata fields: apply them right after create.
+		p := sourceMetadataParams(r)
+		_, err = h.Library.UpdateSource(sid, src.ID, p)
+	}
 	if err != nil {
 		http.Redirect(w, r, fmt.Sprintf("/series/%d?err=%s", sid, urlQuery(err.Error())), http.StatusSeeOther)
 		return
@@ -99,64 +83,37 @@ func (h *Handler) actionUpdateSource(w http.ResponseWriter, r *http.Request) {
 	srcID, _ := strconv.ParseInt(r.FormValue("source_id"), 10, 64)
 	label := strings.TrimSpace(r.FormValue("label"))
 	redir := seriesSourceRedirect(r, sid, srcID)
-	cur, err := h.Library.GetSource(sid, srcID)
+	if _, err := h.Library.GetSource(sid, srcID); err != nil {
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
+		return
+	}
+	p := sourceMetadataParams(r)
+	p.Label = &label
+	limit, err := parseFullScanLimitForm(r)
 	if err != nil {
 		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
 		return
 	}
-	p := library.UpdateSourceParams{
-		Label: &label,
-	}
-	if !cur.IsSingle() {
-		limit, err := parseFullScanLimitForm(r)
+	p.FullScanLimit = &limit
+	for _, field := range []string{"scan_cron", "scan_cron_schedule"} {
+		if _, ok := r.Form[field]; !ok {
+			continue
+		}
+		cron, err := cronexpr.NormalizeScanCron(r.FormValue(field))
 		if err != nil {
 			http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
 			return
 		}
-		p.FullScanLimit = &limit
-		if _, ok := r.Form["scan_cron"]; ok {
-			cron, err := cronexpr.NormalizeScanCron(r.FormValue("scan_cron"))
-			if err != nil {
-				http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-				return
-			}
-			p.ScanCron = &cron
-		} else if _, ok := r.Form["scan_cron_schedule"]; ok {
-			cron, err := cronexpr.NormalizeScanCron(r.FormValue("scan_cron_schedule"))
-			if err != nil {
-				http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-				return
-			}
-			p.ScanCron = &cron
-		}
+		p.ScanCron = &cron
+		break
 	}
 	idx := r.FormValue("index_as_ignored") == "1"
-	if !cur.IsSingle() {
-		p.IndexAsIgnored = &idx
-		titleInclude := strings.TrimSpace(r.FormValue("title_regexp_include"))
-		titleExclude := strings.TrimSpace(r.FormValue("title_regexp_exclude"))
-		p.TitleRegexpInclude = &titleInclude
-		p.TitleRegexpExclude = &titleExclude
-	} else {
-		off := false
-		p.IndexAsIgnored = &off
-	}
-	studio := strings.TrimSpace(r.FormValue("studio"))
-	country := strings.TrimSpace(r.FormValue("country"))
-	mpaa := strings.TrimSpace(r.FormValue("mpaa"))
-	genres := library.ParseStringListFields(r.Form["genre"])
-	tags := library.ParseStringListFields(r.Form["tag"])
-	actors := library.ParseActorsFromFields(r.Form["actor_name"], r.Form["actor_role"])
-	sf := strings.TrimSpace(r.FormValue("special_feature"))
-	p.Studio = &studio
-	p.Country = &country
-	p.MPAA = &mpaa
-	p.Genres = &genres
-	p.Tags = &tags
-	p.Actors = &actors
-	p.SpecialFeature = &sf
-	_, err = h.Library.UpdateSource(sid, srcID, p)
-	if err != nil {
+	titleInclude := strings.TrimSpace(r.FormValue("title_regexp_include"))
+	titleExclude := strings.TrimSpace(r.FormValue("title_regexp_exclude"))
+	p.IndexAsIgnored = &idx
+	p.TitleRegexpInclude = &titleInclude
+	p.TitleRegexpExclude = &titleExclude
+	if _, err := h.Library.UpdateSource(sid, srcID, p); err != nil {
 		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
 		return
 	}
@@ -171,11 +128,12 @@ func (h *Handler) actionDeleteSource(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, appendQuery(seriesSourceRedirect(r, sid, srcID), "err="+urlQuery("confirm delete to remove this source")), http.StatusSeeOther)
 		return
 	}
+	redir := seriesSourceRedirect(r, sid, srcID)
 	if err := h.Library.DeleteSource(sid, srcID); err != nil {
-		http.Redirect(w, r, appendQuery(seriesSourceRedirect(r, sid, srcID), "err="+urlQuery(err.Error())), http.StatusSeeOther)
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/series/%d?ok=source-deleted", sid), http.StatusSeeOther)
+	http.Redirect(w, r, appendQuery(redir, "ok=source-deleted"), http.StatusSeeOther)
 }
 
 func (h *Handler) actionDeleteSeries(w http.ResponseWriter, r *http.Request) {
@@ -342,7 +300,7 @@ func (h *Handler) actionSetSeriesMonitored(w http.ResponseWriter, r *http.Reques
 		if h.tryRenderSeriesListLive(w, r) {
 			return
 		}
-		// Detail (and other pages): monitored is on Edit form; refresh whole page.
+		// Detail (and other pages): refresh so progress mute / tips match new state.
 		hxRedirect(w, redir)
 		return
 	}
@@ -425,19 +383,6 @@ func (h *Handler) actionClearSeriesDownloadErrors(w http.ResponseWriter, r *http
 	http.Redirect(w, r, appendQuery(redir, "ok=clear-error&n="+strconv.FormatInt(int64(n), 10)), http.StatusSeeOther)
 }
 
-func (h *Handler) actionRetrySourceErrors(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
-	srcID, _ := strconv.ParseInt(r.FormValue("source_id"), 10, 64)
-	redir := seriesSourceRedirect(r, sid, srcID)
-	n, err := h.Library.RetrySourceErrors(srcID)
-	if err != nil {
-		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, appendQuery(redir, "ok=retry&n="+strconv.FormatInt(int64(n), 10)), http.StatusSeeOther)
-}
-
 func (h *Handler) actionIgnoreVideo(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
@@ -489,4 +434,24 @@ func (h *Handler) actionDeleteVideoSidecar(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	h.finishVideoAction(w, r, sid, appendQuery(redir, "ok=sidecar-deleted"), nil)
+}
+
+// sourceMetadataParams reads the shared source default-metadata form fields.
+func sourceMetadataParams(r *http.Request) library.UpdateSourceParams {
+	studio := strings.TrimSpace(r.FormValue("studio"))
+	country := strings.TrimSpace(r.FormValue("country"))
+	mpaa := strings.TrimSpace(r.FormValue("mpaa"))
+	genres := library.ParseStringListFields(r.Form["genre"])
+	tags := library.ParseStringListFields(r.Form["tag"])
+	actors := library.ParseActorsFromFields(r.Form["actor_name"], r.Form["actor_role"])
+	sf := strings.TrimSpace(r.FormValue("special_feature"))
+	return library.UpdateSourceParams{
+		Studio:         &studio,
+		Country:        &country,
+		MPAA:           &mpaa,
+		Genres:         &genres,
+		Tags:           &tags,
+		Actors:         &actors,
+		SpecialFeature: &sf,
+	}
 }

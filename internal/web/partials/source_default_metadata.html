@@ -1,12 +1,10 @@
 {{define "source_default_metadata"}}
 {{/*
-  Collapsed Default video metadata on source edit (feed + single).
+  Collapsed Default video metadata on source add and edit.
   Expects: Source (*library.Source or Source), Suggestions (MetaSuggestions),
            PackRoleOptions, ListPrefix (unique id prefix for datalists).
 */}}
 {{$src := .Source}}
-{{$domain := namingDomain $src.URL}}
-{{$locked := eq $src.Kind "single"}}
 {{$packRole := $src.SpecialFeature}}
 {{$packNone := or (eq $packRole "") (eq $packRole "episode")}}
 {{$sug := .Suggestions}}
@@ -43,21 +41,6 @@
         "Placeholder" "Add a genre"
         "EmptyText" "none"
       )}}
-      {{if $locked}}
-      {{template "metadata_string_list_editor" (dict
-        "Label" "Tags"
-        "Name" "tag"
-        "Singular" "tag"
-        "Items" (operatorTagsExcept $src.Tags $domain)
-        "ManagedItems" (domainTagList $domain)
-        "ManagedPipe" (managedPipe (domainTagList $domain))
-        "Options" $sug.Tags
-        "ListID" (printf "%s-tags" $prefix)
-        "Placeholder" "Add a tag"
-        "EmptyText" "none"
-        "Hint" "Source domain tag is locked for single sources."
-      )}}
-      {{else}}
       {{template "metadata_string_list_editor" (dict
         "Label" "Tags"
         "Name" "tag"
@@ -68,7 +51,6 @@
         "Placeholder" "Add a tag"
         "EmptyText" "none"
       )}}
-      {{end}}
     </div>
   </div>
 </details>

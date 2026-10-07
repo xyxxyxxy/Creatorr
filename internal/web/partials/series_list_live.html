@@ -2,17 +2,14 @@
 <div id="series-list-live" {{if .OOB}}hx-swap-oob="true"{{end}}
      data-filter-total="{{.FilterTotal}}"
      data-bulk-busy="{{if .BulkEditBusy}}1{{else}}0{{end}}"
-     data-bulk-mode="0">
+     data-bulk-mode="0"
+     data-view-mode="{{.ViewMode}}"
+     data-list-mode="{{.ListMode}}"
+     data-loaded-through="{{.Load.Through}}"
+     data-through-clamped="{{if .Load.ThroughClamped}}1{{else}}0{{end}}"
+     data-loaded-count="{{.Load.LoadedCount}}">
 {{if or .Series .FilterActive}}
-{{template "list_filters" (dict
-  "Query" .SeriesFilter.Query
-  "QueryPlaceholder" .SeriesFilter.QueryPlaceholder
-  "AriaLabel" .SeriesFilter.AriaLabel
-  "Selects" .SeriesFilter.Selects
-  "LiveTarget" .SeriesFilter.LiveTarget
-  "FormAction" .SeriesFilter.FormAction
-  "SeriesBulkMode" true
-)}}
+{{template "list_view_toolbar" .SeriesFilter}}
 {{end}}
 {{if not .Series}}
 {{if .FilterActive}}
@@ -28,8 +25,7 @@
 </div>
 {{end}}
 {{else}}
-<ul class="list bg-base-100 rounded-box border border-base-300" id="series-list-rows">
-  {{/* Bulk bar: checkbox+count | grow | actions. Rows keep poster column for checkbox alignment. */}}
+<ul class="list bg-base-100 rounded-box border border-base-300 mb-3 hidden" id="series-bulk-bar-wrap">
   <li id="series-bulk-bar"
       class="list-row py-2 hidden"
       data-series-bulk-bar
@@ -44,7 +40,7 @@
       </div>
     </div>
     <div class="list-col-grow min-w-0 flex flex-wrap items-center gap-2 self-center">
-      {{if .Page.Show}}
+      {{if .ShowSelectAll}}
       <button type="button"
               class="btn btn-ghost btn-sm"
               data-series-select-all-matching
@@ -59,15 +55,17 @@
       {{end}}
     </div>
     {{if not .BulkEditBusy}}
-    <div class="self-center justify-self-end">
+    <div class="self-center justify-self-end flex flex-wrap gap-2 items-center">
+      {{/* Labeled actions match page-navbar default btn; icon-only stay joined. */}}
+      {{template "btn_labeled" (dict "Icon" "pencil" "Label" "Edit" "Data" "series-bulk-edit" "Disabled" true)}}
+      {{template "btn_labeled" (dict "Icon" "file-pen" "Label" "Edit metadata" "Data" "series-bulk-metadata" "Disabled" true)}}
+
       <div class="join">
-        <button type="button" class="btn join-item" data-series-bulk-edit disabled>
-          <i data-lucide="pencil" class="size-4"></i>
-          Edit
+        <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-series-bulk-monitor data-tip="Monitor" aria-label="Monitor" disabled>
+          <i data-lucide="bookmark" class="size-4"></i>
         </button>
-        <button type="button" class="btn join-item" data-series-bulk-metadata disabled>
-          <i data-lucide="file-pen" class="size-4"></i>
-          Edit metadata
+        <button type="button" class="btn btn-square join-item tooltip tooltip-top" data-series-bulk-unmonitor data-tip="Unmonitor" aria-label="Unmonitor" disabled>
+          <i data-lucide="bookmark-off" class="size-4"></i>
         </button>
         <button type="button" class="btn btn-soft btn-error btn-square join-item tooltip tooltip-top" data-series-bulk-delete data-tip="Delete" aria-label="Delete" disabled>
           <i data-lucide="trash-2" class="size-4"></i>
@@ -78,11 +76,47 @@
     <div class="size-10 shrink-0" aria-hidden="true"></div>
     {{end}}
   </li>
+</ul>
+{{if ne .ViewMode "table"}}{{template "list_load_controls" .}}{{end}}
+{{if or (eq .ViewMode "cards") (eq .ViewMode "gallery")}}
+{{$seriesGrid := "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"}}
+{{if eq .ViewMode "gallery"}}{{$seriesGrid = "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7"}}{{end}}
+<ul class="grid gap-3 {{$seriesGrid}}" id="series-list-rows">
+  {{template "series_rows_inner" .}}
+  {{if eq .ListMode "infinite"}}{{template "list_infinite_sentinel" .}}{{end}}
+</ul>
+{{else if eq .ViewMode "table"}}
+{{template "series_table" .}}
+{{else}}
+<ul class="list bg-base-100 rounded-box border border-base-300" id="series-list-rows">
+  {{template "series_rows_inner" .}}
+  {{if eq .ListMode "infinite"}}{{template "list_infinite_sentinel" .}}{{end}}
+</ul>
+{{end}}
+{{if ne .ViewMode "table"}}{{template "list_load_controls" .}}{{end}}
+{{end}}
+</div>
+{{end}}
+
+{{define "series_rows_inner"}}
+{{if eq .ViewMode "cards"}}
+  {{range .Series}}
+  {{template "series_card" .}}
+  {{end}}
+{{else if eq .ViewMode "gallery"}}
+  {{range .Series}}
+  {{template "series_gallery_card" .}}
+  {{end}}
+{{else}}
   {{range .Series}}
   {{template "series_list_row" .}}
   {{end}}
-</ul>
-{{template "pagination" .Page}}
 {{end}}
+{{end}}
+
+{{define "series_infinite_chunk"}}
+<div data-infinite-chunk>
+  {{template "series_rows_inner" .}}
+  {{template "list_infinite_sentinel" .}}
 </div>
 {{end}}

@@ -108,10 +108,14 @@ func (s *Store) EnqueueBulkEditVideos(p BulkEditVideosParams) (int64, error) {
 // ListVideoIDsFiltered returns video ids for a series matching filter (list order).
 func (s *Store) ListVideoIDsFiltered(seriesID int64, filter VideoListFilter) ([]int64, error) {
 	var b strings.Builder
-	b.WriteString(`SELECT id FROM videos WHERE series_id = ?`)
-	args := []any{seriesID}
+	b.WriteString(`SELECT id FROM videos WHERE 1=1`)
+	args := []any{}
+	if seriesID > 0 {
+		b.WriteString(` AND series_id = ?`)
+		args = append(args, seriesID)
+	}
 	appendVideoListFilterSQL(&b, &args, filter)
-	b.WriteString(` ORDER BY ` + videoListOrderBy)
+	b.WriteString(` ORDER BY ` + videoOrderByClause(filter.Sort, filter.SortDir))
 	rows, err := s.DB.SQL.Query(b.String(), args...)
 	if err != nil {
 		return nil, err

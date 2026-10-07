@@ -43,8 +43,7 @@ func TestAddSourceSeedsDomainTag(t *testing.T) {
 		t.Fatalf("create series source tags=%v", src.Tags)
 	}
 	added, err := s.AddSource(ser.ID, library.AddSourceParams{
-		URL:  "https://cdn.example.org/feed",
-		Kind: library.SourceKindFeed,
+		URL: "https://cdn.example.org/feed",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -54,11 +53,11 @@ func TestAddSourceSeedsDomainTag(t *testing.T) {
 	}
 }
 
-func TestUpdateSourceSingleLocksDomainTag(t *testing.T) {
+func TestUpdateSourceWatchURLCanDropDomainTag(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, err := s.CreateSeries(library.CreateSeriesParams{
-		Title:            "SingleLock",
+		Title:            "WatchDrop",
 		RootID:           rootID,
 		QualityProfileID: profileID,
 		Monitored:        true,
@@ -67,19 +66,18 @@ func TestUpdateSourceSingleLocksDomainTag(t *testing.T) {
 		t.Fatal(err)
 	}
 	src, err := s.AddSource(ser.ID, library.AddSourceParams{
-		URL:  "https://www.example.com/watch?v=abc",
-		Kind: library.SourceKindSingle,
+		URL: "https://www.example.com/watch?v=abc",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	empty := []string{"custom"}
-	updated, err := s.UpdateSource(ser.ID, src.ID, library.UpdateSourceParams{Tags: &empty})
+	only := []string{"only"}
+	updated, err := s.UpdateSource(ser.ID, src.ID, library.UpdateSourceParams{Tags: &only})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(updated.Tags) != 2 || updated.Tags[0] != "example.com" || updated.Tags[1] != "custom" {
-		t.Fatalf("single tags=%v want domain first", updated.Tags)
+	if len(updated.Tags) != 1 || updated.Tags[0] != "only" {
+		t.Fatalf("tags=%v want operator-only list", updated.Tags)
 	}
 }
 

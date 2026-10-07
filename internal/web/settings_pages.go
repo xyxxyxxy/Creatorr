@@ -157,11 +157,12 @@ func (h *Handler) settingsMaintenance(w http.ResponseWriter, r *http.Request) {
 
 type maintenancePageData struct {
 	pageBase
-	OOB                bool
-	ApplyNamingBusy    bool
-	NFORegenBusy       bool
-	VerifyAllMediaBusy bool
-	SyncFilesBusy      bool
+	OOB                   bool
+	ApplyNamingBusy       bool
+	NFORegenBusy          bool
+	VerifyAllMediaBusy    bool
+	SyncFilesBusy         bool
+	ResetMetaFromInfoBusy bool
 }
 
 func (h *Handler) maintenancePageData(r *http.Request) maintenancePageData {
@@ -169,12 +170,14 @@ func (h *Handler) maintenancePageData(r *http.Request) maintenancePageData {
 	nfoBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindRegenerateNFO, queue.SystemDomain)
 	verifyBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindIntegrityCheck, queue.SystemDomain)
 	syncBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindSyncFiles, queue.SystemDomain)
+	resetBusy, _ := h.Queue.HasPendingOrRunningKind(queue.KindResetMetadataFromInfo, queue.SystemDomain)
 	return maintenancePageData{
-		pageBase:           newSettingsPage("Settings · Maintenance", "maintenance", flashFromQuery(r)),
-		ApplyNamingBusy:    applyBusy,
-		NFORegenBusy:       nfoBusy,
-		VerifyAllMediaBusy: verifyBusy,
-		SyncFilesBusy:      syncBusy,
+		pageBase:              newSettingsPage("Settings · Maintenance", "maintenance", flashFromQuery(r)),
+		ApplyNamingBusy:       applyBusy,
+		NFORegenBusy:          nfoBusy,
+		VerifyAllMediaBusy:    verifyBusy,
+		SyncFilesBusy:         syncBusy,
+		ResetMetaFromInfoBusy: resetBusy,
 	}
 }
 

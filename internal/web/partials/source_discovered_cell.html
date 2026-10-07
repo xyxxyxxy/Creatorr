@@ -1,0 +1,14 @@
+{{define "source_discovered_cell"}}
+{{/* Discovered video status from index_as_ignored (feeds). Singles always Wanted. */}}
+{{if .IndexAsIgnored}}
+<span class="inline-flex items-center gap-1.5 text-sm text-warning tooltip tooltip-top" data-tip="New videos stay ignored until manually set to wanted">
+  <i data-lucide="eye-off" class="size-4 shrink-0" aria-hidden="true"></i>
+  Ignored
+</span>
+{{else}}
+<span class="inline-flex items-center gap-1.5 text-sm opacity-80 tooltip tooltip-top" data-tip="New videos are indexed as wanted">
+  <i data-lucide="eye" class="size-4 shrink-0" aria-hidden="true"></i>
+  Wanted
+</span>
+{{end}}
+{{end}}

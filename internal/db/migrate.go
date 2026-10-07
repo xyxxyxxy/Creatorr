@@ -113,6 +113,26 @@ func (d *DB) migrate() error {
 			if err := d.migrateTo24(); err != nil {
 				return fmt.Errorf("migrate to %d: %w", next, err)
 			}
+		case 25:
+			if err := d.migrateTo25(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
+		case 26:
+			if err := d.migrateTo26(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
+		case 27:
+			if err := d.migrateTo27(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
+		case 28:
+			if err := d.migrateTo28(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
+		case 29:
+			if err := d.migrateTo29(); err != nil {
+				return fmt.Errorf("migrate to %d: %w", next, err)
+			}
 		default:
 			return fmt.Errorf("no migration defined for schema version %d", next)
 		}
@@ -791,6 +811,201 @@ func (d *DB) migrateTo23() error {
 		return fmt.Errorf("rename integrity_check_failed status: %w", err)
 	}
 	return nil
+}
+
+// migrateTo25: tasks.interrupt_count for restart requeue tally on Tasks Explorer.
+func (d *DB) migrateTo25() error {
+	has, err := d.tableHasColumn("tasks", "interrupt_count")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE tasks ADD COLUMN interrupt_count INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return fmt.Errorf("add tasks.interrupt_count: %w", err)
+	}
+	return nil
+}
+
+// migrateTo26: per-file integrity attempt/success stamps (derived failed when checked_at > ok_at).
+func (d *DB) migrateTo26() error {
+	for _, col := range []string{"content_hash_checked_at", "content_hash_ok_at"} {
+		has, err := d.tableHasColumn("files", col)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := d.SQL.Exec(`ALTER TABLE files ADD COLUMN ` + col + ` TEXT`); err != nil {
+			return fmt.Errorf("add files.%s: %w", col, err)
+		}
+	}
+	return nil
+}
+
+// migrateTo27: files.series_id + nullable video_id (series-meta rows have video_id NULL).
+func (d *DB) migrateTo27() error {
+	hasSeries, err := d.tableHasColumn("files", "series_id")
+	if err != nil {
+		return err
+	}
+	if !hasSeries {
+		if _, err := d.SQL.Exec(`ALTER TABLE files ADD COLUMN series_id INTEGER REFERENCES series(id) ON DELETE CASCADE`); err != nil {
+			return fmt.Errorf("add files.series_id: %w", err)
+		}
+	}
+	if _, err := d.SQL.Exec(`
+		UPDATE files SET series_id = (
+			SELECT v.series_id FROM videos v WHERE v.id = files.video_id
+		)
+		WHERE series_id IS NULL AND video_id IS NOT NULL
+	`); err != nil {
+		return fmt.Errorf("backfill files.series_id: %w", err)
+	}
+	// Recreate to drop NOT NULL on video_id (SQLite cannot ALTER NULLability).
+	hasNotNull, err := d.filesVideoIDNotNull()
+	if err != nil {
+		return err
+	}
+	if hasNotNull {
+		if err := d.rebuildFilesNullableVideoID(); err != nil {
+			return err
+		}
+	}
+	return d.ensureFilesFillSeriesIDTrigger()
+}
+
+// migrateTo28: Apprise channels may mark in-app notifications read after external OK.
+func (d *DB) migrateTo28() error {
+	has, err := d.tableHasColumn("notification_channels", "mark_external_read")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE notification_channels ADD COLUMN mark_external_read INTEGER NOT NULL DEFAULT 1`); err != nil {
+		return fmt.Errorf("add notification_channels.mark_external_read: %w", err)
+	}
+	return nil
+}
+
+// migrateTo29: drop sources.kind (one source type; schedule via scan_cron only).
+func (d *DB) migrateTo29() error {
+	has, err := d.tableHasColumn("sources", "kind")
+	if err != nil {
+		return err
+	}
+	if !has {
+		return nil
+	}
+	if _, err := d.SQL.Exec(`ALTER TABLE sources DROP COLUMN kind`); err != nil {
+		return fmt.Errorf("drop sources.kind: %w", err)
+	}
+	return nil
+}
+
+// Note: series-meta disk registration runs after open via library.SyncAllSeriesMetaFiles
+// (Open path / first sync); migrate only reshapes columns.
+
+func (d *DB) filesVideoIDNotNull() (bool, error) {
+	rows, err := d.SQL.Query(`PRAGMA table_info(files)`)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == "video_id" {
+			return notnull == 1, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+func (d *DB) rebuildFilesNullableVideoID() error {
+	hasSize, err := d.tableHasColumn("files", "size_bytes")
+	if err != nil {
+		return err
+	}
+	hasHash, err := d.tableHasColumn("files", "content_hash")
+	if err != nil {
+		return err
+	}
+	hasChecked, err := d.tableHasColumn("files", "content_hash_checked_at")
+	if err != nil {
+		return err
+	}
+	hasOk, err := d.tableHasColumn("files", "content_hash_ok_at")
+	if err != nil {
+		return err
+	}
+	sizeExpr, hashExpr, checkedExpr, okExpr := "NULL", "NULL", "NULL", "NULL"
+	if hasSize {
+		sizeExpr = "f.size_bytes"
+	}
+	if hasHash {
+		hashExpr = "f.content_hash"
+	}
+	if hasChecked {
+		checkedExpr = "f.content_hash_checked_at"
+	}
+	if hasOk {
+		okExpr = "f.content_hash_ok_at"
+	}
+	tx, err := d.SQL.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`
+		CREATE TABLE files_new (
+		  id INTEGER PRIMARY KEY AUTOINCREMENT,
+		  series_id INTEGER REFERENCES series(id) ON DELETE CASCADE,
+		  video_id INTEGER REFERENCES videos(id) ON DELETE CASCADE,
+		  path TEXT NOT NULL,
+		  kind TEXT NOT NULL,
+		  acquired_at TEXT NOT NULL,
+		  size_bytes INTEGER,
+		  content_hash TEXT,
+		  content_hash_checked_at TEXT,
+		  content_hash_ok_at TEXT,
+		  CHECK (series_id IS NOT NULL OR video_id IS NOT NULL)
+		)
+	`); err != nil {
+		return fmt.Errorf("files_new: %w", err)
+	}
+	q := `
+		INSERT INTO files_new (
+		  id, series_id, video_id, path, kind, acquired_at, size_bytes,
+		  content_hash, content_hash_checked_at, content_hash_ok_at
+		)
+		SELECT
+		  f.id,
+		  COALESCE(f.series_id, v.series_id),
+		  f.video_id,
+		  f.path, f.kind, f.acquired_at, ` + sizeExpr + `,
+		  ` + hashExpr + `, ` + checkedExpr + `, ` + okExpr + `
+		FROM files f
+		LEFT JOIN videos v ON v.id = f.video_id
+	`
+	if _, err := tx.Exec(q); err != nil {
+		return fmt.Errorf("copy files: %w", err)
+	}
+	if _, err := tx.Exec(`DROP TABLE files`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`ALTER TABLE files_new RENAME TO files`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // migrateTo24: nullable videos.special_feature (regular=NULL), source catalog preset cols, seed domain into sources.tags.

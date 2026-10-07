@@ -229,7 +229,7 @@ func (s *Store) MoveToFront(id int64) error {
 func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 	// Path-touching system kinds never overlap series_move; series_move needs them idle.
 	switch p.Kind {
-	case KindRenameEpisodes, KindRegenerateNFO, KindSyncFiles, KindRetentionDelete:
+	case KindRenameEpisodes, KindRegenerateNFO, KindResetMetadataFromInfo, KindSyncFiles, KindRetentionDelete:
 		if busy, err := s.PathTouchingSystemBusy(KindSeriesMove); err != nil {
 			return err
 		} else if busy {
@@ -246,7 +246,7 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 	// System lane: at most one pending/running task per kind (except import keeps per-video).
 	if p.Domain == SystemDomain {
 		switch p.Kind {
-		case KindSyncFiles, KindRetentionDelete, KindRegenerateNFO, KindIntegrityCheck, KindYtDlpUpdate, KindBulkEditSeries, KindBulkEditVideos:
+		case KindSyncFiles, KindRetentionDelete, KindRegenerateNFO, KindResetMetadataFromInfo, KindIntegrityCheck, KindYtDlpUpdate, KindBulkEditSeries, KindBulkEditVideos:
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE domain = ? AND kind = ? AND status IN (?, ?) LIMIT 1
 			`, SystemDomain, p.Kind, StatusPending, StatusRunning)
@@ -329,6 +329,16 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 			return s.rejectIfExists(`
 				SELECT 1 FROM tasks WHERE kind = ? AND video_id = ? AND status IN (?, ?) LIMIT 1
 			`, KindIntegrityCheckInitial, p.VideoID, StatusPending, StatusRunning)
+		}
+	case KindFileHashCheck:
+		fileID := FileIDFromPayload(payloadJSON)
+		if fileID > 0 {
+			return s.rejectIfExists(`
+				SELECT 1 FROM tasks
+				WHERE kind = ? AND status IN (?, ?)
+				  AND CAST(COALESCE(json_extract(payload, '$.file_id'), 0) AS INTEGER) = ?
+				LIMIT 1
+			`, KindFileHashCheck, StatusPending, StatusRunning, fileID)
 		}
 	case KindPrefetchSeriesMeta:
 		if p.SeriesID > 0 {

@@ -1,0 +1,20 @@
+{{define "list_table_th"}}
+{{/* Dot: Col tableCol, LiveTarget (id without #). Whole-cell sort link when SortHref set. */}}
+{{$col := .Col}}
+{{$live := .LiveTarget}}
+<th data-col="{{$col.Key}}"{{if not $col.Visible}} class="hidden"{{end}}{{if and $col.SortHref $col.SortSelected}} aria-sort="{{if eq $col.SortDir "asc"}}ascending{{else}}descending{{end}}"{{end}}>
+{{if $col.SortHref}}
+{{$sortIcon := "arrow-up-down"}}{{$sortIconClass := "size-3.5 shrink-0 opacity-40"}}
+{{if $col.SortSelected}}
+{{if eq $col.SortDir "desc"}}{{$sortIcon = "arrow-down"}}{{else}}{{$sortIcon = "arrow-up"}}{{end}}
+{{$sortIconClass = "size-3.5 shrink-0 opacity-70"}}
+{{end}}
+<a class="list-table-sort-link" href="{{$col.SortHref}}"{{if $live}} hx-get="{{$col.SortHref}}" hx-target="#{{$live}}" hx-select="#{{$live}}" hx-swap="outerHTML" hx-push-url="true"{{end}}>
+  <span>{{$col.Label}}</span>
+  <i data-lucide="{{$sortIcon}}" class="{{$sortIconClass}}" aria-hidden="true"></i>
+</a>
+{{else}}
+{{$col.Label}}
+{{end}}
+</th>
+{{end}}
