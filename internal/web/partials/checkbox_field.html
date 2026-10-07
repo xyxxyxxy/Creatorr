@@ -1,7 +1,8 @@
 {{define "checkbox_field"}}
 {{/*
   Boolean option as daisyUI fieldset: checkbox + label + optional field_info + Hint.
-  Expects: Name, Label. Optional: Info, Hint, Help (alias→Info), Checked, InputClass, Disabled, DisabledTitle.
+  Expects: Name, Label. Optional: Info, Hint, Help (alias→Info), Checked, InputClass, Disabled, DisabledTitle,
+  CatalogBlockField (Catalog field key; appends linked "Values blocked under Settings → Catalog…" after Hint).
   When Disabled: mute label, cursor-not-allowed, tip on wrapper (DisabledTitle, else Hint);
   muted Hint stays under the control when set (purpose copy; tip is why disabled).
 */}}
@@ -16,8 +17,8 @@
       {{template "field_info" (dict "Info" $info)}}
     </label>
   </span>
-  {{if .Hint}}
-  <p class="label whitespace-normal opacity-60">{{.Hint}}</p>
+  {{if or .Hint .CatalogBlockField}}
+  <p class="label whitespace-normal opacity-60">{{.Hint}}{{if .CatalogBlockField}}{{if .Hint}} {{end}}Values blocked under <a class="link link-primary" href="/settings/catalog?field={{.CatalogBlockField}}">Settings → Catalog</a> are still skipped.{{end}}</p>
   {{end}}
   {{else}}
   <label class="label justify-start gap-2 cursor-pointer">
@@ -25,8 +26,8 @@
     <span class="label-text text-base-content">{{.Label}}</span>
     {{template "field_info" (dict "Info" $info)}}
   </label>
-  {{if .Hint}}
-  <p class="label whitespace-normal">{{.Hint}}</p>
+  {{if or .Hint .CatalogBlockField}}
+  <p class="label whitespace-normal">{{.Hint}}{{if .CatalogBlockField}}{{if .Hint}} {{end}}Values blocked under <a class="link link-primary" href="/settings/catalog?field={{.CatalogBlockField}}">Settings → Catalog</a> are still skipped.{{end}}</p>
   {{end}}
   {{end}}
 </fieldset>

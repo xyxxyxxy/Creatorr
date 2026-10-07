@@ -114,7 +114,7 @@ func (s *Store) EnqueueRewriteCatalogMeta(p RewriteCatalogMetaParams) (int64, er
 	case CatalogOpRename:
 		msg = "Catalog rename " + p.Field
 	case CatalogOpRemoveBlock:
-		msg = "Catalog remove and block SoftFill " + p.Field
+		msg = "Catalog remove and block auto-fill " + p.Field
 	}
 	return s.Queue.Enqueue(queue.EnqueueParams{
 		Origin:  queue.OriginManual,

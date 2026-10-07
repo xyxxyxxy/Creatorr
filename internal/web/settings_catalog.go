@@ -134,7 +134,7 @@ func (h *Handler) actionCatalogVocabUnblock(w http.ResponseWriter, r *http.Reque
 		redirectSettings(w, r, catalogURL(field), "err="+urlQuery(err.Error()))
 		return
 	}
-	redirectSettings(w, r, catalogURL(field), "ok="+urlQuery("SoftFill block removed"))
+	redirectSettings(w, r, catalogURL(field), "ok="+urlQuery("Auto-fill block removed"))
 }
 
 func (h *Handler) redirectCatalog(w http.ResponseWriter, r *http.Request, field string, taskID int64, err error) {

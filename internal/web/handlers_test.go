@@ -1053,15 +1053,24 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if strings.Contains(body, "Saving does not") {
 				t.Fatalf("%s still has per-field Saving does not hints", path)
 			}
-			if !strings.Contains(body, "softfill_tags") || !strings.Contains(body, ">Metadata</h2>") {
-				t.Fatalf("%s missing Metadata SoftFill toggles", path)
+			if !strings.Contains(body, "softfill_tags") || !strings.Contains(body, ">Metadata</h2>") || !strings.Contains(body, `id="metadata"`) {
+				t.Fatalf("%s missing Metadata auto-fill toggles", path)
+			}
+			if !strings.Contains(body, `href="/settings/catalog?field=tags"`) || !strings.Contains(body, `href="/settings/catalog?field=genres"`) {
+				t.Fatalf("%s missing Catalog deep links in Metadata hints", path)
 			}
 			continue
 		}
 		if path == "/settings/catalog" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "Catalog values") || !strings.Contains(body, "Remove and block SoftFill") {
+			if !strings.Contains(body, "Catalog values") || !strings.Contains(body, "Remove and block auto-fill") {
 				t.Fatalf("%s missing Catalog UI", path)
+			}
+			if !strings.Contains(body, `href="/settings/library#metadata"`) {
+				t.Fatalf("%s missing auto-fill toggles deep link", path)
+			}
+			if strings.Contains(body, "tabs-boxed") || !strings.Contains(body, `class="btn join-item btn-accent"`) {
+				t.Fatalf("%s Catalog field switcher not join buttons", path)
 			}
 			continue
 		}
