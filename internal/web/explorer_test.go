@@ -275,10 +275,35 @@ func TestFilesExplorerBulkModeAndIDs(t *testing.T) {
 	if !strings.Contains(body, `data-files-bulk-check`) {
 		t.Fatalf("files explorer missing Check integrity (btn_labeled): %s", truncate(body, 600))
 	}
+	seriesFiles := httptest.NewRecorder()
+	r.ServeHTTP(seriesFiles, httptest.NewRequest(http.MethodGet,
+		"/explorer/browse?type=files&at=series-detail&series_id="+itoa(ser.ID)+"&kind=series", nil))
+	if seriesFiles.Code != 200 {
+		t.Fatalf("series-detail files status %d", seriesFiles.Code)
+	}
+	sfBody := seriesFiles.Body.String()
+	if strings.Contains(sfBody, `data-files-bulk-mode`) || strings.Contains(sfBody, `data-files-bulk-bar`) {
+		t.Fatalf("series-detail Files must omit multi-select: %s", truncate(sfBody, 600))
+	}
+	videoFiles := httptest.NewRecorder()
+	r.ServeHTTP(videoFiles, httptest.NewRequest(http.MethodGet,
+		"/explorer/browse?type=files&at=video-detail&series_id="+itoa(ser.ID)+"&video_id=1", nil))
+	if videoFiles.Code != 200 {
+		t.Fatalf("video-detail files status %d", videoFiles.Code)
+	}
+	vfBody := videoFiles.Body.String()
+	if strings.Contains(vfBody, `data-files-bulk-mode`) || strings.Contains(vfBody, `data-files-bulk-bar`) {
+		t.Fatalf("video-detail Files must omit multi-select: %s", truncate(vfBody, 600))
+	}
 	if !strings.Contains(body, ">Status</span>") || !strings.Contains(body, "status=failed") ||
 		!strings.Contains(body, "status=ok") || !strings.Contains(body, "status=unchecked") ||
 		!strings.Contains(body, "status=inactive") || !strings.Contains(body, "status=na") {
 		t.Fatalf("files explorer missing Status filter: %s", truncate(body, 800))
+	}
+	if !strings.Contains(body, "kind=series") || !strings.Contains(body, "kind=episode") ||
+		!strings.Contains(body, ">Series</a>") || !strings.Contains(body, ">Video</a>") ||
+		!strings.Contains(body, ">Media</a>") {
+		t.Fatalf("files explorer missing Series/Video/Media Type filters: %s", truncate(body, 800))
 	}
 	if strings.Contains(body, "missing=1") || strings.Contains(body, "integrity=failed") {
 		t.Fatalf("legacy Missing/Integrity filters must be gone: %s", truncate(body, 800))
@@ -345,6 +370,63 @@ func TestFilesExplorerCheckIntegrityDisabledWhenQueued(t *testing.T) {
 	}
 	if strings.Contains(body, `action="/actions/check-file-hash"`) {
 		t.Fatal("Check integrity form must not render while queued")
+	}
+}
+
+func TestSeriesDetailFilesShowsSeriesMetaOnly(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = library.SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	q := queue.NewStore(d)
+	lib := library.NewStore(d, q)
+	ser, err := lib.CreateSeries(library.CreateSeriesParams{
+		Title: "Series Files Only", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://www.example.com/@seriesfiles",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	poster := filepath.Join(t.TempDir(), "poster.jpg")
+	if err := os.WriteFile(poster, []byte("img"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.RegisterSeriesMetaFile(ser.ID, poster, library.ArtPoster); err != nil {
+		t.Fatal(err)
+	}
+	res, err := lib.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "sf-ep", Title: "Episode Clip", SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	media := filepath.Join(t.TempDir(), "ep.mkv")
+	if err := os.WriteFile(media, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.RegisterFileKind(res.VideoID, media, "video"); err != nil {
+		t.Fatal(err)
+	}
+	h := &web.Handler{Library: lib, Queue: q}
+	r := chi.NewRouter()
+	h.Mount(r)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/series/"+strconv.FormatInt(ser.ID, 10), nil))
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 400))
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Series folder files") {
+		t.Fatalf("series Files help missing: %s", truncate(body, 600))
+	}
+	if !strings.Contains(body, "poster.jpg") {
+		t.Fatalf("series meta missing from Files: %s", truncate(body, 800))
+	}
+	if strings.Contains(body, "ep.mkv") {
+		t.Fatalf("episode media must not appear on series Files: %s", truncate(body, 800))
 	}
 }
 

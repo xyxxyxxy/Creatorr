@@ -275,15 +275,11 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, listErr.Error(), 500)
 		return
 	}
-	filter := parseSeriesVideoListFilter(r, ser.Sources)
 	sourceURLs := make([]string, 0, len(ser.Sources))
 	for _, src := range ser.Sources {
 		sourceURLs = append(sourceURLs, src.URL)
 	}
 	indicatorsQ := fmt.Sprintf("/series/%d/task-indicators", id)
-	if q := seriesVideoFilterQuery(filter, videosLive.VideosPage.Page); q != "" {
-		indicatorsQ += "?" + q
-	}
 	roots, _ := h.Library.ListRoots()
 	profiles, _ := h.Library.ListProfiles()
 	folderRenameBusy, _ := h.Library.SeriesHasBlockingTasks(id)
@@ -331,6 +327,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 	} {
 		qFiles.Del(k)
 	}
+	qFiles.Set("kind", library.FileKindScopeSeries)
 	filesReq := cloneRequestQuery(r, qFiles)
 	filesLive, filesErr := h.loadFilesListLive(w, filesReq)
 	if filesErr != nil {
@@ -346,6 +343,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		FilesLive           filesListLiveData
 		SourceURLs          []string
 		ImportNullCount     int
+		ImportedVideosHref  string
 		VideosLive          seriesVideosLiveData
 		HasVideos           bool
 		CanScan             bool
@@ -371,6 +369,7 @@ func (h *Handler) seriesDetail(w http.ResponseWriter, r *http.Request) {
 		FilesLive:           filesLive,
 		SourceURLs:          sourceURLs,
 		ImportNullCount:     nullImportCount,
+		ImportedVideosHref:  seriesImportedVideosBrowseHref(id),
 		VideosLive:          videosLive,
 		HasVideos:           videoTotal > 0,
 		CanScan:             canScan && !seriesDeleting,
@@ -400,11 +399,8 @@ func (h *Handler) seriesTaskIndicators(w http.ResponseWriter, r *http.Request) {
 	activeTasks, _ := h.Queue.ListActiveForSeries(id)
 	seriesTasks, bySource, byVideo := seriesActivityMaps(activeTasks)
 	h.mergeFileDeleteForSeries(id, &seriesTasks, byVideo)
-	filter := parseSeriesVideoListFilter(r, ser.Sources)
-	videoPage := ParsePage(r, "page")
-	videoTotal, _ := h.Library.CountVideosFiltered(id, filter)
-	videosPageInfo := NewPageInfoSize(r, "page", videoPage, videoTotal, VideoPageSize)
-	pageVids, _ := h.Library.ListVideosPageFiltered(id, filter, VideoPageSize, OffsetSize(videosPageInfo.Page, VideoPageSize))
+	filter := seriesVideosGlanceFilter()
+	pageVids, _ := h.Library.ListVideosPageFiltered(id, filter, SeriesVideoGlanceSize, 0)
 
 	vidIDs := map[int64]struct{}{}
 	for _, v := range pageVids {

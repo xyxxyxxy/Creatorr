@@ -97,13 +97,11 @@ func seriesVideosRedirect(seriesID int64, r *http.Request, okKey, detail, errMsg
 	if errMsg != "" {
 		q.Set("err", errMsg)
 	}
-	// Preserve list filters from Referer query when present.
+	// Series Videos glance only keeps ?page=.
 	if ref := r.Header.Get("Referer"); ref != "" {
 		if u, err := url.Parse(ref); err == nil && u != nil {
-			for _, k := range []string{"q", "status", "source", "year", "page", "from", "to"} {
-				if v := u.Query().Get(k); v != "" && q.Get(k) == "" {
-					q.Set(k, v)
-				}
+			if v := u.Query().Get("page"); v != "" && q.Get("page") == "" {
+				q.Set("page", v)
 			}
 		}
 	}

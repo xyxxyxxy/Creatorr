@@ -22,11 +22,18 @@ const (
 	FileStatusNA        = "na"
 )
 
+// File Type filter scope tokens (not files.kind values). Series = video_id NULL
+// (tvshow.nfo + art). Video = episode-owned rows. Packed media stays kind "video".
+const (
+	FileKindScopeSeries = "series"
+	FileKindScopeVideo  = "episode"
+)
+
 // FileListFilter narrows DB-only files Explorer lists (no os.Stat).
 type FileListFilter struct {
 	SeriesID int64    // 0 = all; scope lock or browser filter
 	VideoID  int64    // 0 = all; video-detail embed
-	Kinds    []string // OR via IN
+	Kinds    []string // OR via IN; may include FileKindScopeSeries / FileKindScopeVideo
 	Statuses []string // failed|ok|unchecked|inactive|na; OR of status predicates
 	Q        string   // path substring
 	Sort     string
@@ -85,6 +92,30 @@ func fileIntegrityFailedSQL() string {
 		)`
 }
 
+// splitFileKindFilters separates Type scope tokens from real files.kind values.
+func splitFileKindFilters(kinds []string) (wantSeries, wantVideo bool, real []string) {
+	seenReal := map[string]struct{}{}
+	for _, raw := range trimNonEmptyStrings(kinds) {
+		switch strings.ToLower(strings.TrimSpace(raw)) {
+		case FileKindScopeSeries:
+			wantSeries = true
+		case FileKindScopeVideo:
+			wantVideo = true
+		default:
+			k := strings.TrimSpace(raw)
+			if k == "" {
+				continue
+			}
+			if _, ok := seenReal[k]; ok {
+				continue
+			}
+			seenReal[k] = struct{}{}
+			real = append(real, k)
+		}
+	}
+	return wantSeries, wantVideo, real
+}
+
 func (f FileListFilter) where() (string, []any) {
 	var b strings.Builder
 	var args []any
@@ -101,7 +132,15 @@ func (f FileListFilter) where() (string, []any) {
 		b.WriteString(` AND f.video_id = ?`)
 		args = append(args, f.VideoID)
 	}
-	appendStringsIn(&b, &args, "f.kind", f.Kinds, false)
+	wantSeries, wantEpisode, realKinds := splitFileKindFilters(f.Kinds)
+	if wantSeries != wantEpisode {
+		if wantSeries {
+			b.WriteString(` AND (f.video_id IS NULL OR f.video_id <= 0)`)
+		} else {
+			b.WriteString(` AND f.video_id IS NOT NULL AND f.video_id > 0`)
+		}
+	}
+	appendStringsIn(&b, &args, "f.kind", realKinds, false)
 	failedSQL := fileIntegrityFailedSQL()
 	missingSQL := `f.size_bytes = ?`
 	presentSQL := `(f.size_bytes IS NULL OR f.size_bytes != ?)`

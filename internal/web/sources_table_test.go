@@ -64,8 +64,14 @@ func TestSourcesTableView(t *testing.T) {
 	if strings.Contains(nameSlice, `data-lucide="list-`) || strings.Contains(nameSlice, `data-lucide="film"`) || strings.Contains(nameSlice, `data-lucide="eye`) {
 		t.Fatalf("discovered icons must not sit in name column: %s", nameSlice)
 	}
-	if !strings.Contains(body, `modal-box modal-box-scroll`) || !strings.Contains(body, `id="modal-edit-source-`) {
-		t.Fatal("edit source modal must use modal-box-scroll (tall form after unify)")
+	editIdx := strings.Index(body, `id="modal-edit-source-`)
+	if editIdx < 0 {
+		t.Fatal("edit source modal missing")
+	}
+	// Tip fields (scan cron, etc.) need overlay scroll; box-scroll nests scrollbars.
+	editChunk := body[editIdx:min(editIdx+800, len(body))]
+	if strings.Contains(editChunk, `modal-box-scroll`) {
+		t.Fatal("edit source modal must scroll overlay (no modal-box-scroll)")
 	}
 }
 

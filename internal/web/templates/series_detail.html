@@ -71,24 +71,9 @@
 <script type="application/json" id="series-source-urls">{{toJSON .SourceURLs}}</script>
 {{template "sources_list_live" .SourcesLive}}
 {{if .ImportNullCount}}
-{{$importHref := printf "/series/%d?source=import" .Series.ID}}
-<a class="list bg-base-100 rounded-box border border-base-300 mt-3 block hover:bg-base-200/50"
-   href="{{$importHref}}#series-videos-live"
-   hx-get="{{$importHref}}"
-   hx-target="#series-videos-live"
-   hx-select="#series-videos-live"
-   hx-swap="outerHTML"
-   hx-push-url="true"
-   data-scroll-after-swap="series-videos-live"
-   aria-label="Show imported videos">
-  <div class="list-row" style="--list-grid-cols: 1fr max-content">
-    <div class="list-col-grow min-w-0 flex items-center gap-2">
-      <span class="inline-flex shrink-0 tooltip tooltip-top" data-tip="imported or manually indexed videos with no source URL"><i data-lucide="folder-input" class="size-4 opacity-70"></i></span>
-      <span class="link link-hover font-medium min-w-0 truncate">Import</span>
-    </div>
-    <div class="self-center text-sm opacity-80 tabular-nums">{{if eq .ImportNullCount 1}}1 video imported{{else}}{{.ImportNullCount}} videos imported{{end}}</div>
-  </div>
-</a>
+<a class="link link-hover text-sm mt-3 inline-block"
+   href="{{.ImportedVideosHref}}"
+   aria-label="Show imported videos">{{if eq .ImportNullCount 1}}1 video imported{{else}}{{.ImportNullCount}} videos imported{{end}}</a>
 {{end}}
 {{end}}
 {{template "list_panel_end"}}
@@ -100,16 +85,15 @@
 {{template "notes_editor" (dict "Value" .Series.Notes "Action" "/actions/save-series-notes" "IDName" "series_id" "ID" .Series.ID)}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "All registered files for this series: folder metadata (tvshow.nfo, art) and episode media/sidecars. DB-only list; missing means size_bytes -1.")}}
+{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files" "help" "Series folder files: tvshow.nfo, art.")}}
 {{template "files_list_live" .FilesLive}}
 {{template "list_panel_end"}}
-{{template "files_bulk_modals"}}
 
 <input type="checkbox" id="modal-add-source" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box modal-box-scroll max-w-xl flex flex-col gap-2">
-    <h3 class="font-bold text-lg shrink-0">Add source</h3>
-        <form method="post" action="/actions/add-source" class="space-y-2 js-source-url-form min-h-0 overflow-y-auto grow">
+  <div class="modal-box max-w-xl">
+    <h3 class="font-bold text-lg mb-2">Add source</h3>
+        <form method="post" action="/actions/add-source" class="space-y-2 js-source-url-form">
       <input type="hidden" name="series_id" value="{{.Series.ID}}" />
       <div class="w-full">
         {{template "field_input" (dict
@@ -138,7 +122,7 @@
         "PackRoleOptions" .PackRoleOptions
         "ListPrefix" "add-src"
       )}}
-      <div class="modal-action shrink-0 mt-0">
+      <div class="modal-action">
         <label for="modal-add-source" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary js-source-url-submit">Add</button>
       </div>
@@ -187,13 +171,6 @@
   </div>
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
-
-{{template "video_bulk_modals" (dict
-  "SeriesID" .Series.ID
-  "ShowClearErrors" (not .Deleting)
-  "Suggestions" .MetaForm.Suggestions
-  "PackRoleOptions" .PackRoleOptions
-)}}
 
 {{template "foot" .}}
 {{end}}

@@ -1657,14 +1657,11 @@ func TestSeriesDetailHasMonitoredActionNotOnEditForm(t *testing.T) {
 	if !strings.Contains(body, `name="delivery_mode"`) {
 		t.Fatalf("series detail missing delivery select: %s", truncate(body, 400))
 	}
-	if !strings.Contains(body, "data-video-bulk-mode") {
-		t.Fatalf("series detail missing video multi-select toggle: %s", truncate(body, 500))
+	if strings.Contains(body, "data-video-bulk-mode") || strings.Contains(body, "modal-bulk-edit-videos-metadata") {
+		t.Fatalf("series detail Videos glance must omit multi-select bulk: %s", truncate(body, 500))
 	}
-	if !strings.Contains(body, "modal-bulk-edit-videos-metadata") || !strings.Contains(body, "modal-bulk-delete-videos") {
-		t.Fatalf("series detail missing video bulk modals: %s", truncate(body, 500))
-	}
-	if !strings.Contains(body, `action="/actions/bulk-want-videos"`) {
-		t.Fatalf("series detail missing bulk want form: %s", truncate(body, 400))
+	if !strings.Contains(body, "Browse all") || !strings.Contains(body, `data-view-mode="gallery"`) {
+		t.Fatalf("series detail Videos glance missing Browse all / locked gallery: %s", truncate(body, 500))
 	}
 }
 
@@ -1704,38 +1701,31 @@ func TestSeriesDetailImportRowFiltersVideos(t *testing.T) {
 		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 400))
 	}
 	body := rec.Body.String()
-	wantHref := `/series/` + itoa(ser.ID) + `?source=import`
-	if !strings.Contains(body, `hx-get="`+wantHref+`"`) {
-		t.Fatalf("Import row missing hx-get: %s", truncate(body, 600))
+	// url.Values.Encode sorts keys; html/template escapes & in attrs.
+	wantHref := `/browser?series=` + itoa(ser.ID) + `&amp;sort=acquired&amp;source=import&amp;type=videos`
+	importIdx := strings.Index(body, `aria-label="Show imported videos"`)
+	if importIdx < 0 {
+		t.Fatalf("Import row missing: %s", truncate(body, 600))
 	}
-	if !strings.Contains(body, `data-scroll-after-swap="series-videos-live"`) {
-		t.Fatalf("Import row missing scroll-after-swap: %s", truncate(body, 600))
+	// Anchor opens before aria-label; grab a window that includes href=.
+	start := importIdx - 200
+	if start < 0 {
+		start = 0
 	}
-	if !strings.Contains(body, `hx-target="#series-videos-live"`) {
-		t.Fatalf("Import row missing hx-target: %s", truncate(body, 600))
+	chunk := body[start:min(importIdx+80, len(body))]
+	if !strings.Contains(chunk, `href="`+wantHref+`"`) {
+		t.Fatalf("Import row missing Browse href: %s", truncate(chunk, 400))
+	}
+	if strings.Contains(chunk, `hx-get=`) || strings.Contains(chunk, `hx-target=`) {
+		t.Fatalf("Import row must be a plain Browser link: %s", truncate(chunk, 400))
 	}
 	liveIdx := strings.Index(body, `id="sources-list-live"`)
-	importIdx := strings.Index(body, `aria-label="Show imported videos"`)
-	if liveIdx < 0 || importIdx < 0 || importIdx < liveIdx {
+	if liveIdx < 0 || importIdx < liveIdx {
 		t.Fatalf("Import row should sit after Sources Explorer (live=%d import=%d)", liveIdx, importIdx)
-	}
-
-	req = httptest.NewRequest(http.MethodGet, wantHref, nil)
-	rec = httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != 200 {
-		t.Fatalf("filtered status %d: %s", rec.Code, truncate(rec.Body.String(), 400))
-	}
-	filtered := rec.Body.String()
-	if !strings.Contains(filtered, `aria-label="Source"`) || !strings.Contains(filtered, `aria-label="Import"`) {
-		t.Fatalf("source=import missing Source join + Import chip: %s", truncate(filtered, 600))
-	}
-	if !strings.Contains(filtered, "Imported") {
-		t.Fatalf("source=import missing imported video: %s", truncate(filtered, 600))
 	}
 }
 
-func TestSeriesVideosSearchOnlyOmitsChipRow(t *testing.T) {
+func TestSeriesVideosGlanceOneGalleryRow(t *testing.T) {
 	d, err := db.Open(filepath.Join(t.TempDir(), "ui.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -1753,40 +1743,67 @@ func TestSeriesVideosSearchOnlyOmitsChipRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
-		SeriesID:   ser.ID,
-		Title:      "Hello",
-		UploadDate: "2024-01-02T00:00:00Z",
-	}); err != nil {
-		t.Fatal(err)
+	for i := 0; i < web.SeriesVideoGlanceSize+1; i++ {
+		if _, err := lib.CreateIndexedVideo(library.CreateIndexedVideoParams{
+			SeriesID:   ser.ID,
+			Title:      "V" + itoa(int64(i)),
+			UploadDate: "2024-01-02T00:00:00Z",
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	h := &web.Handler{Library: lib, Queue: q}
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	req := httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID)+"?q=test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID)+"?q=test&view=list&page=2", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	if rec.Code != 200 {
 		t.Fatalf("status %d: %s", rec.Code, truncate(rec.Body.String(), 400))
 	}
 	body := rec.Body.String()
-	if strings.Contains(body, `aria-label="Active filters"`) {
-		t.Fatalf("search-only must not show chip row: %s", truncate(body, 800))
+	liveStart := strings.Index(body, `id="series-videos-live"`)
+	if liveStart < 0 {
+		t.Fatal("series Videos live missing")
 	}
-	if strings.Contains(body, `aria-label="Clear all"`) {
-		t.Fatalf("search-only must not show Clear all: %s", truncate(body, 800))
+	// Next major section after Videos (Notes or Files); avoid matching data-*-id=.
+	liveEndRel := strings.Index(body[liveStart:], `id="files-list-live"`)
+	if liveEndRel < 0 {
+		liveEndRel = strings.Index(body[liveStart:], `>Notes<`)
 	}
-
-	req = httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID)+"?source=import", nil)
-	rec = httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != 200 {
-		t.Fatalf("chip status %d", rec.Code)
+	if liveEndRel < 0 {
+		liveEndRel = len(body) - liveStart
 	}
-	withChip := rec.Body.String()
-	if !strings.Contains(withChip, `aria-label="Active filters"`) || !strings.Contains(withChip, `aria-label="Clear all"`) {
-		t.Fatalf("chip filter should show Active filters + Clear all: %s", truncate(withChip, 800))
+	live := body[liveStart : liveStart+liveEndRel]
+	if strings.Contains(live, `aria-label="Video filters"`) || strings.Contains(live, `aria-label="Active filters"`) {
+		t.Fatalf("series Videos glance must omit filter bar: %s", truncate(live, 800))
+	}
+	if strings.Contains(live, `data-lucide="chevron-first"`) || strings.Contains(live, `data-list-mode="paginated"`) {
+		t.Fatalf("series Videos glance must not paginate: %s", truncate(live, 600))
+	}
+	if !strings.Contains(live, `data-view-mode="gallery"`) || !strings.Contains(live, `data-list-mode="fixed"`) {
+		t.Fatalf("series Videos glance must be fixed gallery: %s", truncate(live, 400))
+	}
+	if !strings.Contains(live, `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`) {
+		t.Fatalf("series Videos glance missing Browser Videos gallery grid: %s", truncate(live, 400))
+	}
+	browse := `/browser?series=` + itoa(ser.ID) + `&amp;sort=acquired&amp;type=videos&amp;view=gallery`
+	if !strings.Contains(live, `Browse all`) || !strings.Contains(live, `href="`+browse+`"`) {
+		t.Fatalf("series Videos missing Browse all: %s", truncate(live, 600))
+	}
+	rowsStart := strings.Index(live, `id="series-videos-rows"`)
+	if rowsStart < 0 {
+		t.Fatal("series Videos rows missing")
+	}
+	rowsEnd := strings.Index(live[rowsStart:], `</ul>`)
+	if rowsEnd < 0 {
+		t.Fatal("series Videos rows unclosed")
+	}
+	rowsChunk := live[rowsStart : rowsStart+rowsEnd]
+	vidPrefix := `/series/` + itoa(ser.ID) + `/videos/`
+	if got := strings.Count(rowsChunk, vidPrefix); got != web.SeriesVideoGlanceSize {
+		t.Fatalf("series Videos glance cards=%d want %d", got, web.SeriesVideoGlanceSize)
 	}
 }
 
@@ -1899,16 +1916,13 @@ func TestListLoadModesInfiniteAndPaginated(t *testing.T) {
 		t.Fatalf("table missing pager")
 	}
 
-	// Series detail videos always paginated.
-	req = httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID)+"?view=list", nil)
+	// Series detail videos: locked paginated glance (covered by TestSeriesVideosGlanceLockedList).
+	req = httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID), nil)
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	body = rec.Body.String()
 	if strings.Contains(body, `id="series-videos`) && strings.Contains(body, `-infinite"`) {
 		t.Fatalf("series detail must not infinite-scroll videos")
-	}
-	if !strings.Contains(body, `data-lucide="chevron-first"`) {
-		t.Fatalf("series detail videos missing pager")
 	}
 
 	// Series list infinite.
@@ -1973,7 +1987,7 @@ func TestSeriesAndVideosTableView(t *testing.T) {
 	r := chi.NewRouter()
 	h.Mount(r)
 
-	for _, path := range []string{"/series?view=table", "/browser?type=videos&view=table", "/series/" + itoa(ser.ID) + "?view=table"} {
+	for _, path := range []string{"/series?view=table", "/browser?type=videos&view=table"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
@@ -1985,13 +1999,13 @@ func TestSeriesAndVideosTableView(t *testing.T) {
 			t.Fatalf("%s missing table chrome: %s", path, truncate(body, 400))
 		}
 		wantSummary := "1 series"
-		if strings.Contains(path, "videos") || strings.Contains(path, "/series/") {
+		if strings.Contains(path, "videos") {
 			wantSummary = "1 video"
 		}
 		if !strings.Contains(body, wantSummary) {
 			t.Fatalf("%s missing table summary %q: %s", path, wantSummary, truncate(body, 400))
 		}
-		if strings.Contains(path, "type=videos") || strings.Contains(path, "/series/") {
+		if strings.Contains(path, "type=videos") {
 			if !strings.Contains(body, `list-table-sticky-end`) {
 				t.Fatalf("%s missing sticky Actions column: %s", path, truncate(body, 400))
 			}

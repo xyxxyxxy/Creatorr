@@ -1,4 +1,4 @@
-// --- Files Explorer bulk selection (Browser + series/video detail embeds) ---
+// --- Files Explorer bulk selection (Browser Files only; detail embeds omit) ---
 const filesBulkSelected = new Set();
 
 let filesBulkMode = false;

@@ -16,8 +16,11 @@ const (
 )
 
 const (
-	// VideoPageSize is the page length for paginated video lists (series detail, table).
+	// VideoPageSize is the page length for Browser Videos table (and other browse video pages).
 	VideoPageSize = 20
+	// SeriesVideoGlanceSize is one Browser Videos gallery row on series detail
+	// (grid-cols-2 sm:grid-cols-3 lg:grid-cols-4).
+	SeriesVideoGlanceSize = 4
 	// SeriesPageSize is the page length for paginated /series table view and Explorer tables.
 	SeriesPageSize = 20
 	// InfiniteChunkSize is rows per infinite-scroll chunk (/series and /videos list|cards|gallery).

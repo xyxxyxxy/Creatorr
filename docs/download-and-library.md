@@ -104,7 +104,7 @@ The series **Metadata** modal (series detail → Metadata) can prefetch from an 
 
 **Add source** on the series page: one modal (**Add source**) for any URL; scan schedule defaults **Never** (no recurring tip until the operator enables schedule). All fields (schedule, **Filter** / full-scan limit / title include-exclude, **Discovered video status**, **Default video metadata**) are always visible on Add and Edit.
 
-**Add video** on the series page: Fetch URL enqueues interactive `prefetch_add_video`, then `POST /api/series/{id}/videos` (status **`ignored`**). **Import Match** plus-video memorizes title + optional upload (no Fetch, no POST) until confirm; `import_plan` creates **`wanted`** rows with `source_id` NULL. Series detail shows a virtual **Import** source/filter for null-`source_id` videos (including Add-video indexed rows until they belong to a source); row tip: imported or manually indexed videos with no source URL.
+**Add video** on the series page: Fetch URL enqueues interactive `prefetch_add_video`, then `POST /api/series/{id}/videos` (status **`ignored`**). **Import Match** plus-video memorizes title + optional upload (no Fetch, no POST) until confirm; `import_plan` creates **`wanted`** rows with `source_id` NULL. Series detail shows a plain link under Sources (`N videos imported`) that filters null-`source_id` videos (including Add-video indexed rows until they belong to a source).
 
 ## Video metadata (episode NFO)
 

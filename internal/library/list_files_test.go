@@ -72,6 +72,20 @@ func TestListFilesFilteredDBOnlyScopes(t *testing.T) {
 	if !art[0].IsSeriesMeta() {
 		t.Fatal("poster should be series-meta")
 	}
+	seriesOnly, err := s.ListFilesFiltered(library.FileListFilter{SeriesID: ser.ID, Kinds: []string{library.FileKindScopeSeries}}, 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seriesOnly) != 1 || seriesOnly[0].Kind != library.ArtPoster {
+		t.Fatalf("series scope=%+v", seriesOnly)
+	}
+	videoOnly, err := s.ListFilesFiltered(library.FileListFilter{SeriesID: ser.ID, Kinds: []string{library.FileKindScopeVideo}}, 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(videoOnly) != 1 || videoOnly[0].Kind != "video" {
+		t.Fatalf("video scope=%+v", videoOnly)
+	}
 }
 
 func TestListFilesFilteredStatusMatchesIntegrityColumn(t *testing.T) {

@@ -19,7 +19,7 @@
     <td>{{if .RetentionTTLSeconds.Valid}}{{retentionDays .RetentionTTLSeconds}} days{{else}}<span class="tooltip tooltip-top inline-flex" data-tip="Keep forever"><i data-lucide="infinity" class="size-4 opacity-70" aria-label="Keep forever"></i></span>{{end}}</td>
     <td class="whitespace-nowrap text-end">
       <div class="join">
-        <label for="modal-edit-root-{{.ID}}" class="btn btn-secondary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+        <label for="modal-edit-root-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
           <i data-lucide="pencil" class="size-3.5"></i>
         </label>
         {{if gt .SeriesCount 0}}
@@ -63,7 +63,7 @@
     </td>
     <td class="whitespace-nowrap text-end">
       <div class="join">
-        <label for="modal-edit-profile-{{.ID}}" class="btn btn-secondary btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
+        <label for="modal-edit-profile-{{.ID}}" class="btn btn-xs btn-square join-item tooltip tooltip-top" data-tip="Edit" aria-label="Edit">
           <i data-lucide="pencil" class="size-3.5"></i>
         </label>
         {{if gt .SeriesCount 0}}

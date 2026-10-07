@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -116,23 +117,41 @@ func (h *Handler) buildSeriesVideoRows(vidList []library.Video, byVideo map[int6
 }
 
 type seriesVideosLiveData struct {
-	SeriesID           int64
-	Videos             []seriesVideoRow
-	VideosPage         PageInfo
-	FilterTotal        int
-	BulkEditBusy       bool
-	ProgressTotal      int64
-	DownloadedCount    int64
-	ErrorCount         int64
-	WantedCount        int64
-	Monitored          bool
-	DownloadErrorCount int
-	VideoFilter        listViewToolbar
-	FilterActive       bool
-	ViewMode           string
-	TableCols          []tableCol
-	TableColsCookie    string
-	OOB                bool
+	SeriesID        int64
+	Videos          []seriesVideoRow
+	FilterTotal     int
+	ProgressTotal   int64
+	DownloadedCount int64
+	ErrorCount      int64
+	WantedCount     int64
+	Monitored       bool
+	BrowseHref      string
+	OOB             bool
+}
+
+// seriesVideosBrowseHref is Browser Videos locked to this series, acquired desc, gallery.
+func seriesVideosBrowseHref(seriesID int64) string {
+	q := url.Values{}
+	q.Set("type", explorerTypeVideos)
+	q.Set("series", strconv.FormatInt(seriesID, 10))
+	q.Set("sort", library.SortAcquired)
+	q.Set("view", viewGallery)
+	return "/browser?" + q.Encode()
+}
+
+// seriesImportedVideosBrowseHref is Browser Videos for null-source imports on this series.
+func seriesImportedVideosBrowseHref(seriesID int64) string {
+	q := url.Values{}
+	q.Set("type", explorerTypeVideos)
+	q.Set("series", strconv.FormatInt(seriesID, 10))
+	q.Set("source", library.VideoSourceImportQuery)
+	q.Set("sort", library.SortAcquired)
+	return "/browser?" + q.Encode()
+}
+
+// seriesVideosGlanceFilter is the locked series-detail Videos glance (acquired desc).
+func seriesVideosGlanceFilter() library.VideoListFilter {
+	return library.VideoListFilter{Sort: library.SortAcquired, SortDir: library.SortDirDesc}
 }
 
 // listViewToolbar is the shared filter/sort/view toolbar for Explorer hosts.
@@ -171,19 +190,12 @@ type listViewToolbar struct {
 }
 
 func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, ser *library.Series, byVideo map[int64][]queue.Task) (seriesVideosLiveData, error) {
+	_ = w
+	_ = r
 	id := ser.ID
-	filter := parseSeriesVideoListFilter(r, ser.Sources)
-	if filter.Sort == "" {
-		filter.Sort = library.SortUpload
-	}
-	viewMode, writeCookie := resolveViewMode(r, cookieModeSeriesVideos, viewList)
-	if writeCookie {
-		writeViewCookie(w, cookieModeSeriesVideos, viewMode)
-	}
+	filter := seriesVideosGlanceFilter()
 	videoTotal, _ := h.Library.CountVideosFiltered(id, filter)
-	load := resolvePaginatedLoad(r, videoTotal, VideoPageSize, "series-videos-live", "page")
-	videosPageInfo := load.Page
-	vidList, err := h.Library.ListVideosPageFiltered(id, filter, load.PageSize, OffsetSize(videosPageInfo.Page, load.PageSize))
+	vidList, err := h.Library.ListVideosPageFiltered(id, filter, SeriesVideoGlanceSize, 0)
 	if err != nil {
 		return seriesVideosLiveData{}, err
 	}
@@ -206,57 +218,16 @@ func (h *Handler) loadSeriesVideosLive(w http.ResponseWriter, r *http.Request, s
 	}
 
 	videos := h.buildSeriesVideoRows(vidList, byVideo, domainBySource)
-
-	videosPageInfo.LiveTarget = "series-videos-live"
-	qfOpts := qFieldOpts(filter.QField)
-	videoFilter := listViewToolbar{
-		Query:            filter.Title,
-		QueryPlaceholder: searchByPlaceholder(qfOpts),
-		AriaLabel:        "Video filters",
-		QFieldOpts:       qfOpts,
-		SortOpts:         videoSortOpts(r, filter.Sort, filter.SortDir, library.SortUpload),
-		SortDir:          library.NormalizeSortDir(filter.Sort, filter.SortDir),
-		ViewOpts:         viewOpts(r, viewMode),
-		ShowView:         true,
-		FromDay:          filter.FromDay,
-		ToDay:            filter.ToDay,
-		ShowDateRange:    true,
-		ShowDatePresence: true,
-		DateRangeLabel:   "Upload date",
-		Selects:          videoFilterSelects(h, r, id, filter, ser.Sources, false),
-		FilterActive:     filter.MenuActive(),
-		Badges:           videoListBadges(r, filter, false, nil),
-		ClearAllHref:     "",
-		LiveTarget:       "series-videos-live",
-		FormAction:       fmt.Sprintf("/series/%d", id),
-		VideoBulkMode:    true,
-	}
-	annotateUploadPresence(r, &videoFilter)
-	if filter.MenuActive() {
-		videoFilter.ClearAllHref = clearOperatorFiltersURL(r)
-	}
-
-	bulkBusy, _ := h.Library.BulkEditVideosBusy()
-	dlErrCount, _ := h.Library.CountSeriesDownloadErrors(id)
 	return seriesVideosLiveData{
-		SeriesID:           id,
-		Videos:             videos,
-		VideosPage:         videosPageInfo,
-		FilterTotal:        videoTotal,
-		BulkEditBusy:       bulkBusy,
-		ProgressTotal:      ser.ProgressTotal(),
-		DownloadedCount:    ser.DownloadedCount,
-		ErrorCount:         ser.ErrorCount(),
-		WantedCount:        ser.WantedCount,
-		Monitored:          ser.Monitored,
-		DownloadErrorCount: dlErrCount,
-		VideoFilter:        videoFilter,
-		FilterActive:       filter.Active(),
-		ViewMode:           viewMode,
-		TableCols: annotateTableColsSort(
-			parseTableColsCookie(r, cookieColsSeriesVideos, videoTableColDefs(false)),
-			videoFilter.SortOpts, videoFilter.SortDir),
-		TableColsCookie:    cookieColsSeriesVideos,
+		SeriesID:        id,
+		Videos:          videos,
+		FilterTotal:     videoTotal,
+		ProgressTotal:   ser.ProgressTotal(),
+		DownloadedCount: ser.DownloadedCount,
+		ErrorCount:      ser.ErrorCount(),
+		WantedCount:     ser.WantedCount,
+		Monitored:       ser.Monitored,
+		BrowseHref:      seriesVideosBrowseHref(id),
 	}, nil
 }
 
@@ -280,10 +251,6 @@ func (h *Handler) seriesVideosLive(w http.ResponseWriter, r *http.Request) {
 // parseSeriesVideoListFilter reads video list filters for a series page (series locked).
 func parseSeriesVideoListFilter(r *http.Request, sources []library.Source) library.VideoListFilter {
 	return parseVideoListFilter(r, sources, false)
-}
-
-func seriesVideoFilterQuery(filter library.VideoListFilter, page int) string {
-	return encodeVideoListFilter(filter, page, "")
 }
 
 func sourceFilterLabel(src library.Source) string {

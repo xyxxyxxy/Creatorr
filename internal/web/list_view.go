@@ -101,11 +101,6 @@ func canonicalizeViewMode(raw string) string {
 	}
 }
 
-// viewPersistedInQuery is true for non-default views that filter rebuild URLs should keep.
-func viewPersistedInQuery(view string) bool {
-	return view == viewCards || view == viewGallery || view == viewTable
-}
-
 // resolveViewMode reads ?view= or the scope cookie; defaultMode is list unless locked.
 // When view is in the query, writeCookie is true so the handler can persist it.
 func resolveViewMode(r *http.Request, cookieName, defaultMode string) (mode string, writeCookie bool) {

@@ -170,6 +170,10 @@ func (h *Handler) loadFilesListLive(w http.ResponseWriter, r *http.Request) (fil
 		r = mergeFilesListPrefs(r)
 		filter = parseFileListFilter(r)
 	}
+	if seriesEmbed {
+		// Series detail Files is folder metadata only; episode files live on video detail / Browser.
+		filter.Kinds = []string{library.FileKindScopeSeries}
+	}
 	if filter.Sort == "" {
 		// Browser: newest acquired first. Scoped embeds: group by type.
 		if embed {
@@ -318,8 +322,9 @@ func (h *Handler) loadFilesListLive(w http.ResponseWriter, r *http.Request) (fil
 		ShowVideoCol:    showVideo,
 		ShowToolbar:     !embed,
 		ShowRowActions:  true,
-		FilesBulkMode:   true,
-		ShowSelectAll:   showSelectAll,
+		// Detail embeds omit multi-select (Browser Files keeps toolbar bulk).
+		FilesBulkMode:   !embed,
+		ShowSelectAll:   showSelectAll && !embed,
 		InfiniteID:      filesInfiniteID,
 		RowsID:          filesRowsID,
 	}
@@ -508,7 +513,9 @@ func filesFilterSelects(r *http.Request, f library.FileListFilter) []listFilterS
 			Name:      "kind",
 			AriaLabel: "Type",
 			Options: []listFilterOpt{
-				{Value: "video", Label: "Video", Selected: kindSel["video"]},
+				{Value: library.FileKindScopeSeries, Label: "Series", Selected: kindSel[library.FileKindScopeSeries]},
+				{Value: library.FileKindScopeVideo, Label: "Video", Selected: kindSel[library.FileKindScopeVideo]},
+				{Value: "video", Label: "Media", Selected: kindSel["video"]},
 				{Value: "nfo", Label: "NFO", Selected: kindSel["nfo"]},
 				{Value: "json", Label: "info.json", Selected: kindSel["json"]},
 				{Value: "thumb", Label: "Thumb", Selected: kindSel["thumb"]},
@@ -538,12 +545,43 @@ func filesFilterSelects(r *http.Request, f library.FileListFilter) []listFilterS
 
 func filesListBadges(r *http.Request, f library.FileListFilter) []listViewBadge {
 	var out []listViewBadge
-	out = append(out, orJoinBadges(r, "kind", "Type", "kind", f.Kinds, nil)...)
+	out = append(out, orJoinBadges(r, "kind", "Type", "kind", f.Kinds, fileKindFilterLabel)...)
 	out = append(out, orJoinBadges(r, "status", "Status", "status", f.Statuses, fileStatusFilterLabel)...)
 	if f.Q != "" {
 		out = append(out, listViewBadge{Label: "Search", Href: clearQueryKeys(r, "q")})
 	}
 	return out
+}
+
+func fileKindFilterLabel(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case library.FileKindScopeSeries:
+		return "Series"
+	case library.FileKindScopeVideo:
+		return "Video"
+	case "video":
+		return "Media"
+	case "nfo":
+		return "NFO"
+	case "json":
+		return "info.json"
+	case "thumb":
+		return "Thumb"
+	case "sub":
+		return "Subtitle"
+	case "sponsorblock":
+		return "SponsorBlock"
+	case "poster":
+		return "Poster"
+	case "banner":
+		return "Banner"
+	case "fanart":
+		return "Fanart"
+	case "clearlogo":
+		return "Clearlogo"
+	default:
+		return kind
+	}
 }
 
 func fileStatusFilterLabel(status string) string {

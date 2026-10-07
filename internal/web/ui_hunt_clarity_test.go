@@ -68,7 +68,9 @@ func TestVideoStatusLabelOnListAndDetail(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	listReq := httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID)+"?status=wanted_download_error", nil)
+	// Series detail Videos is a gallery glance (no status labels); assert on Browser list.
+	listReq := httptest.NewRequest(http.MethodGet,
+		"/browser?type=videos&series="+itoa(ser.ID)+"&status=wanted_download_error&view=list", nil)
 	listRec := httptest.NewRecorder()
 	r.ServeHTTP(listRec, listReq)
 	if listRec.Code != 200 {
@@ -164,7 +166,8 @@ func TestBulkVideoMetadataModalStartsAtNoChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/series/"+itoa(ser.ID), nil)
+	// Bulk metadata modal lives on Browser Videos (series-detail Videos is a locked glance).
+	req := httptest.NewRequest(http.MethodGet, "/browser?type=videos&series="+itoa(ser.ID), nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	if rec.Code != 200 {
@@ -226,9 +229,9 @@ func TestBulkThumbCardClickSelectsNotNavigates(t *testing.T) {
 	js := rec.Body.String()
 	for _, pin := range []string{
 		`#series-list-rows > [data-series-id]`,
-		`#series-videos-rows > [data-video-id], #videos-list-rows > [data-video-id]`,
+		`#videos-list-rows > [data-video-id]`,
 		`thumb+list bulk click #series-list-rows > [data-series-id]`,
-		`thumb+list bulk click #series-videos-rows > [data-video-id], #videos-list-rows > [data-video-id]`,
+		`thumb+list bulk click #videos-list-rows > [data-video-id]`,
 	} {
 		if !strings.Contains(js, pin) {
 			t.Fatalf("app.js missing bulk thumb click pin %q", pin)
@@ -237,8 +240,8 @@ func TestBulkThumbCardClickSelectsNotNavigates(t *testing.T) {
 	if strings.Contains(js, `#series-list-rows > .list-row[data-series-id]`) {
 		t.Fatal("series bulk click still list-row-only; cards/gallery would navigate")
 	}
-	if strings.Contains(js, `#series-videos-rows > .list-row[data-video-id]`) {
-		t.Fatal("video bulk click still list-row-only; cards/gallery would navigate")
+	if strings.Contains(js, `#series-videos-rows`) {
+		t.Fatal("video bulk must not target series-detail Videos glance")
 	}
 	for _, tip := range []string{
 		`Use the multi-select bar`,

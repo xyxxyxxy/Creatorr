@@ -5324,9 +5324,9 @@
   // src/js/video_bulk.js
   var videoBulkSelected = /* @__PURE__ */ new Set();
   var videoBulkMode = false;
-  var VIDEO_BULK_ROW = "#series-videos-rows > [data-video-id], #videos-list-rows > [data-video-id]";
+  var VIDEO_BULK_ROW = "#videos-list-rows > [data-video-id]";
   function videoBulkLive() {
-    return document.getElementById("series-videos-live") || document.getElementById("videos-list-live");
+    return document.getElementById("videos-list-live");
   }
   function videoBulkFilterTotal() {
     const live = videoBulkLive();
@@ -5339,8 +5339,7 @@
     return !!(live && live.getAttribute("data-bulk-busy") === "1");
   }
   function videoBulkSeriesID() {
-    const live = document.getElementById("series-videos-live");
-    return live ? live.getAttribute("data-series-id") || "" : "";
+    return "";
   }
   function videoBulkPageCheckboxes() {
     const live = videoBulkLive();
@@ -5688,7 +5687,7 @@
         return;
       }
       if (videoBulkMode) {
-        //! pin: thumb+list bulk click #series-videos-rows > [data-video-id], #videos-list-rows > [data-video-id]
+        //! pin: thumb+list bulk click #videos-list-rows > [data-video-id]
         const row = ev.target.closest(VIDEO_BULK_ROW);
         if (row && !ev.target.closest(".js-video-select, [data-video-select-wrap], [data-video-row-actions]")) {
           ev.preventDefault();
@@ -5755,7 +5754,7 @@
     });
     const onVideoBulkLiveSwap = (ev) => {
       const target = ev.detail && ev.detail.target;
-      if (!target || target.id !== "series-videos-live" && target.id !== "videos-list-live") return;
+      if (!target || target.id !== "videos-list-live") return;
       restoreVideoBulkCheckboxes();
     };
     document.body.addEventListener("htmx:afterSwap", onVideoBulkLiveSwap);

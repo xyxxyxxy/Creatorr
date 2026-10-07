@@ -3,9 +3,9 @@
 {{range .Sources}}
 <input type="checkbox" id="modal-edit-source-{{.ID}}" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box modal-box-scroll max-w-xl flex flex-col gap-2">
-    <h3 class="font-bold text-lg shrink-0">Edit source</h3>
-    <form method="post" action="/actions/update-source" class="space-y-2 min-h-0 overflow-y-auto grow">
+  <div class="modal-box max-w-xl">
+    <h3 class="font-bold text-lg mb-2">Edit source</h3>
+    <form method="post" action="/actions/update-source" class="space-y-2">
       <input type="hidden" name="series_id" value="{{.SeriesID}}" />
       <input type="hidden" name="source_id" value="{{.ID}}" />
       {{if .Redirect}}<input type="hidden" name="redirect" value="{{.Redirect}}" />{{end}}
@@ -40,7 +40,7 @@
         "PackRoleOptions" $.PackRoleOptions
         "ListPrefix" (printf "edit-src-%d" .ID)
       )}}
-      <div class="modal-action shrink-0 mt-0">
+      <div class="modal-action">
         <label for="modal-edit-source-{{.ID}}" class="btn modal-cancel">Cancel</label>
         <button type="submit" class="btn btn-primary">Save</button>
       </div>

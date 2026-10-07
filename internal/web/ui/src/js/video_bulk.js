@@ -6,12 +6,11 @@ const videoBulkSelected = new Set();
 let videoBulkMode = false;
 
 // Row click target for list + cards/gallery on both live roots.
-const VIDEO_BULK_ROW = "#series-videos-rows > [data-video-id], #videos-list-rows > [data-video-id]";
+const VIDEO_BULK_ROW = "#videos-list-rows > [data-video-id]";
 
 function videoBulkLive() {
-  return (
-    document.getElementById("series-videos-live") || document.getElementById("videos-list-live")
-  );
+  // Browser Videos only; series-detail Videos is a locked glance (no multi-select).
+  return document.getElementById("videos-list-live");
 }
 
 function videoBulkFilterTotal() {
@@ -27,8 +26,8 @@ function videoBulkBusy() {
 }
 
 function videoBulkSeriesID() {
-  const live = document.getElementById("series-videos-live");
-  return live ? live.getAttribute("data-series-id") || "" : "";
+  // Bulk runs on Browser Videos only (library-wide ids endpoint).
+  return "";
 }
 
 function videoBulkPageCheckboxes() {
@@ -408,7 +407,7 @@ export function bootVideoBulk() {
       return;
     }
     if (videoBulkMode) {
-      //! pin: thumb+list bulk click #series-videos-rows > [data-video-id], #videos-list-rows > [data-video-id]
+      //! pin: thumb+list bulk click #videos-list-rows > [data-video-id]
       const row = ev.target.closest(VIDEO_BULK_ROW);
       if (
         row &&
@@ -486,7 +485,7 @@ export function bootVideoBulk() {
   // rewrites id'd bar nodes back to the response's `hidden` (table pager swaps).
   const onVideoBulkLiveSwap = (ev) => {
     const target = ev.detail && ev.detail.target;
-    if (!target || (target.id !== "series-videos-live" && target.id !== "videos-list-live")) return;
+    if (!target || target.id !== "videos-list-live") return;
     restoreVideoBulkCheckboxes();
   };
   document.body.addEventListener("htmx:afterSwap", onVideoBulkLiveSwap);

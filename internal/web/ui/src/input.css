@@ -20,8 +20,8 @@
   speech-bubble tails. Scroll the .modal overlay instead so stock tooltips paint outside the box.
   https://daisyui.com/components/tooltip/
   DaisyUI .modal defaults to z-index 999; sticky .app-shell > header.navbar is 1100, so
-  raise every modal above the shell nav. Tall preview dialogs without tips also use
-  .modal-box-scroll (viewport-capped scroll inside the box).
+  raise every modal above the shell nav. Tall tip-less previews use .modal-box-scroll:
+  cap height on the box, scroll only an inner grow child (not overlay + box + form).
 */
 .modal {
   overflow-y: auto;
@@ -32,8 +32,11 @@
   max-height: none;
 }
 
+.modal:has(.modal-box-scroll) {
+  overflow-y: hidden;
+}
 .modal-box.modal-box-scroll {
-  overflow-y: auto;
+  overflow: hidden;
   max-height: min(90vh, 56rem);
 }
 
