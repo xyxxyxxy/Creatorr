@@ -49,17 +49,17 @@ func (h *Handler) settingsCatalog(w http.ResponseWriter, r *http.Request) {
 		(field == settings.CatalogFieldGenres && softGenres)
 	render(w, "settings_catalog", struct {
 		pageBase
-		Field      string
-		Tabs       []catalogFieldTab
-		Values     []library.CatalogValue
-		Busy       bool
-		PathBusy   bool
-		WarnSoft   bool
+		Field    string
+		Tabs     []catalogFieldTab
+		Values   []catalogValueView
+		Busy     bool
+		PathBusy bool
+		WarnSoft bool
 	}{
 		pageBase: newSettingsPage("Settings · Catalog", "catalog", flashFromQuery(r)),
 		Field:    field,
 		Tabs:     catalogFieldTabs,
-		Values:   values,
+		Values:   catalogValueViews(field, values),
 		Busy:     busy,
 		PathBusy: pathBusy && !busy,
 		WarnSoft: warnSoft,
@@ -80,17 +80,20 @@ func (h *Handler) settingsCatalogValues(w http.ResponseWriter, r *http.Request) 
 	busy, _ := h.Library.RewriteCatalogMetaBusy()
 	softTags, _ := settings.SoftFillTagsEnabled(h.Queue.DB)
 	softGenres, _ := settings.SoftFillGenresEnabled(h.Queue.DB)
+	pathBusy, _ := h.Queue.PathTouchingSystemBusy()
 	warnSoft := (field == settings.CatalogFieldTags && softTags) ||
 		(field == settings.CatalogFieldGenres && softGenres)
 	render(w, "settings_catalog_values", struct {
 		Field    string
-		Values   []library.CatalogValue
+		Values   []catalogValueView
 		Busy     bool
+		PathBusy bool
 		WarnSoft bool
 	}{
 		Field:    field,
-		Values:   values,
+		Values:   catalogValueViews(field, values),
 		Busy:     busy,
+		PathBusy: pathBusy && !busy,
 		WarnSoft: warnSoft,
 	})
 }

@@ -219,6 +219,43 @@ func TestListSourcesFilteredActive(t *testing.T) {
 	if !(SourceListFilter{Domains: []string{"x"}}).MenuActive() {
 		t.Fatal("domain should be menu-active")
 	}
+	if !(SourceListFilter{Tags: []string{"x"}}).MenuActive() {
+		t.Fatal("tag should be menu-active")
+	}
+}
+
+func TestListSourcesFilteredByStudio(t *testing.T) {
+	d, err := db.Open(filepath.Join(t.TempDir(), "src-studio.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	_ = settings.SeedDefaults(d)
+	_ = SeedDefaults(d, config.Config{InitialRootFolder: t.TempDir()})
+	s := NewStore(d, queue.NewStore(d))
+	ser, err := s.CreateSeries(CreateSeriesParams{
+		Title: "Show", RootID: 1, QualityProfileID: 1, Monitored: true,
+		SourceURL: "https://www.example.com/@show",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := ser.Sources[0]
+	studio := "Acme"
+	if _, err := s.UpdateSource(ser.ID, src.ID, UpdateSourceParams{Studio: &studio}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ListSourcesFiltered(SourceListFilter{Studios: []string{"acme"}}, 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != src.ID {
+		t.Fatalf("studio filter: %+v", got)
+	}
+	miss, err := s.CountSourcesFiltered(SourceListFilter{Studios: []string{"Other"}})
+	if err != nil || miss != 0 {
+		t.Fatalf("miss count=%d err=%v", miss, err)
+	}
 }
 
 func TestNormalizeSourceQField(t *testing.T) {

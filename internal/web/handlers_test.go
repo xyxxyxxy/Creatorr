@@ -1063,7 +1063,7 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 		}
 		if path == "/settings/catalog" {
 			body := rec.Body.String()
-			if !strings.Contains(body, "Catalog values") || !strings.Contains(body, "Remove and block auto-fill") {
+			if !strings.Contains(body, "Catalog values") || !strings.Contains(body, "Manage shared metadata") {
 				t.Fatalf("%s missing Catalog UI", path)
 			}
 			if !strings.Contains(body, `href="/settings/library#metadata"`) {
@@ -1071,6 +1071,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			}
 			if strings.Contains(body, "tabs-boxed") || !strings.Contains(body, `class="btn join-item btn-accent"`) {
 				t.Fatalf("%s Catalog field switcher not join buttons", path)
+			}
+			if strings.Contains(body, "A Catalog rewrite is queued or running") {
+				t.Fatalf("%s still has Catalog busy banner", path)
 			}
 			continue
 		}

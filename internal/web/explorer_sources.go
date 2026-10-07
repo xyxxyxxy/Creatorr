@@ -100,6 +100,12 @@ func parseSourceListFilter(r *http.Request) library.SourceListFilter {
 		Q:         strings.TrimSpace(q.Get("q")),
 		QField:    library.NormalizeSourceQField(q.Get("q_field")),
 		Domains:   parseMultiQuery(q, "domain"),
+		Studios:   parseMultiQuery(q, "studio"),
+		Countries: parseMultiQuery(q, "country"),
+		MPAAs:     parseMultiQuery(q, "mpaa"),
+		Genres:    parseMultiQuery(q, "genre"),
+		Tags:      parseMultiQuery(q, "tag"),
+		Actors:    parseMultiQuery(q, "actor"),
 		SeriesIDs: parseMultiInt64(q, "series"),
 		Sort:      parseSourceSort(q.Get("sort")),
 		SortDir:   parseSortDir(q.Get("dir")),
@@ -540,6 +546,56 @@ func sourcesFilterSelects(h *Handler, r *http.Request, filter library.SourceList
 		selects = append(selects, boolOnlySelect(r, "monitored", "Series monitored", "1", "0", filter.SeriesMonitored))
 	}
 	selects = append(selects, presenceOnlySelect(r, library.PresenceScanError, "Scan error"))
+
+	studioSel := selectedSet(filter.Studios)
+	if studios, _ := h.Library.DistinctSourceScalar("studio"); len(studios) > 0 {
+		opts := make([]listFilterOpt, 0, len(studios))
+		for _, s := range studios {
+			opts = append(opts, listFilterOpt{Value: s, Label: s, Selected: studioSel[strings.ToLower(s)]})
+		}
+		selects = append(selects, listFilterSelect{Name: "studio", AriaLabel: "Studio", Options: opts})
+	}
+	countrySel := selectedSet(filter.Countries)
+	if countries, _ := h.Library.DistinctSourceScalar("country"); len(countries) > 0 {
+		opts := make([]listFilterOpt, 0, len(countries))
+		for _, s := range countries {
+			opts = append(opts, listFilterOpt{Value: s, Label: s, Selected: countrySel[strings.ToLower(s)]})
+		}
+		selects = append(selects, listFilterSelect{Name: "country", AriaLabel: "Country", Options: opts})
+	}
+	mpaaSel := selectedSet(filter.MPAAs)
+	if mpaas, _ := h.Library.DistinctSourceScalar("mpaa"); len(mpaas) > 0 {
+		opts := make([]listFilterOpt, 0, len(mpaas))
+		for _, s := range mpaas {
+			opts = append(opts, listFilterOpt{Value: s, Label: s, Selected: mpaaSel[strings.ToLower(s)]})
+		}
+		selects = append(selects, listFilterSelect{Name: "mpaa", AriaLabel: "Content rating", Options: opts})
+	}
+	genreSel := selectedSet(filter.Genres)
+	if genres, _ := h.Library.DistinctSourceJSONStrings("genres"); len(genres) > 0 {
+		opts := make([]listFilterOpt, 0, len(genres))
+		for _, g := range genres {
+			opts = append(opts, listFilterOpt{Value: g, Label: g, Selected: genreSel[strings.ToLower(g)]})
+		}
+		selects = append(selects, listFilterSelect{Name: "genre", AriaLabel: "Genre", Options: opts})
+	}
+	tagSel := selectedSet(filter.Tags)
+	if tags, _ := h.Library.DistinctSourceJSONStrings("tags"); len(tags) > 0 {
+		opts := make([]listFilterOpt, 0, len(tags))
+		for _, g := range tags {
+			opts = append(opts, listFilterOpt{Value: g, Label: g, Selected: tagSel[strings.ToLower(g)]})
+		}
+		selects = append(selects, listFilterSelect{Name: "tag", AriaLabel: "Tag", Options: opts})
+	}
+	actorSel := selectedSet(filter.Actors)
+	if actors, _ := h.Library.DistinctSourceActorNames(); len(actors) > 0 {
+		opts := make([]listFilterOpt, 0, len(actors))
+		for _, a := range actors {
+			opts = append(opts, listFilterOpt{Value: a, Label: a, Selected: actorSel[strings.ToLower(a)]})
+		}
+		selects = append(selects, listFilterSelect{Name: "actor", AriaLabel: "Actor", Options: opts})
+	}
+
 	annotateFilterSelects(r, selects)
 	return selects
 }
@@ -554,6 +610,12 @@ func sourcesListBadges(r *http.Request, filter library.SourceListFilter, seriesT
 		return "#" + s
 	})...)
 	out = append(out, orJoinBadges(r, "domain", "Domain", "domain", filter.Domains, nil)...)
+	out = append(out, orJoinBadges(r, "studio", "Studio", "studio", filter.Studios, nil)...)
+	out = append(out, orJoinBadges(r, "country", "Country", "country", filter.Countries, nil)...)
+	out = append(out, orJoinBadges(r, "mpaa", "Rating", "mpaa", filter.MPAAs, nil)...)
+	out = append(out, orJoinBadges(r, "genre", "Genre", "genre", filter.Genres, nil)...)
+	out = append(out, orJoinBadges(r, "tag", "Tag", "tag", filter.Tags, nil)...)
+	out = append(out, orJoinBadges(r, "actor", "Actor", "actor", filter.Actors, nil)...)
 	if filter.FullScanDone != nil {
 		label := "Full scan: Incomplete"
 		if *filter.FullScanDone {

@@ -1,6 +1,10 @@
 {{define "settings_catalog_values"}}
 {{$field := .Field}}
 {{$busy := .Busy}}
+{{$pathBusy := .PathBusy}}
+{{$locked := or $busy $pathBusy}}
+{{$lockTip := "Catalog rewrite queued or running"}}
+{{if $pathBusy}}{{$lockTip = "Another path-touching task is open"}}{{end}}
 {{$warnSoft := .WarnSoft}}
 
 {{if not .Values}}
@@ -24,15 +28,19 @@
       {{$v.Value}}
       {{if $v.Blocked}}<span class="badge badge-ghost badge-sm ms-1">Blocked from auto-fill</span>{{end}}
     </td>
-    <td>{{$v.SeriesCount}}</td>
-    <td>{{$v.VideoCount}}</td>
-    <td>{{$v.SourceCount}}</td>
+    <td>{{if and (gt $v.SeriesCount 0) $v.SeriesHref}}<a class="link link-primary" href="{{$v.SeriesHref}}">{{$v.SeriesCount}}</a>{{else}}{{$v.SeriesCount}}{{end}}</td>
+    <td>{{if and (gt $v.VideoCount 0) $v.VideoHref}}<a class="link link-primary" href="{{$v.VideoHref}}">{{$v.VideoCount}}</a>{{else}}{{$v.VideoCount}}{{end}}</td>
+    <td>{{if and (gt $v.SourceCount 0) $v.SourceHref}}<a class="link link-primary" href="{{$v.SourceHref}}">{{$v.SourceCount}}</a>{{else}}{{$v.SourceCount}}{{end}}</td>
     <td class="whitespace-nowrap text-end">
       <div class="join">
-        {{if $busy}}
-        <span class="btn btn-xs join-item btn-disabled">Rename</span>
-        <span class="btn btn-xs join-item btn-disabled">Remove</span>
-        <span class="btn btn-xs join-item btn-disabled">Remove and block auto-fill</span>
+        {{if $locked}}
+        <span class="btn btn-xs join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Rename: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">Rename</span>
+        <span class="btn btn-xs join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Remove: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">Remove</span>
+        {{if not $v.Blocked}}
+        <span class="btn btn-xs join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Remove and block auto-fill: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">Remove and block auto-fill</span>
+        {{else}}
+        <span class="btn btn-xs join-item btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Allow auto-fill: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">Allow auto-fill</span>
+        {{end}}
         {{else}}
         <label for="modal-catalog-rename-{{$i}}" class="btn btn-xs join-item">Rename</label>
         <label for="modal-catalog-remove-{{$i}}" class="btn btn-xs join-item">Remove</label>
@@ -65,18 +73,22 @@
   {{if and .Blocked (eq .SeriesCount 0) (eq .VideoCount 0) (eq .SourceCount 0)}}
   <li class="flex flex-wrap items-center gap-2 justify-between border border-base-300 rounded-box px-3 py-2">
     <span class="font-mono text-sm break-all">{{.Value}}</span>
+    {{if $locked}}
+    <span class="btn btn-xs btn-disabled tooltip tooltip-top" data-tip="{{$lockTip}}" aria-label="Allow auto-fill: {{$lockTip}}" aria-disabled="true" role="button" tabindex="-1">Allow auto-fill</span>
+    {{else}}
     <form method="post" action="/actions/catalog-vocab-unblock" class="m-0">
       <input type="hidden" name="field" value="{{$field}}" />
       <input type="hidden" name="from" value="{{.Value}}" />
       <button type="submit" class="btn btn-xs">Allow auto-fill</button>
     </form>
+    {{end}}
   </li>
   {{end}}
   {{end}}
 </ul>
 {{end}}
 
-{{if not $busy}}
+{{if not $locked}}
 {{range $i, $v := .Values}}
 {{if or (gt $v.SeriesCount 0) (gt $v.VideoCount 0) (gt $v.SourceCount 0)}}
 <input type="checkbox" id="modal-catalog-rename-{{$i}}" class="modal-toggle" />

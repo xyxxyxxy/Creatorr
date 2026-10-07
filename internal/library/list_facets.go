@@ -95,6 +95,41 @@ func (s *Store) DistinctSeriesActorNames() ([]string, error) {
 	return s.scanDistinctStrings(q)
 }
 
+// DistinctSourceScalar returns sorted distinct non-empty source default-metadata scalars.
+func (s *Store) DistinctSourceScalar(col string) ([]string, error) {
+	switch col {
+	case "studio", "country", "mpaa":
+	default:
+		return nil, nil
+	}
+	q := `SELECT DISTINCT trim(` + col + `) FROM sources WHERE trim(` + col + `) != '' ORDER BY 1 COLLATE NOCASE`
+	return s.scanDistinctStrings(q)
+}
+
+// DistinctSourceJSONStrings returns sorted distinct values from a source JSON string-array column.
+func (s *Store) DistinctSourceJSONStrings(col string) ([]string, error) {
+	switch col {
+	case "genres", "tags":
+	default:
+		return nil, nil
+	}
+	q := `
+		SELECT DISTINCT trim(j.value) FROM sources src, json_each(src.` + col + `) j
+		WHERE trim(j.value) != ''
+		ORDER BY 1 COLLATE NOCASE`
+	return s.scanDistinctStrings(q)
+}
+
+// DistinctSourceActorNames returns sorted distinct actor names from sources.actors.
+func (s *Store) DistinctSourceActorNames() ([]string, error) {
+	q := `
+		SELECT DISTINCT trim(json_extract(j.value, '$.name'))
+		FROM sources src, json_each(src.actors) j
+		WHERE trim(COALESCE(json_extract(j.value, '$.name'), '')) != ''
+		ORDER BY 1 COLLATE NOCASE`
+	return s.scanDistinctStrings(q)
+}
+
 // DistinctSeriesPremieredYears returns distinct years from series.premiered (newest first).
 // Undated series use presence empty=premiered, not a year slot.
 func (s *Store) DistinctSeriesPremieredYears() (years []int, err error) {
