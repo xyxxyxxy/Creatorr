@@ -60,6 +60,22 @@ func (s *Store) DistinctVideoActorNames(seriesID int64) ([]string, error) {
 	return s.scanDistinctStrings(b.String(), args...)
 }
 
+// DistinctVideoActorRoles returns sorted distinct actor roles from videos.actors JSON.
+func (s *Store) DistinctVideoActorRoles(seriesID int64) ([]string, error) {
+	var b strings.Builder
+	b.WriteString(`
+		SELECT DISTINCT trim(json_extract(j.value, '$.role'))
+		FROM videos v, json_each(v.actors) j
+		WHERE trim(COALESCE(json_extract(j.value, '$.role'), '')) != ''`)
+	args := []any{}
+	if seriesID > 0 {
+		b.WriteString(` AND v.series_id = ?`)
+		args = append(args, seriesID)
+	}
+	b.WriteString(` ORDER BY 1 COLLATE NOCASE`)
+	return s.scanDistinctStrings(b.String(), args...)
+}
+
 // DistinctSeriesScalar returns sorted distinct non-empty series metadata values.
 func (s *Store) DistinctSeriesScalar(col string) ([]string, error) {
 	switch col {
@@ -95,6 +111,16 @@ func (s *Store) DistinctSeriesActorNames() ([]string, error) {
 	return s.scanDistinctStrings(q)
 }
 
+// DistinctSeriesActorRoles returns sorted distinct actor roles from series.actors.
+func (s *Store) DistinctSeriesActorRoles() ([]string, error) {
+	q := `
+		SELECT DISTINCT trim(json_extract(j.value, '$.role'))
+		FROM series s, json_each(s.actors) j
+		WHERE trim(COALESCE(json_extract(j.value, '$.role'), '')) != ''
+		ORDER BY 1 COLLATE NOCASE`
+	return s.scanDistinctStrings(q)
+}
+
 // DistinctSourceScalar returns sorted distinct non-empty source default-metadata scalars.
 func (s *Store) DistinctSourceScalar(col string) ([]string, error) {
 	switch col {
@@ -126,6 +152,16 @@ func (s *Store) DistinctSourceActorNames() ([]string, error) {
 		SELECT DISTINCT trim(json_extract(j.value, '$.name'))
 		FROM sources src, json_each(src.actors) j
 		WHERE trim(COALESCE(json_extract(j.value, '$.name'), '')) != ''
+		ORDER BY 1 COLLATE NOCASE`
+	return s.scanDistinctStrings(q)
+}
+
+// DistinctSourceActorRoles returns sorted distinct actor roles from sources.actors.
+func (s *Store) DistinctSourceActorRoles() ([]string, error) {
+	q := `
+		SELECT DISTINCT trim(json_extract(j.value, '$.role'))
+		FROM sources src, json_each(src.actors) j
+		WHERE trim(COALESCE(json_extract(j.value, '$.role'), '')) != ''
 		ORDER BY 1 COLLATE NOCASE`
 	return s.scanDistinctStrings(q)
 }

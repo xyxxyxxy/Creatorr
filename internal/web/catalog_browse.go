@@ -30,8 +30,9 @@ func catalogFilterQueryKey(field string) string {
 		return "mpaa"
 	case settings.CatalogFieldActorName:
 		return "actor"
+	case settings.CatalogFieldActorRole:
+		return "actor_role"
 	default:
-		// actor_role has no Browser filter.
 		return ""
 	}
 }

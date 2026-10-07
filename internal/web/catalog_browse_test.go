@@ -14,8 +14,8 @@ func TestCatalogBrowserHref(t *testing.T) {
 	if got := catalogBrowserHref("sources", settings.CatalogFieldStudio, "Acme"); got != "/browser?studio=Acme&type=sources" {
 		t.Fatalf("studio got %q", got)
 	}
-	if catalogBrowserHref("series", settings.CatalogFieldActorRole, "host") != "" {
-		t.Fatal("actor_role should not deep-link")
+	if got := catalogBrowserHref("series", settings.CatalogFieldActorRole, "Host"); got != "/browser?actor_role=Host&type=series" {
+		t.Fatalf("actor_role got %q", got)
 	}
 	if catalogBrowserHref("sources", settings.CatalogFieldStudio, "  ") != "" {
 		t.Fatal("empty value")

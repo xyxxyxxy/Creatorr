@@ -26,6 +26,7 @@ func parseVideoListFilter(r *http.Request, sources []library.Source, allowSeries
 		Genres:     parseMultiQuery(q, "genre"),
 		Tags:       parseMultiQuery(q, "tag"),
 		Actors:     parseMultiQuery(q, "actor"),
+		ActorRoles: parseMultiQuery(q, "actor_role"),
 		Sort:       parseVideoSort(q.Get("sort")),
 		SortDir:    parseSortDir(q.Get("dir")),
 	}
@@ -194,6 +195,7 @@ func videoListBadges(r *http.Request, filter library.VideoListFilter, showSeries
 	out = append(out, orJoinBadges(r, "genre", "Genre", "genre", filter.Genres, nil)...)
 	out = append(out, orJoinBadges(r, "tag", "Tag", "tag", filter.Tags, nil)...)
 	out = append(out, orJoinBadges(r, "actor", "Actor", "actor", filter.Actors, nil)...)
+	out = append(out, orJoinBadges(r, "actor_role", "Actor role", "actor_role", filter.ActorRoles, nil)...)
 	for _, e := range filter.Empty {
 		out = append(out, listViewBadge{Label: presenceBadgeLabel(e, true), Href: dropQueryValue(r, "empty", e)})
 	}
@@ -335,6 +337,16 @@ func videoFilterSelects(h *Handler, r *http.Request, seriesID int64, filter libr
 		selects = append(selects, listFilterSelect{
 			Name: "actor", AriaLabel: "Actor", Options: actorOpts,
 			PresenceField: library.PresenceActors})
+	}
+	roles, _ := h.Library.DistinctVideoActorRoles(scope)
+	roleOpts := make([]listFilterOpt, 0, len(roles))
+	roleSel := selectedSet(filter.ActorRoles)
+	for _, g := range roles {
+		roleOpts = append(roleOpts, listFilterOpt{Value: g, Label: g, Selected: roleSel[strings.ToLower(g)]})
+	}
+	if len(roleOpts) > 0 {
+		selects = append(selects, listFilterSelect{
+			Name: "actor_role", AriaLabel: "Actor role", Options: roleOpts})
 	}
 
 	if seriesID > 0 || len(sources) > 0 {
@@ -560,6 +572,7 @@ func seriesListBadges(r *http.Request, filter library.SeriesListFilter) []listVi
 	out = append(out, orJoinBadges(r, "genre", "Genre", "genre", filter.Genres, nil)...)
 	out = append(out, orJoinBadges(r, "tag", "Tag", "tag", filter.Tags, nil)...)
 	out = append(out, orJoinBadges(r, "actor", "Actor", "actor", filter.Actors, nil)...)
+	out = append(out, orJoinBadges(r, "actor_role", "Actor role", "actor_role", filter.ActorRoles, nil)...)
 	for _, e := range filter.Empty {
 		out = append(out, listViewBadge{Label: presenceBadgeLabel(e, true), Href: dropQueryValue(r, "empty", e)})
 	}
@@ -703,6 +716,16 @@ func seriesFilterSelects(h *Handler, r *http.Request, filter library.SeriesListF
 		selects = append(selects, listFilterSelect{
 			Name: "actor", AriaLabel: "Actor", Options: actorOpts,
 			PresenceField: library.PresenceActors})
+	}
+	roles, _ := h.Library.DistinctSeriesActorRoles()
+	roleOpts := make([]listFilterOpt, 0, len(roles))
+	roleSel := selectedSet(filter.ActorRoles)
+	for _, g := range roles {
+		roleOpts = append(roleOpts, listFilterOpt{Value: g, Label: g, Selected: roleSel[strings.ToLower(g)]})
+	}
+	if len(roleOpts) > 0 {
+		selects = append(selects, listFilterSelect{
+			Name: "actor_role", AriaLabel: "Actor role", Options: roleOpts})
 	}
 	selects = append(selects,
 		presenceOnlySelect(r, library.PresencePlot, "Plot"),

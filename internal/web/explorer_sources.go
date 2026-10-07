@@ -103,12 +103,13 @@ func parseSourceListFilter(r *http.Request) library.SourceListFilter {
 		Studios:   parseMultiQuery(q, "studio"),
 		Countries: parseMultiQuery(q, "country"),
 		MPAAs:     parseMultiQuery(q, "mpaa"),
-		Genres:    parseMultiQuery(q, "genre"),
-		Tags:      parseMultiQuery(q, "tag"),
-		Actors:    parseMultiQuery(q, "actor"),
-		SeriesIDs: parseMultiInt64(q, "series"),
-		Sort:      parseSourceSort(q.Get("sort")),
-		SortDir:   parseSortDir(q.Get("dir")),
+		Genres:     parseMultiQuery(q, "genre"),
+		Tags:       parseMultiQuery(q, "tag"),
+		Actors:     parseMultiQuery(q, "actor"),
+		ActorRoles: parseMultiQuery(q, "actor_role"),
+		SeriesIDs:  parseMultiInt64(q, "series"),
+		Sort:       parseSourceSort(q.Get("sort")),
+		SortDir:    parseSortDir(q.Get("dir")),
 	}
 	// series_id = series-detail lock; series = browser operator filter (like Videos).
 	if sid, err := strconv.ParseInt(q.Get("series_id"), 10, 64); err == nil && sid > 0 {
@@ -595,6 +596,14 @@ func sourcesFilterSelects(h *Handler, r *http.Request, filter library.SourceList
 		}
 		selects = append(selects, listFilterSelect{Name: "actor", AriaLabel: "Actor", Options: opts})
 	}
+	roleSel := selectedSet(filter.ActorRoles)
+	if roles, _ := h.Library.DistinctSourceActorRoles(); len(roles) > 0 {
+		opts := make([]listFilterOpt, 0, len(roles))
+		for _, a := range roles {
+			opts = append(opts, listFilterOpt{Value: a, Label: a, Selected: roleSel[strings.ToLower(a)]})
+		}
+		selects = append(selects, listFilterSelect{Name: "actor_role", AriaLabel: "Actor role", Options: opts})
+	}
 
 	annotateFilterSelects(r, selects)
 	return selects
@@ -616,6 +625,7 @@ func sourcesListBadges(r *http.Request, filter library.SourceListFilter, seriesT
 	out = append(out, orJoinBadges(r, "genre", "Genre", "genre", filter.Genres, nil)...)
 	out = append(out, orJoinBadges(r, "tag", "Tag", "tag", filter.Tags, nil)...)
 	out = append(out, orJoinBadges(r, "actor", "Actor", "actor", filter.Actors, nil)...)
+	out = append(out, orJoinBadges(r, "actor_role", "Actor role", "actor_role", filter.ActorRoles, nil)...)
 	if filter.FullScanDone != nil {
 		label := "Full scan: Incomplete"
 		if *filter.FullScanDone {

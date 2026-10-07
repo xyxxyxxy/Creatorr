@@ -428,3 +428,61 @@ func TestDistinctVideoFacetsSeriesScoped(t *testing.T) {
 		t.Fatalf("library studios empty")
 	}
 }
+
+func TestVideoListFilterActorRole(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "Role Filter", RootID: rootID, QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := s.AddSource(ser.ID, library.AddSourceParams{URL: "https://www.example.com/@rolefilter"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := seedTaskID(t, s)
+	for _, li := range []library.ListedVideo{
+		{RemoteID: "host", Title: "Host Ep", SourceID: src.ID, UploadDate: "2024-01-01T00:00:00Z"},
+		{RemoteID: "guest", Title: "Guest Ep", SourceID: src.ID, UploadDate: "2024-02-01T00:00:00Z"},
+	} {
+		if _, err := s.UpsertListed(ser.ID, li, taskID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	vids, err := s.ListVideos(ser.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byRemote := map[string]int64{}
+	for _, v := range vids {
+		byRemote[v.RemoteID] = v.ID
+	}
+	if _, err := s.SaveVideoMetadata(byRemote["host"], library.SaveVideoMetadataParams{
+		Title: "Host Ep", UploadDate: "2024-01-01",
+		Actors: []library.SeriesActor{{Name: "Ann", Role: "Host"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SaveVideoMetadata(byRemote["guest"], library.SaveVideoMetadataParams{
+		Title: "Guest Ep", UploadDate: "2024-02-01",
+		Actors: []library.SeriesActor{{Name: "Bob", Role: "Guest"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ListVideosPageFiltered(ser.ID, library.VideoListFilter{ActorRoles: []string{"host"}}, 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].RemoteID != "host" {
+		t.Fatalf("actor role filter: %+v", got)
+	}
+	roles, err := s.DistinctVideoActorRoles(ser.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roles) != 2 {
+		t.Fatalf("roles=%v", roles)
+	}
+}

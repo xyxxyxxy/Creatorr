@@ -242,6 +242,22 @@ func appendJSONActorNameMatch(b *strings.Builder, args *[]any, col string, names
 	b.WriteString(`)`)
 }
 
+func appendJSONActorRoleMatch(b *strings.Builder, args *[]any, col string, roles []string) {
+	vals := uniqueTrimmed(roles)
+	if len(vals) == 0 {
+		return
+	}
+	b.WriteString(` AND EXISTS (SELECT 1 FROM json_each(` + col + `) j WHERE `)
+	for i, v := range vals {
+		if i > 0 {
+			b.WriteString(` OR `)
+		}
+		b.WriteString(`json_extract(j.value, '$.role') = ? COLLATE NOCASE`)
+		*args = append(*args, v)
+	}
+	b.WriteString(`)`)
+}
+
 func appendScalarEmpty(b *strings.Builder, col string, empty bool) {
 	if empty {
 		b.WriteString(` AND (` + col + ` IS NULL OR trim(` + col + `) = '')`)

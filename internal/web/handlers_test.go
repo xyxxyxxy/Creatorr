@@ -1066,6 +1066,9 @@ func TestSettingsAndTasksUseListPanel(t *testing.T) {
 			if !strings.Contains(body, "Catalog values") || !strings.Contains(body, "Manage shared metadata") {
 				t.Fatalf("%s missing Catalog UI", path)
 			}
+			if !strings.Contains(body, "Blocked from auto-fill") || !strings.Contains(body, "No blocked values.") {
+				t.Fatalf("%s missing empty Blocked from auto-fill section", path)
+			}
 			if !strings.Contains(body, `href="/settings/library#metadata"`) {
 				t.Fatalf("%s missing auto-fill toggles deep link", path)
 			}

@@ -81,9 +81,9 @@
 
 {{$hasBlockedIdle := false}}
 {{range .Values}}{{if and .Blocked (eq .SeriesCount 0) (eq .VideoCount 0) (eq .SourceCount 0)}}{{$hasBlockedIdle = true}}{{end}}{{end}}
-{{if $hasBlockedIdle}}
 <h3 class="font-semibold text-base mt-4">Blocked from auto-fill</h3>
 <p class="text-sm opacity-60 mb-2">These values are not added automatically.</p>
+{{if $hasBlockedIdle}}
 <ul class="space-y-2">
   {{range .Values}}
   {{if and .Blocked (eq .SeriesCount 0) (eq .VideoCount 0) (eq .SourceCount 0)}}
@@ -106,6 +106,8 @@
   {{end}}
   {{end}}
 </ul>
+{{else}}
+<p class="text-sm opacity-60">No blocked values.</p>
 {{end}}
 
 {{if not $locked}}
