@@ -448,6 +448,37 @@ func (h *Handler) actionRefreshSidecarsVideo(w http.ResponseWriter, r *http.Requ
 	http.Redirect(w, r, appendQuery(redir, "ok=refresh-sidecars"), http.StatusSeeOther)
 }
 
+func (h *Handler) actionCheckVideoIntegrity(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)
+	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
+	redir := r.FormValue("redirect")
+	if redir == "" {
+		redir = fmt.Sprintf("/series/%d/videos/%d", sid, vid)
+	}
+	if vid <= 0 {
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery("video_id required")), http.StatusSeeOther)
+		return
+	}
+	if err := h.errIfVideoDeleting(vid); err != nil {
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
+		return
+	}
+	if on, err := h.Library.SeriesProfileVerifyMedia(vid); err != nil {
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
+		return
+	} else if !on {
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery("Integrity checks are off for this quality profile")), http.StatusSeeOther)
+		return
+	}
+	_, err := h.Library.EnqueueVerifyAllMediaScoped(nil, []int64{vid}, queue.OriginManual)
+	if err != nil {
+		http.Redirect(w, r, appendQuery(redir, "err="+urlQuery(err.Error())), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, appendQuery(redir, "ok=check-video-integrity"), http.StatusSeeOther)
+}
+
 func (h *Handler) actionCheckFileHash(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	vid, _ := strconv.ParseInt(r.FormValue("video_id"), 10, 64)

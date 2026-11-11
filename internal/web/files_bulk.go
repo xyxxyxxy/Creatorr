@@ -99,7 +99,7 @@ func (h *Handler) actionBulkCheckFileHash(w http.ResponseWriter, r *http.Request
 			skipped++
 			continue
 		}
-		if f.Missing() || strings.TrimSpace(f.Kind) == "nfo" || f.Kind == library.SeriesMetaFileRoleNFO {
+		if f.Missing() || f.Kind == library.SeriesMetaFileRoleNFO {
 			skipped++
 			continue
 		}

@@ -394,15 +394,9 @@ func fileListRowToExplorer(f library.FileListRow, redir string, showSeries, show
 		}
 	} else if vid > 0 {
 		row.ViewHref = fmt.Sprintf("/series/%d/videos/%d/files/%d", f.SeriesID, vid, f.ID)
-		if f.Kind == "nfo" {
-			checkApplicable = false
-			row.CanCheckHash = false
-			row.CheckDisabledTip = "Integrity check skipped, can be regenerated"
-		} else {
-			row.CanCheckHash = !row.Missing && f.ID > 0
-			if row.Missing {
-				row.CheckDisabledTip = "File missing - integrity check inactive"
-			}
+		row.CanCheckHash = !row.Missing && f.ID > 0
+		if row.Missing {
+			row.CheckDisabledTip = "File missing - integrity check inactive"
 		}
 	} else {
 		checkApplicable = false

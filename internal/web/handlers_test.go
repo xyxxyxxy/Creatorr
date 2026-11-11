@@ -2154,8 +2154,11 @@ func TestVideosPageHasBulkSelect(t *testing.T) {
 	if !strings.Contains(body, "data-video-bulk-mode") {
 		t.Fatalf("Browser Videos missing video multi-select toggle: %s", truncate(body, 500))
 	}
-	if !strings.Contains(body, "data-video-bulk-refresh") || !strings.Contains(body, "data-video-bulk-metadata") {
-		t.Fatalf("Browser Videos missing Refresh/Edit metadata (btn_labeled): %s", truncate(body, 500))
+	if !strings.Contains(body, "data-video-bulk-check-integrity") || !strings.Contains(body, "data-video-bulk-refresh") || !strings.Contains(body, "data-video-bulk-metadata") {
+		t.Fatalf("Browser Videos missing Check integrity/Refresh/Edit metadata (btn_labeled): %s", truncate(body, 500))
+	}
+	if !strings.Contains(body, "modal-bulk-check-integrity-videos") {
+		t.Fatalf("Browser Videos missing Check integrity modal: %s", truncate(body, 500))
 	}
 	if !strings.Contains(body, "modal-bulk-edit-videos-metadata") || !strings.Contains(body, "modal-bulk-delete-videos") {
 		t.Fatalf("Browser Videos missing video bulk modals: %s", truncate(body, 500))

@@ -192,7 +192,32 @@
 {{template "notes_editor" (dict "Value" .Video.Notes "Action" "/actions/save-video-notes" "IDName" "video_id" "ID" .Video.ID)}}
 
 {{template "list_panel"}}
-{{template "list_header" (dict "level" "section" "title" "Files" "icon" "files")}}
+<div class="list-header flex flex-wrap items-start justify-between gap-3">
+  <div class="min-w-0 flex-1">
+    <h2 class="text-lg font-semibold inline-flex items-center gap-2">
+      <i data-lucide="files" class="size-5 shrink-0"></i>
+      <span class="truncate">Files</span>
+    </h2>
+  </div>
+  <div class="list-actions flex flex-wrap gap-2 shrink-0 items-center">
+    {{if .Deleting}}
+    {{template "btn_labeled" (dict "Icon" "shield-check" "Label" "Check integrity" "Disabled" true)}}
+    {{else if not .IntegrityProfileOn}}
+    {{template "btn_labeled" (dict "Icon" "shield-check" "Label" "Check integrity" "Disabled" true "Tip" "Off in this quality profile" "TipClass" "tooltip-bottom")}}
+    {{else if not .HasPackAnchor}}
+    {{template "btn_labeled" (dict "Icon" "shield-check" "Label" "Check integrity" "Disabled" true "Tip" "Needs packed media on disk" "TipClass" "tooltip-bottom")}}
+    {{else if .IntegrityBusy}}
+    {{template "btn_labeled" (dict "Icon" "shield-check" "Label" "Check integrity" "Disabled" true "Tip" .IntegrityBusyTip "TipClass" "tooltip-bottom")}}
+    {{else}}
+    <form method="post" action="/actions/check-video-integrity" class="inline">
+      <input type="hidden" name="video_id" value="{{.Video.ID}}" />
+      <input type="hidden" name="series_id" value="{{.Series.ID}}" />
+      <input type="hidden" name="redirect" value="/series/{{.Series.ID}}/videos/{{.Video.ID}}" />
+      {{template "btn_labeled" (dict "Type" "submit" "Icon" "shield-check" "Label" "Check integrity")}}
+    </form>
+    {{end}}
+  </div>
+</div>
 {{template "files_list_live" .FilesLive}}
 {{template "list_panel_end"}}
 

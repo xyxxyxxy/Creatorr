@@ -78,8 +78,8 @@ func TestVideoDetailDownloadHiddenWhenPresent(t *testing.T) {
 	if strings.Contains(body, "Download now") {
 		t.Fatal("imported downloaded video should hide Download now")
 	}
-	if strings.Contains(body, "File integrity") {
-		t.Fatal("video detail must not show File integrity row (file-level now)")
+	if strings.Contains(body, ">File integrity<") {
+		t.Fatal("video detail must not show File integrity detail row (file-level now)")
 	}
 	if !strings.Contains(get(wantedID), "Download now") {
 		t.Fatal("wanted video should show Download now")

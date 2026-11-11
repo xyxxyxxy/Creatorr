@@ -24,7 +24,7 @@
       {{template "btn_labeled" (dict "Type" "submit" "Icon" "shield-check" "Label" "Check hash")}}
     </form>
     {{end}}
-    <a class="btn btn-outline" href="{{.RawHref}}?download=1">
+    <a class="btn" href="{{.RawHref}}?download=1" aria-label="Download">
       <i data-lucide="download" class="size-4"></i>
       Download
     </a>

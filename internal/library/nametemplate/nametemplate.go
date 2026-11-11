@@ -225,6 +225,52 @@ func SanitizeFilename(s string, maxRunes int) string {
 	return s
 }
 
+// SanitizeID hardens a remote id / uniqueid for the {id} filename token.
+// Unlike SanitizeFilename, brackets and spaces become underscores; consecutive
+// underscores collapse; leading/trailing underscores are trimmed. Max length
+// stays 64 for TokID (same as before).
+func SanitizeID(s string, maxRunes int) string {
+	s = strings.TrimSpace(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	lastUnderscore := false
+	writeUnderscore := func() {
+		if b.Len() > 0 && !lastUnderscore {
+			b.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			continue
+		}
+		switch r {
+		case ' ', '\t', '[', ']', '_':
+			writeUnderscore()
+			continue
+		}
+		if isSafeIDRune(r) {
+			lastUnderscore = false
+			b.WriteRune(r)
+			continue
+		}
+		writeUnderscore()
+	}
+	s = strings.Trim(b.String(), " ._")
+	if s == "" {
+		s = "untitled"
+	}
+	if maxRunes > 0 && utf8.RuneCountInString(s) > maxRunes {
+		runes := []rune(s)
+		s = string(runes[:maxRunes])
+		s = strings.Trim(s, " ._")
+		if s == "" {
+			s = "untitled"
+		}
+	}
+	return s
+}
+
 func isSafeFilenameRune(r rune) bool {
 	switch r {
 	case '-', '_', '.', ',', '(', ')', '[', ']', '\'', ' ':
@@ -234,6 +280,16 @@ func isSafeFilenameRune(r rune) bool {
 		return true
 	}
 	return false
+}
+
+// isSafeIDRune is SanitizeFilename-safe minus brackets, spaces, and underscore
+// (underscore is collapsed separately in SanitizeID).
+func isSafeIDRune(r rune) bool {
+	switch r {
+	case '-', '.', ',', '(', ')', '\'':
+		return true
+	}
+	return unicode.IsLetter(r) || unicode.IsNumber(r)
 }
 
 // ExpandAndSanitize expands tokens with per-field sanitize.
@@ -258,7 +314,7 @@ func ExpandAndSanitize(format string, v Values) (string, error) {
 		case TokTitle:
 			return SanitizeFilename(v.Title, titleMaxFromSuffix(pad))
 		case TokID:
-			return SanitizeFilename(v.ID, 64)
+			return SanitizeID(v.ID, 64)
 		case TokDate:
 			if strings.TrimSpace(v.Date) == "" {
 				return ""

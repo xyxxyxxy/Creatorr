@@ -360,7 +360,12 @@ export function reloadVideoDetailIfMatch(ev) {
   const m = location.pathname.match(/^\/series\/(\d+)\/videos\/(\d+)/);
   if (!m) return;
   const pageVid = Number(m[2]);
-  if (!pageVid || !data.video_id || Number(data.video_id) !== pageVid) return;
+  if (!pageVid) return;
+  const eventVid = Number(data.video_id) || 0;
+  // integrity_check is system-scoped (video_ids in payload); SSE often has video_id 0.
+  // Reload so Files "Check integrity" busy state clears after the pass finishes.
+  const integrityScoped = kind === "integrity_check" && eventVid === 0;
+  if (!integrityScoped && eventVid !== pageVid) return;
   Promise.resolve(flushNotesAutosave())
     .catch(() => {})
     .finally(() => {
