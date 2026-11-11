@@ -56,3 +56,24 @@ func TestNFOMatchesExpectedIgnoresLegacyShowtitle(t *testing.T) {
 		t.Fatal("legacy showtitle on disk must not fail integrity")
 	}
 }
+
+func TestNFOMatchesExpectedSpecialDisplaySelf(t *testing.T) {
+	meta := EpisodeNFO{
+		Title:             "boat blooper",
+		SeriesTitle:       "Freeman's Mind",
+		Season:            0,
+		Episode:           3,
+		PackRole:          PackRoleSpecialEpisode,
+		DisplaySeason:     2026,
+		DisplayEpisode:    1,
+		DisplayEpisodeSet: true,
+		UniqueID:          "BlMxvqkumm0",
+	}
+	got := FormatEpisodeNFO(meta)
+	if !bytes.Contains(got, []byte("<displayseason>")) {
+		t.Fatal("formatter must emit displayseason for specials")
+	}
+	if !nfoMatchesExpected(got, meta) {
+		t.Fatal("formatter output must match itself for specials with displayseason/displayepisode")
+	}
+}
