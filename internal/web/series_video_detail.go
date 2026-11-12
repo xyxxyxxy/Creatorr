@@ -133,6 +133,14 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		resolvedSourceURL = library.DownloadURL(video.SourceURL.String, video.RemoteID)
 	}
 	hasSourceURL := video.SourceURL.Valid && strings.TrimSpace(video.SourceURL.String) != ""
+	integrityBusy, integrityBusyTip := false, ""
+	if h.Queue != nil {
+		if link, err := h.Queue.IntegrityTaskLinkForVideo(vid); err == nil && link != nil {
+			integrityBusy = true
+			integrityBusyTip = "Integrity check already queued"
+		}
+	}
+	integrityProfileOn, _ := h.Library.SeriesProfileVerifyMedia(vid)
 	render(w, "video_detail", struct {
 		pageBase
 		Series              *library.Series
@@ -163,6 +171,9 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		DomainDisabledTitle string
 		Deleting            bool
 		HasPackAnchor       bool
+		IntegrityBusy       bool
+		IntegrityBusyTip    string
+		IntegrityProfileOn  bool
 		MetaForm            videoMetadataView
 	}{
 		pageBase:            newPage(video.Title, "series", flashFromQuery(r)),
@@ -194,6 +205,9 @@ func (h *Handler) videoDetail(w http.ResponseWriter, r *http.Request) {
 		DomainDisabledTitle: disTitle,
 		Deleting:            deleting,
 		HasPackAnchor:       metaForm.HasPackAnchor,
+		IntegrityBusy:       integrityBusy,
+		IntegrityBusyTip:    integrityBusyTip,
+		IntegrityProfileOn:  integrityProfileOn,
 		MetaForm:            metaForm,
 	})
 }

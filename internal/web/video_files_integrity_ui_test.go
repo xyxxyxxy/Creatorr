@@ -105,6 +105,40 @@ func TestFilesExplorerIntegrityFailedUsesTextError(t *testing.T) {
 	if !strings.Contains(bulkBody, "bulk-check-file-hash") || !strings.Contains(bulkBody, "bulk-delete-video-sidecar") {
 		t.Fatal("files bulk modals missing check/delete actions")
 	}
+	if !strings.Contains(bulkBody, "Series tvshow.nfo") {
+		t.Fatal("files bulk check copy must note series tvshow.nfo skip (episode NFO is eligible)")
+	}
+	vdPath := filepath.Join(filepath.Dir(thisFile), "templates", "video_detail.html")
+	vd, err := os.ReadFile(vdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vdBody := string(vd)
+	if !strings.Contains(vdBody, `action="/actions/check-video-integrity"`) {
+		t.Fatal("video detail Files header missing Check integrity action")
+	}
+	if !strings.Contains(vdBody, "IntegrityProfileOn") {
+		t.Fatal("video detail Check integrity must gate on IntegrityProfileOn")
+	}
+	if !strings.Contains(vdBody, "Off in this quality profile") {
+		t.Fatal("video detail missing profile-off Check integrity tip")
+	}
+	barPath := filepath.Join(filepath.Dir(thisFile), "partials", "video_bulk_bar.html")
+	bar, err := os.ReadFile(barPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(bar), "video-bulk-check-integrity") {
+		t.Fatal("video bulk bar missing Check integrity")
+	}
+	vbmPath := filepath.Join(filepath.Dir(thisFile), "partials", "video_bulk_modals.html")
+	vbm, err := os.ReadFile(vbmPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(vbm), "bulk-check-integrity-videos") {
+		t.Fatal("video bulk modals missing Check integrity form")
+	}
 	if !strings.Contains(body, "DeleteDisabledTip") {
 		t.Fatal("files_list_live missing disabled Delete tip branch")
 	}
@@ -146,6 +180,18 @@ func TestFilesListLiveSSERefreshPin(t *testing.T) {
 	}
 	if !strings.Contains(string(sse), "maybeRefreshFilesList") {
 		t.Fatal("sse.js must call maybeRefreshFilesList")
+	}
+	taskrowsPath := filepath.Join(filepath.Dir(thisFile), "ui", "src", "js", "taskrows.js")
+	tr, err := os.ReadFile(taskrowsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trBody := string(tr)
+	if !strings.Contains(trBody, `kind === "integrity_check"`) {
+		t.Fatal("reloadVideoDetailIfMatch must reload on integrity_check without video_id")
+	}
+	if !strings.Contains(trBody, "integrityScoped") {
+		t.Fatal("reloadVideoDetailIfMatch missing integrityScoped gate")
 	}
 }
 

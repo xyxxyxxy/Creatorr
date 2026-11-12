@@ -187,6 +187,43 @@ func TestFileHashStampsEqualOnOK(t *testing.T) {
 	}
 }
 
+func TestEnqueueFileHashCheckAllowsEpisodeNFO(t *testing.T) {
+	s := openLib(t)
+	rootID, profileID := seedRootProfile(t, s)
+	ser, err := s.CreateSeries(library.CreateSeriesParams{
+		Title: "NFOHash", SourceURL: "https://www.example.com/@nfohash", RootID: rootID,
+		QualityProfileID: profileID, Monitored: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.UpsertListed(ser.ID, library.ListedVideo{
+		RemoteID: "nf1", Title: "One", SourceID: ser.Sources[0].ID,
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	media := filepath.Join(dir, "S00E0001 [nf1].mkv")
+	nfo := filepath.Join(dir, "S00E0001 [nf1].nfo")
+	_ = os.WriteFile(media, []byte("x"), 0o644)
+	_ = os.WriteFile(nfo, []byte("<episodedetails><title>One</title></episodedetails>\n"), 0o644)
+	if err := s.RegisterFileKind(res.VideoID, media, "video"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterFileKind(res.VideoID, nfo, "nfo"); err != nil {
+		t.Fatal(err)
+	}
+	var fileID int64
+	if err := s.DB.SQL.QueryRow(`SELECT id FROM files WHERE video_id = ? AND kind = 'nfo'`, res.VideoID).Scan(&fileID); err != nil {
+		t.Fatal(err)
+	}
+	id, err := s.EnqueueFileHashCheck(res.VideoID, fileID)
+	if err != nil || id <= 0 {
+		t.Fatalf("episode NFO Check hash must enqueue; id=%d err=%v", id, err)
+	}
+}
+
 func TestEnqueueFileHashCheckBusy(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)

@@ -55,6 +55,23 @@
   <div class="modal-backdrop" aria-hidden="true"></div>
 </div>
 
+<input type="checkbox" id="modal-bulk-check-integrity-videos" class="modal-toggle" />
+<div class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg mb-2" data-video-bulk-check-integrity-title>Check integrity</h3>
+    <p class="text-sm mb-4">Enqueue File integrity for selected videos (media, sidecars, and episode NFO). Same pass as scheduled and Maintenance integrity check. Videos without packed media or with File integrity off are skipped.</p>
+    <form method="post" action="/actions/bulk-check-integrity-videos" id="form-bulk-check-integrity-videos">
+      {{if .SeriesID}}<input type="hidden" name="series_id" value="{{.SeriesID}}" />{{end}}
+      <div data-bulk-video-ids></div>
+      <div class="modal-action">
+        <label for="modal-bulk-check-integrity-videos" class="btn modal-cancel">Cancel</label>
+        <button type="submit" class="btn btn-primary">Check integrity</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal-backdrop" aria-hidden="true"></div>
+</div>
+
 <input type="checkbox" id="modal-bulk-refresh-sidecars-videos" class="modal-toggle" />
 <div class="modal">
   <div class="modal-box">

@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/xyxxyxxy/Creatorr/internal/library"
+	"github.com/xyxxyxxy/Creatorr/internal/queue"
 )
 
 func parseVideoIDList(r *http.Request) []int64 {
@@ -198,6 +199,21 @@ func (h *Handler) actionBulkRefreshSidecarsVideos(w http.ResponseWriter, r *http
 		msg += " skipped=" + strconv.Itoa(skipped)
 	}
 	http.Redirect(w, r, videoBulkRedirect(r, sid, "bulk_refresh_sidecars", msg, ""), http.StatusSeeOther)
+}
+
+func (h *Handler) actionBulkCheckIntegrityVideos(w http.ResponseWriter, r *http.Request) {
+	ids := parseVideoIDList(r)
+	sid, _ := strconv.ParseInt(r.FormValue("series_id"), 10, 64)
+	if len(ids) == 0 {
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", "select at least one video"), http.StatusSeeOther)
+		return
+	}
+	_, err := h.Library.EnqueueVerifyAllMediaScoped(nil, ids, queue.OriginManual)
+	if err != nil {
+		http.Redirect(w, r, videoBulkRedirect(r, sid, "", "", err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, videoBulkRedirect(r, sid, "bulk_check_integrity", "n="+strconv.Itoa(len(ids)), ""), http.StatusSeeOther)
 }
 
 func (h *Handler) actionBulkEditVideosMetadata(w http.ResponseWriter, r *http.Request) {

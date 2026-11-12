@@ -59,6 +59,58 @@ func TestSanitizeFilename(t *testing.T) {
 	}
 }
 
+func TestSanitizeID(t *testing.T) {
+	archive := "MisterMetokurArchive_[2017-12-21] Tales of Trout Part 1 - Rage B"
+	got := SanitizeID(archive, 64)
+	if strings.ContainsAny(got, "[] ") {
+		t.Fatalf("brackets/spaces left: %q", got)
+	}
+	if strings.Contains(got, "__") {
+		t.Fatalf("underscore run: %q", got)
+	}
+	if strings.HasPrefix(got, "_") || strings.HasSuffix(got, "_") {
+		t.Fatalf("edge underscore: %q", got)
+	}
+	want := "MisterMetokurArchive_2017-12-21_Tales_of_Trout_Part_1_-_Rage_B"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+
+	a := SanitizeID("a[b]c", 64)
+	b := SanitizeID("a_b_c", 64)
+	c := SanitizeID("a b c", 64)
+	if a != b || b != c {
+		t.Fatalf("collision-equal: %q %q %q", a, b, c)
+	}
+
+	long := SanitizeID(strings.Repeat("x", 100), 64)
+	if len([]rune(long)) != 64 {
+		t.Fatalf("truncate: %q len %d", long, len([]rune(long)))
+	}
+}
+
+func TestExpandAndSanitizeID(t *testing.T) {
+	got, err := ExpandAndSanitize("S{year}E{episode:04} [{id}]", Values{
+		Year: 2017, Episode: 3,
+		ID: "MisterMetokurArchive_[2017-12-21] Tales of Trout Part 1 - Rage B",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := strings.Count(got, "[")
+	closeN := strings.Count(got, "]")
+	if open != 1 || closeN != 1 {
+		t.Fatalf("want one outer bracket pair: %q opens=%d closes=%d", got, open, closeN)
+	}
+	if strings.Contains(got, "[[") || strings.Contains(got, "]]") {
+		t.Fatalf("nested brackets: %q", got)
+	}
+	want := "S2017E0003 [MisterMetokurArchive_2017-12-21_Tales_of_Trout_Part_1_-_Rage_B]"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
 func TestExpandKind(t *testing.T) {
 	got, err := ExpandAndSanitize("{kind}", Values{Kind: "Specials"})
 	if err != nil || got != "Specials" {

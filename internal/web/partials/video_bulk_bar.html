@@ -24,6 +24,7 @@
       {{end}}
     </div>
     <div class="self-center justify-self-end flex flex-wrap gap-2 items-center">
+      {{template "btn_labeled" (dict "Icon" "shield-check" "Label" "Check integrity" "Data" "video-bulk-check-integrity" "Disabled" true)}}
       {{template "btn_labeled" (dict "Icon" "refresh-cw" "Label" "Refresh sidecars" "Data" "video-bulk-refresh" "Disabled" true)}}
       {{template "btn_labeled" (dict "Icon" "file-pen" "Label" "Edit metadata" "Data" "video-bulk-metadata" "Disabled" true)}}
 

@@ -213,6 +213,10 @@ func flashFromQuery(r *http.Request) *flash {
 		return flashOK("Ignore updated.")
 	case "bulk_refresh_sidecars":
 		return flashOK("Sidecar refresh enqueued.")
+	case "bulk_check_integrity":
+		return flashOK("Integrity check enqueued.")
+	case "check-video-integrity":
+		return flashOK("Integrity check enqueued.")
 	case "source":
 		return flashOK("Source added.")
 	case "source-updated":

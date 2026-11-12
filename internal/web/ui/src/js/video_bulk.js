@@ -182,7 +182,7 @@ function syncVideoBulkUI() {
     if (countEl) countEl.textContent = n + "/" + m;
     bar
       .querySelectorAll(
-        "[data-video-bulk-want], [data-video-bulk-ignore], [data-video-bulk-refresh], [data-video-bulk-metadata], [data-video-bulk-delete], [data-video-bulk-clear-errors]"
+        "[data-video-bulk-want], [data-video-bulk-ignore], [data-video-bulk-check-integrity], [data-video-bulk-refresh], [data-video-bulk-metadata], [data-video-bulk-delete], [data-video-bulk-clear-errors]"
       )
       .forEach((btn) => {
         btn.disabled = n === 0;
@@ -308,6 +308,16 @@ function runVideoBulkAction(action) {
     }
     setTitle("[data-video-bulk-ignore-title]", "Ignore " + n + "/" + m + " videos");
     openVideoBulkModal("modal-bulk-ignore-videos");
+    return;
+  }
+  //! pin: video bulk Check integrity enqueues integrity_check for selected video ids
+  if (action === "check-integrity") {
+    if (!needConfirm) {
+      submitVideoBulkForm("form-bulk-check-integrity-videos");
+      return;
+    }
+    setTitle("[data-video-bulk-check-integrity-title]", "Check integrity (" + n + "/" + m + ")");
+    openVideoBulkModal("modal-bulk-check-integrity-videos");
     return;
   }
   if (action === "refresh") {
@@ -440,6 +450,12 @@ export function bootVideoBulk() {
     if (ignore) {
       ev.preventDefault();
       runVideoBulkAction("ignore");
+      return;
+    }
+    const checkIntegrity = ev.target.closest("[data-video-bulk-check-integrity]");
+    if (checkIntegrity) {
+      ev.preventDefault();
+      runVideoBulkAction("check-integrity");
       return;
     }
     const refresh = ev.target.closest("[data-video-bulk-refresh]");

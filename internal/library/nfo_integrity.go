@@ -62,6 +62,8 @@ type episodeNFOXMLCompare struct {
 	OriginalTitle     string   `xml:"originaltitle"`
 	Season            int      `xml:"season"`
 	Episode           int      `xml:"episode"`
+	DisplaySeason     int      `xml:"displayseason"`
+	DisplayEpisode    int      `xml:"displayepisode"`
 	Plot              string   `xml:"plot"`
 	Tagline           string   `xml:"tagline"`
 	Studio            string   `xml:"studio"`
@@ -102,6 +104,9 @@ func episodeNFOXMLEqual(a, b episodeNFOXMLCompare) bool {
 		return false
 	}
 	if a.Season != b.Season || a.Episode != b.Episode {
+		return false
+	}
+	if a.DisplaySeason != b.DisplaySeason || a.DisplayEpisode != b.DisplayEpisode {
 		return false
 	}
 	if strings.TrimSpace(a.Plot) != strings.TrimSpace(b.Plot) {
@@ -225,15 +230,16 @@ func actorsEqual(a, b episodeNFOXMLCompare) bool {
 var nfoAllowedElems = map[string]map[string]struct{}{
 	"episodedetails": {
 		"title": {}, "sorttitle": {}, "originaltitle": {}, "showtitle": {}, // showtitle: legacy on disk; not emitted
-		"season": {}, "episode": {}, "plot": {}, "tagline": {}, "studio": {},
+		"season": {}, "episode": {}, "displayseason": {}, "displayepisode": {},
+		"plot": {}, "tagline": {}, "studio": {},
 		"genre": {}, "tag": {}, "aired": {}, "runtime": {}, "country": {}, "mpaa": {},
 		"uniqueid": {}, "actor": {}, "fileinfo": {},
 	},
-	"actor":     {"name": {}, "role": {}, "order": {}},
-	"fileinfo":  {"streamdetails": {}},
+	"actor":         {"name": {}, "role": {}, "order": {}},
+	"fileinfo":      {"streamdetails": {}},
 	"streamdetails": {"video": {}},
-	"video":     {"durationinseconds": {}},
-	"uniqueid":  {}, // chardata only; attrs checked separately
+	"video":         {"durationinseconds": {}},
+	"uniqueid":      {}, // chardata only; attrs checked separately
 }
 
 var nfoAllowedAttrs = map[string]map[string]struct{}{

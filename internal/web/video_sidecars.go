@@ -254,10 +254,10 @@ func (h *Handler) videoSidecarViewPage(w http.ResponseWriter, r *http.Request) {
 	checkBusy, checkTaskID, _ := h.Library.FileHashCheckBusy(vid, fid)
 	checkBusyTip := ""
 	checkTaskKind, checkTaskPrefix := "", ""
-	checkDisabled := f.Kind == "nfo"
+	checkDisabled := missing
 	checkDisabledTip := ""
 	if checkDisabled {
-		checkDisabledTip = "Integrity check skipped, can be regenerated"
+		checkDisabledTip = "File missing - integrity check inactive"
 		checkBusy = false
 		checkTaskID = 0
 	} else if checkBusy {

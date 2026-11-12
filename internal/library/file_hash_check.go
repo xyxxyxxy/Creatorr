@@ -120,9 +120,6 @@ func (s *Store) EnqueueFileHashCheck(videoID, fileID int64) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if f.Kind == "nfo" {
-		return 0, fmt.Errorf("%w: NFO is generated from metadata - regenerate instead of Check hash", ErrInvalid)
-	}
 	busy, taskID, err := s.FileHashCheckBusy(videoID, fileID)
 	if err != nil {
 		return 0, err
