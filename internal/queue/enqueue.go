@@ -228,6 +228,7 @@ func (s *Store) MoveToFront(id int64) error {
 
 func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 	// Path-touching system kinds never overlap series_move; series_move needs them idle.
+	// Inline bulk root moves (bulk_edit_series with root_id) also hold the path lock.
 	switch p.Kind {
 	case KindRenameEpisodes, KindRegenerateNFO, KindResetMetadataFromInfo, KindSyncFiles, KindRetentionDelete, KindRewriteCatalogMeta:
 		if busy, err := s.PathTouchingSystemBusy(KindSeriesMove); err != nil {
@@ -235,9 +236,19 @@ func (s *Store) rejectDuplicate(p EnqueueParams, payloadJSON string) error {
 		} else if busy {
 			return ErrDuplicate
 		}
+		if busy, err := s.BulkEditSeriesRootBusy(); err != nil {
+			return err
+		} else if busy {
+			return ErrDuplicate
+		}
 	case KindSeriesMove:
 		// One open path-touching system task library-wide (includes any series_move).
 		if busy, err := s.PathTouchingSystemBusy(); err != nil {
+			return err
+		} else if busy {
+			return ErrDuplicate
+		}
+		if busy, err := s.BulkEditSeriesRootBusy(); err != nil {
 			return err
 		} else if busy {
 			return ErrDuplicate

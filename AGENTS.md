@@ -87,7 +87,7 @@ New domain term → matching docs file (domain-model by default).
 ## Ship
 
 - **Health:** `GET /api/health` - `ok` | `degraded` | `down`; checks `db`, `worker` (in-process heartbeat, not SQLite), `ytdlp`, `disk`, `flaresolverr`, `pot_provider` (last two skipped if URL unset). Compose healthcheck should use it.
-- **Images:** `ghcr.io/xyxxyxxy/creatorr:latest`, `:X.Y.Z`, and `:X.Y` from git tags `v*` on `main` (docker/metadata strips the `v` prefix); `:dev` tracks tip of `main` (and `workflow_dispatch` rebuilds); `:sha-<short>` on every `main` push for pins and pre-release testing. Compose: [`docker-compose.yml`](docker-compose.yml).
+- **Images:** `ghcr.io/xyxxyxxy/creatorr:latest`, `:X.Y.Z`, and `:X.Y` from git tags `v*` on `main` (docker/metadata strips the `v` prefix); `:dev` tracks tip of `main` (and `workflow_dispatch` rebuilds); `:sha-<short>` on every `main` push and same-repo PR; `:pr-<N>` on same-repo pull requests for pre-merge server smoke. Fork PRs build only (no push). Compose: [`docker-compose.yml`](docker-compose.yml).
 - **Tests:** see **Testing** above. Before push: `make test` (and the rest of the pre-push checklist in Workflow).
 - **Branching:** GitHub Flow - `main` is the only long-lived branch. Never commit on `main`. Short-lived branch, then a pull request into `main`.
 - **Commits:** Conventional Commits; one logical step each; subject ≤72 chars; body explains why when not obvious.

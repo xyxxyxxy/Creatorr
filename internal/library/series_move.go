@@ -85,16 +85,21 @@ func (s *Store) enqueueSeriesMove(seriesID int64, newTitle string, newRootID int
 	return id, nil
 }
 
-// SeriesHasOpenMove reports a pending/running series_move for seriesID.
+// SeriesHasOpenMove reports a pending/running series_move for seriesID,
+// or an open bulk_edit_series that changes root for that series.
 func (s *Store) SeriesHasOpenMove(seriesID int64) (bool, error) {
 	if s.Queue == nil {
 		return false, nil
 	}
-	return s.Queue.SeriesMoveOpen(seriesID)
+	open, err := s.Queue.SeriesMoveOpen(seriesID)
+	if err != nil || open {
+		return open, err
+	}
+	return s.Queue.SeriesBulkRootMoveOpen(seriesID)
 }
 
-// SeriesHasBlockingTasks reports busy media tasks, an open series_move, or a
-// series-scoped rename_episodes. Title/root edits and new moves are blocked while true.
+// SeriesHasBlockingTasks reports busy media tasks, an open series_move / bulk root move,
+// or a series-scoped rename_episodes. Title/root edits and new moves are blocked while true.
 func (s *Store) SeriesHasBlockingTasks(seriesID int64) (bool, error) {
 	if s.Queue == nil {
 		return false, nil
@@ -102,19 +107,20 @@ func (s *Store) SeriesHasBlockingTasks(seriesID int64) (bool, error) {
 	if busy, err := s.SeriesHasBusyMediaTasks(seriesID); err != nil || busy {
 		return busy, err
 	}
+	if open, err := s.SeriesHasOpenMove(seriesID); err != nil || open {
+		return open, err
+	}
 	var n int
 	err := s.DB.SQL.QueryRow(`
 		SELECT COUNT(*) FROM tasks t
 		WHERE t.status IN ('pending', 'running')
+		  AND t.kind = ?
 		  AND (
-		    (t.kind = ? AND t.series_id = ?)
-		    OR (t.kind = ? AND (
-		      t.series_id = ?
-		      OR json_extract(t.payload, '$.series_id') = ?
-		      OR EXISTS (SELECT 1 FROM json_each(t.payload, '$.series_ids') j WHERE j.value = ?)
-		    ))
+		    t.series_id = ?
+		    OR json_extract(t.payload, '$.series_id') = ?
+		    OR EXISTS (SELECT 1 FROM json_each(t.payload, '$.series_ids') j WHERE j.value = ?)
 		  )
-	`, queue.KindSeriesMove, seriesID, queue.KindRenameEpisodes, seriesID, seriesID, seriesID).Scan(&n)
+	`, queue.KindRenameEpisodes, seriesID, seriesID, seriesID).Scan(&n)
 	return n > 0, err
 }
 
@@ -123,14 +129,31 @@ func (s *Store) SeriesHasBlockingTasks(seriesID int64) (bool, error) {
 // rewritten (they omit showtitle; series name is folder + tvshow.nfo).
 // If the folder move fails the DB title/root are reverted; later failures leave disk as-is.
 func (s *Store) SeriesMovePass(ctx context.Context, task *queue.Task, progress func(msg string, pct *float64)) (renamed, skippedBusy, failed int, err error) {
+	var p seriesMovePayload
+	if err := json.Unmarshal([]byte(task.Payload), &p); err != nil {
+		return 0, 0, 0, fmt.Errorf("%w: payload: %v", ErrInvalid, err)
+	}
+	p.NewTitle = strings.TrimSpace(p.NewTitle)
+	p.OldTitle = strings.TrimSpace(p.OldTitle)
+	if p.SeriesID <= 0 || p.NewTitle == "" || p.OldTitle == "" || p.NewRootID <= 0 || p.OldRootID <= 0 {
+		return 0, 0, 0, fmt.Errorf("%w: series_move payload incomplete", ErrInvalid)
+	}
+	return s.applySeriesTitleRootMove(ctx, p, progress, task.ID)
+}
+
+// applySeriesTitleRootMove updates SQLite title/root, moves the folder (with EXDEV copy
+// fallback), writes tvshow.nfo, then applies episode naming. Used by series_move and
+// inline bulk root changes.
+func (s *Store) applySeriesTitleRootMove(
+	ctx context.Context,
+	p seriesMovePayload,
+	progress func(msg string, pct *float64),
+	namingTaskID int64,
+) (renamed, skippedBusy, failed int, err error) {
 	step := func(msg string, pct float64) {
 		if progress != nil {
 			progress(msg, &pct)
 		}
-	}
-	var p seriesMovePayload
-	if err := json.Unmarshal([]byte(task.Payload), &p); err != nil {
-		return 0, 0, 0, fmt.Errorf("%w: payload: %v", ErrInvalid, err)
 	}
 	p.NewTitle = strings.TrimSpace(p.NewTitle)
 	p.OldTitle = strings.TrimSpace(p.OldTitle)
@@ -163,7 +186,7 @@ func (s *Store) SeriesMovePass(ctx context.Context, task *queue.Task, progress f
 		return 0, 0, 0, err
 	}
 	step("Moving series folder", 0.3)
-	if err := s.MoveSeriesFolder(updated, p.OldTitle, p.OldRootID); err != nil {
+	if err := s.MoveSeriesFolder(ctx, updated, p.OldTitle, p.OldRootID); err != nil {
 		if rerr := s.revertSeriesTitleRoot(p); rerr != nil {
 			return 0, 0, 0, fmt.Errorf("folder move failed: %w (revert title/root also failed: %v)", err, rerr)
 		}
@@ -175,7 +198,7 @@ func (s *Store) SeriesMovePass(ctx context.Context, task *queue.Task, progress f
 	}
 	// Episode NFOs omit showtitle; folder rename already moved them. No rewrite here.
 	step("Applying episode naming", 0.7)
-	renamed, skippedBusy, failed, err = s.ApplySeriesEpisodeNaming(ctx, p.SeriesID, task.ID)
+	renamed, skippedBusy, failed, err = s.ApplySeriesEpisodeNaming(ctx, p.SeriesID, namingTaskID)
 	if err != nil {
 		return renamed, skippedBusy, failed, fmt.Errorf("apply episode naming after folder move: %w", err)
 	}
