@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/xyxxyxxy/Creatorr/internal/library"
@@ -207,16 +208,16 @@ func TestSeriesMovePassFailureRevertsDB(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
 	ser, _, media := seedDownloadedSeries(t, s, rootID, profileID)
-	root, _ := s.GetRoot(rootID)
 
 	tid, err := s.EnqueueSeriesMove(ser.ID, "Taken", rootID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Target folder appears on disk after enqueue, so MoveSeriesFolder refuses.
-	if err := os.MkdirAll(filepath.Join(root.Path, "Taken"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	// Non-EXDEV rename failure must not copy-fallback; DB title/root revert.
+	prev := library.SwapSeriesFolderRenamer(func(oldpath, newpath string) error {
+		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: syscall.EPERM}
+	})
+	t.Cleanup(func() { library.SwapSeriesFolderRenamer(prev) })
 	task, _ := s.Queue.GetTask(tid)
 	if _, _, _, err := s.SeriesMovePass(context.Background(), task, nil); err == nil {
 		t.Fatal("expected move failure")
@@ -315,9 +316,10 @@ func TestSeriesArtSurvivesMidMoveTitleUpdate(t *testing.T) {
 	}
 }
 
-func TestBulkEditRootChangeEnqueuesSeriesMove(t *testing.T) {
+func TestBulkEditRootChangeMovesInline(t *testing.T) {
 	s := openLib(t)
 	rootID, profileID := seedRootProfile(t, s)
+	root, _ := s.GetRoot(rootID)
 	a, err := s.CreateSeries(library.CreateSeriesParams{Title: "A", RootID: rootID, QualityProfileID: profileID, Monitored: true})
 	if err != nil {
 		t.Fatal(err)
@@ -325,6 +327,14 @@ func TestBulkEditRootChangeEnqueuesSeriesMove(t *testing.T) {
 	b, err := s.CreateSeries(library.CreateSeriesParams{Title: "B", RootID: rootID, QualityProfileID: profileID, Monitored: true})
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, title := range []string{"A", "B"} {
+		if err := os.MkdirAll(filepath.Join(root.Path, title), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root.Path, title, "marker"), []byte(title), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	newRoot, err := s.CreateRoot("other", t.TempDir(), "", nil)
 	if err != nil {
@@ -338,20 +348,26 @@ func TestBulkEditRootChangeEnqueuesSeriesMove(t *testing.T) {
 	}
 	task, _ := s.Queue.GetTask(bulkID)
 	updated, skipped, failed, err := s.BulkEditSeriesPass(context.Background(), task, nil)
-	// Path-touching exclusivity: only the first series_move enqueues; the second fails while it is open.
-	if err != nil || updated != 1 || skipped != 0 || failed != 1 {
+	if err != nil || updated != 2 || skipped != 0 || failed != 0 {
 		t.Fatalf("pass updated=%d skipped=%d failed=%d err=%v", updated, skipped, failed, err)
 	}
 	gotA, _ := s.GetSeries(a.ID, false)
-	if gotA.RootID != rootID {
-		t.Fatalf("series A root changed before worker move")
+	gotB, _ := s.GetSeries(b.ID, false)
+	if gotA.RootID != newRoot.ID || gotB.RootID != newRoot.ID {
+		t.Fatalf("roots A=%d B=%d want %d", gotA.RootID, gotB.RootID, newRoot.ID)
 	}
-	var nA, nB int
-	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = ? AND series_id = ? AND status = 'pending'`,
-		queue.KindSeriesMove, a.ID).Scan(&nA)
-	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = ? AND series_id = ? AND status = 'pending'`,
-		queue.KindSeriesMove, b.ID).Scan(&nB)
-	if nA != 1 || nB != 0 {
-		t.Fatalf("series_move counts A=%d B=%d want 1/0", nA, nB)
+	var nMoves int
+	_ = s.DB.SQL.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind = ?`, queue.KindSeriesMove).Scan(&nMoves)
+	if nMoves != 0 {
+		t.Fatalf("series_move children=%d want 0", nMoves)
+	}
+	for _, title := range []string{"A", "B"} {
+		body, err := os.ReadFile(filepath.Join(newRoot.Path, title, "marker"))
+		if err != nil || string(body) != title {
+			t.Fatalf("%s marker=%q err=%v", title, body, err)
+		}
+		if _, err := os.Stat(filepath.Join(root.Path, title)); !os.IsNotExist(err) {
+			t.Fatalf("old %s folder still present", title)
+		}
 	}
 }

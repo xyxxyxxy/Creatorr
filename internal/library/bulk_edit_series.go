@@ -72,6 +72,16 @@ func (s *Store) EnqueueBulkEditSeries(p BulkEditSeriesParams) (int64, error) {
 		if _, err := s.GetRoot(*p.RootID); err != nil {
 			return 0, fmt.Errorf("%w: root_id", ErrInvalid)
 		}
+		if busy, err := s.Queue.PathTouchingSystemBusy(); err != nil {
+			return 0, err
+		} else if busy {
+			return 0, fmt.Errorf("%w: a series move, episode rename, NFO rewrite, file sync, or retention purge is already pending or running", ErrConflict)
+		}
+		if busy, err := s.Queue.BulkEditSeriesRootBusy(); err != nil {
+			return 0, err
+		} else if busy {
+			return 0, fmt.Errorf("%w: a bulk series root change is already pending or running", ErrConflict)
+		}
 	}
 	if p.QualityProfileID != nil {
 		if _, err := s.GetProfile(*p.QualityProfileID); err != nil {
@@ -232,7 +242,11 @@ func (s *Store) BulkEditSeriesPass(ctx context.Context, task *queue.Task, progre
 			_ = s.persistBulkEditCursor(task.ID, i+1, p)
 			continue
 		}
-		if err := s.applyBulkEditOne(ser, p, task.ID); err != nil {
+		if err := s.applyBulkEditOne(ctx, ser, p, task.ID, progress); err != nil {
+			// Mid-move cancel: leave cursor so resume retries this series.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return updated, skipped, failed, err
+			}
 			failed++
 			_ = s.persistBulkEditCursor(task.ID, i+1, p)
 			continue
@@ -244,7 +258,7 @@ func (s *Store) BulkEditSeriesPass(ctx context.Context, task *queue.Task, progre
 	return updated, skipped, failed, nil
 }
 
-func (s *Store) applyBulkEditOne(ser *Series, p bulkEditSeriesPayload, taskID int64) error {
+func (s *Store) applyBulkEditOne(ctx context.Context, ser *Series, p bulkEditSeriesPayload, taskID int64, progress func(msg string, pct *float64)) error {
 	if p.QualityProfileID != nil || p.DeliveryMode != nil {
 		up := UpdateSeriesParams{}
 		if p.QualityProfileID != nil {
@@ -263,13 +277,23 @@ func (s *Store) applyBulkEditOne(ser *Series, p bulkEditSeriesPayload, taskID in
 		}
 		ser = ser2
 	}
-	// Root change: series_move owns SQLite root + disk. Already-queued move counts as done.
+	// Root change: move inline (path-touching exclusivity + system-lane serial).
 	if p.RootID != nil && *p.RootID != ser.RootID {
-		if _, err := s.enqueueSeriesMove(ser.ID, ser.Title, *p.RootID, queue.OriginTask, taskID); err != nil {
-			if open, oerr := s.SeriesHasOpenMove(ser.ID); oerr != nil || !open {
-				return err
-			}
+		_, _, _, err := s.applySeriesTitleRootMove(ctx, seriesMovePayload{
+			SeriesID:  ser.ID,
+			OldTitle:  ser.Title,
+			OldRootID: ser.RootID,
+			NewTitle:  ser.Title,
+			NewRootID: *p.RootID,
+		}, progress, taskID)
+		if err != nil {
+			return err
 		}
+		ser2, err := s.GetSeries(ser.ID, false)
+		if err != nil {
+			return err
+		}
+		ser = ser2
 	}
 	if p.Monitored != nil {
 		if err := s.setSeriesMonitored(ser.ID, *p.Monitored); err != nil {

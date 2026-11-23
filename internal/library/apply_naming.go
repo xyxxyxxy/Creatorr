@@ -543,7 +543,7 @@ func (s *Store) applySeriesFolderPrelude(taskID int64, p *applyNamingPayload) er
 	if oldRoot <= 0 {
 		oldRoot = ser.RootID
 	}
-	if err := s.MoveSeriesFolder(ser, oldTitle, oldRoot); err != nil {
+	if err := s.MoveSeriesFolder(context.Background(), ser, oldTitle, oldRoot); err != nil {
 		_, _ = s.DB.SQL.Exec(`
 			UPDATE series SET title = ?, root_id = ? WHERE id = ?
 		`, oldTitle, oldRoot, p.SeriesID)

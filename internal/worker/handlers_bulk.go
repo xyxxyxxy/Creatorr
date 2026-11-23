@@ -30,6 +30,9 @@ func BulkEditSeriesHandler(d Deps) TaskHandler {
 			"updated": updated, "skipped": skipped, "failed": failed,
 		})
 		_ = d.Library.Queue.SetDetail(t.ID, string(detail))
+		if updated == 0 && failed > 0 {
+			return apperrors.New(apperrors.CodeInternal, msg)
+		}
 		return nil
 	}
 }
